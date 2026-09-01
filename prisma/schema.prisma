@@ -1,0 +1,1246 @@
+// Professional Training LMS — data model
+//
+// Drafted from PRD Revision 3. Section references in comments point at the
+// requirement a field or constraint exists to satisfy.
+//
+// Three integrity rules this file CANNOT express are implemented as
+// hand-written SQL in prisma/migrations/. Do not rely on application code
+// for them — see prisma/sql/001_integrity.sql:
+//   1. One ACTIVE enrolment per (userId, cohortId)      — partial unique index
+//   2. A Cohort targets exactly one Course XOR Programme — check constraint
+//   3. Cohort capacity under concurrent checkout          — row-level locking
+//
+// Money is stored in minor units (kobo, cents) as Int. Never Float.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  DEACTIVATED
+}
+
+enum ScopeType {
+  GLOBAL
+  PROGRAMME
+  COURSE
+  COHORT
+}
+
+enum PublicationStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum DeliveryMode {
+  SELF_PACED
+  INSTRUCTOR_LED
+  BLENDED
+}
+
+enum CohortStatus {
+  DRAFT
+  PUBLISHED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum EnrolmentStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  COMPLETED
+  WITHDRAWN
+  TRANSFERRED
+  CANCELLED
+}
+
+enum LessonType {
+  TEXT
+  FILE
+  IMAGE
+  VIDEO
+  EMBED
+  LINK
+  QUIZ
+  ASSIGNMENT
+}
+
+enum AttendanceState {
+  NOT_RECORDED
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum AssessmentType {
+  QUIZ
+  ASSIGNMENT
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  TRUE_FALSE
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  ABANDONED
+  EXPIRED
+}
+
+// Draft grades are never learner-visible. Release is explicit (ASM-05).
+enum GradeStatus {
+  DRAFT
+  RELEASED
+}
+
+enum CompletionScope {
+  COURSE
+  PROGRAMME
+}
+
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+  SUPERSEDED
+}
+
+// PRD §19 — Paystack and Stripe are providers within one deployment, not
+// separate commercial models. MANUAL is the offline-payment exception.
+enum PaymentProvider {
+  PAYSTACK
+  STRIPE
+  MANUAL
+}
+
+// The single shared state machine. Every provider feeds this (PAY-02, §19.2).
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  PENDING_MANUAL_REVIEW
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  EXCEPTION
+}
+
+enum RefundStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  FAILED
+  RECORDED_MANUALLY
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  DUPLICATE
+  SIGNATURE_INVALID
+  EXCEPTION
+}
+
+enum TicketStatus {
+  NEW
+  OPEN
+  ASSIGNED
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// Public replies reach the learner. Internal notes never do (SUP-02).
+enum MessageVisibility {
+  PUBLIC
+  INTERNAL
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+// ---------------------------------------------------------------------------
+// Identity — IAM-01 to IAM-06
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  name          String
+  phone         String?
+  status        UserStatus @default(PENDING_VERIFICATION)
+
+  // Presentation hint only. Authority comes from Assignment, never from this.
+  isStaff Boolean @default(false)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deactivatedAt   DateTime?
+  deactivatedById String?
+
+  sessions           Session[]
+  accounts           Account[]
+  assignments        Assignment[]       @relation("AssignmentSubject")
+  assignmentsCreated Assignment[]       @relation("AssignmentCreator")
+  policyAcceptances  PolicyAcceptance[]
+  enrolments         Enrolment[]
+  orders             Order[]
+  certificates       Certificate[]
+  ticketsRaised      Ticket[]           @relation("TicketRequester")
+  ticketsAssigned    Ticket[]           @relation("TicketAssignee")
+  ticketMessages     TicketMessage[]
+  auditEvents        AuditEvent[]       @relation("AuditActor")
+  instructorOf       CohortInstructor[]
+  facilitatorOf      ScheduledSession[]
+  gradesGiven        Grade[]            @relation("Grader")
+  exportJobs         ExportJob[]
+
+  @@index([status])
+  @@index([isStaff])
+}
+
+// Auth.js adapter models. Kept for adapter compatibility even though PRD
+// §5.2 rules out social login and SSO for Revision 1.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// Database sessions, not JWT — IAM-03 requires selective and global
+// revocation, which a stateless token cannot provide.
+model Session {
+  id           String    @id @default(cuid())
+  sessionToken String    @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime  @default(now())
+  ipAddress    String?
+  userAgent    String?
+  revokedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+}
+
+// Single-use, expiring. Covers email verification and password reset (IAM-02).
+model VerificationToken {
+  identifier String
+  token      String    @unique
+  expires    DateTime
+  purpose    String
+  consumedAt DateTime?
+
+  @@unique([identifier, token])
+  @@index([expires])
+}
+
+// REG-04 — terms, privacy, refund policy, and marketing consent are stored
+// separately, each with the version accepted.
+model PolicyAcceptance {
+  id         String   @id @default(cuid())
+  userId     String
+  policyType String
+  version    String
+  accepted   Boolean
+  acceptedAt DateTime @default(now())
+  orderId    String?
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([userId, policyType])
+}
+
+// ---------------------------------------------------------------------------
+// Roles, permissions, scope — RBAC-01 to RBAC-08
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  active      Boolean @default(true)
+  version     Int     @default(1)
+
+  // Seeded defaults may be edited and deactivated but never deleted —
+  // historical assignments must stay intelligible (PRD §7.1).
+  isDefault Boolean @default(false)
+
+  // Validated against the closed catalogue in
+  // src/server/permissions/catalogue.ts. Unknown strings are rejected
+  // (RBAC-03).
+  permissions String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions    RoleVersion[]
+  assignments Assignment[]
+
+  @@index([active])
+}
+
+// RBAC-02 — an edit creates a new version and prior versions are preserved.
+model RoleVersion {
+  id          String   @id @default(cuid())
+  roleId      String
+  version     Int
+  name        String
+  description String?
+  permissions String[]
+  active      Boolean
+  reason      String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, version])
+}
+
+// RBAC-04, RBAC-05 — effective access is the union of matching active
+// grants. scopeId is null when scopeType is GLOBAL.
+model Assignment {
+  id          String    @id @default(cuid())
+  userId      String
+  roleId      String
+  scopeType   ScopeType @default(GLOBAL)
+  scopeId     String?
+  active      Boolean   @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  reason      String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  revokedById String?
+
+  user    User  @relation("AssignmentSubject", fields: [userId], references: [id], onDelete: Cascade)
+  creator User? @relation("AssignmentCreator", fields: [createdById], references: [id])
+  role    Role  @relation(fields: [roleId], references: [id])
+
+  @@index([userId, active])
+  @@index([scopeType, scopeId])
+  @@index([roleId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit — RBAC-08, NFR-07. Append-only to application users.
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id            String     @id @default(cuid())
+  actorId       String?
+  actorType     String     @default("USER")
+  action        String
+  targetType    String
+  targetId      String?
+  scopeType     ScopeType?
+  scopeId       String?
+  before        Json?
+  after         Json?
+  reason        String?
+  outcome       String
+  correlationId String?
+  ipAddress     String?
+  createdAt     DateTime   @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@index([action, createdAt])
+  @@index([correlationId])
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue — CAT-01 to CAT-08
+// ---------------------------------------------------------------------------
+
+model Programme {
+  id       String  @id @default(cuid())
+  slug     String  @unique
+  title    String
+  summary  String?
+  outcomes String?
+  audience String?
+
+  status PublicationStatus @default(DRAFT)
+
+  // CAT-02 — whether learners must take Courses in order.
+  sequential Boolean @default(true)
+
+  // Versioned rule evaluated by the completion engine (LRN-07).
+  completionRule        Json?
+  completionRuleVersion Int   @default(1)
+
+  certificateEnabled Boolean @default(true)
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  courses      ProgrammeCourse[]
+  cohorts      Cohort[]
+  certificates Certificate[]
+
+  @@index([status])
+}
+
+// CAT-02 — a Course belongs to many Programmes by reference. It is never
+// cloned.
+model ProgrammeCourse {
+  id          String @id @default(cuid())
+  programmeId String
+  courseId    String
+  position    Int
+
+  programme Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  course    Course    @relation(fields: [courseId], references: [id])
+
+  @@unique([programmeId, courseId])
+  @@unique([programmeId, position])
+}
+
+model Course {
+  id            String  @id @default(cuid())
+  slug          String  @unique
+  title         String
+  summary       String?
+  outcomes      String?
+  audience      String?
+  prerequisites String?
+  durationHours Int?
+
+  status PublicationStatus @default(DRAFT)
+
+  // CAT-05 — incremented on publish. A Cohort captures the value current at
+  // its own publication so later edits cannot change active obligations.
+  contentVersion Int @default(1)
+
+  // CRD-01 — Course certificates issue only where the provider enables them.
+  certificateEnabled Boolean @default(false)
+
+  completionRule        Json?
+  completionRuleVersion Int   @default(1)
+
+  publishedAt   DateTime?
+  publishedById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  modules           Module[]
+  assessments       Assessment[]
+  programmes        ProgrammeCourse[]
+  cohorts           Cohort[]
+  cohortCourses     CohortCourse[]
+  scheduledSessions ScheduledSession[]
+  completions       CompletionRecord[]
+  certificates      Certificate[]
+  tickets           Ticket[]
+
+  @@index([status])
+}
+
+model Module {
+  id       String  @id @default(cuid())
+  courseId String
+  title    String
+  summary  String?
+  position Int
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@unique([courseId, position])
+  @@index([courseId])
+}
+
+model Lesson {
+  id       String     @id @default(cuid())
+  moduleId String
+  title    String
+  position Int
+  type     LessonType
+
+  body     String?
+  embedUrl String?
+  linkUrl  String?
+
+  // LRN-02 — required lessons gate completion; sequencing is enforced
+  // server-side.
+  required Boolean @default(true)
+
+  // LRN-05 — manual completion only where the published rule permits it.
+  allowManualComplete Boolean @default(true)
+
+  assessmentId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  module     Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  assessment Assessment?      @relation(fields: [assessmentId], references: [id])
+  resources  LessonResource[]
+  progress   LessonProgress[]
+
+  @@unique([moduleId, position])
+  @@index([moduleId])
+}
+
+// NFR-06 — private storage only. storageKey is an object key, never a URL,
+// and downloads use short-lived authorized access.
+model LessonResource {
+  id         String   @id @default(cuid())
+  lessonId   String
+  title      String
+  storageKey String
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  scanStatus String   @default("PENDING")
+  createdAt  DateTime @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+}
+
+// ---------------------------------------------------------------------------
+// Cohorts and delivery — COH-01 to COH-07
+// ---------------------------------------------------------------------------
+
+model Cohort {
+  id    String @id @default(cuid())
+  code  String @unique
+  title String
+
+  // COH-01 — exactly one of these is set. Enforced by a CHECK constraint in
+  // prisma/sql/001_integrity.sql; Prisma cannot express XOR.
+  courseId    String?
+  programmeId String?
+
+  deliveryMode DeliveryMode
+  timezone     String       @default("Africa/Lagos")
+
+  startsAt          DateTime
+  endsAt            DateTime
+  enrolmentOpensAt  DateTime
+  enrolmentClosesAt DateTime
+
+  // COH-06 — seatsTaken is incremented inside the same transaction that
+  // creates an Enrolment, with SELECT ... FOR UPDATE on this row. Counting
+  // enrolments and then inserting loses the race.
+  capacity   Int
+  seatsTaken Int @default(0)
+
+  priceMinor Int
+  currency   String @default("NGN")
+
+  status      CohortStatus @default(DRAFT)
+  publishedAt DateTime?
+
+  // ATT-02 — attendance threshold as a completion rule.
+  attendanceThresholdPct Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course    Course?    @relation(fields: [courseId], references: [id])
+  programme Programme? @relation(fields: [programmeId], references: [id])
+
+  cohortCourses     CohortCourse[]
+  instructors       CohortInstructor[]
+  scheduledSessions ScheduledSession[]
+  enrolments        Enrolment[]
+  orders            Order[]
+  tickets           Ticket[]
+
+  @@index([status, startsAt])
+  @@index([courseId])
+  @@index([programmeId])
+}
+
+// PRD §6.2 — a Programme Cohort inherits Course membership as a versioned
+// snapshot, so editing the Programme later cannot change what enrolled
+// learners owe.
+model CohortCourse {
+  id             String @id @default(cuid())
+  cohortId       String
+  courseId       String
+  position       Int
+  contentVersion Int
+
+  // Structure captured at cohort publication: modules, lessons, required
+  // flags, assessment references. The learner's obligations are read from
+  // here, not from the live Course.
+  contentSnapshot Json?
+
+  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@unique([cohortId, courseId])
+  @@unique([cohortId, position])
+}
+
+model CohortInstructor {
+  id         String   @id @default(cuid())
+  cohortId   String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([cohortId, userId])
+}
+
+model ScheduledSession {
+  id       String  @id @default(cuid())
+  cohortId String
+  courseId String?
+  title    String
+
+  startsAt DateTime
+  endsAt   DateTime
+  location String?
+
+  // LRN-06 — hidden before the visibility window and from unenrolled users.
+  meetingUrl             String?
+  linkVisibleFromMinutes Int     @default(60)
+
+  facilitatorId      String?
+  attendanceExpected Boolean   @default(true)
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cohort      Cohort             @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  course      Course?            @relation(fields: [courseId], references: [id])
+  facilitator User?              @relation(fields: [facilitatorId], references: [id])
+  attendance  AttendanceRecord[]
+
+  @@index([cohortId, startsAt])
+}
+
+// ATT-01, ATT-03 — every change records actor and time; corrections carry a
+// mandatory reason and feed completion recalculation.
+model AttendanceRecord {
+  id          String          @id @default(cuid())
+  sessionId   String
+  enrolmentId String
+  state       AttendanceState @default(NOT_RECORDED)
+  note        String?
+
+  recordedById String?
+  recordedAt   DateTime @default(now())
+
+  correctedById    String?
+  correctedAt      DateTime?
+  correctionReason String?
+
+  session   ScheduledSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrolment Enrolment        @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, enrolmentId])
+  @@index([enrolmentId])
+}
+
+// ---------------------------------------------------------------------------
+// Enrolment and progress — COH-05, LRN-01 to LRN-07
+// ---------------------------------------------------------------------------
+
+model Enrolment {
+  id       String  @id @default(cuid())
+  userId   String
+  cohortId String
+  orderId  String?
+
+  status EnrolmentStatus @default(PENDING_PAYMENT)
+
+  accessStartsAt DateTime?
+  accessEndsAt   DateTime?
+  activatedAt    DateTime?
+  withdrawnAt    DateTime?
+  reason         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  cohort Cohort @relation(fields: [cohortId], references: [id])
+  order  Order? @relation(fields: [orderId], references: [id])
+
+  lessonProgress LessonProgress[]
+  attendance     AttendanceRecord[]
+  attempts       Attempt[]
+  submissions    Submission[]
+  grades         Grade[]
+  completions    CompletionRecord[]
+  certificates   Certificate[]
+
+  // A partial unique index on (userId, cohortId) WHERE status = 'ACTIVE'
+  // lives in prisma/sql/001_integrity.sql. A plain @@unique would wrongly
+  // block re-enrolment after a withdrawal.
+  @@index([userId, status])
+  @@index([cohortId, status])
+}
+
+// LRN-04 — progress is idempotent, attributable, and recalculable.
+model LessonProgress {
+  id          String   @id @default(cuid())
+  enrolmentId String
+  lessonId    String
+  completedAt DateTime @default(now())
+  source      String   @default("MANUAL")
+
+  enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  lesson    Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([enrolmentId, lessonId])
+}
+
+// LRN-07 — records which rule version was satisfied and what evidence
+// satisfied it, so a later correction can be reasoned about.
+model CompletionRecord {
+  id           String          @id @default(cuid())
+  enrolmentId  String
+  scope        CompletionScope
+  courseId     String?
+  ruleVersion  Int
+  completedAt  DateTime        @default(now())
+  evidence     Json?
+  supersededAt DateTime?
+
+  enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  course    Course?   @relation(fields: [courseId], references: [id])
+
+  @@index([enrolmentId, scope])
+}
+
+// ---------------------------------------------------------------------------
+// Assessment — ASM-01 to ASM-07
+// ---------------------------------------------------------------------------
+
+model Assessment {
+  id       String         @id @default(cuid())
+  courseId String
+  type     AssessmentType
+  title    String
+
+  instructions String?
+  version      Int               @default(1)
+  status       PublicationStatus @default(DRAFT)
+
+  availableFrom  DateTime?
+  availableUntil DateTime?
+  dueAt          DateTime?
+
+  // Quiz settings
+  maxAttempts Int?
+  passMark    Int?
+  totalMarks  Int?
+
+  // Assignment settings — ASM-03
+  allowedFileTypes  String[]
+  maxFileSizeBytes  Int?
+  allowResubmission Boolean  @default(false)
+
+  feedbackBehaviour String @default("ON_RELEASE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions   QuizQuestion[]
+  attempts    Attempt[]
+  submissions Submission[]
+  grades      Grade[]
+  lessons     Lesson[]
+
+  @@index([courseId, type])
+}
+
+model QuizQuestion {
+  id           String       @id @default(cuid())
+  assessmentId String
+  position     Int
+  prompt       String
+  type         QuestionType
+  marks        Int          @default(1)
+  explanation  String?
+
+  assessment Assessment   @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  options    QuizOption[]
+
+  @@unique([assessmentId, position])
+}
+
+model QuizOption {
+  id         String  @id @default(cuid())
+  questionId String
+  position   Int
+  label      String
+  isCorrect  Boolean @default(false)
+
+  question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, position])
+}
+
+// ASM-02 — attempts store start and submit time, answers, the assessment
+// version used, result, and status, so scoring is reproducible.
+model Attempt {
+  id            String        @id @default(cuid())
+  assessmentId  String
+  enrolmentId   String
+  attemptNumber Int
+  versionUsed   Int
+  status        AttemptStatus @default(IN_PROGRESS)
+
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  answers     Json?
+  score       Int?
+  maxScore    Int?
+  passed      Boolean?
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  enrolment  Enrolment  @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  grades     Grade[]
+
+  @@unique([assessmentId, enrolmentId, attemptNumber])
+  @@index([enrolmentId])
+}
+
+// ASM-04 — a durable receipt. A failed upload must never present as success,
+// so the row is written only after the object store confirms the put.
+model Submission {
+  id            String @id @default(cuid())
+  assessmentId  String
+  enrolmentId   String
+  attemptNumber Int    @default(1)
+  versionUsed   Int
+
+  receiptId   String   @unique @default(cuid())
+  submittedAt DateTime @default(now())
+  isLate      Boolean  @default(false)
+
+  storageKey String
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  scanStatus String @default("PENDING")
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  enrolment  Enrolment  @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  grades     Grade[]
+
+  @@unique([assessmentId, enrolmentId, attemptNumber])
+  @@index([enrolmentId])
+}
+
+model Grade {
+  id           String  @id @default(cuid())
+  assessmentId String
+  enrolmentId  String
+  submissionId String?
+  attemptId    String?
+
+  score    Int
+  maxScore Int
+  passed   Boolean?
+  feedback String?
+
+  status GradeStatus @default(DRAFT)
+
+  gradedById String?
+  gradedAt   DateTime @default(now())
+
+  releasedById String?
+  releasedAt   DateTime?
+
+  assessment Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  enrolment  Enrolment       @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  submission Submission?     @relation(fields: [submissionId], references: [id])
+  attempt    Attempt?        @relation(fields: [attemptId], references: [id])
+  grader     User?           @relation("Grader", fields: [gradedById], references: [id])
+  overrides  GradeOverride[]
+
+  @@index([enrolmentId, status])
+  @@index([assessmentId, status])
+}
+
+// ASM-06 — original and revised value, actor, reason, and time are all
+// preserved. The override never destroys the prior figure.
+model GradeOverride {
+  id            String   @id @default(cuid())
+  gradeId       String
+  previousScore Int
+  newScore      Int
+  reason        String
+  actorId       String?
+  createdAt     DateTime @default(now())
+
+  grade Grade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+
+  @@index([gradeId])
+}
+
+// ---------------------------------------------------------------------------
+// Certificates — CRD-01 to CRD-06
+// ---------------------------------------------------------------------------
+
+model Certificate {
+  id String @id @default(cuid())
+
+  // CRD-04 — the public lookup key. Carries no internal identifier.
+  verificationRef String @unique
+
+  enrolmentId String
+  userId      String
+  scope       CompletionScope
+  courseId    String?
+  programmeId String?
+
+  awardTitle  String
+  learnerName String
+  issuedAt    DateTime          @default(now())
+  status      CertificateStatus @default(ACTIVE)
+
+  storageKey String?
+
+  revokedAt        DateTime?
+  revokedById      String?
+  revocationReason String?
+
+  // CRD-05 — reissue links old and new rather than overwriting.
+  supersedesId String? @unique
+
+  // CRD-06 — set when a grade or attendance correction may invalidate this
+  // credential. Never silently destroyed.
+  reviewFlaggedAt DateTime?
+
+  enrolment    Enrolment    @relation(fields: [enrolmentId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  course       Course?      @relation(fields: [courseId], references: [id])
+  programme    Programme?   @relation(fields: [programmeId], references: [id])
+  supersedes   Certificate? @relation("Reissue", fields: [supersedesId], references: [id])
+  supersededBy Certificate? @relation("Reissue")
+
+  @@index([userId, status])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Commerce — REG-03, PAY-01 to PAY-14, PRD §19
+// ---------------------------------------------------------------------------
+
+// REG-03 — one traceable order per checkout attempt. idempotencyKey makes
+// replay produce at most one paid effect and one active enrolment.
+model Order {
+  id        String @id @default(cuid())
+  reference String @unique
+  userId    String
+  cohortId  String
+
+  amountMinor Int
+  currency    String @default("NGN")
+
+  status OrderStatus @default(PENDING)
+
+  // §19.1 — the provider chosen at checkout. Changing method keeps one order.
+  selectedProvider PaymentProvider?
+
+  idempotencyKey String  @unique
+  correlationId  String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  paidAt    DateTime?
+
+  user   User   @relation(fields: [userId], references: [id])
+  cohort Cohort @relation(fields: [cohortId], references: [id])
+
+  paymentAttempts   PaymentAttempt[]
+  refunds           Refund[]
+  enrolments        Enrolment[]
+  policyAcceptances PolicyAcceptance[]
+  tickets           Ticket[]
+
+  @@index([userId, status])
+  @@index([cohortId, status])
+  @@index([status, createdAt])
+}
+
+// §19.2 — every provider attempt lands here. PAY-10: only a server-verified
+// result may move this to SUCCEEDED. A browser redirect never does.
+model PaymentAttempt {
+  id       String          @id @default(cuid())
+  orderId  String
+  provider PaymentProvider
+
+  providerRef      String?
+  providerIntentId String?
+
+  amountMinor Int
+  currency    String
+  status      PaymentStatus @default(PENDING)
+
+  idempotencyKey String  @unique
+  correlationId  String?
+
+  initiatedAt   DateTime  @default(now())
+  confirmedAt   DateTime?
+  failedAt      DateTime?
+  failureReason String?
+
+  // PAY-03 — manual confirmation requires all of these plus a reason.
+  manualChannel     String?
+  manualReference   String?
+  manualPaidAt      DateTime?
+  manualEvidenceKey String?
+  confirmedById     String?
+  reason            String?
+
+  // Safe provider payload. Never contains secrets (PAY-14).
+  evidence Json?
+
+  // PAY-07 — set when duplicate or out-of-order evidence conflicts with the
+  // recorded state. Becomes a visible exception, not a duplicate effect.
+  exceptionNote String?
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds Refund[]
+
+  @@index([orderId, status])
+  @@index([provider, status])
+  @@index([providerRef])
+}
+
+// PAY-05, PAY-13 — amount cannot exceed eligible paid value; reason,
+// approver, resulting access decision, actor and time are all preserved.
+model Refund {
+  id               String @id @default(cuid())
+  orderId          String
+  paymentAttemptId String
+
+  amountMinor Int
+  currency    String
+  provider    PaymentProvider
+  providerRef String?
+
+  reason         String
+  approverRef    String?
+  accessDecision String
+  status         RefundStatus @default(REQUESTED)
+
+  actorId     String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  order          Order          @relation(fields: [orderId], references: [id])
+  paymentAttempt PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+}
+
+// PAY-07 — the replay guard. providerEventId is unique, so a duplicate or
+// delayed delivery is recognised rather than reprocessed.
+model WebhookEvent {
+  id              String          @id @default(cuid())
+  provider        PaymentProvider
+  providerEventId String
+  eventType       String
+  payload         Json
+  signatureValid  Boolean
+  status          WebhookStatus   @default(RECEIVED)
+  receivedAt      DateTime        @default(now())
+  processedAt     DateTime?
+  error           String?
+
+  @@unique([provider, providerEventId])
+  @@index([status, receivedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Support — SUP-01 to SUP-06
+// ---------------------------------------------------------------------------
+
+model Ticket {
+  id        String @id @default(cuid())
+  reference String @unique
+  userId    String
+
+  category String
+  subject  String
+  priority TicketPriority @default(NORMAL)
+  status   TicketStatus   @default(NEW)
+
+  assigneeId String?
+
+  // SUP-05 — contextual links. Opening one performs a fresh permission check;
+  // ticket access alone grants nothing.
+  cohortId String?
+  courseId String?
+  orderId  String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  firstRespondedAt DateTime?
+  resolvedAt       DateTime?
+  closedAt         DateTime?
+  reopenedAt       DateTime?
+  escalatedAt      DateTime?
+  escalationReason String?
+
+  user     User    @relation("TicketRequester", fields: [userId], references: [id])
+  assignee User?   @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  cohort   Cohort? @relation(fields: [cohortId], references: [id])
+  course   Course? @relation(fields: [courseId], references: [id])
+  order    Order?  @relation(fields: [orderId], references: [id])
+
+  messages    TicketMessage[]
+  attachments TicketAttachment[]
+
+  @@index([status, priority])
+  @@index([assigneeId, status])
+  @@index([userId])
+}
+
+// SUP-02 — public replies and internal notes share a table but never a
+// visibility. Exports exclude INTERNAL (SUP-06).
+model TicketMessage {
+  id         String            @id @default(cuid())
+  ticketId   String
+  authorId   String
+  visibility MessageVisibility
+  body       String
+  createdAt  DateTime          @default(now())
+
+  ticket      Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      User               @relation(fields: [authorId], references: [id])
+  attachments TicketAttachment[]
+
+  @@index([ticketId, createdAt])
+}
+
+model TicketAttachment {
+  id        String  @id @default(cuid())
+  ticketId  String
+  messageId String?
+
+  storageKey String
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  scanStatus String   @default("PENDING")
+  createdAt  DateTime @default(now())
+
+  ticket  Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message TicketMessage? @relation(fields: [messageId], references: [id])
+
+  @@index([ticketId])
+}
+
+// ---------------------------------------------------------------------------
+// Operations — RPT-04, COM-02
+// ---------------------------------------------------------------------------
+
+// RPT-04 — queued, processing, succeeded, failed, expired, retry. Downloads
+// use short-lived authorized access and the download event is recorded.
+model ExportJob {
+  id            String    @id @default(cuid())
+  requestedById String
+  dataset       String
+  filters       Json?
+  status        JobStatus @default(QUEUED)
+  rowCount      Int?
+  storageKey    String?
+  expiresAt     DateTime?
+  error         String?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  downloadedAt  DateTime?
+
+  requestedBy User @relation(fields: [requestedById], references: [id])
+
+  @@index([requestedById, status])
+}
+
+// COM-02 — repeated events within one correlation produce at most one
+// notification. The composite unique is the deduplication guard.
+model EmailDispatch {
+  id                String    @id @default(cuid())
+  template          String
+  toEmail           String
+  userId            String?
+  correlationId     String
+  status            String    @default("QUEUED")
+  providerMessageId String?
+  sentAt            DateTime?
+  failedAt          DateTime?
+  error             String?
+  createdAt         DateTime  @default(now())
+
+  @@unique([template, correlationId])
+  @@index([status, createdAt])
+}
