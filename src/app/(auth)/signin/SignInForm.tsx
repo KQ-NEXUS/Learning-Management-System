@@ -13,7 +13,7 @@ export function SignInForm() {
       {state.error && (
         <p
           role="alert"
-          className="border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
+          className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger"
         >
           {state.error}
         </p>
@@ -26,7 +26,7 @@ export function SignInForm() {
           type="email"
           autoComplete="username"
           required
-          className="border border-neutral-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
+          className="border border-zinc-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
         />
       </label>
 
@@ -37,14 +37,14 @@ export function SignInForm() {
           type="password"
           autoComplete="current-password"
           required
-          className="border border-neutral-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
+          className="border border-zinc-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
         />
       </label>
 
       <button
         type="submit"
         disabled={pending}
-        className="bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="bg-accent px-3 py-2 text-sm font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50"
       >
         {pending ? "Signing in…" : "Sign in"}
       </button>
