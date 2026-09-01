@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+
+    // Claude Design export: static spec sheet plus its generated canvas
+    // runtime. Reference material, not application code.
+    "design/**",
   ]),
 
   // Data access is confined to the service layer.

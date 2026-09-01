@@ -208,6 +208,11 @@ model User {
   phone         String?
   status        UserStatus @default(PENDING_VERIFICATION)
 
+  // IAM-06 — brute-force and credential-stuffing resistance. Reset to zero
+  // on any successful sign-in.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
   // Presentation hint only. Authority comes from Assignment, never from this.
   isStaff Boolean @default(false)
 

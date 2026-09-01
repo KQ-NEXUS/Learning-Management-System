@@ -54,3 +54,10 @@ docs/superpowers/
 
 # Track task list — local working document
 docs/TRACK-A-TASKS.md
+
+# Playwright MCP session artifacts
+.playwright-mcp/
+design 
+.claude 
+.planning 
+reference 
