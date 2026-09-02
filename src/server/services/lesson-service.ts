@@ -8,20 +8,20 @@
  * so a Cohort pinned to a publication that included it still resolves, and
  * so LessonProgress and completion records are never orphaned.
  *
- * `createLesson` computes position here (Task 1 of this file's history);
- * `parseLessonInput` (D-30 sanitisation, D-24 required toggle, D-31 QUIZ/
- * ASSIGNMENT empty picker) is layered onto the SAME function before it
- * delegates, rather than a second exported entry point — the raw factory
- * `create`/`update` must never be the path any UI calls.
+ * `createLesson` computes position; `parseLessonInput`/`parseLessonUpdateInput`
+ * (D-30 sanitisation, D-24 required toggle, D-31 QUIZ/ASSIGNMENT empty
+ * picker) validate `createLesson`/`updateLesson`'s input before either
+ * delegates — the raw factory `create`/`update` must never be the path any
+ * UI calls.
  */
 
-import { z } from "zod";
 import { prisma } from "@/server/db";
 import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
 import { nextAppendPosition, parkedWithdrawnPosition } from "@/lib/positions";
+import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
 import {
   createResourceService,
   type Delegate,
@@ -47,22 +47,6 @@ export type LessonRecord = {
 export type LessonDelegate = Delegate<LessonRecord>;
 
 type WithPermissionFn = ReturnType<typeof createWithPermission>;
-
-// NO position field — see <position_rule>. .strict() rejects one outright
-// rather than silently dropping it.
-const createLessonInputSchema = z
-  .object({
-    moduleId: z.string().min(1),
-    title: z.string().trim().min(1).max(200),
-    type: z.string().min(1),
-    body: z.string().optional(),
-    embedUrl: z.string().optional(),
-    linkUrl: z.string().optional(),
-    required: z.boolean().default(true),
-    allowManualComplete: z.boolean().default(true),
-    assessmentId: z.string().nullable().optional(),
-  })
-  .strict();
 
 export type CreateLessonServiceDeps = {
   delegate: LessonDelegate;
@@ -130,10 +114,11 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
     },
   });
 
-  // The factory's raw `create` must never be the path any UI calls.
-  // `createLesson` is the only path that computes position AND (once
-  // parseLessonInput is layered on) sanitises body/validates embed and link
-  // URLs before delegating.
+  // The factory's raw `create`/`update` must never be the path any UI
+  // calls. `createLesson`/`updateLesson` are the only paths: both validate
+  // through `parseLessonInput`/`parseLessonUpdateInput` — sanitising body
+  // and validating embed/link URLs (T-04-12, T-04-13) — BEFORE delegating,
+  // and `createLesson` is also the only path that computes position.
   const createLesson = deps.withPermission<{
     moduleId: string;
     title: string;
@@ -148,7 +133,7 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
     const courseId = await resolveCourseIdForModule(input.moduleId);
     return { courseIds: courseId ? [courseId] : [] };
   })(async (input, ctx) => {
-    const parsed = createLessonInputSchema.parse(input);
+    const parsed = parseLessonInput(input);
 
     const created = await runInTransaction(async () => {
       const liveSiblings = (
@@ -188,6 +173,15 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
     return created;
   });
 
+  // Validates through parseLessonUpdateInput (moduleId/title/type all
+  // optional — an update is not a re-parenting surface) before delegating
+  // to the factory's `update`, which already gates on courses.edit via
+  // `lessonScope`. No separate withPermission wrapper needed here.
+  const updateLesson = (id: string, data: Record<string, unknown>, reason?: string) => {
+    const parsed = parseLessonUpdateInput(data);
+    return lessonService.update(id, parsed, reason);
+  };
+
   const listActiveLessons = deps.withPermission<string>("courses.view", async (moduleId) => {
     const courseId = await resolveCourseIdForModule(moduleId);
     return { courseIds: courseId ? [courseId] : [] };
@@ -208,6 +202,7 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
     lessonScope,
     lessonService,
     createLesson,
+    updateLesson,
     listActiveLessons,
     listWithdrawnLessons,
   };
@@ -240,6 +235,7 @@ const built = createLessonService({
 export const lessonScope = built.lessonScope;
 export const lessonService = built.lessonService;
 export const createLesson = built.createLesson;
+export const updateLesson = built.updateLesson;
 export const listActiveLessons = built.listActiveLessons;
 export const listWithdrawnLessons = built.listWithdrawnLessons;
 
