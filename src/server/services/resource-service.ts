@@ -53,8 +53,21 @@ export type ResourceServiceConfig<T> = {
     create: Permission;
     edit: Permission;
   };
-  /** Maps a record id to the scope a grant must match to reach it. */
-  toScope: (id: string) => ResourceScope;
+  /**
+   * Maps a record id to the scope a grant must match to reach it.
+   *
+   * May return a Promise. Course's scope IS the record — `toScope: (id) =>
+   * ({ courseIds: [id] })` — but a Module or Lesson has no scope of its own;
+   * its parent Course id can only be known by reading the row from the
+   * database. A caller-supplied parent id would be a scope the caller
+   * *asserted*, which `with-permission.ts` explicitly warns against
+   * ("Resolved before the check so the scope reflects the real record and
+   * its parents, not something the caller asserted"). `withPermission`'s own
+   * `ScopeResolver` already accepts `ResourceScope | Promise<ResourceScope>`,
+   * so widening this field only extends the factory's type — the
+   * authorization core in `src/server/permissions/**` does not change.
+   */
+  toScope: (id: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
 };
