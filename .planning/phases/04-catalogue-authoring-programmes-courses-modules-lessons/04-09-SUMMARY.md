@@ -4,7 +4,7 @@ plan: 09
 subsystem: ui
 tags: [react, next-app-router, hello-pangea-dnd, server-actions, zod, wcag, accessibility]
 
-status: checkpoint-pending
+status: complete
 
 requires:
   - phase: 04-01
@@ -173,6 +173,12 @@ holding `courses.edit`):
 
 **Resume signal:** "approved", or a description of the step that failed.
 
+**Checkpoint outcome:** ✅ Approved 2026-09-03. Steps 1–9 verified against a dev
+server (empty course `arrange-test-empty` for step 1; seeded
+`workplace-safety-essentials` for 2–9, with one lesson pre-withdrawn via a
+throwaway fixture script). Step 1b's "Add lesson" link confirmed present and
+well-formed; the target route 404s as expected (plan 04-11 not yet built).
+
 ## Files Created/Modified
 
 - `src/components/catalogue/ArrangeBoard.tsx` — reusable arrange board
@@ -246,12 +252,11 @@ deviation 2 is a one-line read needed to render the screen the plan specifies.
 
 ## Next Phase Readiness
 
-- Blocked on the Task 3 human checkpoint (accessibility + concurrency + guard).
-- After approval: mark CAT-02 and CAT-03 complete; the plan-metadata commit
-  (`docs(04-09): ...`) is still to be made by the orchestrator flow.
+- Task 3 human checkpoint approved 2026-09-03 (accessibility + concurrency + guard).
+- CAT-02 and CAT-03 satisfied by this plan.
 - Plan 04-11 can now hand a `moduleId` from the arrange screen to its
   lesson-create form.
 
 ---
 *Phase: 04-catalogue-authoring-programmes-courses-modules-lessons*
-*Status: checkpoint-pending — 2026-09-03*
+*Status: complete — 2026-09-03*
