@@ -57,10 +57,10 @@ import {
   type ReadinessItem,
 } from "@/server/services/readiness-service";
 import {
-  assertNoRunningCohorts as liveAssertNoRunningCohorts,
-  blockingCohorts as liveBlockingCohorts,
+  createCatalogueGuards,
   type BlockingCohort,
   type CatalogueTarget,
+  type CohortGuardDelegate,
 } from "@/server/services/catalogue-guards";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
@@ -506,7 +506,10 @@ export function createPublishService(deps: PublishServiceDeps) {
     return migrated;
   }
 
-  const publishCourse = createPublishOperation<CoursePublishAggregate, CourseObligationPayload>({
+  const publishCourseOp = createPublishOperation<
+    CoursePublishAggregate,
+    CourseObligationPayload
+  >({
     kind: "Course",
     permission: "courses.publish",
     toScope: courseScope,
@@ -517,7 +520,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     commit: courseCommit,
   });
 
-  const publishProgramme = createPublishOperation<
+  const publishProgrammeOp = createPublishOperation<
     ProgrammePublishAggregate,
     ProgrammeObligationPayload
   >({
@@ -530,6 +533,34 @@ export function createPublishService(deps: PublishServiceDeps) {
     affected: (id) => deps.blockingCohorts({ programmeId: id }),
     commit: programmeCommit,
   });
+
+  /** `publishCourse({ courseId, expectedUpdatedAt, reason?, migrateCohortIds? })` */
+  const publishCourse = (input: {
+    courseId: string;
+    expectedUpdatedAt: Date;
+    reason?: string | null;
+    migrateCohortIds?: string[];
+  }) =>
+    publishCourseOp({
+      id: input.courseId,
+      expectedUpdatedAt: input.expectedUpdatedAt,
+      reason: input.reason,
+      migrateCohortIds: input.migrateCohortIds,
+    });
+
+  /** `publishProgramme({ programmeId, expectedUpdatedAt, reason?, migrateCohortIds? })` */
+  const publishProgramme = (input: {
+    programmeId: string;
+    expectedUpdatedAt: Date;
+    reason?: string | null;
+    migrateCohortIds?: string[];
+  }) =>
+    publishProgrammeOp({
+      id: input.programmeId,
+      expectedUpdatedAt: input.expectedUpdatedAt,
+      reason: input.reason,
+      migrateCohortIds: input.migrateCohortIds,
+    });
 
   // -------------------------------------------------------------------------
   // Unpublish — content only, gated courses.publish, refused mid-cohort (D-12)
@@ -605,21 +636,235 @@ export function createPublishService(deps: PublishServiceDeps) {
     return { hasChanges, changes };
   });
 
+  // -------------------------------------------------------------------------
+  // The public-listing switch (D-08 / D-09) — the independent commercial act
+  // -------------------------------------------------------------------------
+
+  const setPublicListing = withPermission<{ kind: PublishKind; id: string; listed: boolean }>(
+    "programmes.publish",
+    (input) => (input.kind === "Course" ? courseScope(input.id) : programmeScope(input.id)),
+  )(async (input, ctx) => {
+    const slug = input.kind.toLowerCase();
+
+    if (!input.listed) {
+      // D-12: listing-off ALWAYS succeeds, even mid-cohort — sales stop
+      // immediately without pulling material away from current learners.
+      // Never touches `status`.
+      const update = input.kind === "Course" ? deps.updateCourse : deps.updateProgramme;
+      const target = await update(input.id, { publiclyListed: false });
+      if (!target) throw new PublishTargetNotFoundError();
+      await audit({
+        action: `${slug}.unlisted`,
+        targetType: input.kind,
+        targetId: input.id,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason: null,
+        after: { publiclyListed: false },
+      });
+      return;
+    }
+
+    // Listing-on: re-run the SAME readiness evaluator server-side and refuse
+    // ONLY on a blocking FAIL. There is deliberately NO extra check that the
+    // content status is already published — the user ruled D-08 beats the
+    // original D-25 wording, so a DRAFT course whose four blockers pass CAN be
+    // listed (the early-bookings case). The evaluator is the single source of
+    // truth (D-27).
+    let failures: ReadinessItem[];
+    let publiclyListedAt: Date | null;
+    let slugLockedAt: Date | null;
+
+    if (input.kind === "Course") {
+      const agg = await deps.loadCourse(input.id);
+      if (!agg) throw new PublishTargetNotFoundError();
+      failures = blockingFailures(evaluateCourseReadiness(agg));
+      publiclyListedAt = agg.publiclyListedAt;
+      slugLockedAt = agg.slugLockedAt;
+    } else {
+      const agg = await deps.loadProgramme(input.id);
+      if (!agg) throw new PublishTargetNotFoundError();
+      failures = blockingFailures(evaluateProgrammeReadiness(agg));
+      publiclyListedAt = agg.publiclyListedAt;
+      slugLockedAt = agg.slugLockedAt;
+    }
+
+    if (failures.length > 0) throw new ListingNotReadyError(failures);
+
+    const data: Record<string, unknown> = { publiclyListed: true };
+    // First listing stamps both; a later re-listing moves neither (D-11:
+    // the slug freezes on FIRST public listing and never thaws).
+    if (publiclyListedAt == null) data.publiclyListedAt = now();
+    if (slugLockedAt == null) data.slugLockedAt = now();
+
+    const update = input.kind === "Course" ? deps.updateCourse : deps.updateProgramme;
+    await update(input.id, data);
+
+    await audit({
+      action: `${slug}.listed`,
+      targetType: input.kind,
+      targetId: input.id,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason: null,
+      after: { publiclyListed: true, slugFrozen: slugLockedAt != null || data.slugLockedAt != null },
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Archive / un-archive (D-14 / D-16). Gated courses.edit (Course) /
+  // programmes.manage (Programme), both reason-required, both refused while a
+  // Cohort is running — the same principle as unpublish, on purpose.
+  // -------------------------------------------------------------------------
+
+  const archiveCourseRecord = withPermission<{ id: string; reason: string }>(
+    "courses.edit",
+    (input) => courseScope(input.id),
+  )(async (input, ctx) => {
+    const reason = requireReason(input.reason);
+    const agg = await deps.loadCourse(input.id);
+    if (!agg) throw new PublishTargetNotFoundError();
+
+    await deps.assertNoRunningCohorts({ courseId: input.id }); // D-14
+
+    // D-14: Programme membership only WARNS — it names the Programmes,
+    // removes the Course from their DRAFT ordering, and leaves every
+    // already-published ProgrammePublication.payload byte-identical.
+    const { programmeTitles } = await deps.removeCourseFromAllProgrammes(input.id);
+
+    await deps.updateCourse(input.id, { status: "ARCHIVED", publiclyListed: false });
+
+    await audit({
+      action: "course.archived",
+      targetType: "Course",
+      targetId: input.id,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason,
+      before: { status: agg.status, publiclyListed: agg.publiclyListed },
+      after: { status: "ARCHIVED", publiclyListed: false },
+    });
+
+    return { programmeWarnings: programmeTitles };
+  });
+
+  const archiveProgrammeRecord = withPermission<{ id: string; reason: string }>(
+    "programmes.manage",
+    (input) => programmeScope(input.id),
+  )(async (input, ctx) => {
+    const reason = requireReason(input.reason);
+    const agg = await deps.loadProgramme(input.id);
+    if (!agg) throw new PublishTargetNotFoundError();
+
+    await deps.assertNoRunningCohorts({ programmeId: input.id }); // D-14 / D-18
+
+    await deps.updateProgramme(input.id, { status: "ARCHIVED", publiclyListed: false });
+
+    await audit({
+      action: "programme.archived",
+      targetType: "Programme",
+      targetId: input.id,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason,
+      before: { status: agg.status, publiclyListed: agg.publiclyListed },
+      after: { status: "ARCHIVED", publiclyListed: false },
+    });
+
+    return { programmeWarnings: [] as string[] };
+  });
+
+  function archiveCatalogueRecord(input: { kind: PublishKind; id: string; reason: string }) {
+    return input.kind === "Course"
+      ? archiveCourseRecord({ id: input.id, reason: input.reason })
+      : archiveProgrammeRecord({ id: input.id, reason: input.reason });
+  }
+
+  const unarchiveCourseRecord = withPermission<{ id: string; reason: string }>(
+    "courses.edit",
+    (input) => courseScope(input.id),
+  )(async (input, ctx) => {
+    const reason = requireReason(input.reason);
+    const agg = await deps.loadCourse(input.id);
+    if (!agg) throw new PublishTargetNotFoundError();
+
+    // D-16: always back to DRAFT + unlisted, NEVER straight to PUBLISHED or
+    // on sale. Re-publishing and re-listing are deliberate, separate acts
+    // that re-run their own checks.
+    await deps.updateCourse(input.id, { status: "DRAFT", publiclyListed: false });
+
+    await audit({
+      action: "course.unarchived",
+      targetType: "Course",
+      targetId: input.id,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason,
+      before: { status: agg.status },
+      after: { status: "DRAFT", publiclyListed: false },
+    });
+  });
+
+  const unarchiveProgrammeRecord = withPermission<{ id: string; reason: string }>(
+    "programmes.manage",
+    (input) => programmeScope(input.id),
+  )(async (input, ctx) => {
+    const reason = requireReason(input.reason);
+    const agg = await deps.loadProgramme(input.id);
+    if (!agg) throw new PublishTargetNotFoundError();
+
+    await deps.updateProgramme(input.id, { status: "DRAFT", publiclyListed: false });
+
+    await audit({
+      action: "programme.unarchived",
+      targetType: "Programme",
+      targetId: input.id,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason,
+      before: { status: agg.status },
+      after: { status: "DRAFT", publiclyListed: false },
+    });
+  });
+
+  function unarchiveCatalogueRecord(input: { kind: PublishKind; id: string; reason: string }) {
+    return input.kind === "Course"
+      ? unarchiveCourseRecord({ id: input.id, reason: input.reason })
+      : unarchiveProgrammeRecord({ id: input.id, reason: input.reason });
+  }
+
   return {
     publishCourse,
     publishProgramme,
+    setPublicListing,
     unpublishContent,
+    archiveCatalogueRecord,
+    unarchiveCatalogueRecord,
     getLatestPublication,
     getUnpublishedChangeSummary,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Production binding
+// Prisma-backed binding
+//
+// Exported as a builder so the integration test (real Postgres via
+// tests/support/pg.ts) can wire the SAME loaders and commit path to a
+// throwaway container with a harness-built `withPermission`, instead of
+// re-deriving them and drifting from production.
 // ---------------------------------------------------------------------------
 
-async function loadCourseAggregate(id: string): Promise<CoursePublishAggregate | null> {
-  const course = await prisma.course.findUnique({
+/** A widened Prisma client — `prisma` in production, a testcontainer client
+ * in the integration test. `any` internally because the select trees below
+ * are validated by Prisma at runtime, not worth re-typing by hand. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyPrisma = any;
+
+async function loadCourseAggregate(
+  db: AnyPrisma,
+  id: string,
+): Promise<CoursePublishAggregate | null> {
+  const course = await db.course.findUnique({
     where: { id },
     select: {
       id: true,
@@ -659,7 +904,7 @@ async function loadCourseAggregate(id: string): Promise<CoursePublishAggregate |
   });
   if (!course) return null;
 
-  const upcomingCohortCount = await prisma.cohort.count({
+  const upcomingCohortCount = await db.cohort.count({
     where: { courseId: id, startsAt: { gte: new Date() } },
   });
 
@@ -671,8 +916,11 @@ async function loadCourseAggregate(id: string): Promise<CoursePublishAggregate |
   };
 }
 
-async function loadProgrammeAggregate(id: string): Promise<ProgrammePublishAggregate | null> {
-  const programme = await prisma.programme.findUnique({
+async function loadProgrammeAggregate(
+  db: AnyPrisma,
+  id: string,
+): Promise<ProgrammePublishAggregate | null> {
+  const programme = await db.programme.findUnique({
     where: { id },
     select: {
       id: true,
@@ -700,8 +948,11 @@ async function loadProgrammeAggregate(id: string): Promise<ProgrammePublishAggre
   return { ...programme, completionRule: programme.completionRule ?? null };
 }
 
-async function latestCoursePublicationRow(id: string): Promise<PublicationRecord | null> {
-  const row = await prisma.coursePublication.findFirst({
+async function latestCoursePublicationRow(
+  db: AnyPrisma,
+  id: string,
+): Promise<PublicationRecord | null> {
+  const row = await db.coursePublication.findFirst({
     where: { courseId: id },
     orderBy: { version: "desc" },
     select: { id: true, version: true, payload: true, publishedAt: true, publishedById: true },
@@ -709,8 +960,11 @@ async function latestCoursePublicationRow(id: string): Promise<PublicationRecord
   return row as PublicationRecord | null;
 }
 
-async function latestProgrammePublicationRow(id: string): Promise<PublicationRecord | null> {
-  const row = await prisma.programmePublication.findFirst({
+async function latestProgrammePublicationRow(
+  db: AnyPrisma,
+  id: string,
+): Promise<PublicationRecord | null> {
+  const row = await db.programmePublication.findFirst({
     where: { programmeId: id },
     orderBy: { version: "desc" },
     select: { id: true, version: true, payload: true, publishedAt: true, publishedById: true },
@@ -719,17 +973,20 @@ async function latestProgrammePublicationRow(id: string): Promise<PublicationRec
 }
 
 async function removeCourseFromAllProgrammes(
+  db: AnyPrisma,
   courseId: string,
 ): Promise<{ programmeTitles: string[] }> {
-  const memberships = await prisma.programmeCourse.findMany({
+  const memberships = await db.programmeCourse.findMany({
     where: { courseId },
     select: { id: true, programmeId: true, programme: { select: { title: true } } },
   });
   if (memberships.length === 0) return { programmeTitles: [] };
 
-  const programmeIds = [...new Set(memberships.map((m) => m.programmeId))];
+  const programmeIds = [
+    ...new Set(memberships.map((m: { programmeId: string }) => m.programmeId)),
+  ] as string[];
 
-  await prisma.$transaction(async (tx) => {
+  await db.$transaction(async (tx: AnyPrisma) => {
     await tx.programmeCourse.deleteMany({ where: { courseId } });
     // Renumber the survivors of each affected Programme's DRAFT ordering
     // to a contiguous 0..n-1. Ascending order never collides: every new
@@ -737,11 +994,12 @@ async function removeCourseFromAllProgrammes(
     // a strictly smaller value. Published ProgrammePublication.payload rows
     // are immutable and untouched (D-14).
     for (const programmeId of programmeIds) {
-      const survivors = await tx.programmeCourse.findMany({
-        where: { programmeId },
-        orderBy: { position: "asc" },
-        select: { id: true, position: true },
-      });
+      const survivors: Array<{ id: string; position: number }> =
+        await tx.programmeCourse.findMany({
+          where: { programmeId },
+          orderBy: { position: "asc" },
+          select: { id: true, position: true },
+        });
       for (let i = 0; i < survivors.length; i++) {
         if (survivors[i].position !== i) {
           await tx.programmeCourse.update({
@@ -754,41 +1012,71 @@ async function removeCourseFromAllProgrammes(
   });
 
   return {
-    programmeTitles: [...new Set(memberships.map((m) => m.programme.title))],
+    programmeTitles: [
+      ...new Set(
+        memberships.map((m: { programme: { title: string } }) => m.programme.title),
+      ),
+    ] as string[],
   };
 }
 
-const productionDb: PublishDb = {
-  $transaction: (fn) => prisma.$transaction((tx) => fn(tx as unknown as PublishTx)),
-};
+/** Adapts `recordAudit` to the `ResourceAuditEntry` shape this service emits. */
+const liveAudit: Audit = (entry) =>
+  recordAudit({
+    actorId: entry.actorId,
+    action: entry.action,
+    targetType: entry.targetType,
+    targetId: entry.targetId,
+    before: entry.before,
+    after: entry.after,
+    reason: entry.reason,
+    outcome: entry.outcome,
+  });
 
-const built = createPublishService({
-  db: productionDb,
-  loadCourse: loadCourseAggregate,
-  loadProgramme: loadProgrammeAggregate,
-  updateCourse: (id, data) => prisma.course.update({ where: { id }, data }),
-  updateProgramme: (id, data) => prisma.programme.update({ where: { id }, data }),
-  latestCoursePublication: latestCoursePublicationRow,
-  latestProgrammePublication: latestProgrammePublicationRow,
-  blockingCohorts: liveBlockingCohorts,
-  assertNoRunningCohorts: liveAssertNoRunningCohorts,
-  removeCourseFromAllProgrammes,
-  withPermission: liveWithPermission,
-  audit: (entry) =>
-    recordAudit({
-      actorId: entry.actorId,
-      action: entry.action,
-      targetType: entry.targetType,
-      targetId: entry.targetId,
-      before: entry.before,
-      after: entry.after,
-      reason: entry.reason,
-      outcome: entry.outcome,
-    }),
-});
+/**
+ * Builds the whole publish service against a given Prisma client and
+ * `withPermission`. Production passes the singleton and the live authorizer;
+ * `tests/publish.integration.test.ts` passes a testcontainer client and a
+ * GLOBAL-grant harness — so the integration test exercises the real loaders
+ * and the real transaction, not a re-derived copy.
+ */
+export function createPrismaBackedPublishService(
+  client: AnyPrisma,
+  withPermission: WithPermission,
+  audit: Audit = liveAudit,
+) {
+  const db: PublishDb = {
+    $transaction: (fn) => client.$transaction((tx: unknown) => fn(tx as PublishTx)),
+  };
+
+  const guards = createCatalogueGuards({
+    cohort: client.cohort as unknown as CohortGuardDelegate,
+  });
+
+  return createPublishService({
+    db,
+    loadCourse: (id) => loadCourseAggregate(client, id),
+    loadProgramme: (id) => loadProgrammeAggregate(client, id),
+    updateCourse: (id, data) => client.course.update({ where: { id }, data }),
+    updateProgramme: (id, data) => client.programme.update({ where: { id }, data }),
+    latestCoursePublication: (id) => latestCoursePublicationRow(client, id),
+    latestProgrammePublication: (id) => latestProgrammePublicationRow(client, id),
+    blockingCohorts: guards.blockingCohorts,
+    assertNoRunningCohorts: guards.assertNoRunningCohorts,
+    removeCourseFromAllProgrammes: (courseId) =>
+      removeCourseFromAllProgrammes(client, courseId),
+    withPermission,
+    audit,
+  });
+}
+
+const built = createPrismaBackedPublishService(prisma, liveWithPermission);
 
 export const publishCourse = built.publishCourse;
 export const publishProgramme = built.publishProgramme;
+export const setPublicListing = built.setPublicListing;
 export const unpublishContent = built.unpublishContent;
+export const archiveCatalogueRecord = built.archiveCatalogueRecord;
+export const unarchiveCatalogueRecord = built.unarchiveCatalogueRecord;
 export const getLatestPublication = built.getLatestPublication;
 export const getUnpublishedChangeSummary = built.getUnpublishedChangeSummary;

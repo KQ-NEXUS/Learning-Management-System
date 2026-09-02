@@ -316,14 +316,14 @@ describe("publishCourse — authorization (D-09)", () => {
     const h = makeHarness();
     const svc = h.buildService([grant("courses.edit")]);
     await expect(
-      svc.publishCourse({ id: "course-1", expectedUpdatedAt: T0 }),
+      svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 }),
     ).rejects.toBeInstanceOf(AuthorizationError);
   });
 
   it("cannot change publiclyListed through publishCourse", async () => {
     const h = makeHarness();
     const svc = h.buildService([grant("courses.publish")]);
-    await svc.publishCourse({ id: "course-1", expectedUpdatedAt: T0 });
+    await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 });
     expect(h.state.courses.get("course-1")!.publiclyListed).toBe(false);
     expect(h.state.courses.get("course-1")!.publiclyListedAt).toBeNull();
   });
@@ -334,7 +334,7 @@ describe("publishCourse — the immutable version", () => {
     const h = makeHarness();
     const svc = h.buildService([grant("courses.publish")]);
 
-    const result = await svc.publishCourse({ id: "course-1", expectedUpdatedAt: T0 });
+    const result = await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 });
 
     expect(result.version).toBe(1);
     expect(h.state.coursePublications).toHaveLength(1);
@@ -351,7 +351,7 @@ describe("publishCourse — the immutable version", () => {
   it("sets Course.status, publishedAt, publishedById and contentVersion", async () => {
     const h = makeHarness();
     const svc = h.buildService([grant("courses.publish")]);
-    await svc.publishCourse({ id: "course-1", expectedUpdatedAt: T0 });
+    await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 });
 
     const row = h.state.courses.get("course-1")!;
     expect(row.status).toBe("PUBLISHED");
@@ -364,11 +364,11 @@ describe("publishCourse — the immutable version", () => {
     const h = makeHarness();
     const svc = h.buildService([grant("courses.publish")]);
 
-    await svc.publishCourse({ id: "course-1", expectedUpdatedAt: T0 });
+    await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 });
     const v1Snapshot = JSON.stringify(h.state.coursePublications[0]);
 
     const newToken = h.state.courses.get("course-1")!.updatedAt;
-    const second = await svc.publishCourse({ id: "course-1", expectedUpdatedAt: newToken });
+    const second = await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: newToken });
 
     expect(second.version).toBe(2);
     expect(h.state.coursePublications).toHaveLength(2);
@@ -379,7 +379,7 @@ describe("publishCourse — the immutable version", () => {
     const h = makeHarness();
     const svc = h.buildService([grant("courses.publish")]);
     await expect(
-      svc.publishCourse({ id: "course-1", expectedUpdatedAt: new Date("2000-01-01") }),
+      svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: new Date("2000-01-01") }),
     ).rejects.toBeInstanceOf(StaleOrderError);
     expect(h.state.coursePublications).toHaveLength(0);
   });
@@ -388,7 +388,7 @@ describe("publishCourse — the immutable version", () => {
     const h = makeHarness({ courseOverrides: { title: null } });
     const svc = h.buildService([grant("courses.publish")]);
     await expect(
-      svc.publishCourse({ id: "course-1", expectedUpdatedAt: T0 }),
+      svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 }),
     ).rejects.toBeInstanceOf(ReadinessRefusedError);
     expect(h.state.coursePublications).toHaveLength(0);
   });
@@ -397,7 +397,7 @@ describe("publishCourse — the immutable version", () => {
     const h = makeHarness();
     const svc = h.buildService([grant("courses.publish")]);
     await expect(
-      svc.publishCourse({ id: "nope", expectedUpdatedAt: T0 }),
+      svc.publishCourse({ courseId: "nope", expectedUpdatedAt: T0 }),
     ).rejects.toBeInstanceOf(PublishTargetNotFoundError);
   });
 });
@@ -406,7 +406,7 @@ describe("publishCourse — cohort migration (D-06)", () => {
   it("leaves every running cohort's coursePublicationId unchanged when migrateCohortIds is empty", async () => {
     const h = makeHarness({ running: [RUNNING_COHORT] });
     const svc = h.buildService([grant("courses.publish")]);
-    await svc.publishCourse({ id: "course-1", expectedUpdatedAt: T0, migrateCohortIds: [] });
+    await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0, migrateCohortIds: [] });
     expect(h.state.cohorts.get("cohort-standalone")!.coursePublicationId).toBeNull();
   });
 
@@ -415,7 +415,7 @@ describe("publishCourse — cohort migration (D-06)", () => {
     const svc = h.buildService([grant("courses.publish")]);
     await expect(
       svc.publishCourse({
-        id: "course-1",
+        courseId: "course-1",
         expectedUpdatedAt: T0,
         migrateCohortIds: ["cohort-standalone"],
         reason: "   ",
@@ -428,7 +428,7 @@ describe("publishCourse — cohort migration (D-06)", () => {
     const svc = h.buildService([grant("courses.publish")]);
 
     const result = await svc.publishCourse({
-      id: "course-1",
+      courseId: "course-1",
       expectedUpdatedAt: T0,
       migrateCohortIds: ["cohort-standalone"],
       reason: "Corrected a required-flag error",
@@ -444,7 +444,7 @@ describe("publishCourse — cohort migration (D-06)", () => {
     const svc = h.buildService([grant("courses.publish")]);
     await expect(
       svc.publishCourse({
-        id: "course-1",
+        courseId: "course-1",
         expectedUpdatedAt: T0,
         migrateCohortIds: ["forged-cohort"],
         reason: "x",
@@ -458,7 +458,7 @@ describe("publishProgramme — same rules, its own permission and payload builde
     const h = makeHarness();
     const svc = h.buildService([grant("programmes.manage")]);
     await expect(
-      svc.publishProgramme({ id: "programme-1", expectedUpdatedAt: T0 }),
+      svc.publishProgramme({ programmeId: "programme-1", expectedUpdatedAt: T0 }),
     ).rejects.toBeInstanceOf(AuthorizationError);
   });
 
@@ -466,7 +466,7 @@ describe("publishProgramme — same rules, its own permission and payload builde
     const h = makeHarness();
     const svc = h.buildService([grant("programmes.publish")]);
 
-    const result = await svc.publishProgramme({ id: "programme-1", expectedUpdatedAt: T0 });
+    const result = await svc.publishProgramme({ programmeId: "programme-1", expectedUpdatedAt: T0 });
 
     expect(result.version).toBe(1);
     expect(h.state.programmePublications).toHaveLength(1);
