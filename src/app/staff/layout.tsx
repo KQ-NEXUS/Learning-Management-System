@@ -17,6 +17,9 @@ import { signOutAction } from "@/app/(auth)/signin/actions";
 const NAV = [
   { label: "Cohorts", href: null },
   { label: "Courses", href: "/staff/courses" },
+  { label: "Roles", href: "/staff/roles" },
+  { label: "Users", href: "/staff/users" },
+  { label: "Audit", href: "/staff/audit" },
   { label: "Enrolments", href: null },
   { label: "Assessment", href: null },
   { label: "Certificates", href: null },
