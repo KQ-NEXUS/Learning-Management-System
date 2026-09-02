@@ -24,7 +24,7 @@ import { useUnsavedOrder } from "./UnsavedOrderGuard";
  * arrangement and is disabled until something changes (D-20).
  *
  * The `required` badge is READ-ONLY here — the toggle lives on the lesson form
- * (D-24). No `@tiptap/*` import belongs in this file; that bundle is the
+ * (D-24). No rich-text-editor import belongs in this file; that bundle is the
  * lesson form's alone (plan 04-11).
  */
 
@@ -32,7 +32,7 @@ export type ArrangeItem = {
   id: string;
   label: string;
   sublabel?: string;
-  /** Read-only, e.g. "Required" / "Optional". Rendered as a badge, never an input. */
+  /** Read-only, e.g. "Required" / "Optional". Rendered as a badge, never a control. */
   badge?: string;
 };
 

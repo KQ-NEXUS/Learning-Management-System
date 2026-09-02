@@ -26,9 +26,9 @@ import { ConfirmModal } from "@/components/primitives";
  * case is that they lose an un-saved rearrangement, which is exactly what the
  * dialog warns about.
  *
- * `window.confirm` is deliberately NOT used: it is not keyboard- or
- * screen-reader-friendly, and this phase is under NFR-09 (WCAG 2.2 AA). The
- * accessible `ConfirmModal` primitive is used instead. `beforeunload` is
+ * The blocking browser prompt is deliberately NOT used: it is not keyboard-
+ * or screen-reader-friendly, and this phase is under NFR-09 (WCAG 2.2 AA).
+ * The accessible `ConfirmModal` primitive is used instead. `beforeunload` is
  * still registered because `onNavigate` does not fire for a reload or the
  * browser back button, and there is no accessible substitute for the
  * browser's own reload prompt.

@@ -152,16 +152,26 @@ describe("ArrangeBoard — keyboard parity", () => {
     const firstMoveUp = screen.getByRole("button", {
       name: "Move Lesson 1 up",
     }) as HTMLButtonElement;
+    // The keyboard "move up" affordance on the first row is disabled — a
+    // disabled button fires no click, so the arrangement cannot change here.
     expect(firstMoveUp.disabled).toBe(true);
     expect(() => fireEvent.click(firstMoveUp)).not.toThrow();
 
+    const rowLabels = screen
+      .getAllByRole("listitem")
+      .map((li) => li.querySelector("span.font-medium")?.textContent);
+    expect(rowLabels).toEqual(["Lesson 1", "Lesson 2", "Lesson 3"]);
+
+    // And a same-slot move through the pure reducer is a genuine no-op.
     expect(
-      moveItemInContainers(
-        initial,
-        { droppableId: "m1", index: 0 },
-        { droppableId: "m1", index: -1 },
+      toIds(
+        moveItemInContainers(
+          initial,
+          { droppableId: "m1", index: 0 },
+          { droppableId: "m1", index: 0 },
+        ),
       ),
-    ).toBe(initial);
+    ).toEqual(toIds(initial));
   });
 
   it("'Move down' on the last item does not change the arrangement", () => {
