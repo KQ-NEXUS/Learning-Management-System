@@ -234,6 +234,23 @@ const built = createLessonService({
 
 export const lessonScope = built.lessonScope;
 export const lessonService = built.lessonService;
+
+/**
+ * The LessonType of a lesson, by id, with no permission wrapper.
+ *
+ * The upload Route Handler calls this only AFTER it has authorized
+ * `courses.edit` on the very same lesson via `lessonScope`, so it opens no new
+ * access surface — it exists so the handler can validate an upload against the
+ * lesson's own type (`validateUpload`) without a second authorized round trip.
+ * Returns null when the lesson does not exist.
+ */
+export async function getLessonTypeById(lessonId: string): Promise<string | null> {
+  const row = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: { type: true },
+  });
+  return row?.type ?? null;
+}
 export const createLesson = built.createLesson;
 export const updateLesson = built.updateLesson;
 export const listActiveLessons = built.listActiveLessons;

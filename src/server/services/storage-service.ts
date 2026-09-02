@@ -8,10 +8,10 @@
  * either backend, and application code reads `S3_*` only (never `MINIO_*`).
  *
  * WORKER REACH (plan 04-10): the scan worker's handlers import this module.
- * It MUST NOT import `@/server/permissions` or anything that calls
- * `cookies()` from `next/headers` — doing so would drag the request-bound
- * permission stack into a process that has no request. There is no reason
- * for this module to need permissions; keep it that way.
+ * It MUST NOT import the request-scoped permission module (`src/server/`
+ * `permissions/*`) or anything that reads the request session cookie — doing
+ * so would drag request-only APIs into a process that has no request. There is
+ * no reason for this module to reach the permission layer; keep it that way.
  */
 
 import { Readable, Transform } from "node:stream";
