@@ -141,10 +141,14 @@ describe("evaluateCourseReadiness — four states, four blockers", () => {
   });
 
   it("blockingFailures returns only items with state FAIL and blocking true", () => {
-    const items = evaluateCourseReadiness(makeCourse({ title: "", modules: [] }));
+    // A module with zero lessons keeps the "modules" item PASS-ing (a
+    // module DOES exist) while failing "module-lessons" independently,
+    // alongside the missing title — the three blockers this evaluator can
+    // ever raise in combination.
+    const items = evaluateCourseReadiness(makeCourse({ title: "", modules: [{ withdrawnAt: null, lessons: [] }] }));
     const failures = blockingFailures(items);
     expect(failures.every((item) => item.state === "FAIL" && item.blocking === true)).toBe(true);
-    expect(failures.map((item) => item.id).sort()).toEqual(["module-lessons", "modules", "title"].sort());
+    expect(failures.map((item) => item.id).sort()).toEqual(["module-lessons", "title"].sort());
   });
 
   it("a fully ready course yields zero blocking failures", () => {
