@@ -208,6 +208,10 @@ model User {
   phone         String?
   status        UserStatus @default(PENDING_VERIFICATION)
 
+  // D-10 — holds an unverified new address during an email-change request,
+  // without touching the live, unique, sign-in-identifier `email` column.
+  pendingEmail String?
+
   // IAM-06 — brute-force and credential-stuffing resistance. Reset to zero
   // on any successful sign-in.
   failedLoginAttempts Int       @default(0)
@@ -289,6 +293,10 @@ model VerificationToken {
   expires    DateTime
   purpose    String
   consumedAt DateTime?
+
+  // D-05 — the per-address cooldown needs to know when the last token for an
+  // identifier+purpose was issued; the model previously carried no timestamp.
+  createdAt DateTime @default(now())
 
   @@unique([identifier, token])
   @@index([expires])

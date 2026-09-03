@@ -32,9 +32,13 @@ export default async function StaffLayout({
   children: React.ReactNode;
 }) {
   // Convenience only. The server action's own check is the security —
-  // a layout guard protects rendering, not data (RBAC-06).
+  // a layout guard protects rendering, not data (RBAC-06). The staffness
+  // check below is the same kind of defence in depth: it only stops a
+  // Learner from rendering a shell whose child components would throw
+  // (D-18) — the root cause is the branched sign-in redirect (D-15).
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
+  if (!actor.isStaff) redirect("/signin");
 
   return (
     <div className="flex min-h-screen flex-col">
