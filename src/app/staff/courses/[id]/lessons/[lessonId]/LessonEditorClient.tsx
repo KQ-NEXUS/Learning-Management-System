@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { ConfirmModal, ResourceForm } from "@/components/primitives";
 import { LessonFormFields, type LessonFieldValues } from "@/components/catalogue";
 import type { LessonType } from "@/lib/upload-limits";
-import { INITIAL_SAVE_STATE, saveLessonAction, withdrawLessonAction } from "./actions";
+import { saveLessonAction, withdrawLessonAction, type SaveLessonState } from "./actions";
+
+const INITIAL_SAVE_STATE: SaveLessonState = { ok: null, errors: [], message: null };
 
 const TYPE_OPTIONS: { value: LessonType; label: string }[] = [
   { value: "TEXT", label: "Text" },
@@ -47,11 +49,13 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
         courseId,
         reason,
       });
-      // A success redirects server-side and never returns here.
-      if (result && !result.ok) {
-        setWithdrawError(result.message);
-        setWithdrawing(false);
+      if (result.ok) {
+        router.push(`/staff/courses/${courseId}/arrange`);
+        router.refresh();
+        return;
       }
+      setWithdrawError(result.message);
+      setWithdrawing(false);
     } catch {
       setWithdrawError("The lesson was not withdrawn.");
       setWithdrawing(false);

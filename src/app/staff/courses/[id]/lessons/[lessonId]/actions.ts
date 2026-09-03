@@ -43,13 +43,14 @@ const LESSON_TYPES = [
 // saveLessonAction — one action, both create and edit.
 // ---------------------------------------------------------------------------
 
+// A "use server" file may only export async functions, so the initial-state
+// constant for `useActionState` lives with its consumer, not here. Types are
+// erased at compile time and stay fine to export.
 export type SaveLessonState = {
   ok: boolean | null;
   errors: FieldError[];
   message: string | null;
 };
-
-export const INITIAL_SAVE_STATE: SaveLessonState = { ok: null, errors: [], message: null };
 
 /** The hidden routing fields — never forwarded to `parseLessonInput` (`.strict()`). */
 const envelopeSchema = z
@@ -68,11 +69,23 @@ function fieldValue(form: FormData, key: string): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+// The cross-field rules in `lesson-input.ts` already carry human messages; only
+// the base string checks (a blank required field) surface as schema internals
+// like "Invalid input: expected string, received undefined".
+const FRIENDLY_FIELD_MESSAGE: Record<string, string> = {
+  title: "Enter a title for this lesson.",
+  body: "Add some lesson content.",
+  embedUrl: "Enter an embed URL from one of the allowed hosts.",
+  linkUrl: "Enter a valid link URL.",
+};
+
 function zodFieldErrors(error: z.ZodError): FieldError[] {
-  return error.issues.map((issue) => ({
-    name: typeof issue.path[0] === "string" ? issue.path[0] : "title",
-    message: issue.message,
-  }));
+  return error.issues.map((issue) => {
+    const name = typeof issue.path[0] === "string" ? issue.path[0] : "title";
+    const isBaseStringCheck = issue.code === "invalid_type" || issue.code === "too_small";
+    const friendly = isBaseStringCheck ? FRIENDLY_FIELD_MESSAGE[name] : undefined;
+    return { name, message: friendly ?? issue.message };
+  });
 }
 
 /** ZodError -> field errors; an authz failure -> one generic, non-enumerating line. */
@@ -186,7 +199,11 @@ export async function withdrawLessonAction(
     throw error;
   }
 
+  // This action is awaited imperatively from a client handler, so it returns a
+  // result and lets the client navigate — a server-side `redirect()` here throws
+  // NEXT_REDIRECT, which that handler's try/catch would swallow as a spurious
+  // "not withdrawn" error even though the archive succeeded.
   revalidatePath(`/staff/courses/${parsed.data.courseId}`);
   revalidatePath(`/staff/courses/${parsed.data.courseId}/arrange`);
-  redirect(`/staff/courses/${parsed.data.courseId}/arrange`);
+  return { ok: true };
 }
