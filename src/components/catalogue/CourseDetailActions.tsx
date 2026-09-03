@@ -71,9 +71,13 @@ export function CourseDetailActions({
   const published = status === "PUBLISHED";
 
   function failureText(result: Extract<CatalogueActionResult | PublishActionResult, { ok: false }>) {
-    return result.reason === "COHORTS_RUNNING"
-      ? `Blocked by running cohorts: ${cohortCodes(result)}.`
-      : result.message;
+    if (result.reason === "COHORTS_RUNNING") {
+      return `Blocked by running cohorts: ${cohortCodes(result)}.`;
+    }
+    if (result.reason === "NOT_READY" && result.failures.length > 0) {
+      return `${result.message} Blocking: ${result.failures.map((item) => item.label).join(", ")}.`;
+    }
+    return result.message;
   }
 
   function settle(result: CatalogueActionResult | PublishActionResult, successText: string) {
