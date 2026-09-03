@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { getPublicCourseBySlug } from "@/server/services/public-catalogue-service";
 
-export const revalidate = 300;
+// Rendered per request, never prerendered — the Docker builder has no
+// DATABASE_URL (04-15 planner fallback; 04-10 `docker build` requirement).
+export const dynamic = "force-dynamic";
 
 function formatDate(value: Date): string {
   return new Date(value).toLocaleDateString(undefined, {

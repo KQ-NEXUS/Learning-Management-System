@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { listPublicCourses } from "@/server/services/public-catalogue-service";
 
-// ISR: anonymous reads stay fast (NFR-02); a listing/publish/archive action
-// calls revalidatePath('/courses') so correctness is restored within one round
-// trip. `next.config.ts` has cacheComponents off, so this is the ordinary model.
-export const revalidate = 300;
+// Rendered per request, never prerendered. 04-15's `<planner_decisions>`
+// sanctioned this fallback: `next build` inside the Docker builder has no
+// `DATABASE_URL`, so a statically-prerendered `listPublicCourses()` fails the
+// image build (04-10's `docker build .` requirement). T-04-71's disposition
+// was already "accept" — the query is a single indexed `where` over a small
+// set, and `revalidatePath('/courses')` from the staff actions is now moot
+// because every request re-reads. Correctness first, caching second.
+export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Courses" };
 
