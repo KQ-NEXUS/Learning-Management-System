@@ -65,9 +65,16 @@ export function CourseDetailActions({
   const [publishError, setPublishError] = useState<string | null>(null);
 
   const [modal, setModal] = useState<null | "unpublish" | "archive" | "unarchive">(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const archived = status === "ARCHIVED";
   const published = status === "PUBLISHED";
+
+  function failureText(result: Extract<CatalogueActionResult | PublishActionResult, { ok: false }>) {
+    return result.reason === "COHORTS_RUNNING"
+      ? `Blocked by running cohorts: ${cohortCodes(result)}.`
+      : result.message;
+  }
 
   function settle(result: CatalogueActionResult | PublishActionResult, successText: string) {
     if (result.ok) {
@@ -75,12 +82,14 @@ export function CourseDetailActions({
       router.refresh();
       return true;
     }
-    const text =
-      result.reason === "COHORTS_RUNNING"
-        ? `Blocked by running cohorts: ${cohortCodes(result)}.`
-        : result.message;
-    setFeedback({ tone: "danger", text });
+    setFeedback({ tone: "danger", text: failureText(result) });
     return false;
+  }
+
+  function openModal(kind: "unpublish" | "archive" | "unarchive") {
+    setModalError(null);
+    setFeedback(null);
+    setModal(kind);
   }
 
   async function runListing(listed: boolean) {
@@ -131,15 +140,21 @@ export function CourseDetailActions({
           : unarchiveCourseAction;
     const result = await action({ courseId, reason });
     setBusy(null);
-    const ok = settle(
-      result,
-      kind === "unpublish"
-        ? "Content unpublished — the course is back to draft."
-        : kind === "archive"
-          ? "Course archived and removed from the public catalogue."
-          : "Course un-archived — it is back to draft and unlisted.",
-    );
-    if (ok) setModal(null);
+    if (result.ok) {
+      settle(
+        result,
+        kind === "unpublish"
+          ? "Content unpublished — the course is back to draft."
+          : kind === "archive"
+            ? "Course archived and removed from the public catalogue."
+            : "Course un-archived — it is back to draft and unlisted.",
+      );
+      setModal(null);
+      return;
+    }
+    // Keep the modal open and show the refusal in it — a COHORTS_RUNNING
+    // message names the blocking cohorts and must not hide behind the dialog.
+    setModalError(failureText(result));
   }
 
   return (
@@ -173,7 +188,7 @@ export function CourseDetailActions({
         {canPublishContent && published && (
           <button
             type="button"
-            onClick={() => setModal("unpublish")}
+            onClick={() => openModal("unpublish")}
             className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
           >
             Unpublish
@@ -204,7 +219,7 @@ export function CourseDetailActions({
         {!archived ? (
           <button
             type="button"
-            onClick={() => setModal("archive")}
+            onClick={() => openModal("archive")}
             className="border border-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface"
           >
             Archive
@@ -212,7 +227,7 @@ export function CourseDetailActions({
         ) : (
           <button
             type="button"
-            onClick={() => setModal("unarchive")}
+            onClick={() => openModal("unarchive")}
             className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
           >
             Un-archive
@@ -253,6 +268,7 @@ export function CourseDetailActions({
         minReasonLength={10}
         reasonLabel="Reason for unpublishing"
         pending={busy === "unpublish"}
+        error={modal === "unpublish" ? modalError : null}
         onConfirm={(reason) => runReasoned("unpublish", reason)}
         onCancel={() => setModal(null)}
       />
@@ -264,6 +280,7 @@ export function CourseDetailActions({
         minReasonLength={10}
         reasonLabel="Reason for archiving"
         pending={busy === "archive"}
+        error={modal === "archive" ? modalError : null}
         onConfirm={(reason) => runReasoned("archive", reason)}
         onCancel={() => setModal(null)}
       />
@@ -275,6 +292,7 @@ export function CourseDetailActions({
         minReasonLength={10}
         reasonLabel="Reason for un-archiving"
         pending={busy === "unarchive"}
+        error={modal === "unarchive" ? modalError : null}
         onConfirm={(reason) => runReasoned("unarchive", reason)}
         onCancel={() => setModal(null)}
       />
