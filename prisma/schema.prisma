@@ -78,6 +78,16 @@ enum LessonType {
   ASSIGNMENT
 }
 
+// CAT-04 / D-28 — one scan vocabulary shared by LessonResource, Submission
+// and TicketAttachment, so Phases 10 and 12 inherit the pipeline instead of
+// inventing a second bare-String vocabulary.
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  ERROR
+}
+
 enum AttendanceState {
   NOT_RECORDED
   PRESENT
@@ -241,6 +251,14 @@ model User {
   facilitatorOf      ScheduledSession[]
   gradesGiven        Grade[]            @relation("Grader")
   exportJobs         ExportJob[]
+
+  // CAT-06 — publish attribution. Named relations disambiguate the two
+  // publication models that both point at User.
+  coursePublications    CoursePublication[]    @relation("CoursePublishedBy")
+  programmePublications ProgrammePublication[] @relation("ProgrammePublishedBy")
+
+  // D-28 — audit completeness on the upload pipeline (RBAC-08).
+  lessonResourceUploads LessonResource[]
 
   @@index([status])
   @@index([isStaff])
@@ -444,6 +462,20 @@ model Programme {
 
   certificateEnabled Boolean @default(true)
 
+  // CAT-05 — incremented on publish, mirroring Course.contentVersion so the
+  // shared publish operation (plan 04-08) behaves identically for both.
+  contentVersion Int     @default(1)
+  publishedById  String?
+
+  // D-08 — public listing is a separate switch from `status`; content
+  // publish and public sale are independent business acts.
+  publiclyListed   Boolean   @default(false)
+  publiclyListedAt DateTime?
+
+  // D-11 — slug freezes on first public listing so bookmarked/indexed URLs
+  // never break.
+  slugLockedAt DateTime?
+
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -451,8 +483,36 @@ model Programme {
   courses      ProgrammeCourse[]
   cohorts      Cohort[]
   certificates Certificate[]
+  publications ProgrammePublication[]
 
   @@index([status])
+  @@index([publiclyListed])
+}
+
+// CAT-05/CAT-06 — an immutable record of a Programme publish: the frozen
+// obligation payload (course list, order, sequential flag, completion
+// rule — D-04), the actor, the version and the time. Never updated after
+// insert; a new publish is a new row.
+model ProgrammePublication {
+  id          String @id @default(cuid())
+  programmeId String
+  version     Int
+
+  // D-02 FROZEN payload only — structure and rules, never live prose.
+  payload       Json
+  payloadSchema Int  @default(1)
+
+  publishedAt   DateTime @default(now())
+  publishedById String
+  reason        String?
+
+  programme   Programme @relation(fields: [programmeId], references: [id])
+  publishedBy User      @relation("ProgrammePublishedBy", fields: [publishedById], references: [id])
+
+  pinnedByCohorts Cohort[]
+
+  @@unique([programmeId, version])
+  @@index([programmeId, publishedAt])
 }
 
 // CAT-02 — a Course belongs to many Programmes by reference. It is never
@@ -492,6 +552,15 @@ model Course {
   completionRule        Json?
   completionRuleVersion Int   @default(1)
 
+  // D-08 — public listing is a separate switch from `status`; content
+  // publish and public sale are independent business acts.
+  publiclyListed   Boolean   @default(false)
+  publiclyListedAt DateTime?
+
+  // D-11 — slug freezes on first public listing so bookmarked/indexed URLs
+  // never break.
+  slugLockedAt DateTime?
+
   publishedAt   DateTime?
   publishedById String?
   createdAt     DateTime  @default(now())
@@ -506,8 +575,37 @@ model Course {
   completions       CompletionRecord[]
   certificates      Certificate[]
   tickets           Ticket[]
+  publications      CoursePublication[]
 
   @@index([status])
+  @@index([publiclyListed])
+}
+
+// CAT-05/CAT-06 — an immutable record of a Course publish: the frozen
+// obligation payload (module/lesson structure, required flags, attached
+// assessment, completion rule — D-02), the actor, the version and the time.
+// Never updated after insert; a new publish is a new row.
+model CoursePublication {
+  id       String @id @default(cuid())
+  courseId String
+  version  Int
+
+  // D-02 FROZEN payload only — structure and rules, never live prose.
+  payload       Json
+  payloadSchema Int  @default(1)
+
+  publishedAt   DateTime @default(now())
+  publishedById String
+  reason        String?
+
+  course      Course @relation(fields: [courseId], references: [id])
+  publishedBy User   @relation("CoursePublishedBy", fields: [publishedById], references: [id])
+
+  pinnedByCohortCourses CohortCourse[]
+  pinnedByCohorts       Cohort[]
+
+  @@unique([courseId, version])
+  @@index([courseId, publishedAt])
 }
 
 model Module {
@@ -515,7 +613,20 @@ model Module {
   courseId String
   title    String
   summary  String?
+
+  // D-17 — two-band convention shared with Lesson.position: live rows use
+  // non-negative positions (negative values are transiently used mid-reorder
+  // by plan 04-05's two-pass transaction); a withdrawn row is parked at or
+  // under WITHDRAWN_PARK_BASE (-1,000,000) so it can never collide with a
+  // live position or with the reorder's parking space. The unique index
+  // below is total, not partial — a withdrawn row still occupies a unique
+  // (parent, position) slot (migration.sql:839,845).
   position Int
+
+  // D-17 — soft-delete. Withdrawn items vanish from authoring and future
+  // snapshots but stay readable for Cohorts pinned to a version that
+  // included them (no `status` field — withdrawnAt is the whole mechanism).
+  withdrawnAt DateTime?
 
   course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   lessons Lesson[]
@@ -528,8 +639,16 @@ model Lesson {
   id       String     @id @default(cuid())
   moduleId String
   title    String
-  position Int
   type     LessonType
+
+  // D-17 — two-band convention shared with Module.position: live rows use
+  // non-negative positions (negative values are transiently used mid-reorder
+  // by plan 04-05's two-pass transaction); a withdrawn row is parked at or
+  // under WITHDRAWN_PARK_BASE (-1,000,000) so it can never collide with a
+  // live position or with the reorder's parking space. The unique index
+  // below is total, not partial — a withdrawn row still occupies a unique
+  // (parent, position) slot (migration.sql:839,845).
+  position Int
 
   body     String?
   embedUrl String?
@@ -544,6 +663,11 @@ model Lesson {
 
   assessmentId String?
 
+  // D-17 — soft-delete. A withdrawn lesson stays visible-but-inert to
+  // Cohorts pinned to a version that included it (D-03), so LessonProgress
+  // and completion records are never orphaned.
+  withdrawnAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -554,24 +678,45 @@ model Lesson {
 
   @@unique([moduleId, position])
   @@index([moduleId])
+  @@index([withdrawnAt])
 }
 
 // NFR-06 — private storage only. storageKey is an object key, never a URL,
 // and downloads use short-lived authorized access.
 model LessonResource {
-  id         String   @id @default(cuid())
+  id         String @id @default(cuid())
   lessonId   String
   title      String
   storageKey String
   filename   String
   mimeType   String
-  sizeBytes  Int
-  scanStatus String   @default("PENDING")
-  createdAt  DateTime @default(now())
 
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  // NFR-06 / D-28 — widened from Int: PostgreSQL int4 tops out at
+  // 2,147,483,647 and the VIDEO cap (plan 04-07) is 2 GB = 2,147,483,648,
+  // one byte over. Left as Int, a maximum-size video would stream all the
+  // way into object storage and then fail on the row insert, orphaning the
+  // object with no row pointing at it. Callers must serialise this value as
+  // a string or a BigInt, never as a JSON number.
+  sizeBytes BigInt
+
+  scanStatus ScanStatus @default(PENDING)
+
+  // D-28 — reconciliation over stuck PENDING rows (@@index([scanStatus])
+  // below) and audit completeness (RBAC-08: actor, target, before/after).
+  uploadedById String?
+  scannedAt    DateTime?
+  scanDetail   String?
+
+  // CAT-04 — resources render in order on the lesson.
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  lesson     Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  uploadedBy User?  @relation(fields: [uploadedById], references: [id])
 
   @@index([lessonId])
+  @@index([scanStatus])
 }
 
 // ---------------------------------------------------------------------------
@@ -611,11 +756,26 @@ model Cohort {
   // ATT-02 — attendance threshold as a completion rule.
   attendanceThresholdPct Int?
 
+  // D-05/D-06 (OQ-1) — a standalone-Course cohort has no guaranteed
+  // CohortCourse row to hang a publication pin on (Cohort carries
+  // courseId XOR programmeId, enforced by the CHECK in 001_integrity.sql),
+  // so Cohort pins directly for that shape. Programme cohorts pin here too;
+  // per-course pins inside a Programme cohort live on CohortCourse below.
+  // PostgreSQL does not index a foreign key automatically, and "which
+  // cohorts are pinned to version N?" (D-06) is a lookup on this pointing
+  // side — without the index it is a sequential scan every time the publish
+  // dialog opens.
+  coursePublicationId    String?
+  programmePublicationId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   course    Course?    @relation(fields: [courseId], references: [id])
   programme Programme? @relation(fields: [programmeId], references: [id])
+
+  coursePublication    CoursePublication?    @relation(fields: [coursePublicationId], references: [id])
+  programmePublication ProgrammePublication? @relation(fields: [programmePublicationId], references: [id])
 
   cohortCourses     CohortCourse[]
   instructors       CohortInstructor[]
@@ -627,6 +787,8 @@ model Cohort {
   @@index([status, startsAt])
   @@index([courseId])
   @@index([programmeId])
+  @@index([coursePublicationId])
+  @@index([programmePublicationId])
 }
 
 // PRD §6.2 — a Programme Cohort inherits Course membership as a versioned
@@ -640,15 +802,23 @@ model CohortCourse {
   contentVersion Int
 
   // Structure captured at cohort publication: modules, lessons, required
-  // flags, assessment references. The learner's obligations are read from
-  // here, not from the live Course.
+  // flags, assessment references. Retained for history only — the live pin
+  // is coursePublicationId below (planner decision OQ-1/A1, Phase 4); the
+  // learner's obligations are read from the pinned CoursePublication.payload,
+  // not from this column.
   contentSnapshot Json?
 
-  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
-  course Course @relation(fields: [courseId], references: [id])
+  // D-05/D-06 (OQ-1) — per-course pin inside a Programme cohort. See the
+  // comment on Cohort.coursePublicationId for why both exist.
+  coursePublicationId String?
+
+  cohort            Cohort             @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  course            Course             @relation(fields: [courseId], references: [id])
+  coursePublication CoursePublication? @relation(fields: [coursePublicationId], references: [id])
 
   @@unique([cohortId, courseId])
   @@unique([cohortId, position])
+  @@index([coursePublicationId])
 }
 
 model CohortInstructor {
@@ -900,7 +1070,8 @@ model Submission {
   filename   String
   mimeType   String
   sizeBytes  Int
-  scanStatus String @default("PENDING")
+  // CAT-04 / D-28 — shared vocabulary with LessonResource and TicketAttachment.
+  scanStatus ScanStatus @default(PENDING)
 
   assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   enrolment  Enrolment  @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
@@ -1205,8 +1376,9 @@ model TicketAttachment {
   filename   String
   mimeType   String
   sizeBytes  Int
-  scanStatus String   @default("PENDING")
-  createdAt  DateTime @default(now())
+  // CAT-04 / D-28 — shared vocabulary with LessonResource and Submission.
+  scanStatus ScanStatus @default(PENDING)
+  createdAt  DateTime   @default(now())
 
   ticket  Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   message TicketMessage? @relation(fields: [messageId], references: [id])

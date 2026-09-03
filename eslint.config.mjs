@@ -16,6 +16,13 @@ const eslintConfig = defineConfig([
     // Claude Design export: static spec sheet plus its generated canvas
     // runtime. Reference material, not application code.
     "design/**",
+
+    // Tooling and planning material, not application code (and all
+    // gitignored). ESLint 9's flat config does not read .gitignore, so these
+    // must be listed or `eslint .` lints the GSD CLI's own .cjs scripts.
+    ".claude/**",
+    ".planning/**",
+    "reference/**",
   ]),
 
   // Data access is confined to the service layer.
@@ -27,7 +34,7 @@ const eslintConfig = defineConfig([
   //
   // See docs/superpowers/specs/2026-09-01-track-a-foundation-design.md (D2).
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}", "worker/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

@@ -1,0 +1,25 @@
+# Normalise line endings. Without this, `core.autocrlf=true` on Windows checks
+# every text file out as CRLF, which breaks tools that expect LF —
+# `prisma format --check`, `.gitignore` pattern matching, and clean diffs.
+* text=auto eol=lf
+
+# Keep shell scripts and lockfiles LF regardless of content sniffing.
+*.sh text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.prisma text eol=lf
+package-lock.json text eol=lf
+
+# Binary assets — never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.docx binary

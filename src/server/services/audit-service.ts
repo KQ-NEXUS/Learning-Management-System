@@ -19,6 +19,13 @@ import type { ScopeType } from "@/server/permissions/scope";
 
 export type BusinessAuditEvent = {
   actorId: string | null;
+  /**
+   * Who the actor IS — "USER" (default) or "SYSTEM" for a row written by a
+   * worker with no session (D-28 scan verdicts). `AuditEvent.actorType`
+   * defaults to "USER" in the schema; this is what lets a system-actor row be
+   * told apart from a user row in the audit view (RBAC-08, Phase 8 export).
+   */
+  actorType?: string;
   action: string;
   targetType: string;
   targetId?: string | null;
@@ -72,6 +79,10 @@ export function redactForAudit(value: unknown, seen: WeakSet<object> = new WeakS
 export function buildAuditRow(event: BusinessAuditEvent) {
   return {
     actorId: event.actorId,
+    // "USER" (default) or "SYSTEM" for a worker-written row with no session
+    // (D-28 scan verdicts). `AuditEvent.actorType` defaults to "USER" in the
+    // schema; this is what tells a system-actor row apart in the audit view.
+    actorType: event.actorType ?? "USER",
     action: event.action,
     targetType: event.targetType,
     targetId: event.targetId ?? null,
