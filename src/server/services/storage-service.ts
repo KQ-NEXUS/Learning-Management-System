@@ -114,6 +114,24 @@ export async function putLessonObject(
   return { bytesUploaded };
 }
 
+/**
+ * Opens an object as a Node stream for the out-of-process malware worker.
+ * The bytes remain in storage regardless of the verdict; infected resources
+ * are marked in the database and are never deleted here.
+ */
+export async function getLessonObject(key: string): Promise<Readable> {
+  const response = await s3.send(
+    new GetObjectCommand({
+      Bucket: bucketName(),
+      Key: key,
+    }),
+  );
+  if (!(response.Body instanceof Readable)) {
+    throw new Error(`Object storage returned no readable body for ${key}.`);
+  }
+  return response.Body;
+}
+
 export type PresignLessonObjectInput = {
   key: string;
   lessonType: string;

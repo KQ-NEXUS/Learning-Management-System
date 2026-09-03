@@ -252,6 +252,18 @@ describe("scan-system-service — the worker-only, unauthorized path", () => {
     expect(events[0]).toMatchObject({ actorId: null, actorType: "SYSTEM" });
   });
 
+  it("findScanTarget returns only the storage key needed by the worker", async () => {
+    const { delegate } = makeScanDelegate([
+      { id: "res1", storageKey: "lessons/lesson1/object-1" },
+    ]);
+    const svc = createScanSystemService({ delegate, audit: async () => {} });
+
+    await expect(svc.findScanTarget("res1")).resolves.toEqual({
+      storageKey: "lessons/lesson1/object-1",
+    });
+    await expect(svc.findScanTarget("missing")).resolves.toBeNull();
+  });
+
   it("findStuckPending returns PENDING rows older than the cutoff and excludes recent ones", async () => {
     const old = new Date(Date.now() - 60 * 60_000);
     const recent = new Date();
@@ -290,7 +302,7 @@ describe("import boundaries (T-04-27d)", () => {
     expect(src).not.toMatch(/next\/headers/);
     expect(src).not.toMatch(/getCurrentActor/);
     expect(src).not.toMatch(/withPermission/);
-    expect(src.match(/AsSystem/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(src.match(/AsSystem/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 
   it("storage-service and queue never name @/server/permissions or withPermission", () => {

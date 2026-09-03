@@ -16,15 +16,15 @@
  * Decision: a separate, explicitly unauthorized, worker-only module. The
  * alternative — a synthetic system actor holding a GLOBAL grant — means minting
  * an identity that can do anything, in a process whose whole job is handling
- * attacker-supplied bytes. A narrow, named, two-function surface is the smaller
+ * attacker-supplied bytes. A narrow, named, three-function surface is the smaller
  * blast radius.
  *
  * The controls that make it safe are structural:
- *   1. This file's two exported operations are suffixed `AsSystem` — the label
+ *   1. This file's three exported operations are suffixed `AsSystem` — the label
  *      is the warning.
- *   2. Neither takes a caller-supplied filter. `markScanResultAsSystem` takes a
- *      resource id and a ScanStatus; `findStuckPendingAsSystem` takes a minute
- *      count. Neither can read or write anything else.
+ *   2. None takes a caller-supplied filter. The worker can resolve one resource
+ *      id to its storage key, mark that id's result, or find PENDING rows older
+ *      than a minute count. It cannot read or write anything else.
  *   3. They still audit — `actorId: null, actorType: "SYSTEM"`.
  *   4. A test asserts nothing under `src/app/**` imports this module.
  *
@@ -127,7 +127,15 @@ export function createScanSystemService(deps: CreateScanSystemServiceDeps) {
     return rows.filter((r) => r.scanStatus === "PENDING" && r.createdAt < cutoff);
   }
 
-  return { markScanResult, findStuckPending };
+  /** Resolve only the storage key needed by a scan job. */
+  async function findScanTarget(
+    id: string,
+  ): Promise<{ storageKey: string } | null> {
+    const row = await deps.delegate.findUnique({ where: { id } });
+    return row ? { storageKey: row.storageKey } : null;
+  }
+
+  return { markScanResult, findStuckPending, findScanTarget };
 }
 
 const built = createScanSystemService({
@@ -152,4 +160,11 @@ export function findStuckPendingAsSystem(
   olderThanMinutes: number,
 ): Promise<LessonResourceRecord[]> {
   return built.findStuckPending(olderThanMinutes);
+}
+
+/** Resolve the single storage key needed by a scan job. Worker only. */
+export function findScanTargetAsSystem(
+  id: string,
+): Promise<{ storageKey: string } | null> {
+  return built.findScanTarget(id);
 }
