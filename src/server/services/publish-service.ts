@@ -636,6 +636,26 @@ export function createPublishService(deps: PublishServiceDeps) {
     return { hasChanges, changes };
   });
 
+  /**
+   * The course detail page's readiness input (D-27, consumed by plan 04-12).
+   *
+   * Loads the exact aggregate the publish and listing operations evaluate —
+   * authorized behind `courses.view` — so the caller can run
+   * `evaluateCourseReadiness` on it and get precisely what the server-side
+   * refusal checks against. It also carries the D-22 token and the two status
+   * flags the action bar reads. The caller runs the evaluator; the page owns
+   * that one line so "the panel renders, it never evaluates" (D-27) stays
+   * visibly true.
+   */
+  const loadCourseReadinessAggregate = withPermission<string>(
+    "courses.view",
+    (id) => courseScope(id),
+  )(async (courseId): Promise<CoursePublishAggregate> => {
+    const agg = await deps.loadCourse(courseId);
+    if (!agg) throw new PublishTargetNotFoundError();
+    return agg;
+  });
+
   // -------------------------------------------------------------------------
   // The public-listing switch (D-08 / D-09) — the independent commercial act
   // -------------------------------------------------------------------------
@@ -842,6 +862,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     unarchiveCatalogueRecord,
     getLatestPublication,
     getUnpublishedChangeSummary,
+    loadCourseReadinessAggregate,
   };
 }
 
@@ -1080,3 +1101,4 @@ export const archiveCatalogueRecord = built.archiveCatalogueRecord;
 export const unarchiveCatalogueRecord = built.unarchiveCatalogueRecord;
 export const getLatestPublication = built.getLatestPublication;
 export const getUnpublishedChangeSummary = built.getUnpublishedChangeSummary;
+export const loadCourseReadinessAggregate = built.loadCourseReadinessAggregate;
