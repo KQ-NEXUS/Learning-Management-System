@@ -5,7 +5,7 @@ import Link from "next/link";
  * scopes this phase to an index and a detail page; discovery and checkout hang
  * off these routes in Phase 6.
  */
-export default function PublicLayout({ children }: LayoutProps<"/">) {
+export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-zinc-200">
