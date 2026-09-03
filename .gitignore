@@ -57,8 +57,10 @@ docs/TRACK-A-TASKS.md
 
 # Playwright MCP session artifacts
 .playwright-mcp/
-design 
-.claude 
-.planning 
-reference 
+
+# Local tooling and planning scratch — not part of the shipped repo
+design/
+.claude/
+.planning/
+reference/
 .worktrees/
