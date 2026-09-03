@@ -160,7 +160,10 @@ describe("UploadPanel", () => {
     );
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(25);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25);
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 

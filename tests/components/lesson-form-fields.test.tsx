@@ -31,9 +31,9 @@ describe("LessonFormFields", () => {
       />,
     );
 
-    expect(screen.getByLabelText(/title/i)).toBeTruthy();
-    expect(screen.getByLabelText("Required")).toBeTruthy();
-    expect(screen.getByLabelText("Allow manual complete")).toBeTruthy();
+    expect(screen.getByLabelText(/^title/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^required/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^allow manual complete/i)).toBeTruthy();
   });
 
   it("binds TEXT lessons to the constrained rich text editor", () => {
@@ -62,12 +62,12 @@ describe("LessonFormFields", () => {
     render(<LessonFormFields lessonType="EMBED" />);
     const hint = screen.getByText(/allowed hosts/i).textContent ?? "";
     for (const host of EMBED_HOST_ALLOWLIST) expect(hint).toContain(host);
-    expect(screen.getByLabelText("Embed URL")).toBeTruthy();
+    expect(screen.getByLabelText(/^embed url/i)).toBeTruthy();
   });
 
   it("renders the LINK URL and optional prose fields", () => {
     render(<LessonFormFields lessonType="LINK" />);
-    expect(screen.getByLabelText("Link URL")).toBeTruthy();
+    expect(screen.getByLabelText(/^link url/i)).toBeTruthy();
     expect(screen.getByText("Optional introductory prose")).toBeTruthy();
   });
 
