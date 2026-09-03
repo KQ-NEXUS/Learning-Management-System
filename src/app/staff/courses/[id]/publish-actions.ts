@@ -55,7 +55,9 @@ export type PublishActionResult =
   | { ok: true; version: number; migratedCohortIds: string[] }
   | CommonFailure;
 
-export type CatalogueActionResult = { ok: true } | CommonFailure;
+export type CatalogueActionResult =
+  | { ok: true; programmeWarnings?: string[] }
+  | CommonFailure;
 
 // ---------------------------------------------------------------------------
 // Error → result mapping. An authz failure is one generic line — never one
@@ -202,9 +204,16 @@ export async function archiveCourseAction(
     return { ok: false, reason: "REASON_REQUIRED", message: "Give a reason of at least 10 characters." };
   }
   try {
-    await archiveCatalogueRecord({ kind: "Course", id: parsed.data.courseId, reason: parsed.data.reason });
+    // D-14: archiving a Course that sits in Programmes only WARNS — it is
+    // removed from their DRAFT ordering and the published versions are
+    // untouched. Surface those Programme names so staff see the blast radius.
+    const result = (await archiveCatalogueRecord({
+      kind: "Course",
+      id: parsed.data.courseId,
+      reason: parsed.data.reason,
+    })) as { programmeWarnings?: string[] } | undefined;
     revalidateCourse(parsed.data.courseId);
-    return { ok: true };
+    return { ok: true, programmeWarnings: result?.programmeWarnings ?? [] };
   } catch (error) {
     return toFailure(error);
   }

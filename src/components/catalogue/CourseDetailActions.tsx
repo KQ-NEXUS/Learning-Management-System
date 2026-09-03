@@ -145,13 +145,17 @@ export function CourseDetailActions({
     const result = await action({ courseId, reason });
     setBusy(null);
     if (result.ok) {
+      const warnings =
+        kind === "archive" && "programmeWarnings" in result && result.programmeWarnings?.length
+          ? ` It was removed from the draft order of: ${result.programmeWarnings.join(", ")} (published versions are unchanged).`
+          : "";
       settle(
         result,
-        kind === "unpublish"
+        (kind === "unpublish"
           ? "Content unpublished — the course is back to draft."
           : kind === "archive"
             ? "Course archived and removed from the public catalogue."
-            : "Course un-archived — it is back to draft and unlisted.",
+            : "Course un-archived — it is back to draft and unlisted.") + warnings,
       );
       setModal(null);
       return;
