@@ -41,7 +41,7 @@ key-decisions:
   - "public-catalogue-service is deliberately not wrapped in the permission choke point — its audience is anonymous — so its `where` clause IS the access control and lives once, as PUBLIC_VISIBILITY_WHERE (publiclyListed AND not ARCHIVED), reused by all four queries."
   - "Every public query selects an explicit field list; the returned shapes carry no completionRule, publishedById or internal id, and the Programme shape omits prerequisites/durationHours (no such columns) and adds ordered member course titles."
   - "The [slug] pages do the existence check as a top-level await BEFORE any Suspense boundary, so notFound() produces a real HTTP 404. The experimental 403 helper is not used — a 403 confirms the record exists."
-  - "ISR: `export const revalidate = 300` on all four routes plus revalidatePath from every listing/publish/archive action. `npm run build` reached the database and the decision held — no fallback to force-dynamic."
+  - "Prerendering: all four routes are `export const dynamic = 'force-dynamic'` — the fallback the planner sanctioned. `npm run build` on the host passed with ISR, but the Docker builder has no `DATABASE_URL` (`.dockerignore` excludes `.env*`), so a statically-prerendered `listPublicCourses()` failed `docker build` (04-10's requirement). Per-request rendering keeps `notFound()` a real 404 and T-04-71 already accepted the anonymous DB traffic."
   - "Unlisted, archived and never-existed slugs all resolve to null and render the identical not-found page — no enumeration oracle (T-04-68)."
 
 patterns-established:
@@ -118,11 +118,19 @@ completed: 2026-09-03
 - `npx vitest run tests/public-catalogue-service.test.ts`: 9 passed.
 - `npx tsc --noEmit`: clean.
 - `npx eslint "src/app/(public)"`: clean.
-- `npm run build`: **succeeds**. Route table: `○ /courses` and `○ /programmes` static with a 5m revalidate window; `ƒ /courses/[slug]` and `ƒ /programmes/[slug]` dynamic (server-rendered on demand). The ISR decision held — no `force-dynamic` fallback.
+- `npm run build`: **succeeds**. All four public routes render `ƒ` (Dynamic, server-rendered on demand) after the `force-dynamic` change — see the follow-up fix below.
 - `npx vitest run`: 36 files, **435 non-integration tests passed** + 28 skipped (the 2 Testcontainers files pass when the local Docker daemon is up — it dropped repeatedly this session).
 - Task 1 greps: 9 `it` blocks; draft+listed asserted returned and published+unlisted not; ARCHIVED never returned under either flag; `completionRule` absent from the shape; `PUBLIC_VISIBILITY_WHERE` used 6× (definition + uses); zero `withPermission`; both not-found files exist.
 - Task 2 greps: all four routes export `revalidate`; zero `forbidden()`; `notFound()` before the first `<Suspense` in each `[slug]/page.tsx`; the `revalidatePath('/courses/[slug]', 'page')` call present; no search/filter/price/booking control; zero `prerequisites`/`durationHours` on the programme page; `prisma/schema.prisma` unchanged; zero `@prisma/client` under `(public)`.
 - Human checkpoint: approved 2026-09-03. Driven against a production build — an unlisted course URL and a made-up slug both returned HTTP 404 (verified on the document response, not just the page), no route returned 403, and listing a course through the staff "List publicly" action made it appear on the anonymous `/courses` index within one reload. Steps 9 (archive leaves the catalogue while staff can still read it) and 11 (accessibility pass) confirmed by the developer.
+
+## Follow-up fixes (developer testing, same day)
+
+Three issues surfaced when the developer exercised the Docker/self-hosted path:
+
+1. **`docker build` failed** — the two `○ Static` public index pages prerender at build, calling `listPublicCourses()`, but the Docker builder has no `DATABASE_URL`. Local `npm run build` had masked it (`.env` + Neon). Fixed by switching all four public routes to `export const dynamic = "force-dynamic"` — the fallback `<planner_decisions>` sanctioned. The `[slug]` routes were already dynamic; the index pages were the blocker.
+2. **`prisma format --check` failed** — not a schema problem. `core.autocrlf=true` with no `.gitattributes` checked the LF-stored schema out as CRLF. Added `.gitattributes` (`* text=auto eol=lf`) and renormalised; this also removes the CRLF class that had briefly made `.gitignore` mis-ignore `.planning` earlier in the phase.
+3. **`docker compose config --quiet` failed** — the repo `.env` is a `next dev` file (Neon `DATABASE_URL` only); `docker-compose.yml` needs `POSTGRES_PASSWORD` / `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` (`:?` form). Merged `.env.example`'s self-hosted section into the local `.env` — dev tools ignore the extras, and the Compose services build their own `DATABASE_URL` from `POSTGRES_*`.
 
 ## Next Phase Readiness
 
