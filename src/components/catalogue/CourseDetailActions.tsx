@@ -248,12 +248,7 @@ export function CourseDetailActions({
         >
           Arrange
         </a>
-        <a
-          href={`/staff/courses/${courseId}/preview`}
-          className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
-        >
-          Preview
-        </a>
+        {/* The preview links live on the course detail page itself (plan 04-14). */}
       </div>
 
       <PublishDialog

@@ -61,6 +61,8 @@ export default async function CourseDetailPage({
   // D-27: the page runs the one shared evaluator; the panel only draws its output.
   const readinessItems = evaluateCourseReadiness(readinessAggregate);
 
+  const firstLessonId = tree.modules.flatMap((m) => m.lessons)[0]?.id ?? null;
+
   const [canPublishContent, canManageListing, affectedCohorts] = await Promise.all([
     can("courses.publish", { courseIds: [id] }),
     can("programmes.publish", { courseIds: [id] }),
@@ -131,17 +133,34 @@ export default async function CourseDetailPage({
       identifier={course.slug}
       subtitle={course.summary}
       actions={
-        <CourseDetailActions
-          courseId={id}
-          status={readinessAggregate.status}
-          publiclyListed={readinessAggregate.publiclyListed}
-          canPublishContent={canPublishContent}
-          canManageListing={canManageListing}
-          expectedUpdatedAt={readinessAggregate.updatedAt.toISOString()}
-          readinessItems={readinessItems}
-          unpublishedChanges={changeSummary.changes}
-          affectedCohorts={affectedCohorts}
-        />
+        <div className="flex flex-wrap items-start gap-2">
+          <CourseDetailActions
+            courseId={id}
+            status={readinessAggregate.status}
+            publiclyListed={readinessAggregate.publiclyListed}
+            canPublishContent={canPublishContent}
+            canManageListing={canManageListing}
+            expectedUpdatedAt={readinessAggregate.updatedAt.toISOString()}
+            readinessItems={readinessItems}
+            unpublishedChanges={changeSummary.changes}
+            affectedCohorts={affectedCohorts}
+          />
+          {/* D-13 preview surfaces (plan 04-14) — staff-gated, no shareable link. */}
+          <Link
+            href={`/staff/courses/${id}/preview`}
+            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+          >
+            Preview public page
+          </Link>
+          {firstLessonId && (
+            <Link
+              href={`/staff/courses/${id}/preview/lessons/${firstLessonId}`}
+              className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            >
+              Preview learner view
+            </Link>
+          )}
+        </div>
       }
       badges={
         <>
