@@ -17,7 +17,7 @@ import {
 } from "@/server/auth/lockout";
 
 export type SignInResult =
-  | { ok: true; token: string; expires: Date }
+  | { ok: true; token: string; expires: Date; isStaff: boolean }
   | { ok: false; reason: "INVALID" | "LOCKED" };
 
 export async function signIn(
@@ -32,6 +32,10 @@ export async function signIn(
       status: true,
       failedLoginAttempts: true,
       lockedUntil: true,
+      // Presentation hint only, used to choose the post-sign-in redirect
+      // (D-15) — never an authorization input. Authority still comes
+      // exclusively from Assignment rows resolved through withPermission.
+      isStaff: true,
     },
   });
 
@@ -66,7 +70,7 @@ export async function signIn(
     }),
   ]);
 
-  return { ok: true, token, expires };
+  return { ok: true, token, expires, isStaff: user.isStaff };
 }
 
 /** Revokes one session. IAM-03. */

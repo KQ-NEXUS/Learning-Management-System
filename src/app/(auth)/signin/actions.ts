@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/server/services/auth-service";
 import { SESSION_COOKIE, SESSION_TTL_DAYS } from "@/server/auth/lockout";
+import { landingPathFor } from "@/server/auth/landing";
 
 export type SignInState = { error: string | null };
 
@@ -38,7 +39,7 @@ export async function signInAction(
     maxAge: SESSION_TTL_DAYS * 86_400,
   });
 
-  redirect("/staff/courses");
+  redirect(landingPathFor(result));
 }
 
 export async function signOutAction(): Promise<void> {

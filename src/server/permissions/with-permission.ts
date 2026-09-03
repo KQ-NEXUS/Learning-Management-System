@@ -49,7 +49,12 @@ export class AuthorizationError extends Error {
   }
 }
 
-export type Actor = { userId: string };
+// isStaff is a presentation hint only, optional so no existing Actor
+// construction stops compiling — used to choose the post-sign-in redirect
+// (D-15) and the staff-layout guard (D-18), never as an authorization
+// input. Authority always comes from Assignment rows resolved through
+// withPermission.
+export type Actor = { userId: string; isStaff?: boolean };
 
 /** An assignment row: a grant plus its validity window. */
 export type RawGrant = Grant & GrantWindow;

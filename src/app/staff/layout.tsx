@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { signOutAction } from "@/app/(auth)/signin/actions";
+import { LEARNER_LANDING_PATH } from "@/server/auth/landing";
 
 /**
  * The admin workspace shell.
@@ -18,6 +19,9 @@ const NAV = [
   { label: "Cohorts", href: null },
   { label: "Courses", href: "/staff/courses" },
   { label: "Programmes", href: "/staff/programmes" },
+  { label: "Roles", href: "/staff/roles" },
+  { label: "Users", href: "/staff/users" },
+  { label: "Audit", href: "/staff/audit" },
   { label: "Enrolments", href: null },
   { label: "Assessment", href: null },
   { label: "Certificates", href: null },
@@ -30,9 +34,18 @@ export default async function StaffLayout({
   children: React.ReactNode;
 }) {
   // Convenience only. The server action's own check is the security —
-  // a layout guard protects rendering, not data (RBAC-06).
+  // a layout guard protects rendering, not data (RBAC-06). The staffness
+  // check below is the same kind of defence in depth: it only stops a
+  // Learner from rendering a shell whose child components would throw
+  // (D-18) — the root cause is the branched sign-in redirect (D-15).
+  // G-03-7: the non-staff branch sends an already-authenticated actor to
+  // their own landing path rather than /signin — the actor is signed in,
+  // so sending them to sign-in reads as an unexpected sign-out, and they
+  // would only re-authenticate into the same destination this branch can
+  // send them to directly, never learning why they were bounced.
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
+  if (!actor.isStaff) redirect(LEARNER_LANDING_PATH);
 
   return (
     <div className="flex min-h-screen flex-col">
