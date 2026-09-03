@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.worktrees
+.env*
+!.env.example
+.planning
+.claude
+docs
+tests
+design
+reference
+coverage
+npm-debug.log*

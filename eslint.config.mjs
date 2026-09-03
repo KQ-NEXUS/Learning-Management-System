@@ -27,7 +27,7 @@ const eslintConfig = defineConfig([
   //
   // See docs/superpowers/specs/2026-09-01-track-a-foundation-design.md (D2).
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}", "worker/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

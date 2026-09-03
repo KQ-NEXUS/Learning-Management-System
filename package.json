@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "worker": "tsx worker/index.ts",
+    "docker:up": "docker compose up -d --build",
     "lint": "eslint",
     "test": "vitest run",
     "db:seed": "prisma db seed",
@@ -27,6 +29,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "sanitize-html": "^2.17.7",
+    "tsx": "^4.23.13",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -45,7 +48,6 @@
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "testcontainers": "^12.1.0",
-    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^4.1.11"
   },
