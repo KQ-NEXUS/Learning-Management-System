@@ -249,3 +249,137 @@ export const { addCourseToProgramme, removeCourseFromProgramme } =
       }),
     runInTransaction: (fn) => prisma.$transaction(fn),
   });
+
+// ---------------------------------------------------------------------------
+// Read helpers for the staff UI (plan 04-13). Authorized `programmes.view`;
+// they add only the joined counts / member lists the CRUD `list`/`get` do not.
+// ---------------------------------------------------------------------------
+
+export type ProgrammeIndexRow = {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string | null;
+  sequential: boolean;
+  status: string;
+  publiclyListed: boolean;
+  certificateEnabled: boolean;
+  courseCount: number;
+};
+
+/** The Programme index table's rows, with member counts. */
+export const listProgrammesForIndex = withPermission<void>(
+  "programmes.view",
+  () => ({}),
+)(async (): Promise<ProgrammeIndexRow[]> => {
+  const rows = await prisma.programme.findMany({
+    orderBy: { title: "asc" },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      summary: true,
+      sequential: true,
+      status: true,
+      publiclyListed: true,
+      certificateEnabled: true,
+      _count: { select: { courses: true } },
+    },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    summary: row.summary,
+    sequential: row.sequential,
+    status: row.status,
+    publiclyListed: row.publiclyListed,
+    certificateEnabled: row.certificateEnabled,
+    courseCount: row._count.courses,
+  }));
+});
+
+export type ProgrammeMemberRow = {
+  /** The ProgrammeCourse join-row id — what the reorder service orders by. */
+  membershipId: string;
+  courseId: string;
+  position: number;
+  title: string;
+  slug: string;
+  status: string;
+  /** Titles of the OTHER Programmes this Course also belongs to (CAT-02). */
+  otherProgrammeTitles: string[];
+};
+
+/** A Programme with its ordered member Courses and each member's other memberships. */
+export const loadProgrammeComposition = withPermission<string>(
+  "programmes.view",
+  (id) => programmeScope(id),
+)(async (programmeId) => {
+  const programme = await prisma.programme.findUnique({
+    where: { id: programmeId },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      updatedAt: true,
+      status: true,
+      courses: {
+        orderBy: { position: "asc" },
+        select: {
+          id: true,
+          position: true,
+          course: {
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+              status: true,
+              programmes: {
+                where: { programmeId: { not: programmeId } },
+                select: { programme: { select: { title: true } } },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!programme) return null;
+
+  const members: ProgrammeMemberRow[] = programme.courses.map((edge) => ({
+    membershipId: edge.id,
+    courseId: edge.course.id,
+    position: edge.position,
+    title: edge.course.title,
+    slug: edge.course.slug,
+    status: edge.course.status,
+    otherProgrammeTitles: edge.course.programmes.map((p) => p.programme.title),
+  }));
+
+  return {
+    id: programme.id,
+    title: programme.title,
+    slug: programme.slug,
+    status: programme.status,
+    updatedAt: programme.updatedAt,
+    members,
+  };
+});
+
+/** Courses NOT already in this Programme — the "Add a Course" picker source. */
+export const listAddableCourses = withPermission<string>(
+  "programmes.view",
+  (id) => programmeScope(id),
+)(async (programmeId) => {
+  const members = await prisma.programmeCourse.findMany({
+    where: { programmeId },
+    select: { courseId: true },
+  });
+  const memberIds = new Set(members.map((m) => m.courseId));
+  const courses = await prisma.course.findMany({
+    orderBy: { title: "asc" },
+    select: { id: true, title: true, slug: true, status: true },
+  });
+  return courses.filter((course) => !memberIds.has(course.id));
+});
