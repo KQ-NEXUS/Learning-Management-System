@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   listLessonResources: vi.fn(),
   retryLessonResource: vi.fn(),
+  markRetryEnqueueFailed: vi.fn(),
   enqueueScan: vi.fn(async () => {}),
 }));
 
@@ -14,6 +15,7 @@ vi.mock("@/server/permissions", () => ({ AuthenticationError, AuthorizationError
 vi.mock("@/server/services/lesson-resource-service", () => ({
   listLessonResources: h.listLessonResources,
   retryLessonResource: h.retryLessonResource,
+  markRetryEnqueueFailed: h.markRetryEnqueueFailed,
   ResourceRetryNotAllowedError,
 }));
 vi.mock("@/server/jobs/queue", () => ({ enqueueScan: h.enqueueScan }));
@@ -44,6 +46,12 @@ beforeEach(() => {
     ...record,
     scanStatus: "PENDING",
     scanDetail: null,
+    scannedAt: null,
+  });
+  h.markRetryEnqueueFailed.mockResolvedValue({
+    ...record,
+    scanStatus: "ERROR",
+    scanDetail: "The scan could not be queued. Try again in a moment.",
     scannedAt: null,
   });
 });
@@ -101,6 +109,39 @@ describe("POST /api/lesson-resources/[id]/retry", () => {
     expect(await response.json()).toMatchObject({
       resource: { id: "resource-1", scanStatus: "PENDING", scanDetail: null },
     });
+  });
+
+  it("rolls the row back to ERROR and returns 503 when the scan cannot be enqueued", async () => {
+    h.enqueueScan.mockRejectedValueOnce(new Error("queue unavailable"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await POST(new Request("http://localhost/retry", { method: "POST" }), {
+      params: Promise.resolve({ id: "resource-1" }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(h.retryLessonResource).toHaveBeenCalledWith("resource-1");
+    expect(h.markRetryEnqueueFailed).toHaveBeenCalledWith("resource-1");
+    const body = await response.json();
+    expect(body.error).toMatch(/could not be queued/i);
+    expect(body.resource).toMatchObject({ id: "resource-1", scanStatus: "ERROR" });
+    errorSpy.mockRestore();
+  });
+
+  it("still returns 503 when the rollback write also fails", async () => {
+    h.enqueueScan.mockRejectedValueOnce(new Error("queue unavailable"));
+    h.markRetryEnqueueFailed.mockRejectedValueOnce(new Error("db down"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await POST(new Request("http://localhost/retry", { method: "POST" }), {
+      params: Promise.resolve({ id: "resource-1" }),
+    });
+
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body.error).toMatch(/could not be queued/i);
+    expect(body.resource).toBeUndefined();
+    errorSpy.mockRestore();
   });
 
   it("returns 409 and does not enqueue when the row is not in ERROR", async () => {

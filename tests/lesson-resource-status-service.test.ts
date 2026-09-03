@@ -98,7 +98,9 @@ describe("lesson resource status operations", () => {
       delegate,
       resolveLessonContext,
       withPermission,
-      audit: async (event) => audits.push(event as Record<string, unknown>),
+      audit: async (event) => {
+        audits.push(event as Record<string, unknown>);
+      },
     });
 
     await expect(service.retryLessonResource("resource-error")).resolves.toMatchObject({
@@ -131,4 +133,68 @@ describe("lesson resource status operations", () => {
       );
     },
   );
+
+  it("rolls a PENDING row back to ERROR with a queue-failure detail and a FAILURE audit", async () => {
+    const { delegate, rows } = makeDelegate([
+      { id: "resource-error", scanStatus: "PENDING", scanDetail: null, scannedAt: null },
+    ]);
+    const { withPermission } = createTestWithPermission([grant("courses.edit")], {
+      userId: "staff-9",
+    });
+    const audits: Array<Record<string, unknown>> = [];
+    const service = createLessonResourceService({
+      delegate,
+      resolveLessonContext,
+      withPermission,
+      audit: async (event) => {
+        audits.push(event as Record<string, unknown>);
+      },
+    });
+
+    await expect(service.markRetryEnqueueFailed("resource-error")).resolves.toMatchObject({
+      scanStatus: "ERROR",
+    });
+    expect(rows[0].scanStatus).toBe("ERROR");
+    expect(rows[0].scanDetail).toMatch(/could not be queued/i);
+    expect(audits[0]).toMatchObject({
+      action: "lessonresource.scan_retry_enqueue_failed",
+      outcome: "FAILURE",
+      actorId: "staff-9",
+      targetId: "resource-error",
+    });
+  });
+
+  it.each(["ERROR", "CLEAN", "INFECTED"] as const)(
+    "leaves a %s row untouched and does not audit when rollback finds it already moved on",
+    async (scanStatus) => {
+      const { delegate, rows } = makeDelegate([{ id: "resource-1", scanStatus }]);
+      const { withPermission } = createTestWithPermission([grant("courses.edit")]);
+      const audits: Array<Record<string, unknown>> = [];
+      const service = createLessonResourceService({
+        delegate,
+        resolveLessonContext,
+        withPermission,
+        audit: async (event) => {
+          audits.push(event as Record<string, unknown>);
+        },
+      });
+
+      await service.markRetryEnqueueFailed("resource-1");
+      expect(rows[0].scanStatus).toBe(scanStatus);
+      expect(audits).toHaveLength(0);
+    },
+  );
+
+  it("denies the rollback without courses.edit on the parent course", async () => {
+    const { delegate } = makeDelegate([{ id: "resource-1", scanStatus: "PENDING" }]);
+    const { withPermission } = createTestWithPermission([grant("courses.view")]);
+    const service = createLessonResourceService({
+      delegate,
+      resolveLessonContext,
+      withPermission,
+      audit: async () => {},
+    });
+
+    await expect(service.markRetryEnqueueFailed("resource-1")).rejects.toThrow();
+  });
 });

@@ -1,15 +1,11 @@
 /**
- * LessonResource — the request-path operations for lesson file attachments
+ * LessonResource — request-path operations for lesson file attachments
  * (CAT-04 / D-28).
  *
- * A LessonResource has no permission of its own: every operation gates on the
- * grandparent Course's `courses.*`, resolved by querying
- * LessonResource -> Lesson -> Module -> Course rather than trusting a
- * caller-supplied id (T-04-11 pattern, same as Module and Lesson).
- *
- * The scan-verdict operations do NOT live here — they run in a process with no
- * request context and are deliberately unauthorized. See
- * `scan-system-service.ts`.
+ * A resource has no permission of its own: every operation resolves through
+ * LessonResource -> Lesson -> Module -> Course rather than trusting scope from
+ * the caller. Scan verdict writes remain in scan-system-service.ts because the
+ * worker has no request/session context.
  */
 
 import { prisma } from "@/server/db";
@@ -45,10 +41,10 @@ export type LessonResourceDelegate = Delegate<LessonResourceRecord>;
 
 type WithPermissionFn = ReturnType<typeof createWithPermission>;
 
-/** The parent lesson's course (for scope) and type (for the download TTL). */
+/** The parent lesson's course (for scope) and type (for download TTL). */
 export type LessonContext = { courseId: string; type: string };
 
-/** Thrown by `getDownloadableResource` when the file is not yet scanned clean. */
+/** Thrown by `getDownloadableResource` while a file is not yet clean. */
 export class ResourceNotScannedError extends Error {
   constructor() {
     super("This file is still being scanned. Try again in a moment.");
@@ -56,7 +52,7 @@ export class ResourceNotScannedError extends Error {
   }
 }
 
-/** Thrown by `getDownloadableResource` when the file is INFECTED or errored. */
+/** Thrown by `getDownloadableResource` when the file cannot be downloaded. */
 export class ResourceInfectedError extends Error {
   constructor() {
     super("This file did not pass a security scan and cannot be downloaded.");
@@ -64,13 +60,16 @@ export class ResourceInfectedError extends Error {
   }
 }
 
+/** Only ERROR is retriable; CLEAN/INFECTED are final and PENDING is active. */
+export class ResourceRetryNotAllowedError extends Error {
+  constructor() {
+    super("Only a resource with a scan error can be retried.");
+    this.name = "ResourceRetryNotAllowedError";
+  }
+}
+
 export type CreateLessonResourceServiceDeps = {
   delegate: LessonResourceDelegate;
-  /**
-   * Resolves a Lesson id to its parent Course id and its LessonType. Production
-   * queries Prisma (`Lesson -> Module -> Course`); tests inject an in-memory
-   * lookup. Null when the Lesson does not exist.
-   */
   resolveLessonContext: (lessonId: string) => Promise<LessonContext | null>;
   withPermission: WithPermissionFn;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
@@ -88,11 +87,6 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     return { courseIds: context ? [context.courseId] : [] };
   }
 
-  // Built on the factory for `get`/`list` parity. No `archiveData`/`restoreData`:
-  // LessonResource has neither a `status` nor a `withdrawnAt` column, so the
-  // factory's `archive` would write a column that does not exist. It is not
-  // re-exported from this module. An INFECTED file is marked, never deleted
-  // (`markScanResult` in scan-system-service.ts) and stays visible to staff.
   const lessonResourceService = createResourceService<LessonResourceRecord>({
     name: "LessonResource",
     delegate,
@@ -122,8 +116,6 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
         mimeType: input.mimeType,
         sizeBytes: input.sizeBytes,
         scanStatus: "PENDING",
-        // Attribution is taken from the authenticated actor, never the request
-        // (T-04-28).
         uploadedById: ctx.actor.userId,
       },
     });
@@ -137,8 +129,90 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
       reason: null,
       after: created,
     });
-
     return created;
+  });
+
+  const listLessonResources = deps.withPermission<string>(
+    "courses.view",
+    async (lessonId) => {
+      const context = await resolveLessonContext(lessonId);
+      return { courseIds: context ? [context.courseId] : [] };
+    },
+  )(async (lessonId) => {
+    const rows = await delegate.findMany({ where: { lessonId } });
+    return rows
+      .filter((row) => row.lessonId === lessonId)
+      .sort((left, right) => left.position - right.position);
+  });
+
+  const retryLessonResource = deps.withPermission<string>(
+    "courses.edit",
+    (id) => lessonResourceScope(id),
+  )(async (id, ctx) => {
+    const before = await delegate.findUnique({ where: { id } });
+    if (!before || before.scanStatus !== "ERROR") {
+      throw new ResourceRetryNotAllowedError();
+    }
+
+    // The row keeps its original `createdAt`, so a retried row immediately looks
+    // "stuck" to `findStuckPending` (scan-system-service.ts) and the
+    // reconciliation cron may re-enqueue it once before the worker clears
+    // PENDING. That is harmless — `markScanResult` is idempotent, so the second
+    // verdict is a no-op write. Tightening this would need a `scanRequestedAt`
+    // column keyed by the enqueue, which is out of scope here.
+    const after = await delegate.update({
+      where: { id },
+      data: { scanStatus: "PENDING", scannedAt: null, scanDetail: null },
+    });
+    await deps.audit({
+      action: "lessonresource.scan_retry_requested",
+      targetType: "LessonResource",
+      targetId: id,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason: null,
+      before,
+      after,
+    });
+    return after;
+  });
+
+  // Compensating write for the retry Route Handler. `retryLessonResource` has
+  // already flipped the row to PENDING and audited it, but the route's
+  // subsequent `enqueueScan` threw — so no job exists and nothing will move the
+  // row off PENDING except the reconciliation cron, minutes later
+  // (`findStuckPending` in scan-system-service.ts). Put the row back to ERROR
+  // now with a truthful detail so the staff UI shows the failure immediately
+  // and the Retry control stays available. No-ops if the row has already left
+  // PENDING (a racing worker or sweep got there first).
+  const markRetryEnqueueFailed = deps.withPermission<string>(
+    "courses.edit",
+    (id) => lessonResourceScope(id),
+  )(async (id, ctx) => {
+    const before = await delegate.findUnique({ where: { id } });
+    if (!before || before.scanStatus !== "PENDING") {
+      return before;
+    }
+
+    const after = await delegate.update({
+      where: { id },
+      data: {
+        scanStatus: "ERROR",
+        scanDetail: "The scan could not be queued. Try again in a moment.",
+        scannedAt: null,
+      },
+    });
+    await deps.audit({
+      action: "lessonresource.scan_retry_enqueue_failed",
+      targetType: "LessonResource",
+      targetId: id,
+      actorId: ctx.actor.userId,
+      outcome: "FAILURE",
+      reason: "scan enqueue failed after retry",
+      before,
+      after,
+    });
+    return after;
   });
 
   const getDownloadableResource = deps.withPermission<string>(
@@ -147,15 +221,11 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
   )(async (id): Promise<DownloadableResource | null> => {
     const row = await delegate.findUnique({ where: { id } });
     if (!row) return null;
-
     if (row.scanStatus === "PENDING") throw new ResourceNotScannedError();
     if (row.scanStatus === "INFECTED" || row.scanStatus === "ERROR") {
       throw new ResourceInfectedError();
     }
 
-    // CLEAN only from here. The parent lesson's type drives the presign TTL
-    // (D-37), so it is resolved alongside the row rather than in a second
-    // query from the Route Handler.
     const context = await resolveLessonContext(row.lessonId);
     return { ...row, lesson: { type: context?.type ?? "FILE" } };
   });
@@ -164,6 +234,9 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     lessonResourceScope,
     lessonResourceService,
     createLessonResource,
+    listLessonResources,
+    retryLessonResource,
+    markRetryEnqueueFailed,
     getDownloadableResource,
   };
 }
@@ -195,4 +268,7 @@ const built = createLessonResourceService({
 export const lessonResourceScope = built.lessonResourceScope;
 export const lessonResourceService = built.lessonResourceService;
 export const createLessonResource = built.createLessonResource;
+export const listLessonResources = built.listLessonResources;
+export const retryLessonResource = built.retryLessonResource;
+export const markRetryEnqueueFailed = built.markRetryEnqueueFailed;
 export const getDownloadableResource = built.getDownloadableResource;
