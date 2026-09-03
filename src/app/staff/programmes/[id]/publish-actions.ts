@@ -85,6 +85,9 @@ function toFailure(error: unknown): CommonFailure {
 function revalidateProgramme(programmeId: string): void {
   revalidatePath(`/staff/programmes/${programmeId}`);
   revalidatePath(`/staff/programmes/${programmeId}/arrange`);
+  // Public catalogue (plan 04-15). `type` is REQUIRED for the dynamic segment.
+  revalidatePath("/programmes");
+  revalidatePath("/programmes/[slug]", "page");
 }
 
 const publishSchema = z

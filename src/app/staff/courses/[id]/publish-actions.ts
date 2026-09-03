@@ -14,9 +14,10 @@
  * D-27: the readiness decision is `publish-service`'s, re-run server-side inside
  * each operation. The panel's props are never the gate.
  *
- * Public-route revalidation is deliberately NOT wired here — plan 04-15 owns the
- * public pages and adds those `revalidatePath` calls to this same file. A
- * `revalidatePath` for a route that does not exist yet is dead code.
+ * Public-route revalidation is wired in `revalidateCourse` (plan 04-15): a
+ * listing / publish / archive change refreshes `/courses` and the dynamic
+ * `/courses/[slug]` within one action round trip, so the built public pages
+ * never serve a record the business has withdrawn.
  */
 
 import { revalidatePath } from "next/cache";
@@ -109,6 +110,10 @@ function toFailure(error: unknown): CommonFailure {
 function revalidateCourse(courseId: string): void {
   revalidatePath(`/staff/courses/${courseId}`);
   revalidatePath(`/staff/courses/${courseId}/arrange`);
+  // Public catalogue (plan 04-15). The `type` argument is REQUIRED for a
+  // dynamic segment — without it the call silently does nothing useful.
+  revalidatePath("/courses");
+  revalidatePath("/courses/[slug]", "page");
 }
 
 // ---------------------------------------------------------------------------

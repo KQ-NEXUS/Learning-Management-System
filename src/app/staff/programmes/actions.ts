@@ -127,5 +127,8 @@ export async function updateProgrammeAction(
 
   revalidatePath("/staff/programmes");
   revalidatePath(`/staff/programmes/${programmeId}`);
+  // A title or slug edit changes the public catalogue too (plan 04-15).
+  revalidatePath("/programmes");
+  revalidatePath("/programmes/[slug]", "page");
   return { ok: true, id: programmeId };
 }
