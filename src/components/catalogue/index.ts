@@ -19,3 +19,9 @@ export type { GuardedLinkProps } from "./UnsavedOrderGuard";
 
 export { RichTextEditor } from "./RichTextEditor";
 export type { RichTextEditorProps } from "./RichTextEditor";
+
+export { UploadPanel } from "./UploadPanel";
+export type { UploadPanelProps, LessonResourceView } from "./UploadPanel";
+
+export { LessonFormFields } from "./LessonFormFields";
+export type { LessonFormFieldsProps, LessonFieldValues } from "./LessonFormFields";

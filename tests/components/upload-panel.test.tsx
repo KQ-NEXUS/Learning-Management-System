@@ -38,18 +38,11 @@ describe("UploadPanel", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="IMAGE"
-        initialResources={[]}
-        maxPolls={0}
-      />,
+      <UploadPanel lessonId="lesson-1" lessonType="IMAGE" initialResources={[]} maxPolls={0} />,
     );
 
     fireEvent.change(screen.getByLabelText("Choose image"), {
-      target: {
-        files: [new File(["<svg/>"], "diagram.svg", { type: "image/svg+xml" })],
-      },
+      target: { files: [new File(["<svg/>"], "diagram.svg", { type: "image/svg+xml" })] },
     });
 
     expect(
@@ -62,12 +55,7 @@ describe("UploadPanel", () => {
     const fetchSpy = vi.fn(() => jsonResponse({ id: "resource-new", scanStatus: "PENDING" }, 201));
     vi.stubGlobal("fetch", fetchSpy);
     render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        initialResources={[]}
-        maxPolls={0}
-      />,
+      <UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[]} maxPolls={0} />,
     );
 
     const file = new File(["slides"], "slides.pdf", { type: "application/pdf" });
@@ -115,9 +103,7 @@ describe("UploadPanel", () => {
     expect(screen.getByText("Eicar-Test-Signature")).toBeTruthy();
     const links = screen.getAllByRole("link", { name: "Download" });
     expect(links).toHaveLength(1);
-    expect(links[0].getAttribute("href")).toBe(
-      "/api/lesson-resources/resource-clean/download",
-    );
+    expect(links[0].getAttribute("href")).toBe("/api/lesson-resources/resource-clean/download");
   });
 
   it("retries an ERROR resource through the retry endpoint and returns it to Scanning", async () => {
@@ -136,11 +122,43 @@ describe("UploadPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry scan" }));
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-    expect(fetchSpy.mock.calls[0][0]).toBe(
-      "/api/lesson-resources/resource-error/retry",
-    );
-    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: "POST" });
+    const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/lesson-resources/resource-error/retry");
+    expect(init).toMatchObject({ method: "POST" });
     expect(screen.getByText("Scanning")).toBeTruthy();
+  });
+
+  it("keeps an ERROR resource visible and surfaces the reason when the retry cannot be queued", async () => {
+    const rolledBack = resource("ERROR", {
+      id: "resource-error",
+      scanDetail: "The scan could not be queued. Try again in a moment.",
+    });
+    const fetchSpy = vi.fn(() =>
+      jsonResponse(
+        { error: "The scan could not be queued. Try again in a moment.", resource: rolledBack },
+        503,
+      ),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    render(
+      <UploadPanel
+        lessonId="lesson-1"
+        lessonType="FILE"
+        maxPolls={0}
+        initialResources={[resource("ERROR", { id: "resource-error" })]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry scan" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe(
+        "The scan could not be queued. Try again in a moment.",
+      ),
+    );
+    expect(screen.getByText("Scan error")).toBeTruthy();
+    expect(screen.queryByText("Scanning")).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry scan" })).toBeTruthy();
   });
 
   it("bounds status polling and stops scheduling work after unmount", async () => {

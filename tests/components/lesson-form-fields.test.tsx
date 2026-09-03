@@ -1,8 +1,25 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LessonFormFields } from "@/components/catalogue";
 import { EMBED_HOST_ALLOWLIST } from "@/lib/embed-url";
 import type { LessonType } from "@/lib/upload-limits";
+
+vi.mock("@/components/catalogue/RichTextEditor", () => ({
+  RichTextEditor: ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (html: string) => void;
+  }) => (
+    <textarea
+      aria-label="Lesson body"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
+import { LessonFormFields } from "@/components/catalogue/LessonFormFields";
 
 afterEach(() => {
   cleanup();

@@ -1,0 +1,331 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { StatusPill } from "@/components/primitives";
+import {
+  UPLOAD_LIMITS,
+  validateUpload,
+  type UploadableLessonType,
+} from "@/lib/upload-limits";
+
+export type LessonResourceView = {
+  id: string;
+  title: string;
+  filename: string;
+  mimeType: string;
+  /** Decimal string because the database column is a BigInt. */
+  sizeBytes: string;
+  scanStatus: "PENDING" | "CLEAN" | "INFECTED" | "ERROR";
+  scanDetail: string | null;
+  position: number;
+};
+
+export type UploadPanelProps = {
+  lessonId: string;
+  lessonType: UploadableLessonType;
+  initialResources?: LessonResourceView[];
+  /** Test seams; production uses a short interval and a finite one-minute window. */
+  pollIntervalMs?: number;
+  maxPolls?: number;
+};
+
+const FRIENDLY_LIMIT_MESSAGES: Record<UploadableLessonType, string> = {
+  IMAGE: "Images must be PNG, JPEG, WebP or GIF and under 10 MB.",
+  FILE: "Files must be an accepted document, text, archive or Office format and under 50 MB.",
+  VIDEO: "Videos must be MP4 or WebM and under 2 GB.",
+};
+
+function statusPresentation(status: LessonResourceView["scanStatus"]) {
+  switch (status) {
+    case "CLEAN":
+      return { label: "Clean", tone: "success" as const };
+    case "INFECTED":
+      return { label: "Infected", tone: "danger" as const };
+    case "ERROR":
+      return { label: "Scan error", tone: "warning" as const };
+    default:
+      return { label: "Scanning", tone: "neutral" as const };
+  }
+}
+
+async function responseMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: string };
+    return body.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function UploadPanel({
+  lessonId,
+  lessonType,
+  initialResources,
+  pollIntervalMs = 3_000,
+  maxPolls = 20,
+}: UploadPanelProps) {
+  const [resources, setResources] = useState<LessonResourceView[]>(initialResources ?? []);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const pollCount = useRef(0);
+
+  const fetchResources = useCallback(
+    async (signal?: AbortSignal): Promise<LessonResourceView[]> => {
+      const response = await fetch(
+        `/api/lesson-resources?${new URLSearchParams({ lessonId })}`,
+        { signal, cache: "no-store" },
+      );
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, "Could not refresh scan status."));
+      }
+      const body = (await response.json()) as { resources: LessonResourceView[] };
+      return body.resources;
+    },
+    [lessonId],
+  );
+
+  useEffect(() => {
+    pollCount.current = 0;
+  }, [lessonId]);
+
+  useEffect(() => {
+    if (initialResources !== undefined) return;
+    const controller = new AbortController();
+    void fetchResources(controller.signal)
+      .then(setResources)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setMessage(error instanceof Error ? error.message : "Could not load resources.");
+        }
+      });
+    return () => controller.abort();
+  }, [fetchResources, initialResources]);
+
+  const hasPending = resources.some((resource) => resource.scanStatus === "PENDING");
+  useEffect(() => {
+    if (!hasPending || maxPolls <= 0 || pollCount.current >= maxPolls) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      pollCount.current += 1;
+      void fetchResources(controller.signal)
+        .then((next) => {
+          if (!controller.signal.aborted) setResources(next);
+        })
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted) {
+            setMessage(error instanceof Error ? error.message : "Could not refresh scan status.");
+          }
+        });
+    }, pollIntervalMs);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [fetchResources, hasPending, maxPolls, pollIntervalMs, resources]);
+
+  function chooseFile(file: File | null) {
+    setMessage(null);
+    setSelectedFile(null);
+    if (!file) return;
+
+    // Courtesy only: the Route Handler repeats this validation and remains the
+    // actual security and size gate for attacker-controlled browser input.
+    const check = validateUpload({
+      lessonType,
+      mimeType: file.type,
+      sizeBytes: file.size,
+    });
+    if (!check.ok) {
+      setMessage(FRIENDLY_LIMIT_MESSAGES[lessonType]);
+      return;
+    }
+
+    setSelectedFile(file);
+    setTitle((current) => current || file.name.replace(/\.[^.]+$/, ""));
+  }
+
+  async function upload() {
+    if (!selectedFile) return;
+    const resourceTitle = title.trim();
+    if (!resourceTitle) {
+      setMessage("Give this resource a title before uploading.");
+      return;
+    }
+
+    setUploading(true);
+    setMessage(null);
+    const query = new URLSearchParams({
+      lessonId,
+      title: resourceTitle,
+      filename: selectedFile.name,
+      mimeType: selectedFile.type,
+      sizeBytes: String(selectedFile.size),
+    });
+
+    try {
+      const response = await fetch(`/api/lesson-resources/upload?${query}`, {
+        method: "POST",
+        body: selectedFile,
+      });
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, "The upload failed."));
+      }
+      const created = (await response.json()) as {
+        id: string;
+        scanStatus: "PENDING";
+      };
+      const pending: LessonResourceView = {
+        id: created.id,
+        title: resourceTitle,
+        filename: selectedFile.name,
+        mimeType: selectedFile.type,
+        sizeBytes: String(selectedFile.size),
+        scanStatus: created.scanStatus,
+        scanDetail: null,
+        position: resources.length,
+      };
+      setResources((current) => [...current, pending]);
+      pollCount.current = 0;
+      setSelectedFile(null);
+      setTitle("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function retry(resourceId: string) {
+    setRetryingId(resourceId);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/lesson-resources/${resourceId}/retry`, {
+        method: "POST",
+      });
+      const body = (await response.json().catch(() => null)) as {
+        resource?: LessonResourceView;
+        error?: string;
+      } | null;
+
+      // A 503 carries the row the server rolled back to ERROR, so apply the
+      // resource whether or not the request succeeded.
+      if (body?.resource) {
+        const next = body.resource;
+        setResources((current) =>
+          current.map((resource) => (resource.id === resourceId ? next : resource)),
+        );
+      }
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Could not retry this scan.");
+      }
+      pollCount.current = 0;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not retry this scan.");
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
+  const noun = lessonType.toLowerCase();
+  const limit = UPLOAD_LIMITS[lessonType];
+
+  return (
+    <fieldset
+      aria-label={`${noun} resources`}
+      className="flex flex-col gap-3 border border-zinc-200 bg-zinc-50 p-3"
+    >
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-600">
+        Resources
+      </legend>
+
+      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+        Resource title
+        <input
+          type="text"
+          value={title}
+          maxLength={300}
+          onChange={(event) => setTitle(event.target.value)}
+          className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+        {`Choose ${noun}`}
+        <input
+          type="file"
+          accept={limit.mimeTypes.join(",")}
+          onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
+          className="text-sm file:mr-3 file:border file:border-zinc-300 file:bg-white file:px-2.5 file:py-1.5 file:text-xs file:font-medium"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={!selectedFile || uploading}
+        onClick={() => void upload()}
+        className="self-start bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast disabled:opacity-50"
+      >
+        Upload resource
+      </button>
+
+      {uploading && (
+        <div aria-live="polite" className="flex items-center gap-2 text-xs text-zinc-600">
+          <progress aria-label="Upload progress" className="h-1.5 w-32" />
+          Uploading…
+        </div>
+      )}
+      {message && (
+        <p role="alert" className="text-xs text-danger">
+          {message}
+        </p>
+      )}
+
+      {resources.length === 0 ? (
+        <p className="text-xs text-zinc-500">No resources uploaded yet.</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-zinc-200 border-t border-zinc-200">
+          {resources.map((resource) => {
+            const status = statusPresentation(resource.scanStatus);
+            return (
+              <li key={resource.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{resource.title}</p>
+                  <p className="truncate text-xs text-zinc-500">{resource.filename}</p>
+                  {(resource.scanStatus === "INFECTED" || resource.scanStatus === "ERROR") &&
+                    resource.scanDetail && (
+                      <p className="mt-1 text-xs text-zinc-600">{resource.scanDetail}</p>
+                    )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill label={status.label} tone={status.tone} />
+                  {resource.scanStatus === "CLEAN" && (
+                    <a
+                      href={`/api/lesson-resources/${resource.id}/download`}
+                      className="text-xs font-medium text-accent underline underline-offset-2"
+                    >
+                      Download
+                    </a>
+                  )}
+                  {resource.scanStatus === "ERROR" && (
+                    <button
+                      type="button"
+                      aria-label="Retry scan"
+                      disabled={retryingId === resource.id}
+                      onClick={() => void retry(resource.id)}
+                      className="border border-zinc-300 bg-white px-2 py-1 text-xs font-medium disabled:opacity-50"
+                    >
+                      {retryingId === resource.id ? "Retrying…" : "Retry"}
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </fieldset>
+  );
+}
