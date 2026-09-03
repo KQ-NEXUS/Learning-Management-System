@@ -172,9 +172,28 @@ export function buildProgrammeObligationTree(programme: ObligationProgrammeInput
 }
 
 /**
+ * Serialises with object keys sorted at every depth, so two payloads with the
+ * same content compare equal regardless of key order. This matters because the
+ * stored payload is a `jsonb` column: PostgreSQL does not preserve object key
+ * order, so a plain `JSON.stringify` of the round-tripped payload would never
+ * match a freshly built tree and the "unpublished changes" banner would be
+ * permanently stuck on. Array order is preserved — the builders already sort
+ * modules and lessons by position, and position IS an obligation.
+ */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, val) => {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      const record = val as Record<string, unknown>;
+      return Object.fromEntries(Object.keys(record).sort().map((k) => [k, record[k]]));
+    }
+    return val;
+  });
+}
+
+/**
  * `true` when the aggregate's live obligations differ from the last
  * published payload. Because the builders above sort deterministically and
- * emit only the frozen facets, a canonical `JSON.stringify` comparison is
+ * emit only the frozen facets, a canonical serialisation comparison is
  * total — it needs no field-by-field structural diff to be correct.
  *
  * When there is no publication yet, "unpublished changes" reduces to "is
@@ -191,7 +210,7 @@ export function hasUnpublishedObligationChanges(
 
   const freshTree = "courses" in aggregate ? buildProgrammeObligationTree(aggregate) : buildCourseObligationTree(aggregate);
 
-  return JSON.stringify(freshTree) !== JSON.stringify(latestPublicationPayload);
+  return canonicalJson(freshTree) !== canonicalJson(latestPublicationPayload);
 }
 
 function isCourseObligationPayload(

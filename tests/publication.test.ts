@@ -212,6 +212,18 @@ describe("hasUnpublishedObligationChanges — D-01, the single most important as
     expect(hasUnpublishedObligationChanges(editedProse, published)).toBe(false);
   });
 
+  it("is false when the stored payload has the same content but its object keys are reordered", () => {
+    // The real payload column is `jsonb`; PostgreSQL does not preserve object
+    // key order, so the round-tripped payload arrives with keys shuffled. The
+    // comparison must be canonical, not a raw JSON.stringify.
+    const course = makeCourse();
+    const tree = buildCourseObligationTree(course) as Record<string, unknown>;
+    const shuffled = Object.fromEntries(
+      Object.keys(tree).reverse().map((key) => [key, tree[key]]),
+    ) as unknown as ReturnType<typeof buildCourseObligationTree>;
+    expect(hasUnpublishedObligationChanges(course, shuffled)).toBe(false);
+  });
+
   it("reordering lessons returns true", () => {
     const course = makeCourse();
     const published = buildCourseObligationTree(course);
