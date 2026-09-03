@@ -63,6 +63,14 @@ export type ArrangeBoardProps = {
   title?: string;
   /** Rendered next to a container's label — e.g. an "Add lesson" link. */
   renderContainerAction?: (containerId: string) => ReactNode;
+  /**
+   * Rendered after each item's Move controls — e.g. a "Remove from programme"
+   * button (plan 04-13). Optional and backward-compatible: callers that do not
+   * pass it get exactly today's board.
+   */
+  renderItemAction?: (item: ArrangeItem, containerId: string) => ReactNode;
+  /** Shown when a container has no items. Defaults to the lesson-board copy. */
+  emptyContainerLabel?: string;
 };
 
 type Loc = { droppableId: string; index: number };
@@ -130,6 +138,8 @@ export function ArrangeBoard({
   allowCrossContainer = false,
   title,
   renderContainerAction,
+  renderItemAction,
+  emptyContainerLabel = "No lessons in this module yet.",
 }: ArrangeBoardProps) {
   const { setDirty } = useUnsavedOrder();
   const boardKey = useId();
@@ -215,7 +225,7 @@ export function ArrangeBoard({
                 >
                   {container.items.length === 0 && (
                     <li className="border border-dashed border-zinc-300 px-2.5 py-2 text-xs text-zinc-500">
-                      No lessons in this module yet.
+                      {emptyContainerLabel}
                     </li>
                   )}
                   {container.items.map((item, index) => (
@@ -307,6 +317,7 @@ export function ArrangeBoard({
                                 </button>
                               </>
                             )}
+                            {renderItemAction?.(item, container.id)}
                           </span>
                         </li>
                       )}
