@@ -656,6 +656,35 @@ export function createPublishService(deps: PublishServiceDeps) {
     return agg;
   });
 
+  /** The Programme detail page's equivalent of `loadCourseReadinessAggregate`. */
+  const loadProgrammeReadinessAggregate = withPermission<string>(
+    "programmes.view",
+    (id) => programmeScope(id),
+  )(async (programmeId): Promise<ProgrammePublishAggregate> => {
+    const agg = await deps.loadProgramme(programmeId);
+    if (!agg) throw new PublishTargetNotFoundError();
+    return agg;
+  });
+
+  /** The Programme detail page's D-05 banner feed — mirrors the course version. */
+  const getUnpublishedProgrammeChangeSummary = withPermission<string>(
+    "programmes.view",
+    (id) => programmeScope(id),
+  )(async (programmeId): Promise<{ hasChanges: boolean; changes: string[] }> => {
+    const agg = await deps.loadProgramme(programmeId);
+    if (!agg) return { hasChanges: false, changes: [] };
+
+    const latest = await deps.latestProgrammePublication(programmeId);
+    const latestPayload = (latest?.payload ?? null) as ProgrammeObligationPayload | null;
+
+    const hasChanges = hasUnpublishedObligationChanges(agg, latestPayload);
+    const changes = latestPayload
+      ? diffObligationTrees(buildProgrammeObligationTree(agg), latestPayload)
+      : [];
+
+    return { hasChanges, changes };
+  });
+
   // -------------------------------------------------------------------------
   // The public-listing switch (D-08 / D-09) — the independent commercial act
   // -------------------------------------------------------------------------
@@ -863,6 +892,8 @@ export function createPublishService(deps: PublishServiceDeps) {
     getLatestPublication,
     getUnpublishedChangeSummary,
     loadCourseReadinessAggregate,
+    loadProgrammeReadinessAggregate,
+    getUnpublishedProgrammeChangeSummary,
   };
 }
 
@@ -1102,3 +1133,5 @@ export const unarchiveCatalogueRecord = built.unarchiveCatalogueRecord;
 export const getLatestPublication = built.getLatestPublication;
 export const getUnpublishedChangeSummary = built.getUnpublishedChangeSummary;
 export const loadCourseReadinessAggregate = built.loadCourseReadinessAggregate;
+export const loadProgrammeReadinessAggregate = built.loadProgrammeReadinessAggregate;
+export const getUnpublishedProgrammeChangeSummary = built.getUnpublishedProgrammeChangeSummary;
