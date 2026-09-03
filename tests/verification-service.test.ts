@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { guardFindUnique } from "./support/prisma-contract";
 import { TOKEN_PURPOSE } from "@/lib/identity";
 import {
   createVerificationService,
@@ -8,9 +9,21 @@ import {
 
 type UserRow = { id: string; email: string; status: string };
 
-function harness(options: { tokens?: VerificationTokenRow[]; users?: UserRow[] } = {}) {
+/** A recognisable rejection used by every "rejecting transport" test in this
+ * file, so a failing assertion's stack trace is unambiguous about its origin. */
+class SimulatedProviderOutage extends Error {
+  constructor() {
+    super("simulated provider outage");
+    this.name = "SimulatedProviderOutage";
+  }
+}
+
+function harness(
+  options: { tokens?: VerificationTokenRow[]; users?: UserRow[]; rejectDispatch?: boolean } = {},
+) {
   const tokens: VerificationTokenRow[] = options.tokens ?? [];
   const users: UserRow[] = options.users ?? [];
+  const rejectDispatch = options.rejectDispatch ?? false;
   const dispatched: unknown[] = [];
   const audits: unknown[] = [];
 
@@ -49,8 +62,12 @@ function harness(options: { tokens?: VerificationTokenRow[]; users?: UserRow[] }
       }),
     },
     user: {
-      findUnique: vi.fn(async ({ where }: { where: { email: string } }) =>
-        users.find((u) => u.email === where.email) ?? null,
+      // Guarded per plan 07's schema-derived contract (tests/support/prisma-contract.ts):
+      // this fake can never answer a findUnique selector the real Prisma client would refuse.
+      findUnique: vi.fn(
+        guardFindUnique("User", async ({ where }: { where: { email: string } }) =>
+          users.find((u) => u.email === where.email) ?? null,
+        ),
       ),
       findFirst: vi.fn(async ({ where }: { where: { email: string } }) =>
         users.find((u) => u.email === where.email) ?? null,
@@ -69,6 +86,7 @@ function harness(options: { tokens?: VerificationTokenRow[]; users?: UserRow[] }
   const service = createVerificationService({
     store,
     dispatch: async (params) => {
+      if (rejectDispatch) throw new SimulatedProviderOutage();
       dispatched.push(params);
       return { ok: true };
     },
@@ -360,6 +378,24 @@ describe("resendVerification", () => {
     expect(pendingResult).toEqual({ ok: true });
     expect(activeResult).toEqual({ ok: true });
     expect(cooldownResult).toEqual({ ok: true });
+  });
+});
+
+// G-03-3 regression, observed live during UAT (test 31): a rejecting
+// transport must not escape resendVerification.
+describe("resendVerification — rejecting transport (G-03-3 regression)", () => {
+  it("returns its single ok value and does not reject when the send rejects", async () => {
+    harness_now.value = new Date("2026-09-02T12:00:00Z");
+    const { service, dispatched } = harness({
+      users: [{ id: "u1", email: "learner@example.com", status: "PENDING_VERIFICATION" }],
+      rejectDispatch: true,
+    });
+
+    // await in a form that fails the test on rejection.
+    const result = await service.resendVerification("learner@example.com");
+
+    expect(result).toEqual({ ok: true });
+    expect(dispatched).toHaveLength(0); // the transport really did reject
   });
 });
 

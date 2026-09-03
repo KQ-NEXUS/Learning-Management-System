@@ -10,7 +10,7 @@ import {
   type SetMarketingPreferenceState,
 } from "./actions";
 
-const UPDATE_INITIAL: UpdateProfileState = { error: null, saved: false };
+const UPDATE_INITIAL: UpdateProfileState = { error: null, saved: false, saveCount: 0, savedProfile: null };
 const EMAIL_CHANGE_INITIAL: RequestEmailChangeState = { error: null, requested: false };
 
 export function ProfileForm({
@@ -38,6 +38,13 @@ export function ProfileForm({
 function NameAndPhoneSection({ name, phone }: { name: string; phone: string | null }) {
   const [state, action, pending] = useActionState(updateProfileAction, UPDATE_INITIAL);
 
+  // G-03-6b — branch on the echoed profile being present rather than a
+  // null-coalescing chain: a saved phone of null must render as an empty
+  // field, not silently fall back to the stale server prop, which is
+  // exactly what `savedProfile?.phone ?? phone` would do.
+  const displayName = state.savedProfile !== null ? state.savedProfile.name : name;
+  const displayPhone = state.savedProfile !== null ? state.savedProfile.phone : phone;
+
   return (
     <form action={action} className="flex flex-col gap-4">
       <h2 className="text-sm font-semibold tracking-tight">Profile</h2>
@@ -54,11 +61,19 @@ function NameAndPhoneSection({ name, phone }: { name: string; phone: string | nu
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium">Full name</span>
         <input
+          // React 19 resets an uncontrolled form after a form action
+          // completes, restoring `defaultValue` — an already-mounted input
+          // does not follow a changed `defaultValue` prop, so
+          // revalidatePath alone leaves this field showing the pre-save
+          // value (exactly what UAT reported). Keying off the save counter
+          // forces a remount on every successful save, so the reset lands
+          // on the value that was actually saved.
+          key={`name-${state.saveCount}`}
           name="name"
           type="text"
           autoComplete="name"
           required
-          defaultValue={name}
+          defaultValue={displayName}
           className="border border-zinc-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
         />
       </label>
@@ -66,10 +81,11 @@ function NameAndPhoneSection({ name, phone }: { name: string; phone: string | nu
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium">Phone</span>
         <input
+          key={`phone-${state.saveCount}`}
           name="phone"
           type="tel"
           autoComplete="tel"
-          defaultValue={phone ?? ""}
+          defaultValue={displayPhone ?? ""}
           className="border border-zinc-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
         />
       </label>

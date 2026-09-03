@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { guardFindUnique } from "./support/prisma-contract";
 import { POLICY_TYPE, POLICY_VERSIONS } from "@/lib/identity";
 import {
   createProfileService,
@@ -24,7 +25,17 @@ type PolicyAcceptanceRow = {
 
 const NOW = { value: new Date("2026-09-02T12:00:00Z") };
 
-function sharedHarness() {
+/** A recognisable rejection used by every "rejecting transport" test in this
+ * file, so a failing assertion's stack trace is unambiguous about its origin. */
+class SimulatedProviderOutage extends Error {
+  constructor() {
+    super("simulated provider outage");
+    this.name = "SimulatedProviderOutage";
+  }
+}
+
+function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
+  const rejectDispatch = options.rejectDispatch ?? false;
   const users: ProfileUserRow[] = [];
   const policyAcceptances: PolicyAcceptanceRow[] = [];
   const tokens: VerificationTokenRow[] = [];
@@ -34,12 +45,20 @@ function sharedHarness() {
 
   const store = {
     user: {
-      findUnique: vi.fn(async ({ where }: { where: { id?: string; email?: string; pendingEmail?: string } }) => {
-        if (where.id) return users.find((u) => u.id === where.id) ?? null;
-        if (where.email) return users.find((u) => u.email === where.email) ?? null;
-        if (where.pendingEmail) return users.find((u) => u.pendingEmail === where.pendingEmail) ?? null;
-        return null;
-      }),
+      // Guarded: G-03-6a. A hand-written fake once answered
+      // `findUnique({ where: { pendingEmail } })`, a query the real Prisma
+      // client rejects because User.pendingEmail carries no @unique — the
+      // suite passed while the email-change confirmation flow was 100%
+      // broken in the browser. The guard reads legal selectors out of
+      // prisma/schema.prisma at run time, so this fake can never again be
+      // more permissive than the database it stands in for.
+      findUnique: vi.fn(
+        guardFindUnique("User", async ({ where }: { where: { id?: string; email?: string } }) => {
+          if (where.id) return users.find((u) => u.id === where.id) ?? null;
+          if (where.email) return users.find((u) => u.email === where.email) ?? null;
+          return null;
+        }),
+      ),
       findFirst: vi.fn(async ({ where }: { where: { id?: string; email?: string; pendingEmail?: string } }) => {
         if (where.email) return users.find((u) => u.email === where.email) ?? null;
         if (where.pendingEmail) return users.find((u) => u.pendingEmail === where.pendingEmail) ?? null;
@@ -51,6 +70,17 @@ function sharedHarness() {
         if (!u) throw new Error("user not found");
         Object.assign(u, data);
         return u;
+      }),
+      // Not guarded — updateMany takes a filter, not a unique selector, so
+      // the findUnique contract does not apply here.
+      updateMany: vi.fn(async ({ where, data }: { where: { pendingEmail?: string }; data: Record<string, unknown> }) => {
+        let count = 0;
+        for (const u of users) {
+          if (where.pendingEmail !== undefined && u.pendingEmail !== where.pendingEmail) continue;
+          Object.assign(u, data);
+          count++;
+        }
+        return { count };
       }),
     },
     policyAcceptance: {
@@ -110,6 +140,7 @@ function sharedHarness() {
   const verificationService = createVerificationService({
     store: store as unknown as VerificationStore,
     dispatch: async (params) => {
+      if (rejectDispatch) throw new SimulatedProviderOutage();
       dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
       return { ok: true };
     },
@@ -125,6 +156,7 @@ function sharedHarness() {
     issueToken: (params) => verificationService.issueToken(params),
     consumeToken: (params, apply) => verificationService.consumeToken(params, apply),
     dispatch: async (params) => {
+      if (rejectDispatch) throw new SimulatedProviderOutage();
       dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
       return { ok: true };
     },
@@ -297,6 +329,25 @@ describe("requestEmailChange — happy path, collision, and same-address", () =>
   });
 });
 
+// G-03-3 regression, observed live during UAT (test 31): a rejecting
+// transport must not escape requestEmailChange.
+describe("requestEmailChange — rejecting transport (G-03-3 regression)", () => {
+  it("returns the frozen accepted value and does not reject when the send rejects", async () => {
+    const { profileService, users, dispatched } = sharedHarness({ rejectDispatch: true });
+    users.push(makeUser());
+
+    // await in a form that fails the test on rejection.
+    const result = await profileService.requestEmailChange(
+      { userId: "u1" },
+      { currentPassword: "correct", newEmail: "new@example.com" },
+    );
+
+    expect(result).toBe(EMAIL_CHANGE_ACCEPTED);
+    expect(dispatched).toHaveLength(0); // the transport really did reject
+    expect(users[0].pendingEmail).toBe("new@example.com"); // the request itself still took effect
+  });
+});
+
 describe("confirmEmailChange", () => {
   it("moves pendingEmail into email, nulls pendingEmail, and sets emailVerified inside the claim transaction", async () => {
     const { profileService, users, dispatched } = sharedHarness();
@@ -344,6 +395,72 @@ describe("confirmEmailChange", () => {
     const result = await profileService.confirmEmailChange(token);
     expect(result).toEqual({ ok: false });
     expect(users[0].email).toBe("learner@example.com"); // unchanged — refused cleanly, not a thrown constraint error
+  });
+
+  // G-03-6a regression: without Task 1's fix, this fails at the guarded
+  // findUnique inside confirmEmailChange — a query on a non-unique column —
+  // rather than at an assertion below. That is precisely the behaviour
+  // being pinned: the flow was 100% broken and no test caught it.
+  it("resolves the pending account through a legal query and completes the confirmation end to end", async () => {
+    const { profileService, users, dispatched } = sharedHarness();
+    users.push(makeUser({ id: "u1", email: "learner@example.com" }));
+
+    await profileService.requestEmailChange(
+      { userId: "u1" },
+      { currentPassword: "correct", newEmail: "fresh@example.com" },
+    );
+    const token = extractToken(dispatched[0].textContent);
+
+    const result = await profileService.confirmEmailChange(token);
+
+    expect(result).toEqual({ ok: true });
+    expect(users[0].email).toBe("fresh@example.com");
+    expect(users[0].pendingEmail).toBeNull();
+    expect(users[0].emailVerified).toBeInstanceOf(Date);
+  });
+
+  // Pins the ambiguity Task 1 closes: two accounts cannot simultaneously
+  // hold the same pendingEmail, so findFirst always resolves to the
+  // requester who asked most recently — never to an earlier, unrelated
+  // account that once requested the same address.
+  it("when a second account requests the same pending address, confirming resolves to the second account, never the first", async () => {
+    const { profileService, users, dispatched } = sharedHarness();
+    users.push(makeUser({ id: "u1", email: "first@example.com" }));
+    users.push(makeUser({ id: "u2", email: "second@example.com" }));
+
+    const originalNow = NOW.value;
+    try {
+      await profileService.requestEmailChange(
+        { userId: "u1" },
+        { currentPassword: "correct", newEmail: "contested@example.com" },
+      );
+      dispatched.length = 0; // isolate the second requester's dispatch below
+
+      // D-05's per-address cooldown is keyed on the target identifier, not
+      // the requester — advance the fake clock past it so the second
+      // requester's own token actually issues rather than being silently
+      // suppressed.
+      NOW.value = new Date(originalNow.getTime() + 61_000);
+
+      await profileService.requestEmailChange(
+        { userId: "u2" },
+        { currentPassword: "correct", newEmail: "contested@example.com" },
+      );
+
+      const pendingHolders = users.filter((u) => u.pendingEmail === "contested@example.com");
+      expect(pendingHolders).toHaveLength(1);
+      expect(pendingHolders[0].id).toBe("u2");
+      expect(users.find((u) => u.id === "u1")?.pendingEmail).toBeNull();
+
+      const token = extractToken(dispatched[0].textContent);
+      const result = await profileService.confirmEmailChange(token);
+
+      expect(result).toEqual({ ok: true });
+      expect(users.find((u) => u.id === "u2")?.email).toBe("contested@example.com");
+      expect(users.find((u) => u.id === "u1")?.email).toBe("first@example.com"); // untouched
+    } finally {
+      NOW.value = originalNow;
+    }
   });
 });
 

@@ -34,6 +34,20 @@ export type EmailDispatchStore = {
   };
 };
 
+/**
+ * The params shape every dispatch call site builds — named once here so the
+ * four services (registration, verification, password-reset, profile) and
+ * `dispatchBestEffort` below all reference the same type instead of each
+ * declaring an equivalent literal inline.
+ */
+export type DispatchParams = {
+  template: string;
+  toEmail: string;
+  userId?: string | null;
+  subject: string;
+  textContent: string;
+};
+
 export function createEmailDispatchService(deps: {
   store: EmailDispatchStore;
   send: (params: { to: string; subject: string; textContent: string }) => Promise<{ providerMessageId: string | null }>;
@@ -43,13 +57,7 @@ export function createEmailDispatchService(deps: {
   const { store, send, describeFailure } = deps;
   const now = deps.now ?? (() => new Date());
 
-  async function dispatch(params: {
-    template: string;
-    toEmail: string;
-    userId?: string | null;
-    subject: string;
-    textContent: string;
-  }): Promise<EmailDispatchRow> {
+  async function dispatch(params: DispatchParams): Promise<EmailDispatchRow> {
     const row = await store.emailDispatch.create({
       data: {
         template: params.template,
@@ -88,6 +96,32 @@ export function createEmailDispatchService(deps: {
   }
 
   return { dispatch };
+}
+
+export type DispatchBestEffortResult = { sent: boolean };
+
+/**
+ * `dispatch` deliberately still throws: the FAILED row plus a rethrow is the
+ * contract Phase 13's exactly-once delivery work is specified against, and a
+ * primitive that cannot fail cannot be retried. This wrapper is the single
+ * sanctioned way to opt out of that throw. It is named, and imported by name
+ * at every call site, so the opt-out is visible where the decision is made
+ * rather than hidden inside the primitive. It resolves in both arms — on a
+ * rejecting `dispatchFn` it reports `{ sent: false }` rather than rejecting
+ * itself, and on a resolving one it reports `{ sent: true }`. It does not log
+ * — `dispatch` has already written the FAILED row with a describe-failure
+ * string, and the raw error here could carry the recipient address.
+ */
+export async function dispatchBestEffort(
+  dispatchFn: (params: DispatchParams) => Promise<unknown>,
+  params: DispatchParams,
+): Promise<DispatchBestEffortResult> {
+  try {
+    await dispatchFn(params);
+    return { sent: true };
+  } catch {
+    return { sent: false };
+  }
 }
 
 export const emailDispatchService = createEmailDispatchService({

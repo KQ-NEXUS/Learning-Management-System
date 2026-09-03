@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { guardFindUnique } from "./support/prisma-contract";
 import {
   PASSWORD_RESET_TOKEN_TTL_MS,
   VERIFICATION_TOKEN_TTL_MS,
@@ -24,7 +25,17 @@ import { signIn } from "@/server/services/auth-service";
 
 const NOW = { value: new Date("2026-09-02T12:00:00Z") };
 
-function sharedHarness() {
+/** A recognisable rejection used by every "rejecting transport" test in this
+ * file, so a failing assertion's stack trace is unambiguous about its origin. */
+class SimulatedProviderOutage extends Error {
+  constructor() {
+    super("simulated provider outage");
+    this.name = "SimulatedProviderOutage";
+  }
+}
+
+function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
+  const rejectDispatch = options.rejectDispatch ?? false;
   const users: (PasswordResetUserRow & { passwordHash: string | null })[] = [];
   const tokens: VerificationTokenRow[] = [];
   const dispatched: { toEmail: string; textContent: string; subject: string }[] = [];
@@ -33,11 +44,15 @@ function sharedHarness() {
 
   const store = {
     user: {
-      findUnique: vi.fn(async ({ where }: { where: { id?: string; email?: string } }) => {
-        if (where.id) return users.find((u) => u.id === where.id) ?? null;
-        if (where.email) return users.find((u) => u.email === where.email) ?? null;
-        return null;
-      }),
+      // Guarded per plan 07's schema-derived contract (tests/support/prisma-contract.ts):
+      // this fake can never answer a findUnique selector the real Prisma client would refuse.
+      findUnique: vi.fn(
+        guardFindUnique("User", async ({ where }: { where: { id?: string; email?: string } }) => {
+          if (where.id) return users.find((u) => u.id === where.id) ?? null;
+          if (where.email) return users.find((u) => u.email === where.email) ?? null;
+          return null;
+        }),
+      ),
       update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
         const u = users.find((x) => x.id === where.id);
         if (!u) throw new Error("user not found");
@@ -84,6 +99,7 @@ function sharedHarness() {
   const verificationService = createVerificationService({
     store: store as unknown as VerificationStore,
     dispatch: async (params) => {
+      if (rejectDispatch) throw new SimulatedProviderOutage();
       dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
       return { ok: true };
     },
@@ -99,6 +115,7 @@ function sharedHarness() {
     issueToken: (params) => verificationService.issueToken(params),
     consumeToken: (params, apply) => verificationService.consumeToken(params, apply),
     dispatch: async (params) => {
+      if (rejectDispatch) throw new SimulatedProviderOutage();
       dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
       return { ok: true };
     },
@@ -186,6 +203,42 @@ describe("requestReset — non-enumeration across all five outcomes", () => {
     expect(unknown.dispatched).toHaveLength(0);
     expect(pending.dispatched).toHaveLength(0);
     expect(deactivated.dispatched).toHaveLength(0);
+  });
+});
+
+// G-03-3 regression, observed live during UAT (test 31): a provider outage
+// used to crash the active-account branch while an unknown address still
+// returned the normal frozen confirmation — a live account-enumeration
+// oracle defeating D-08/IAM-06's non-enumeration guarantee. This pins the
+// exact scenario: with a rejecting transport, an existing ACTIVE account and
+// an address with no account at all must resolve to the byte-identical
+// value, and neither call may reject.
+describe("requestReset — outage-time indistinguishability (G-03-3 regression)", () => {
+  it("returns the identical frozen value, by object identity and deep equality, for an existing ACTIVE account and an unknown address when dispatch rejects", async () => {
+    NOW.value = new Date("2026-09-02T12:00:00Z");
+
+    const active = sharedHarness({ rejectDispatch: true });
+    active.users.push({ id: "u1", email: "active@example.com", status: "ACTIVE", passwordHash: "hash" });
+
+    // await in a form that fails the test on rejection — a test that only
+    // inspects the returned value would still pass if this call rejected and
+    // the assertion below never ran.
+    const activeResult = await active.passwordResetService.requestReset("active@example.com");
+
+    const unknown = sharedHarness({ rejectDispatch: true });
+    const unknownResult = await unknown.passwordResetService.requestReset("nobody@example.com");
+
+    // Same object identity as the exported frozen constant...
+    expect(activeResult).toBe(PASSWORD_RESET_ACCEPTED);
+    expect(unknownResult).toBe(PASSWORD_RESET_ACCEPTED);
+    // ...and therefore also identical to, and deep-equal with, each other.
+    expect(activeResult).toBe(unknownResult);
+    expect(activeResult).toEqual(unknownResult);
+
+    // No email was actually recorded as sent — the transport really did
+    // reject, this is not accidentally the always-resolving default path.
+    expect(active.dispatched).toHaveLength(0);
+    expect(unknown.dispatched).toHaveLength(0);
   });
 });
 

@@ -22,7 +22,7 @@ import {
 } from "@/lib/identity";
 import { type VerificationStore, type VerificationTokenRow } from "@/server/services/verification-service";
 import { verificationService } from "@/server/services/verification-service";
-import { emailDispatchService } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -69,6 +69,7 @@ export type ProfileStore = {
     findUnique(args: Record<string, unknown>): Promise<ProfileUserRow | null>;
     findFirst(args: Record<string, unknown>): Promise<ProfileUserRow | null>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<ProfileUserRow>;
+    updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
   };
   policyAcceptance: {
     findFirst(args: Record<string, unknown>): Promise<{ id: string; accepted: boolean } | null>;
@@ -103,13 +104,7 @@ export function createProfileService(deps: {
     params: { token: string; purpose: typeof TOKEN_PURPOSE.EMAIL_CHANGE },
     apply: (tx: VerificationStore, row: VerificationTokenRow) => Promise<void>,
   ) => Promise<{ ok: true } | { ok: false }>;
-  dispatch: (params: {
-    template: string;
-    toEmail: string;
-    userId?: string | null;
-    subject: string;
-    textContent: string;
-  }) => Promise<unknown>;
+  dispatch: (params: DispatchParams) => Promise<unknown>;
   audit: (event: BusinessAuditEvent) => Promise<void>;
   verify?: (password: string, stored: string) => Promise<boolean>;
   now?: () => Date;
@@ -197,6 +192,26 @@ export function createProfileService(deps: {
       return EMAIL_CHANGE_ACCEPTED;
     }
 
+    // findFirst is how confirmEmailChange resolves the pending account (it
+    // must be: pendingEmail carries no @unique — see the design note above
+    // requestEmailChange in the plan, and the comment in
+    // verification-service.ts's VerificationStore type). findFirst can only
+    // ever resolve unambiguously if at most one row holds a given pending
+    // address, so clear it from every other row before claiming it here.
+    // This is the row-level analogue of D-03 (issueToken already
+    // invalidates the prior unconsumed token for this identifier+purpose,
+    // so a superseded request's link is already dead — this just makes the
+    // User rows agree with the tokens instead of leaving a stale pending
+    // address behind that a later findFirst could resolve to the wrong
+    // account). The alternative, a unique constraint on the column, was
+    // rejected: requestEmailChange has no constraint-violation handling and
+    // would surface a database error for a contested address while
+    // returning the frozen accepted value for an uncontested one.
+    await store.user.updateMany({
+      where: { pendingEmail: newEmail },
+      data: { pendingEmail: null },
+    });
+
     await store.user.update({
       where: { id: actor.userId },
       data: { pendingEmail: newEmail },
@@ -211,7 +226,9 @@ export function createProfileService(deps: {
     if (issued.ok) {
       const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
       const confirmUrl = `${baseUrl}/confirm-email-change?token=${issued.token}`;
-      await dispatch({
+      // G-03-3 — best-effort: a provider outage must not crash an
+      // already-authenticated learner's email-change request.
+      await dispatchBestEffort(dispatch, {
         template: "email-change-confirmation",
         toEmail: newEmail,
         userId: actor.userId,
@@ -238,7 +255,12 @@ export function createProfileService(deps: {
     const result = await consumeToken(
       { token, purpose: TOKEN_PURPOSE.EMAIL_CHANGE },
       async (tx, row) => {
-        const user = await tx.user.findUnique({ where: { pendingEmail: row.identifier } });
+        // findFirst, not findUnique — pendingEmail carries no @unique (see
+        // the comment on VerificationStore's user slice in
+        // verification-service.ts). requestEmailChange's clearing write
+        // guarantees at most one row can match, so this resolves
+        // unambiguously to the account that actually requested the change.
+        const user = await tx.user.findFirst({ where: { pendingEmail: row.identifier } });
         if (!user) return;
 
         // Re-check inside the claim transaction: the address may have been

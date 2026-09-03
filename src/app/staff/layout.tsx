@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { signOutAction } from "@/app/(auth)/signin/actions";
+import { LEARNER_LANDING_PATH } from "@/server/auth/landing";
 
 /**
  * The admin workspace shell.
@@ -36,9 +37,14 @@ export default async function StaffLayout({
   // check below is the same kind of defence in depth: it only stops a
   // Learner from rendering a shell whose child components would throw
   // (D-18) — the root cause is the branched sign-in redirect (D-15).
+  // G-03-7: the non-staff branch sends an already-authenticated actor to
+  // their own landing path rather than /signin — the actor is signed in,
+  // so sending them to sign-in reads as an unexpected sign-out, and they
+  // would only re-authenticate into the same destination this branch can
+  // send them to directly, never learning why they were bounced.
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
-  if (!actor.isStaff) redirect("/signin");
+  if (!actor.isStaff) redirect(LEARNER_LANDING_PATH);
 
   return (
     <div className="flex min-h-screen flex-col">

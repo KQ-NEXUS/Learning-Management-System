@@ -11,7 +11,7 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "@/server/db";
 import { isInCooldown } from "@/server/auth/request-cooldown";
 import { TOKEN_PURPOSE, VERIFICATION_TOKEN_TTL_MS, type TokenPurpose } from "@/lib/identity";
-import { emailDispatchService } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -57,13 +57,7 @@ function buildVerificationEmailText(verifyUrl: string): string {
 
 export function createVerificationService(deps: {
   store: VerificationStore;
-  dispatch: (params: {
-    template: string;
-    toEmail: string;
-    userId?: string | null;
-    subject: string;
-    textContent: string;
-  }) => Promise<unknown>;
+  dispatch: (params: DispatchParams) => Promise<unknown>;
   audit: (event: BusinessAuditEvent) => Promise<void>;
   generateToken?: () => string;
   now?: () => Date;
@@ -184,7 +178,8 @@ export function createVerificationService(deps: {
       if (issued.ok) {
         const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
         const verifyUrl = `${baseUrl}/verify?token=${issued.token}`;
-        await dispatch({
+        // G-03-3 — best-effort: a provider outage must not crash a resend.
+        await dispatchBestEffort(dispatch, {
           template: "email-verification",
           toEmail: identifier,
           userId: user.id,

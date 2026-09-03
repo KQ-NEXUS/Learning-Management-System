@@ -27,14 +27,26 @@ export async function registerAction(
     return { error: "Accept the terms of service and the privacy notice to continue.", sent: false };
   }
 
-  const result = await registrationService.registerLearner({
-    email,
-    password,
-    name,
-    phone: null,
-    acceptedTerms,
-    acceptedPrivacy,
-  });
+  // G-03-3: the service call is wrapped in try/catch so a failure below it
+  // (a dropped DB connection, or anything else the service does not itself
+  // guard) returns the same generic-error state as an invalid submission,
+  // rather than propagating a throw into a framework error page. Registration
+  // may legitimately answer with an error; what it may not do is answer with
+  // an error for one address and a success for another, which is what an
+  // error page on the already-active branch would produce.
+  let result;
+  try {
+    result = await registrationService.registerLearner({
+      email,
+      password,
+      name,
+      phone: null,
+      acceptedTerms,
+      acceptedPrivacy,
+    });
+  } catch {
+    return { error: "Something went wrong. Nothing was saved — try again.", sent: false };
+  }
 
   if (!result.ok) {
     return { error: "Something went wrong. Nothing was saved — try again.", sent: false };

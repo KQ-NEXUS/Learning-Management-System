@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { guardFindUnique } from "./support/prisma-contract";
 import { POLICY_TYPE, POLICY_VERSIONS, MIN_PASSWORD_LENGTH } from "@/lib/identity";
 import {
   createRegistrationService,
@@ -26,9 +27,19 @@ type PolicyAcceptanceRow = {
 
 const NOW = { value: new Date("2026-09-02T12:00:00Z") };
 
+/** A recognisable rejection used by every "rejecting transport" test in this
+ * file, so a failing assertion's stack trace is unambiguous about its origin. */
+class SimulatedProviderOutage extends Error {
+  constructor() {
+    super("simulated provider outage");
+    this.name = "SimulatedProviderOutage";
+  }
+}
+
 /** One fake store backing both registration-service and verification-service, so an
  * end-to-end test can drive registerLearner and then verifyEmail against the same data. */
-function sharedHarness() {
+function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
+  const rejectDispatch = options.rejectDispatch ?? false;
   const users: RegisteredUserRow[] = [];
   const policyAcceptances: PolicyAcceptanceRow[] = [];
   const tokens: VerificationTokenRow[] = [];
@@ -38,11 +49,15 @@ function sharedHarness() {
 
   const store = {
     user: {
-      findUnique: vi.fn(async ({ where }: { where: { id?: string; email?: string } }) => {
-        if (where.id) return users.find((u) => u.id === where.id) ?? null;
-        if (where.email) return users.find((u) => u.email === where.email) ?? null;
-        return null;
-      }),
+      // Guarded per plan 07's schema-derived contract (tests/support/prisma-contract.ts):
+      // this fake can never answer a findUnique selector the real Prisma client would refuse.
+      findUnique: vi.fn(
+        guardFindUnique("User", async ({ where }: { where: { id?: string; email?: string } }) => {
+          if (where.id) return users.find((u) => u.id === where.id) ?? null;
+          if (where.email) return users.find((u) => u.email === where.email) ?? null;
+          return null;
+        }),
+      ),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         if (users.some((u) => u.email === data.email)) {
           throw { code: "P2002" };
@@ -126,6 +141,7 @@ function sharedHarness() {
   const verificationService = createVerificationService({
     store: store as unknown as VerificationStore,
     dispatch: async (params) => {
+      if (rejectDispatch) throw new SimulatedProviderOutage();
       dispatched.push({
         toEmail: params.toEmail,
         subject: params.subject,
@@ -144,6 +160,7 @@ function sharedHarness() {
     issueToken: (params) => verificationService.issueToken(params),
     resendVerification: (email) => verificationService.resendVerification(email),
     dispatch: async (params) => {
+      if (rejectDispatch) throw new SimulatedProviderOutage();
       dispatched.push({
         toEmail: params.toEmail,
         subject: params.subject,
@@ -252,6 +269,26 @@ describe("registerLearner — brand-new email", () => {
   it("writes exactly one user.created audit event", async () => {
     const { registrationService, audits } = sharedHarness();
     await registrationService.registerLearner(BASE_INPUT);
+    const created = audits.filter((a) => (a as { action: string }).action === "user.created");
+    expect(created).toHaveLength(1);
+  });
+});
+
+// G-03-3 regression, observed live during UAT (test 31): a rejecting
+// transport must not escape registerLearner, and the audit ordering fix
+// (T-03-52) must survive it — the user.created row is committed with the
+// account, before the send is even attempted.
+describe("registerLearner — rejecting transport (G-03-3 regression)", () => {
+  it("returns the frozen accepted value, does not reject, and still writes exactly one user.created audit row", async () => {
+    const { registrationService, audits, users, dispatched } = sharedHarness({ rejectDispatch: true });
+
+    // await in a form that fails the test on rejection.
+    const result = await registrationService.registerLearner({ ...BASE_INPUT, email: "outage@example.com" });
+
+    expect(result).toBe(REGISTRATION_ACCEPTED);
+    expect(dispatched).toHaveLength(0); // the transport really did reject
+    expect(users).toHaveLength(1); // the account was still committed
+
     const created = audits.filter((a) => (a as { action: string }).action === "user.created");
     expect(created).toHaveLength(1);
   });

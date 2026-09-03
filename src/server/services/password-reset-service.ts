@@ -13,7 +13,7 @@ import { prisma } from "@/server/db";
 import { hashPassword } from "@/server/auth/password";
 import { signOutAllForUser } from "@/server/services/auth-service";
 import { verificationService, type VerificationStore, type VerificationTokenRow } from "@/server/services/verification-service";
-import { emailDispatchService } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 import { MIN_PASSWORD_LENGTH, PASSWORD_RESET_TOKEN_TTL_MS, TOKEN_PURPOSE } from "@/lib/identity";
@@ -64,13 +64,7 @@ export function createPasswordResetService(deps: {
     params: { token: string; purpose: typeof TOKEN_PURPOSE.PASSWORD_RESET },
     apply: (tx: VerificationStore, row: VerificationTokenRow) => Promise<void>,
   ) => Promise<{ ok: true } | { ok: false }>;
-  dispatch: (params: {
-    template: string;
-    toEmail: string;
-    userId?: string | null;
-    subject: string;
-    textContent: string;
-  }) => Promise<unknown>;
+  dispatch: (params: DispatchParams) => Promise<unknown>;
   audit: (event: BusinessAuditEvent) => Promise<void>;
   hash?: (plaintext: string) => Promise<string>;
   signOutAll?: (userId: string) => Promise<number>;
@@ -93,6 +87,13 @@ export function createPasswordResetService(deps: {
     // so it can never affect any account other than one later created or
     // reactivated under that same address, and D-05's cooldown/D-03's
     // invalidate-on-reissue already govern it like any other token.
+    // G-03-3 — the send below runs only on this active-account branch, so an
+    // escaping send failure was observable only for real accounts: a
+    // provider outage was a live account-enumeration oracle, crashing the
+    // active branch while an unknown address returned the normal frozen
+    // confirmation. Routing the send through dispatchBestEffort is what
+    // keeps all five outcomes (active, unknown, pending, deactivated,
+    // cooldown-refused) returning the one frozen value in every weather.
     const issued = await issueToken({
       identifier,
       purpose: TOKEN_PURPOSE.PASSWORD_RESET,
@@ -102,7 +103,7 @@ export function createPasswordResetService(deps: {
     if (issued.ok && user && user.status === "ACTIVE") {
       const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
       const resetUrl = `${baseUrl}/reset-password?token=${issued.token}`;
-      await dispatch({
+      await dispatchBestEffort(dispatch, {
         template: "password-reset",
         toEmail: identifier,
         userId: user.id,

@@ -19,7 +19,7 @@ import {
   VERIFICATION_TOKEN_TTL_MS,
 } from "@/lib/identity";
 import { verificationService } from "@/server/services/verification-service";
-import { emailDispatchService } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -86,13 +86,7 @@ export function createRegistrationService(deps: {
     ttlMs: number;
   }) => Promise<{ ok: true; token: string } | { ok: false; reason: "COOLDOWN" }>;
   resendVerification: (email: string) => Promise<{ ok: true }>;
-  dispatch: (params: {
-    template: string;
-    toEmail: string;
-    userId?: string | null;
-    subject: string;
-    textContent: string;
-  }) => Promise<unknown>;
+  dispatch: (params: DispatchParams) => Promise<unknown>;
   audit: (event: BusinessAuditEvent) => Promise<void>;
   hash?: (plaintext: string) => Promise<string>;
   now?: () => Date;
@@ -198,24 +192,12 @@ export function createRegistrationService(deps: {
       throw error;
     }
 
-    const issued = await issueToken({
-      identifier: email,
-      purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
-      ttlMs: VERIFICATION_TOKEN_TTL_MS,
-    });
-
-    if (issued.ok) {
-      const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-      const verifyUrl = `${baseUrl}/verify?token=${issued.token}`;
-      await dispatch({
-        template: "email-verification",
-        toEmail: email,
-        userId: user.id,
-        subject: "Verify your account",
-        textContent: buildVerificationEmailText(verifyUrl),
-      });
-    }
-
+    // T-03-52 — the audit write moves to immediately after the transaction
+    // commits, before token issuance and before the send. Not wrapped, moved:
+    // the User row is committed by now, and a committed account with no
+    // audit row is a repudiation gap. The send below is the most
+    // failure-prone step in this function and must not sit between the
+    // commit and its audit.
     await audit({
       actorId: user.id,
       action: "user.created",
@@ -226,6 +208,28 @@ export function createRegistrationService(deps: {
       scopeType: "GLOBAL",
       scopeId: null,
     });
+
+    const issued = await issueToken({
+      identifier: email,
+      purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
+      ttlMs: VERIFICATION_TOKEN_TTL_MS,
+    });
+
+    if (issued.ok) {
+      const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
+      const verifyUrl = `${baseUrl}/verify?token=${issued.token}`;
+      // G-03-3 — routed through the best-effort wrapper: a provider outage
+      // must degrade delivery, never leave a committed, audited account
+      // behind a framework error page. The result is discarded — no
+      // caller-visible value may depend on whether the send happened.
+      await dispatchBestEffort(dispatch, {
+        template: "email-verification",
+        toEmail: email,
+        userId: user.id,
+        subject: "Verify your account",
+        textContent: buildVerificationEmailText(verifyUrl),
+      });
+    }
 
     return REGISTRATION_ACCEPTED;
   }
