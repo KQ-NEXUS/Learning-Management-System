@@ -21,6 +21,7 @@ export type ReadinessState = "PASS" | "FAIL" | "WARN" | "NOT_YET_CHECKED";
 
 export type ReadinessCategory =
   | "Content"
+  | "Catalogue"
   | "Schedule"
   | "Price"
   | "Capacity"
@@ -167,20 +168,13 @@ export function evaluateCourseReadiness(course: ReadinessCourseInput): Readiness
       state: course.upcomingCohortCount > 0 ? "PASS" : "WARN",
     },
 
-    // D-26 named gaps — a THIRD state, visually distinct from both a tick
-    // and a cross. Never PASS: a silently assumed pass is what the PXR
-    // forbids for a category this phase does not evaluate at all.
-    { id: "schedule", category: "Schedule", label: "Schedule", blocking: false, state: "NOT_YET_CHECKED", deferredTo: "Phase 5" },
-    { id: "price", category: "Price", label: "Price", blocking: false, state: "NOT_YET_CHECKED", deferredTo: "Phase 5" },
-    { id: "capacity", category: "Capacity", label: "Capacity", blocking: false, state: "NOT_YET_CHECKED", deferredTo: "Phase 5" },
-    {
-      id: "instructors",
-      category: "Instructors",
-      label: "Instructors",
-      blocking: false,
-      state: "NOT_YET_CHECKED",
-      deferredTo: "Phase 5",
-    },
+    // The schedule / price / capacity / instructors slots that used to live
+    // here as NOT_YET_CHECKED stubs reserved for Phase 5 have moved to
+    // `evaluateCohortReadiness` below. They are per-Cohort properties a Course
+    // does not have (a Course has no start date, seat count, price, or
+    // instructor roster — its Cohorts do). See RESEARCH Open Question 1
+    // (05-RESEARCH.md, RESOLVED) and plan 05-03 Task 1. The `assessments`
+    // slot stays here — Phase 10 owns it and it is genuinely per-Course.
   ];
 
   // D-31 named gap — only present when the course actually has a QUIZ or
@@ -251,6 +245,193 @@ export function evaluateProgrammeReadiness(programme: ReadinessProgrammeInput): 
       blocking: false,
       state: programme.audience?.trim() ? "PASS" : "WARN",
     },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Cohort readiness (COH-04 / D-27 / D-28 / D-29).
+//
+// Structural input only — the caller (`cohort-service`, plan 05-05) reads the
+// cohort aggregate and hands plain values in, so this stays a pure, testable
+// function with zero data-access. Plan 05-15's publish action calls
+// `blockingFailures(evaluateCohortReadiness(...))` — never its own copy of
+// these rules — so the on-screen panel and the server-side refusal agree by
+// construction.
+// ---------------------------------------------------------------------------
+
+export type ReadinessCohortInput = {
+  deliveryMode: string;
+  startsAt: Date | string;
+  endsAt: Date | string;
+  capacity: number;
+  seatsTaken: number;
+  priceMinor: number;
+  currency: string | null;
+  attendanceThresholdPct: number | null;
+  instructorCount: number;
+  nonCancelledSessionCount: number;
+  sessions: Array<{ startsAt: Date | string; endsAt: Date | string; cancelledAt: Date | string | null }>;
+  pin: {
+    kind: "course" | "programme";
+    publicationId: string | null;
+    targetStatus: string | null;
+    completionRule: unknown;
+  } | null;
+};
+
+function toEpoch(value: Date | string): number {
+  return value instanceof Date ? value.getTime() : new Date(value).getTime();
+}
+
+/**
+ * Evaluates a Cohort's publication readiness across the six D-28/D-29
+ * categories. Catalogue, Schedule, Capacity and Instructors are
+ * `blocking: true` and FAIL-capable; Price is `blocking: true` but is
+ * effectively always PASS (0 is a legal free cohort); Completion and the two
+ * WARN sub-items are advisory. No item is ever `NOT_YET_CHECKED` — D-28 turns
+ * every reserved slot into a real check.
+ */
+export function evaluateCohortReadiness(cohort: ReadinessCohortInput): ReadinessItem[] {
+  const selfPaced = cohort.deliveryMode === "SELF_PACED";
+  const modeLabel = cohort.deliveryMode.toLowerCase().replace(/_/g, "-");
+
+  // --- Catalogue (D-29) -----------------------------------------------------
+  const pinKindLabel = cohort.pin?.kind === "programme" ? "Programme" : "Course";
+  const cataloguePass =
+    cohort.pin != null && cohort.pin.publicationId != null && cohort.pin.targetStatus === "PUBLISHED";
+  const catalogue: ReadinessItem = {
+    id: "catalogue",
+    category: "Catalogue",
+    label: "Pinned to a published Course or Programme",
+    blocking: true,
+    state: cataloguePass ? "PASS" : "FAIL",
+    detail: cataloguePass
+      ? `Pinned to a published ${pinKindLabel} publication`
+      : cohort.pin == null || cohort.pin.publicationId == null
+        ? "Not pinned to a published Course or Programme — publish the catalogue item first"
+        : `The pinned ${pinKindLabel} is ${cohort.pin.targetStatus ?? "not published"}, not PUBLISHED — only a frozen publication can back a cohort`,
+  };
+
+  // --- Schedule (D-28) ----------------------------------------------------
+  const schedulePass = selfPaced || cohort.nonCancelledSessionCount > 0;
+  const schedule: ReadinessItem = {
+    id: "schedule",
+    category: "Schedule",
+    label: "Schedule set",
+    blocking: true,
+    state: schedulePass ? "PASS" : "FAIL",
+    detail: selfPaced
+      ? "Self-paced cohort — no scheduled sessions required"
+      : schedulePass
+        ? `${cohort.nonCancelledSessionCount} non-cancelled session${cohort.nonCancelledSessionCount === 1 ? "" : "s"} scheduled`
+        : "No non-cancelled sessions — add at least one session or set the cohort to self-paced",
+  };
+
+  const cohortStart = toEpoch(cohort.startsAt);
+  const cohortEnd = toEpoch(cohort.endsAt);
+  const strayCount = cohort.sessions.filter(
+    (session) =>
+      session.cancelledAt == null &&
+      (toEpoch(session.startsAt) < cohortStart || toEpoch(session.endsAt) > cohortEnd),
+  ).length;
+  const scheduleDates: ReadinessItem = {
+    id: "schedule-dates",
+    category: "Schedule",
+    label: "Sessions fall within the cohort dates",
+    blocking: false,
+    state: strayCount > 0 ? "WARN" : "PASS",
+    detail:
+      strayCount > 0
+        ? `${strayCount} session${strayCount === 1 ? "" : "s"} start before the cohort begins or end after it finishes`
+        : "Every non-cancelled session falls within the cohort start and end dates",
+  };
+
+  // --- Price (D-28) — blocking but effectively always PASS ---------------
+  const currencySet = cohort.currency != null && cohort.currency.trim().length > 0;
+  const pricePass = currencySet && cohort.priceMinor >= 0;
+  const price: ReadinessItem = {
+    id: "price",
+    category: "Price",
+    label: "Price set",
+    blocking: true,
+    state: pricePass ? "PASS" : "FAIL",
+    detail: !currencySet
+      ? "No currency set on the cohort"
+      : cohort.priceMinor < 0
+        ? `Price is negative (${cohort.priceMinor} minor units)`
+        : cohort.priceMinor === 0
+          ? `Free cohort — 0 ${cohort.currency}`
+          : `${cohort.priceMinor} minor units ${cohort.currency}`,
+  };
+
+  // --- Capacity (D-28) --------------------------------------------------
+  const capacityPass = cohort.capacity > 0 && cohort.capacity >= cohort.seatsTaken;
+  const capacity: ReadinessItem = {
+    id: "capacity",
+    category: "Capacity",
+    label: "Capacity set and not oversold",
+    blocking: true,
+    state: capacityPass ? "PASS" : "FAIL",
+    detail:
+      cohort.capacity < 1
+        ? "Capacity is 0 — set at least 1 seat"
+        : cohort.capacity < cohort.seatsTaken
+          ? `${cohort.seatsTaken} seats already taken but capacity is ${cohort.capacity}`
+          : `${cohort.seatsTaken} of ${cohort.capacity} seats taken`,
+  };
+
+  // --- Instructors (D-28) ---------------------------------------------
+  const instructorsPass = selfPaced || cohort.instructorCount > 0;
+  const instructors: ReadinessItem = {
+    id: "instructors",
+    category: "Instructors",
+    label: "At least one instructor assigned",
+    blocking: true,
+    state: instructorsPass ? "PASS" : "FAIL",
+    detail: selfPaced
+      ? "Self-paced cohort — no instructor required"
+      : instructorsPass
+        ? `${cohort.instructorCount} instructor${cohort.instructorCount === 1 ? "" : "s"} assigned`
+        : `No instructor assigned to this ${modeLabel} cohort`,
+  };
+
+  // --- Completion (D-28) — WARN-only ---------------------------------
+  const hasCompletionRule = cohort.pin != null && cohort.pin.completionRule != null;
+  const completion: ReadinessItem = {
+    id: "completion",
+    category: "Completion",
+    label: "Pinned publication carries a completion rule",
+    blocking: false,
+    state: hasCompletionRule ? "PASS" : "WARN",
+    detail: hasCompletionRule
+      ? "The pinned publication defines how a learner completes"
+      : "The pinned publication has no completion rule — learners cannot be marked complete until the Phase 9/11 engine ships",
+  };
+
+  const attendanceThresholdOnSelfPaced =
+    cohort.attendanceThresholdPct != null && selfPaced;
+  const attendanceThresholdSelfPaced: ReadinessItem = {
+    id: "attendance-threshold-self-paced",
+    category: "Completion",
+    label: "Attendance threshold suits the delivery mode",
+    blocking: false,
+    state: attendanceThresholdOnSelfPaced ? "WARN" : "PASS",
+    detail: attendanceThresholdOnSelfPaced
+      ? `An attendance threshold of ${cohort.attendanceThresholdPct}% is set on a self-paced cohort, which has no sessions to attend`
+      : cohort.attendanceThresholdPct != null
+        ? `Attendance threshold of ${cohort.attendanceThresholdPct}%`
+        : "No attendance threshold set on this cohort",
+  };
+
+  return [
+    catalogue,
+    schedule,
+    scheduleDates,
+    price,
+    capacity,
+    instructors,
+    completion,
+    attendanceThresholdSelfPaced,
   ];
 }
 
