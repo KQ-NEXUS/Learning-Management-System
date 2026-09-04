@@ -374,9 +374,223 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
     },
   );
 
+  // -------------------------------------------------------------------------
+  // withdrawEnrolment / cancelEnrolment (D-14)
+  //
+  // WITHDRAWN is for an enrolment whose access has started; CANCELLED is for
+  // before access or an administrative void. Both release the seat only when
+  // one is actually held (`heldSeat`), so cancelling a hold-less
+  // PENDING_PAYMENT enrolment does not wrongly decrement `seatsTaken`.
+  // -------------------------------------------------------------------------
+
+  function makeTerminalAction(
+    toStatus: "WITHDRAWN" | "CANCELLED",
+    eventType: "enrolment.withdrawn" | "enrolment.cancelled",
+    stampWithdrawnAt: boolean,
+  ) {
+    return withPermission<{ enrolmentId: string; reason: string }>(
+      "enrolments.manage",
+      (input) => deps.enrolmentScope(input.enrolmentId),
+    )(async (input, ctx) => {
+      const reason = requireReason(input.reason);
+
+      const result = await db.$transaction(async (tx) => {
+        const e = await tx.enrolment.findUnique({
+          where: { id: input.enrolmentId },
+        });
+        if (!e) throw new EnrolmentNotFoundError(input.enrolmentId);
+        const before = e.status;
+        assertTransition(before as EnrolmentStatusValue, toStatus, e.id);
+
+        await releaseSeat(tx, {
+          cohortId: e.cohortId,
+          enrolmentId: e.id,
+          toStatus,
+          reason,
+          heldSeat: holdsSeat(e),
+          ...(stampWithdrawnAt ? { withdrawnAt: now() } : {}),
+        });
+
+        await writeDomainEvent(tx, {
+          type: eventType,
+          payload: {
+            enrolmentId: e.id,
+            cohortId: e.cohortId,
+            actorId: ctx.actor.userId,
+            reason,
+          },
+        });
+
+        return { id: e.id, before };
+      });
+
+      await deps.audit({
+        action: eventType,
+        targetType: "Enrolment",
+        targetId: result.id,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason,
+        before: { status: result.before },
+        after: { status: toStatus },
+      });
+
+      return { id: result.id, status: toStatus };
+    });
+  }
+
+  const withdrawEnrolment = makeTerminalAction(
+    "WITHDRAWN",
+    "enrolment.withdrawn",
+    true,
+  );
+  const cancelEnrolment = makeTerminalAction(
+    "CANCELLED",
+    "enrolment.cancelled",
+    false,
+  );
+
+  // -------------------------------------------------------------------------
+  // transferEnrolment (D-13) — same offer only
+  //
+  // Authorization is resolved on the SOURCE cohort (`enrolmentScope`). The
+  // target is confined below to a sibling cohort of the SAME offer, which is
+  // what stops a transfer from becoming a write into a cohort the caller's
+  // grant does not cover (T-05-40). Cross-offer transfer is deferred — there
+  // is no compatibility path. History (see the file header) is never copied;
+  // the source row is retained as TRANSFERRED, linked from the new row's
+  // `transferredFromId`.
+  // -------------------------------------------------------------------------
+
+  const transferEnrolment = withPermission<{
+    enrolmentId: string;
+    targetCohortId: string;
+    reason: string;
+  }>("enrolments.manage", (input) => deps.enrolmentScope(input.enrolmentId))(
+    async (input, ctx) => {
+      const reason = requireReason(input.reason);
+
+      const source = await deps.enrolment.findUnique({
+        where: { id: input.enrolmentId },
+      });
+      if (!source) throw new EnrolmentNotFoundError(input.enrolmentId);
+
+      if (input.targetCohortId === source.cohortId) {
+        throw new CrossOfferTransferError(
+          source.cohortId,
+          input.targetCohortId,
+          "the target cohort is the same as the source cohort",
+        );
+      }
+
+      const [sourceCohort, targetCohort] = await Promise.all([
+        deps.cohort.findUnique({ where: { id: source.cohortId } }),
+        deps.cohort.findUnique({ where: { id: input.targetCohortId } }),
+      ]);
+      if (!sourceCohort) throw new CohortNotFoundError(source.cohortId);
+      if (!targetCohort) throw new CohortNotFoundError(input.targetCohortId);
+
+      const sameOffer =
+        (sourceCohort.courseId !== null &&
+          sourceCohort.courseId === targetCohort.courseId) ||
+        (sourceCohort.programmeId !== null &&
+          sourceCohort.programmeId === targetCohort.programmeId);
+      if (!sameOffer) {
+        throw new CrossOfferTransferError(
+          source.cohortId,
+          input.targetCohortId,
+          "the target cohort belongs to a different course or programme",
+        );
+      }
+
+      const result = await db.$transaction(async (tx) => {
+        const e = await tx.enrolment.findUnique({
+          where: { id: input.enrolmentId },
+        });
+        if (!e) throw new EnrolmentNotFoundError(input.enrolmentId);
+        const before = e.status;
+        assertTransition(before as EnrolmentStatusValue, "TRANSFERRED", e.id);
+
+        await releaseSeat(tx, {
+          cohortId: e.cohortId,
+          enrolmentId: e.id,
+          toStatus: "TRANSFERRED",
+          reason,
+          heldSeat: holdsSeat(e),
+        });
+
+        // takeSeat enforces the TARGET cohort's capacity with the same row
+        // lock as any other seat take. A full target throws here and the
+        // whole transfer rolls back — the source stays as it was (T-05-46).
+        const created = await takeSeat(tx, {
+          cohortId: input.targetCohortId,
+          enrolment: {
+            userId: e.userId,
+            cohortId: input.targetCohortId,
+            status: "ACTIVE",
+            activatedAt: now(),
+            reason,
+            transferredFromId: e.id,
+            orderId: null,
+          },
+        });
+
+        await writeDomainEvent(tx, {
+          type: "enrolment.transferred",
+          payload: {
+            sourceEnrolmentId: e.id,
+            targetEnrolmentId: created.id,
+            sourceCohortId: e.cohortId,
+            targetCohortId: input.targetCohortId,
+            actorId: ctx.actor.userId,
+          },
+        });
+
+        return { sourceId: e.id, targetId: created.id, before };
+      });
+
+      await deps.audit({
+        action: "enrolment.transferred",
+        targetType: "Enrolment",
+        targetId: result.sourceId,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason,
+        before: { status: result.before },
+        after: {
+          status: "TRANSFERRED",
+          transferredToId: result.targetId,
+          targetCohortId: input.targetCohortId,
+        },
+      });
+      await deps.audit({
+        action: "enrolment.transferred",
+        targetType: "Enrolment",
+        targetId: result.targetId,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason,
+        before: null,
+        after: {
+          status: "ACTIVE",
+          transferredFromId: result.sourceId,
+          cohortId: input.targetCohortId,
+        },
+      });
+
+      return {
+        sourceEnrolmentId: result.sourceId,
+        targetEnrolmentId: result.targetId,
+      };
+    },
+  );
+
   return {
     addEnrolment,
     approveEnrolment,
+    transferEnrolment,
+    withdrawEnrolment,
+    cancelEnrolment,
   };
 }
 
@@ -459,3 +673,6 @@ const built = createPrismaBackedEnrolmentService(prisma, liveWithPermission);
 
 export const addEnrolment = built.addEnrolment;
 export const approveEnrolment = built.approveEnrolment;
+export const transferEnrolment = built.transferEnrolment;
+export const withdrawEnrolment = built.withdrawEnrolment;
+export const cancelEnrolment = built.cancelEnrolment;
