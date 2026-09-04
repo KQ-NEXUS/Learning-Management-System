@@ -14,8 +14,12 @@ import { AuthorizationError } from "@/server/permissions/with-permission";
 import type { ResourceScope } from "@/server/permissions/scope";
 import {
   createRosterService,
+  exceptionsToCsv,
+  EXCEPTION_CATEGORIES,
+  MissingCohortIdError,
   type RosterRow,
   type RosterStore,
+  type AttendanceException,
 } from "@/server/services/roster-service";
 
 const NOW = new Date("2026-03-15T12:00:00.000Z");
@@ -269,3 +273,181 @@ describe("loadCohortRoster — row contents (D-17, D-18)", () => {
 // @ts-expect-error a number is not assignable to RosterRow["progress"]
 const _rejectsNumericProgress: RosterRow["progress"] = 42;
 void _rejectsNumericProgress;
+
+const FUTURE_SESSION_START = new Date("2026-03-20T09:00:00.000Z");
+
+describe("EXCEPTION_CATEGORIES", () => {
+  it("is the closed, frozen set of three category ids", () => {
+    expect([...EXCEPTION_CATEGORIES]).toEqual(["missing-register", "at-risk", "disputed"]);
+    expect(Object.isFrozen(EXCEPTION_CATEGORIES)).toBe(true);
+  });
+});
+
+describe("loadAttendanceExceptions — permission and bounding (T-05-65)", () => {
+  it("requires attendance.view", async () => {
+    const { service } = harness({ grants: [grant("cohorts.view")] });
+    await expect(
+      service.loadAttendanceExceptions({ cohortId: "cohort-1" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("refuses a request with no cohort id", async () => {
+    const { service } = harness({ grants: [grant("attendance.view")], scope: {} });
+    await expect(
+      service.loadAttendanceExceptions({ cohortId: "" }),
+    ).rejects.toBeInstanceOf(MissingCohortIdError);
+  });
+});
+
+describe("loadAttendanceExceptions — the three categories (D-19)", () => {
+  it("flags a past session with an unmarked active learner as missing-register, naming the count", async () => {
+    const { service } = harness({
+      cohort: { attendanceThresholdPct: null, instructors: [] },
+      enrolments: [
+        enrolment({ id: "enr-1" }),
+        enrolment({ id: "enr-2", user: { id: "u2", name: "Bob", email: "b@x.test" } }),
+      ],
+      sessions: [session({ id: "past", startsAt: PAST_SESSION_START, endsAt: PAST_SESSION_END })],
+      records: [record({ enrolmentId: "enr-1", sessionId: "past", state: "PRESENT" })],
+    });
+    const rows = await service.loadAttendanceExceptions({ cohortId: "cohort-1" });
+    const missing = rows.filter((r) => r.category === "missing-register");
+    expect(missing).toHaveLength(1);
+    expect(missing[0]).toMatchObject({ sessionId: "past", unmarkedLearnerCount: 1 });
+  });
+
+  it("produces no missing-register exception for a future session with no records", async () => {
+    const { service } = harness({
+      sessions: [
+        session({ id: "future", startsAt: FUTURE_SESSION_START, endsAt: FUTURE_SESSION_END }),
+      ],
+      records: [],
+    });
+    const rows = await service.loadAttendanceExceptions({ cohortId: "cohort-1" });
+    expect(rows.filter((r) => r.category === "missing-register")).toHaveLength(0);
+  });
+
+  it("flags an at-risk learner below threshold while future sessions remain", async () => {
+    const { service } = harness({
+      cohort: { attendanceThresholdPct: 75, instructors: [] },
+      sessions: [
+        session({ id: "p1", startsAt: PAST_SESSION_START, endsAt: PAST_SESSION_END }),
+        session({ id: "p2", startsAt: PAST_SESSION_START, endsAt: PAST_SESSION_END }),
+        session({ id: "future", startsAt: FUTURE_SESSION_START, endsAt: FUTURE_SESSION_END }),
+      ],
+      records: [
+        record({ sessionId: "p1", state: "ABSENT" }),
+        record({ sessionId: "p2", state: "ABSENT" }),
+      ],
+    });
+    const rows = await service.loadAttendanceExceptions({ cohortId: "cohort-1" });
+    const atRisk = rows.filter((r) => r.category === "at-risk");
+    expect(atRisk).toHaveLength(1);
+    expect(atRisk[0]).toMatchObject({ enrolmentId: "enr-1", earnedPct: 0, requiredPct: 75 });
+  });
+
+  it("never flags at-risk when the cohort threshold is null", async () => {
+    const { service } = harness({
+      cohort: { attendanceThresholdPct: null, instructors: [] },
+      sessions: [
+        session({ id: "p1", startsAt: PAST_SESSION_START, endsAt: PAST_SESSION_END }),
+        session({ id: "future", startsAt: FUTURE_SESSION_START, endsAt: FUTURE_SESSION_END }),
+      ],
+      records: [record({ sessionId: "p1", state: "ABSENT" })],
+    });
+    const rows = await service.loadAttendanceExceptions({ cohortId: "cohort-1" });
+    expect(rows.filter((r) => r.category === "at-risk")).toHaveLength(0);
+  });
+
+  it("flags any record carrying a correctionReason as disputed, with reason, corrector and time", async () => {
+    const correctedAt = new Date("2026-03-10T00:00:00.000Z");
+    const { service } = harness({
+      sessions: [session({ id: "past" })],
+      records: [
+        record({
+          sessionId: "past",
+          state: "PRESENT",
+          correctionReason: "Marked absent in error, learner had emailed",
+          correctedAt,
+          correctedBy: { name: "Cora Corrector" },
+        }),
+      ],
+    });
+    const rows = await service.loadAttendanceExceptions({ cohortId: "cohort-1" });
+    const disputed = rows.filter((r) => r.category === "disputed");
+    expect(disputed).toHaveLength(1);
+    expect(disputed[0]).toMatchObject({
+      correctionReason: "Marked absent in error, learner had emailed",
+      correctedByName: "Cora Corrector",
+      correctedAt,
+    });
+  });
+
+  it("honours a category filter and a learner search term", async () => {
+    const { service } = harness({
+      cohort: { attendanceThresholdPct: 75, instructors: [] },
+      enrolments: [
+        enrolment({ id: "enr-1", user: { id: "u1", name: "Ada Learner", email: "a@x.test" } }),
+        enrolment({ id: "enr-2", user: { id: "u2", name: "Bob Other", email: "b@x.test" } }),
+      ],
+      sessions: [
+        session({ id: "p1", startsAt: PAST_SESSION_START, endsAt: PAST_SESSION_END }),
+        session({ id: "future", startsAt: FUTURE_SESSION_START, endsAt: FUTURE_SESSION_END }),
+      ],
+      records: [
+        record({ enrolmentId: "enr-1", sessionId: "p1", state: "ABSENT" }),
+        record({ enrolmentId: "enr-2", sessionId: "p1", state: "ABSENT" }),
+      ],
+    });
+    const filtered = await service.loadAttendanceExceptions({
+      cohortId: "cohort-1",
+      categories: ["at-risk"],
+      search: "ada",
+    });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]).toMatchObject({ category: "at-risk", learnerName: "Ada Learner" });
+  });
+});
+
+describe("exceptionsToCsv — pure, injection-safe, filter-parity (ATT-04, T-05-63/64)", () => {
+  const atRisk = (name: string): AttendanceException => ({
+    category: "at-risk",
+    enrolmentId: "e1",
+    learnerName: name,
+    earnedPct: 40,
+    requiredPct: 75,
+  });
+
+  it("emits a header row plus exactly one line per supplied row", () => {
+    expect(exceptionsToCsv([atRisk("Ada"), atRisk("Bob")]).split("\n")).toHaveLength(3);
+  });
+
+  it("parity: exactly one line per filtered row, no re-query", () => {
+    const filtered = [atRisk("Ada"), atRisk("Bob"), atRisk("Cy")];
+    expect(exceptionsToCsv(filtered).split("\n").length - 1).toBe(filtered.length);
+  });
+
+  it("prefixes a value starting with = so a spreadsheet cannot execute it", () => {
+    expect(exceptionsToCsv([atRisk("=cmd()")]).split("\n")[1]).toContain("'=cmd()");
+  });
+
+  it("quotes and escapes a value containing a comma", () => {
+    const csv = exceptionsToCsv([
+      {
+        category: "disputed",
+        enrolmentId: "e1",
+        learnerName: "Ada",
+        sessionId: "s1",
+        sessionTitle: "Week 1",
+        correctionReason: "Corrected, per email",
+        correctedByName: "Cora",
+        correctedAt: new Date("2026-03-10T00:00:00.000Z"),
+      },
+    ]);
+    expect(csv.split("\n")[1]).toContain('"Corrected, per email"');
+  });
+
+  it("returns just the header for an empty list", () => {
+    expect(exceptionsToCsv([]).split("\n")).toHaveLength(1);
+  });
+});
