@@ -225,6 +225,40 @@ export async function takeSeat(
 }
 
 /**
+ * Claims one unit of capacity in `cohortId` for an enrolment row that ALREADY
+ * EXISTS — the D-12 "approve a hold-less PENDING_PAYMENT enrolment" path.
+ *
+ * `takeSeat` cannot serve this case: it INSERTs a new enrolment. Here the row
+ * was already created hold-less by `addEnrolment` (a cohort with `holdMinutes`
+ * null/0 takes no seat until the enrolment reaches ACTIVE — D-02), so approve
+ * must run only the capacity gate and the increment, never a second insert
+ * (RESEARCH Pitfall 3). The status flip to ACTIVE and the `holdExpiresAt: null`
+ * write stay the caller's, in the same transaction.
+ *
+ * Same row lock and same refusal order as `takeSeat`: lock the Cohort row,
+ * `CapacityExceededError` before the counter is touched, then
+ * `seatsTaken = seatsTaken + 1`.
+ */
+export async function claimSeat(
+  tx: SeatTxClient,
+  args: { cohortId: string },
+): Promise<void> {
+  const rows = await tx.$queryRaw<{ seatsTaken: number; capacity: number }[]>`
+    SELECT "seatsTaken", "capacity" FROM "Cohort" WHERE "id" = ${args.cohortId} FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) throw new CohortNotFoundError(args.cohortId);
+  if (row.seatsTaken >= row.capacity) {
+    throw new CapacityExceededError(args.cohortId, row.capacity, row.seatsTaken);
+  }
+
+  await tx.cohort.update({
+    where: { id: args.cohortId },
+    data: { seatsTaken: { increment: 1 } },
+  });
+}
+
+/**
  * Moves an enrolment to a terminal (or transferred) status and, when it
  * `heldSeat`, releases its seat — all under the Cohort row lock.
  *
