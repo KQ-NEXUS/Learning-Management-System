@@ -593,6 +593,11 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
         timezone,
         startsAtLabel: utcToWallParts(r.startsAt, timezone).label,
         endsAtLabel: utcToWallParts(r.endsAt, timezone).label,
+        // D-25 / T-05-86 — presence only, never the capability itself. The
+        // Sessions tab's "Mode/link" column needs to know whether a link is
+        // configured without ever receiving the URL; `r.meetingUrl` is read
+        // here (never returned) purely to derive this boolean.
+        hasMeetingLink: r.meetingUrl !== null,
       }));
   });
 

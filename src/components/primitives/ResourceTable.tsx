@@ -111,6 +111,12 @@ export type ResourceTableProps<T> = {
    * rather than duplicating the empty-state panel per screen.
    */
   emptyBody?: string;
+  /**
+   * Overrides the unfiltered-empty heading (default: "No {noun} yet"). Screens
+   * with a UI-SPEC-mandated exact heading that does not read naturally off
+   * `noun` (e.g. Sessions: "No sessions scheduled") pass this.
+   */
+  emptyHeading?: string;
 };
 
 const CELL = "px-3 py-2 align-middle";
@@ -180,6 +186,7 @@ export function ResourceTable<T>({
   createLabel,
   primaryColumnKey,
   emptyBody,
+  emptyHeading,
 }: ResourceTableProps<T>) {
   const rows = state.status === "ready" ? state.rows : [];
   const loading = state.status === "loading";
@@ -354,7 +361,7 @@ export function ResourceTable<T>({
         {header}
         <Panel>
           <p className="text-sm font-semibold text-zinc-900">
-            {filtered ? `No ${noun} match these filters` : `No ${noun} yet`}
+            {filtered ? `No ${noun} match these filters` : (emptyHeading ?? `No ${noun} yet`)}
           </p>
           <p className="max-w-prose text-sm text-zinc-600">
             {filtered
