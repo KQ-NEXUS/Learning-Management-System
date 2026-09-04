@@ -104,6 +104,13 @@ export type ResourceTableProps<T> = {
   onCreate?: () => void;
   createLabel?: string;
   primaryColumnKey?: string;
+  /**
+   * Overrides the unfiltered-empty body copy ("Create one to get started.").
+   * Screens with a UI-SPEC-mandated exact empty-state sentence (e.g. Cohorts:
+   * "Create a cohort to schedule sessions and open enrolment.") pass this
+   * rather than duplicating the empty-state panel per screen.
+   */
+  emptyBody?: string;
 };
 
 const CELL = "px-3 py-2 align-middle";
@@ -172,6 +179,7 @@ export function ResourceTable<T>({
   onCreate,
   createLabel,
   primaryColumnKey,
+  emptyBody,
 }: ResourceTableProps<T>) {
   const rows = state.status === "ready" ? state.rows : [];
   const loading = state.status === "loading";
@@ -357,7 +365,7 @@ export function ResourceTable<T>({
                     ? ` Clearing them shows all ${state.totalWithoutFilters} ${noun}.`
                     : ""
                 }`
-              : "Create one to get started."}
+              : (emptyBody ?? "Create one to get started.")}
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             {filtered && onClearFilters && (
