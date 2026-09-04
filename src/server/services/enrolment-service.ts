@@ -199,6 +199,93 @@ export type EnrolmentTxClient = SeatTxClient &
     };
   };
 
+/**
+ * The minimal transaction surface `applyEnrolmentExit` needs — a STRICT
+ * subset of `EnrolmentTxClient` (no `enrolment.create`, no
+ * `enrolment.findUnique`) so a caller that already has the `Enrolment` row in
+ * hand — plan 05-11's `cancelCohort` bulk path — can satisfy this with its
+ * own transaction client shape without widening it to the single-enrolment
+ * surface. The real `EnrolmentTxClient` used by `db.$transaction` above is a
+ * superset and is passed here unchanged.
+ */
+export type EnrolmentExitTxClient = {
+  $queryRaw<T = unknown>(
+    query: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<T>;
+  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
+  enrolment: {
+    update(args: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
+  };
+  cohort: {
+    update(args: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
+  };
+  domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
+};
+
+/**
+ * The shared WITHDRAWN/CANCELLED transition body (D-14), extracted so
+ * `withdrawEnrolment`, `cancelEnrolment` and plan 05-11's `cancelCohort` bulk
+ * path all apply the SAME state-machine check, seat release and event
+ * emission rather than three copies that can drift. Takes an
+ * ALREADY-FETCHED `enrolment` row and an ALREADY-OPEN `tx` — the caller owns
+ * both the read and the transaction boundary; this function only validates
+ * the transition and performs the write.
+ *
+ * Throws `IllegalTransitionError` (via `assertTransition`) for a source
+ * status with no legal move to `toStatus` — including every terminal status,
+ * which is exactly what stops `cancelCohort` from touching an
+ * already-WITHDRAWN/CANCELLED/TRANSFERRED/COMPLETED row.
+ */
+export async function applyEnrolmentExit(
+  tx: EnrolmentExitTxClient,
+  args: {
+    enrolment: EnrolmentRow;
+    toStatus: "WITHDRAWN" | "CANCELLED";
+    reason: string;
+    actorId: string;
+    now: Date;
+  },
+): Promise<{ id: string; before: EnrolmentStatusValue; toStatus: "WITHDRAWN" | "CANCELLED" }> {
+  const { enrolment: e, toStatus, reason, actorId, now } = args;
+  const before = e.status as EnrolmentStatusValue;
+  assertTransition(before, toStatus, e.id);
+
+  // `releaseSeat` is typed against `SeatTxClient`, which also declares
+  // `enrolment.create` (needed by `takeSeat`, never by this path). The cast
+  // is the same "structural, cast via unknown" idiom `cohort-service.ts`
+  // uses for its own `$transaction` binding — `EnrolmentExitTxClient` stays
+  // narrow so a caller with no create surface (the bulk cancel path) can
+  // still satisfy it.
+  await releaseSeat(tx as unknown as SeatTxClient, {
+    cohortId: e.cohortId,
+    enrolmentId: e.id,
+    toStatus,
+    reason,
+    heldSeat: holdsSeat(e),
+    ...(toStatus === "WITHDRAWN" ? { withdrawnAt: now } : {}),
+  });
+
+  const eventType = toStatus === "WITHDRAWN" ? "enrolment.withdrawn" : "enrolment.cancelled";
+  await writeDomainEvent(tx, {
+    type: eventType,
+    payload: {
+      enrolmentId: e.id,
+      cohortId: e.cohortId,
+      actorId,
+      reason,
+    },
+  });
+
+  return { id: e.id, before, toStatus };
+}
+
 export type EnrolmentServiceDeps = {
   db: {
     $transaction: <R>(fn: (tx: EnrolmentTxClient) => Promise<R>) => Promise<R>;
@@ -381,12 +468,17 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
   // before access or an administrative void. Both release the seat only when
   // one is actually held (`heldSeat`), so cancelling a hold-less
   // PENDING_PAYMENT enrolment does not wrongly decrement `seatsTaken`.
+  //
+  // The transition body is `applyEnrolmentExit` (module scope, below) — it is
+  // exported and callable with an ALREADY-OPEN `tx` so plan 05-11's
+  // `cancelCohort` bulk path can apply it to every affected enrolment inside
+  // its own single `$transaction`, instead of re-implementing the state
+  // machine a second time.
   // -------------------------------------------------------------------------
 
   function makeTerminalAction(
     toStatus: "WITHDRAWN" | "CANCELLED",
     eventType: "enrolment.withdrawn" | "enrolment.cancelled",
-    stampWithdrawnAt: boolean,
   ) {
     return withPermission<{ enrolmentId: string; reason: string }>(
       "enrolments.manage",
@@ -399,29 +491,14 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
           where: { id: input.enrolmentId },
         });
         if (!e) throw new EnrolmentNotFoundError(input.enrolmentId);
-        const before = e.status;
-        assertTransition(before as EnrolmentStatusValue, toStatus, e.id);
 
-        await releaseSeat(tx, {
-          cohortId: e.cohortId,
-          enrolmentId: e.id,
+        return applyEnrolmentExit(tx, {
+          enrolment: e,
           toStatus,
           reason,
-          heldSeat: holdsSeat(e),
-          ...(stampWithdrawnAt ? { withdrawnAt: now() } : {}),
+          actorId: ctx.actor.userId,
+          now: now(),
         });
-
-        await writeDomainEvent(tx, {
-          type: eventType,
-          payload: {
-            enrolmentId: e.id,
-            cohortId: e.cohortId,
-            actorId: ctx.actor.userId,
-            reason,
-          },
-        });
-
-        return { id: e.id, before };
       });
 
       await deps.audit({
@@ -439,16 +516,8 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
     });
   }
 
-  const withdrawEnrolment = makeTerminalAction(
-    "WITHDRAWN",
-    "enrolment.withdrawn",
-    true,
-  );
-  const cancelEnrolment = makeTerminalAction(
-    "CANCELLED",
-    "enrolment.cancelled",
-    false,
-  );
+  const withdrawEnrolment = makeTerminalAction("WITHDRAWN", "enrolment.withdrawn");
+  const cancelEnrolment = makeTerminalAction("CANCELLED", "enrolment.cancelled");
 
   // -------------------------------------------------------------------------
   // transferEnrolment (D-13) — same offer only

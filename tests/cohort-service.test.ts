@@ -16,6 +16,7 @@ import {
   OfferLockedError,
   CohortReadinessRefusedError,
   NoPublishedOfferError,
+  CohortCancelBlockedError,
   type CohortRecord,
   type CohortAggregateRow,
   type CohortPublishTx,
@@ -23,6 +24,7 @@ import {
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { CohortNotFoundError } from "@/server/services/seat-accounting";
+import { ReasonRequiredError } from "@/server/services/enrolment-service";
 import { type Delegate } from "@/server/services/resource-service";
 
 const T0 = new Date("2026-01-01T00:00:00.000Z");
@@ -454,5 +456,409 @@ describe("publishCohort — permission-, readiness- and token-gated", () => {
       }),
     ).rejects.toBeInstanceOf(StaleOrderError);
     expect(tx.domainEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cancelCohort (D-31) — Task 1
+//
+// Driven by its own staged-commit fake `$transaction` (the same idiom
+// `tests/enrolment-service.test.ts` uses for `db.$transaction`): a mutation
+// made inside the callback is only applied to the outer store if the
+// callback resolves, so a mid-loop throw genuinely proves nothing partial
+// survives — not just "the mock wasn't asked to persist it".
+// ---------------------------------------------------------------------------
+
+type CancelEnrolmentRow = {
+  id: string;
+  userId: string;
+  cohortId: string;
+  status: string;
+  holdExpiresAt: Date | null;
+  activatedAt: Date | null;
+  withdrawnAt: Date | null;
+  reason: string | null;
+  orderId: string | null;
+  transferredFromId: string | null;
+};
+
+function cancelEnr(over: Partial<CancelEnrolmentRow> = {}): CancelEnrolmentRow {
+  return {
+    id: over.id ?? "enr-1",
+    userId: over.userId ?? "user-1",
+    cohortId: over.cohortId ?? "cohort-1",
+    status: over.status ?? "ACTIVE",
+    holdExpiresAt: over.holdExpiresAt ?? null,
+    activatedAt: over.activatedAt ?? null,
+    withdrawnAt: over.withdrawnAt ?? null,
+    reason: over.reason ?? null,
+    orderId: over.orderId ?? null,
+    transferredFromId: over.transferredFromId ?? null,
+  };
+}
+
+type CancelSessionRow = {
+  id: string;
+  cancelledAt: Date | null;
+  cancellationReason: string | null;
+};
+
+function cancelSession(over: Partial<CancelSessionRow> = {}): CancelSessionRow {
+  return {
+    id: over.id ?? "session-1",
+    cancelledAt: over.cancelledAt ?? null,
+    cancellationReason: over.cancellationReason ?? null,
+  };
+}
+
+function cancelHarness(opts?: {
+  grants?: ReturnType<typeof grant>[];
+  cohortRow?: CohortRecord;
+  enrolments?: CancelEnrolmentRow[];
+  sessions?: CancelSessionRow[];
+  failOnEnrolmentId?: string;
+}) {
+  const cohortRow = opts?.cohortRow ?? makeCohortRow({ status: "PUBLISHED", seatsTaken: 3 });
+  const cohorts = new Map<string, CohortRecord>([[cohortRow.id, cohortRow]]);
+  const enrolments = new Map<string, CancelEnrolmentRow>(
+    (opts?.enrolments ?? []).map((e) => [e.id, { ...e }]),
+  );
+  const sessions = new Map<string, CancelSessionRow>(
+    (opts?.sessions ?? []).map((s) => [s.id, { ...s }]),
+  );
+  const audits: Array<Record<string, unknown>> = [];
+  const events: Array<Record<string, unknown>> = [];
+
+  const cloneMap = <V,>(m: Map<string, V>) =>
+    new Map<string, V>([...m].map(([k, v]) => [k, { ...(v as object) } as V]));
+
+  function makeTx(
+    cStore: Map<string, CohortRecord>,
+    eStore: Map<string, CancelEnrolmentRow>,
+    sStore: Map<string, CancelSessionRow>,
+    evStore: Array<Record<string, unknown>>,
+  ) {
+    return {
+      $queryRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
+        const c = cStore.get(vals[0] as string);
+        return c ? [{ seatsTaken: c.seatsTaken, capacity: c.capacity }] : [];
+      },
+      $executeRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
+        const c = cStore.get(vals[0] as string);
+        if (c) c.seatsTaken = Math.max(c.seatsTaken - 1, 0);
+        return 1;
+      },
+      enrolment: {
+        findMany: async ({
+          where,
+        }: {
+          where: { cohortId: string; status: { in: string[] } };
+        }) =>
+          [...eStore.values()].filter(
+            (e) => e.cohortId === where.cohortId && where.status.in.includes(e.status),
+          ),
+        update: async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Record<string, unknown>;
+        }) => {
+          if (opts?.failOnEnrolmentId && where.id === opts.failOnEnrolmentId) {
+            throw new Error("simulated mid-loop failure");
+          }
+          const row = eStore.get(where.id);
+          if (!row) throw new Error(`no such enrolment ${where.id}`);
+          Object.assign(row, data);
+          return row;
+        },
+      },
+      cohort: {
+        update: async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Record<string, unknown>;
+        }) => {
+          const c = cStore.get(where.id) as CohortRecord;
+          const s = data.seatsTaken as
+            | { increment?: number; decrement?: number }
+            | undefined;
+          if (s?.increment) c.seatsTaken += s.increment;
+          if (s?.decrement) c.seatsTaken -= s.decrement;
+          return c;
+        },
+        updateMany: async ({
+          where,
+          data,
+        }: {
+          where: { id: string; updatedAt: Date };
+          data: Record<string, unknown>;
+        }) => {
+          const c = cStore.get(where.id);
+          if (!c || c.updatedAt.getTime() !== where.updatedAt.getTime()) {
+            return { count: 0 };
+          }
+          Object.assign(c, data);
+          return { count: 1 };
+        },
+      },
+      scheduledSession: {
+        findMany: async ({ where }: { where: { cohortId: string; cancelledAt: null } }) =>
+          [...sStore.values()].filter(
+            (s) => s.cancelledAt === where.cancelledAt,
+          ),
+        update: async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Record<string, unknown>;
+        }) => {
+          const row = sStore.get(where.id);
+          if (!row) throw new Error(`no such session ${where.id}`);
+          Object.assign(row, data);
+          return row;
+        },
+      },
+      domainEvent: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          evStore.push(data);
+          return { id: `evt-${evStore.length}` };
+        },
+      },
+    };
+  }
+
+  const db = {
+    $transaction: async <R,>(fn: (tx: CohortPublishTx) => Promise<R>): Promise<R> => {
+      const cStaged = cloneMap(cohorts);
+      const eStaged = cloneMap(enrolments);
+      const sStaged = cloneMap(sessions);
+      const evStaged: Array<Record<string, unknown>> = [];
+      const result = await fn(
+        makeTx(cStaged, eStaged, sStaged, evStaged) as unknown as CohortPublishTx,
+      );
+      for (const [k, v] of cStaged) cohorts.set(k, v);
+      for (const [k, v] of eStaged) enrolments.set(k, v);
+      for (const [k, v] of sStaged) sessions.set(k, v);
+      for (const e of evStaged) events.push(e);
+      return result;
+    },
+  };
+
+  const delegate: Delegate<CohortRecord> = {
+    findMany: vi.fn(async () => [...cohorts.values()]),
+    findUnique: vi.fn(async ({ where }) => cohorts.get(where.id) ?? null),
+    create: vi.fn(async ({ data }) => {
+      const row = makeCohortRow({ id: "cohort-new", ...(data as Partial<CohortRecord>) });
+      cohorts.set(row.id, row);
+      return row;
+    }),
+    update: vi.fn(async ({ where, data }) => {
+      const next = {
+        ...(cohorts.get(where.id) as CohortRecord),
+        ...(data as Partial<CohortRecord>),
+      };
+      cohorts.set(where.id, next);
+      return next;
+    }),
+  };
+
+  const { withPermission } = createTestWithPermission(
+    opts?.grants ?? [grant("cohorts.manage")],
+  );
+
+  const service = createCohortService({
+    delegate,
+    enrolment: { count: vi.fn(async () => 0) },
+    aggregate: { findUnique: vi.fn(async () => null) },
+    db,
+    toScope: (id) => ({ cohortId: id, courseIds: ["course-1"] }),
+    withPermission,
+    audit: async (entry) => {
+      audits.push(entry as unknown as Record<string, unknown>);
+    },
+    runInTransaction: (fn) => fn(),
+    now: () => NOW,
+  });
+
+  return { service, cohorts, enrolments, sessions, events, audits };
+}
+
+describe("cancelCohort (D-31) — atomic bulk withdraw, session cancellation, status change", () => {
+  it("requires a reason of at least 10 trimmed characters, writing nothing for a blank one", async () => {
+    const { service, audits } = cancelHarness();
+    await expect(
+      service.cancelCohort({ cohortId: "cohort-1", reason: "   ", expectedUpdatedAt: T0 }),
+    ).rejects.toBeInstanceOf(ReasonRequiredError);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("requires a reason of at least 10 trimmed characters, writing nothing for a too-short one", async () => {
+    const { service, audits } = cancelHarness();
+    await expect(
+      service.cancelCohort({ cohortId: "cohort-1", reason: "too short", expectedUpdatedAt: T0 }),
+    ).rejects.toBeInstanceOf(ReasonRequiredError);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("requires cohorts.manage", async () => {
+    const { service } = cancelHarness({ grants: [grant("cohorts.view")] });
+    await expect(
+      service.cancelCohort({
+        cohortId: "cohort-1",
+        reason: "Cohort closed for the season",
+        expectedUpdatedAt: T0,
+      }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("throws CohortCancelBlockedError on an already-CANCELLED cohort and writes nothing", async () => {
+    const { service, audits, events } = cancelHarness({
+      cohortRow: makeCohortRow({ status: "CANCELLED" }),
+    });
+    await expect(
+      service.cancelCohort({
+        cohortId: "cohort-1",
+        reason: "Duplicate cancellation attempt",
+        expectedUpdatedAt: T0,
+      }),
+    ).rejects.toBeInstanceOf(CohortCancelBlockedError);
+    expect(audits).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  it("withdraws ACTIVE, cancels PENDING_PAYMENT, leaves terminal statuses untouched, soft-cancels open sessions, zeroes seatsTaken", async () => {
+    const untouchedWithdrawn = cancelEnr({ id: "enr-withdrawn", status: "WITHDRAWN", reason: "prior reason" });
+    const { service, cohorts, enrolments, sessions, audits, events } = cancelHarness({
+      cohortRow: makeCohortRow({ status: "PUBLISHED", seatsTaken: 3 }),
+      enrolments: [
+        cancelEnr({ id: "enr-active-1", status: "ACTIVE" }),
+        cancelEnr({ id: "enr-active-2", status: "ACTIVE" }),
+        cancelEnr({
+          id: "enr-pending",
+          status: "PENDING_PAYMENT",
+          holdExpiresAt: new Date(NOW.getTime() + 10 * 60_000),
+        }),
+        untouchedWithdrawn,
+      ],
+      sessions: [
+        cancelSession({ id: "session-open-1" }),
+        cancelSession({ id: "session-open-2" }),
+        cancelSession({
+          id: "session-already-cancelled",
+          cancelledAt: new Date("2026-02-01T00:00:00.000Z"),
+          cancellationReason: "weather",
+        }),
+      ],
+    });
+
+    const reason = "Cohort cancelled — operations decision";
+    await service.cancelCohort({ cohortId: "cohort-1", reason, expectedUpdatedAt: T0 });
+
+    expect(enrolments.get("enr-active-1")!.status).toBe("WITHDRAWN");
+    expect(enrolments.get("enr-active-1")!.reason).toBe(reason);
+    expect(enrolments.get("enr-active-1")!.withdrawnAt).toEqual(NOW);
+    expect(enrolments.get("enr-active-2")!.status).toBe("WITHDRAWN");
+
+    expect(enrolments.get("enr-pending")!.status).toBe("CANCELLED");
+    expect(enrolments.get("enr-pending")!.reason).toBe(reason);
+    expect(enrolments.get("enr-pending")!.holdExpiresAt).toBeNull();
+
+    // Terminal-status row is byte-identical to before.
+    expect(enrolments.get("enr-withdrawn")).toEqual(untouchedWithdrawn);
+
+    expect(sessions.get("session-open-1")!.cancelledAt).toEqual(NOW);
+    expect(sessions.get("session-open-1")!.cancellationReason).toBe(reason);
+    expect(sessions.get("session-open-2")!.cancelledAt).toEqual(NOW);
+    expect(sessions.get("session-already-cancelled")!.cancelledAt).toEqual(
+      new Date("2026-02-01T00:00:00.000Z"),
+    );
+    expect(sessions.get("session-already-cancelled")!.cancellationReason).toBe("weather");
+
+    expect(cohorts.get("cohort-1")!.status).toBe("CANCELLED");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(0);
+
+    // One audit row per affected enrolment (2 withdrawn + 1 cancelled), one
+    // per cancelled session (2), one for the cohort — never a single batch
+    // row (D-31, T-05-69).
+    const enrolmentAudits = audits.filter((a) => a.targetType === "Enrolment");
+    expect(enrolmentAudits).toHaveLength(3);
+    expect(enrolmentAudits.map((a) => a.targetId).sort()).toEqual(
+      ["enr-active-1", "enr-active-2", "enr-pending"].sort(),
+    );
+    expect(
+      enrolmentAudits.find((a) => a.targetId === "enr-active-1"),
+    ).toMatchObject({ action: "enrolment.withdrawn", before: { status: "ACTIVE" }, after: { status: "WITHDRAWN" }, reason });
+    expect(
+      enrolmentAudits.find((a) => a.targetId === "enr-pending"),
+    ).toMatchObject({ action: "enrolment.cancelled", before: { status: "PENDING_PAYMENT" }, after: { status: "CANCELLED" }, reason });
+
+    const sessionAudits = audits.filter((a) => a.targetType === "ScheduledSession");
+    expect(sessionAudits).toHaveLength(2);
+    expect(sessionAudits.map((a) => a.targetId).sort()).toEqual(
+      ["session-open-1", "session-open-2"].sort(),
+    );
+
+    const cohortAudits = audits.filter((a) => a.targetType === "Cohort");
+    expect(cohortAudits).toHaveLength(1);
+    expect(cohortAudits[0]).toMatchObject({ action: "cohort.cancelled", reason });
+
+    // Total audit rows: 3 enrolments + 2 sessions + 1 cohort — never a
+    // single batch-level row.
+    expect(audits).toHaveLength(6);
+
+    // One domain event per affected enrolment plus one cohort.cancelled,
+    // all written inside the transaction.
+    expect(events.filter((e) => e.type === "enrolment.withdrawn")).toHaveLength(2);
+    expect(events.filter((e) => e.type === "enrolment.cancelled")).toHaveLength(1);
+    expect(events.filter((e) => e.type === "cohort.cancelled")).toHaveLength(1);
+  });
+
+  it("a mid-loop failure leaves the cohort open and every enrolment untouched", async () => {
+    const { service, cohorts, enrolments, sessions, audits, events } = cancelHarness({
+      cohortRow: makeCohortRow({ status: "PUBLISHED", seatsTaken: 2 }),
+      enrolments: [
+        cancelEnr({ id: "enr-active-1", status: "ACTIVE" }),
+        cancelEnr({ id: "enr-active-2", status: "ACTIVE" }),
+      ],
+      sessions: [cancelSession({ id: "session-open-1" })],
+      failOnEnrolmentId: "enr-active-2",
+    });
+
+    await expect(
+      service.cancelCohort({
+        cohortId: "cohort-1",
+        reason: "Should not partially apply",
+        expectedUpdatedAt: T0,
+      }),
+    ).rejects.toThrow("simulated mid-loop failure");
+
+    expect(cohorts.get("cohort-1")!.status).toBe("PUBLISHED");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(2);
+    expect(enrolments.get("enr-active-1")!.status).toBe("ACTIVE");
+    expect(enrolments.get("enr-active-2")!.status).toBe("ACTIVE");
+    expect(sessions.get("session-open-1")!.cancelledAt).toBeNull();
+    expect(audits).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  it("throws StaleOrderError on a stale expectedUpdatedAt and writes no audit or event", async () => {
+    const { service, cohorts, audits, events } = cancelHarness({
+      cohortRow: makeCohortRow({ status: "PUBLISHED", seatsTaken: 0, updatedAt: T0 }),
+      enrolments: [],
+    });
+    await expect(
+      service.cancelCohort({
+        cohortId: "cohort-1",
+        reason: "Attempting with a stale token",
+        expectedUpdatedAt: new Date("2020-01-01"),
+      }),
+    ).rejects.toBeInstanceOf(StaleOrderError);
+    expect(cohorts.get("cohort-1")!.status).toBe("PUBLISHED");
+    expect(audits).toHaveLength(0);
+    expect(events).toHaveLength(0);
   });
 });

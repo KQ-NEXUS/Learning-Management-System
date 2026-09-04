@@ -45,6 +45,11 @@ import {
 import { StaleOrderError } from "./reorder-service";
 import { writeDomainEvent } from "./domain-event-service";
 import { CohortNotFoundError } from "./seat-accounting";
+import {
+  applyEnrolmentExit,
+  ReasonRequiredError,
+  type EnrolmentRow,
+} from "./enrolment-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 
@@ -167,6 +172,43 @@ export class NoPublishedOfferError extends Error {
   }
 }
 
+// ---------------------------------------------------------------------------
+// cancelCohort (D-31) — bulk withdraw + status change, all atomic
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown when `cancelCohort` is called on a Cohort whose `status` is already
+ * `CANCELLED`. Nothing is written — no enrolment touched, no session
+ * touched, no audit row, no event.
+ */
+export class CohortCancelBlockedError extends Error {
+  readonly cohortId: string;
+
+  constructor(cohortId: string) {
+    super(`Cohort ${cohortId} is already cancelled.`);
+    this.name = "CohortCancelBlockedError";
+    this.cohortId = cohortId;
+  }
+}
+
+/** UI-SPEC line 160's `ConfirmModal minReasonLength: 10` contract. */
+const CANCEL_REASON_MIN_LENGTH = 10;
+
+/**
+ * Copy of the `publish-service.ts` / `enrolment-service.ts` shape, widened
+ * with a minimum trimmed length so a one-word reason cannot bulk-withdraw an
+ * entire roster.
+ */
+function requireCancelReason(reason: string | null | undefined): string {
+  const trimmed = reason?.trim();
+  if (!trimmed || trimmed.length < CANCEL_REASON_MIN_LENGTH) {
+    throw new ReasonRequiredError(
+      `A reason of at least ${CANCEL_REASON_MIN_LENGTH} characters is required to cancel a cohort.`,
+    );
+  }
+  return trimmed;
+}
+
 /** One frozen publication row — the id is the pin, the payload carries the
  *  completion rule the readiness evaluator reads. */
 type CohortPublicationRow = { id: string; payload: unknown };
@@ -287,14 +329,50 @@ function toReadinessInput(row: CohortAggregateRow): ReadinessCohortInput {
   };
 }
 
-/** The transaction client `publishCohort` needs — structurally satisfied by a
- *  Prisma `tx` and by a unit-test fake, so no `@prisma/client` import. */
+/** The `ScheduledSession` columns `cancelCohort`'s soft-cancel loop reads
+ *  and writes (D-26 — never a delete). */
+export type ScheduledSessionCancelRow = { id: string; cancelledAt: Date | null };
+
+/**
+ * The transaction client `publishCohort` and `cancelCohort` need —
+ * structurally satisfied by a Prisma `tx` and by a unit-test fake, so no
+ * `@prisma/client` import. Widened beyond `publishCohort`'s own needs
+ * (`cohort.updateMany` / `domainEvent.create`) to also carry what
+ * `cancelCohort`'s bulk withdraw/session-cancel needs: `enrolment.findMany`
+ * plus everything `applyEnrolmentExit` (`enrolment-service.ts`) requires of a
+ * tx — `$queryRaw`/`$executeRaw`/`enrolment.update`/`cohort.update` — and the
+ * session soft-cancel's `scheduledSession.findMany`/`update`. A real Prisma
+ * `tx` satisfies every field; a unit-test fake only needs to implement what
+ * the operation under test calls.
+ */
 export type CohortPublishTx = {
+  $queryRaw<T = unknown>(
+    query: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<T>;
+  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
   cohort: {
+    update(args: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
     updateMany(args: {
       where: Record<string, unknown>;
       data: Record<string, unknown>;
     }): Promise<{ count: number }>;
+  };
+  enrolment: {
+    findMany(args: { where: Record<string, unknown> }): Promise<EnrolmentRow[]>;
+    update(args: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
+  };
+  scheduledSession: {
+    findMany(args: {
+      where: Record<string, unknown>;
+    }): Promise<ScheduledSessionCancelRow[]>;
+    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
   domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
 };
@@ -462,7 +540,142 @@ export function createCohortService(deps: CohortServiceDeps) {
     },
   );
 
-  return { cohortService, updateCohort, loadCohortReadinessAggregate, publishCohort };
+  /**
+   * COH-05 / D-31 / T-05-68..T-05-75. UI-SPEC line 160's confirmation copy
+   * ("Withdraws all {n} active enrolments … cancels every scheduled session
+   * … kept as cancelled, never deleted") is the exact contract this
+   * implements: mandatory reason (min 10 trimmed chars, matching the
+   * `ConfirmModal` contract), refuse an already-`CANCELLED` cohort, then in
+   * ONE `$transaction` — every `ACTIVE` enrolment -> `WITHDRAWN`, every
+   * `PENDING_PAYMENT` enrolment -> `CANCELLED` (D-14's distinction) via the
+   * SHARED `applyEnrolmentExit` (never a second copy of the transition
+   * table — grep gate), soft-cancel every non-cancelled session (D-26 — never
+   * a delete), and claim the cohort with a conditional `updateMany`
+   * (`StaleOrderError` on a lost race). Per-transition audit rows — one per
+   * affected enrolment, one per cancelled session, one for the cohort — are
+   * written AFTER commit; a single batch row would lose exactly the history
+   * the roster and ATT-03 depend on (D-31, T-05-69).
+   */
+  const cancelCohort = withPermission<{
+    cohortId: string;
+    reason: string;
+    expectedUpdatedAt: Date;
+  }>("cohorts.manage", (input) => deps.toScope(input.cohortId))(
+    async (input, ctx) => {
+      const reason = requireCancelReason(input.reason);
+
+      const cohort = await deps.delegate.findUnique({ where: { id: input.cohortId } });
+      if (!cohort) throw new CohortNotFoundError(input.cohortId);
+      if (cohort.status === "CANCELLED") {
+        throw new CohortCancelBlockedError(input.cohortId);
+      }
+
+      const cancelledAt = now();
+
+      const { affected, cancelledSessionIds } = await deps.db.$transaction(async (tx) => {
+        // D-14: ACTIVE -> WITHDRAWN, PENDING_PAYMENT -> CANCELLED. Every
+        // other status (WITHDRAWN/CANCELLED/TRANSFERRED/COMPLETED) is left
+        // untouched by construction — this query never selects it.
+        const enrolments = await tx.enrolment.findMany({
+          where: { cohortId: input.cohortId, status: { in: ["ACTIVE", "PENDING_PAYMENT"] } },
+        });
+
+        const affected: Array<{
+          id: string;
+          before: string;
+          toStatus: "WITHDRAWN" | "CANCELLED";
+        }> = [];
+        for (const enrolment of enrolments) {
+          const toStatus = enrolment.status === "ACTIVE" ? "WITHDRAWN" : "CANCELLED";
+          const result = await applyEnrolmentExit(tx, {
+            enrolment,
+            toStatus,
+            reason,
+            actorId: ctx.actor.userId,
+            now: cancelledAt,
+          });
+          affected.push(result);
+        }
+
+        // D-26: soft-cancel only, never a delete.
+        const sessions = await tx.scheduledSession.findMany({
+          where: { cohortId: input.cohortId, cancelledAt: null },
+        });
+        for (const session of sessions) {
+          await tx.scheduledSession.update({
+            where: { id: session.id },
+            data: { cancelledAt, cancellationReason: reason },
+          });
+        }
+
+        const claimed = await tx.cohort.updateMany({
+          where: { id: input.cohortId, updatedAt: input.expectedUpdatedAt },
+          data: { status: "CANCELLED", seatsTaken: 0 },
+        });
+        if (claimed.count === 0) throw new StaleOrderError();
+
+        await writeDomainEvent(tx, {
+          type: "cohort.cancelled",
+          payload: { cohortId: input.cohortId, actorId: ctx.actor.userId, reason },
+        });
+
+        return { affected, cancelledSessionIds: sessions.map((s) => s.id) };
+      });
+
+      // Per-transition audit rows, written after commit (T-05-69) — one per
+      // affected enrolment, one per cancelled session, one for the cohort.
+      for (const e of affected) {
+        await deps.audit({
+          action: e.toStatus === "WITHDRAWN" ? "enrolment.withdrawn" : "enrolment.cancelled",
+          targetType: "Enrolment",
+          targetId: e.id,
+          actorId: ctx.actor.userId,
+          outcome: "SUCCESS",
+          reason,
+          before: { status: e.before },
+          after: { status: e.toStatus },
+        });
+      }
+      for (const sessionId of cancelledSessionIds) {
+        await deps.audit({
+          action: "session.cancelled",
+          targetType: "ScheduledSession",
+          targetId: sessionId,
+          actorId: ctx.actor.userId,
+          outcome: "SUCCESS",
+          reason,
+          before: { cancelledAt: null },
+          after: { cancelledAt },
+        });
+      }
+      await deps.audit({
+        action: "cohort.cancelled",
+        targetType: "Cohort",
+        targetId: input.cohortId,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason,
+        before: { status: cohort.status },
+        after: { status: "CANCELLED", seatsTaken: 0 },
+      });
+
+      return {
+        cohortId: input.cohortId,
+        status: "CANCELLED" as const,
+        withdrawnCount: affected.filter((e) => e.toStatus === "WITHDRAWN").length,
+        cancelledCount: affected.filter((e) => e.toStatus === "CANCELLED").length,
+        sessionsCancelled: cancelledSessionIds.length,
+      };
+    },
+  );
+
+  return {
+    cohortService,
+    updateCohort,
+    loadCohortReadinessAggregate,
+    publishCohort,
+    cancelCohort,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +709,7 @@ const built = createCohortService({
 export const cohortService = built.cohortService;
 export const updateCohort = built.updateCohort;
 export const publishCohort = built.publishCohort;
+export const cancelCohort = built.cancelCohort;
 export const loadCohortReadinessAggregate = built.loadCohortReadinessAggregate;
 
 /** Bound to `prisma.enrolment` — the guard plan 05-11/05-12 call directly. */
