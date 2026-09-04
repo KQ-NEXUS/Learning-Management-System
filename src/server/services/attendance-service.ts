@@ -471,7 +471,159 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
     },
   );
 
-  return { markAttendance };
+  // -------------------------------------------------------------------------
+  // saveSessionAttendance — the whole roster, one commit (D-10, ATT-01)
+  // -------------------------------------------------------------------------
+
+  const saveSessionAttendance = withPermission<{
+    sessionId: string;
+    entries: Array<{
+      enrolmentId: string;
+      state: AttendanceStateValue;
+      note?: string;
+      reason?: string;
+    }>;
+  }>("attendance.manage", (input) => deps.sessionScope(input.sessionId))(
+    async (input, ctx) => {
+      const session = await deps.session.findUnique({ where: { id: input.sessionId } });
+      if (!session) throw new SessionNotFoundError(input.sessionId);
+
+      // The learner set comes from the DATABASE, filtered by the session's own
+      // `cohortId` — never from the caller's list (D-10).
+      const roster = await deps.enrolment.findMany({
+        where: { cohortId: session.cohortId },
+      });
+      const rosterIds = new Set(roster.map((e) => e.id));
+
+      // Validate every submitted id against that set and reject duplicates —
+      // BEFORE any write, so a single bad id writes nothing at all (T-05-47).
+      const seen = new Set<string>();
+      for (const entry of input.entries) {
+        if (seen.has(entry.enrolmentId)) {
+          throw new LearnerNotOnRosterError(
+            input.sessionId,
+            entry.enrolmentId,
+            "appears more than once in the submitted list",
+          );
+        }
+        seen.add(entry.enrolmentId);
+        if (!rosterIds.has(entry.enrolmentId)) {
+          throw new LearnerNotOnRosterError(input.sessionId, entry.enrolmentId);
+        }
+      }
+
+      // Per-entry pre-marking / correction-window rules, still before any
+      // write so the whole batch refuses atomically.
+      const timing = timingFor(session, now());
+      const prepared = input.entries.map((entry) => {
+        const reason = trimReason(entry.reason);
+        assertMarkAllowed(session, entry.enrolmentId, entry.state, reason, timing);
+        return { enrolmentId: entry.enrolmentId, state: entry.state, note: entry.note ?? null, reason };
+      });
+
+      // Skip entries whose state and note already match the stored row, so a
+      // "save all" on an unchanged register produces no events (D-17).
+      const existing = await deps.attendance.findMany({
+        where: { sessionId: input.sessionId },
+      });
+      const existingByEnrolment = new Map(existing.map((r) => [r.enrolmentId, r]));
+      const changed = prepared.filter((entry) => {
+        const row = existingByEnrolment.get(entry.enrolmentId);
+        const currentState: AttendanceStateValue = row?.state ?? "NOT_RECORDED";
+        const currentNote = row?.note ?? null;
+        return currentState !== entry.state || currentNote !== entry.note;
+      });
+
+      const results = await deps.runInTransaction(async (tx) => {
+        const out: Array<{
+          enrolmentId: string;
+          before: AttendanceStateValue;
+          after: AttendanceStateValue;
+          reason: string | null;
+        }> = [];
+        for (const entry of changed) {
+          const { before, after } = await writeOneRecord(tx, {
+            session,
+            enrolmentId: entry.enrolmentId,
+            state: entry.state,
+            note: entry.note,
+            reason: entry.reason,
+            afterClose: timing.afterClose,
+            actorId: ctx.actor.userId,
+          });
+          out.push({ enrolmentId: entry.enrolmentId, before, after, reason: entry.reason });
+        }
+        return out;
+      });
+
+      // One audit row per changed record — ATT-03's before/after history is
+      // per learner, not per batch.
+      for (const r of results) {
+        await auditChange({
+          enrolmentId: r.enrolmentId,
+          actorId: ctx.actor.userId,
+          before: r.before,
+          after: r.after,
+          reason: timing.afterClose ? r.reason : null,
+        });
+      }
+
+      return {
+        sessionId: input.sessionId,
+        total: input.entries.length,
+        changed: results.length,
+      };
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // loadSessionRegister — what the marking screen renders (D-21)
+  // -------------------------------------------------------------------------
+
+  const loadSessionRegister = withPermission<{ sessionId: string }>(
+    "attendance.view",
+    (input) => deps.sessionScope(input.sessionId),
+  )(async (input) => {
+    const session = await deps.session.findUnique({ where: { id: input.sessionId } });
+    if (!session) throw new SessionNotFoundError(input.sessionId);
+
+    const [enrolments, records] = await Promise.all([
+      deps.enrolment.findMany({
+        where: {
+          cohortId: session.cohortId,
+          status: { notIn: OFF_ROSTER_STATUSES },
+        },
+      }),
+      deps.attendance.findMany({ where: { sessionId: input.sessionId } }),
+    ]);
+    const recordByEnrolment = new Map(records.map((r) => [r.enrolmentId, r]));
+
+    // A courtesy echo of the server rule the marking screen uses to disable
+    // PRESENT/ABSENT/LATE — NOT the rule itself (that is `assertMarkAllowed`).
+    const canSetLiveStates = !isBeforeSessionStart(session, now());
+    const windowClosesAt = markingWindowClosesAt(session);
+
+    return enrolments
+      .map((row) => {
+        const enrolment = row as RegisterEnrolmentRow;
+        const record = recordByEnrolment.get(enrolment.id);
+        return {
+          enrolmentId: enrolment.id,
+          learnerId: enrolment.user.id,
+          learnerName: enrolment.user.name ?? enrolment.user.email,
+          learnerEmail: enrolment.user.email,
+          status: enrolment.status,
+          state: record?.state ?? ("NOT_RECORDED" as AttendanceStateValue),
+          note: record?.note ?? null,
+          isCorrection: (record?.correctionReason ?? null) !== null,
+          windowClosesAt,
+          canSetLiveStates,
+        };
+      })
+      .sort((a, b) => a.learnerName.localeCompare(b.learnerName));
+  });
+
+  return { markAttendance, saveSessionAttendance, loadSessionRegister };
 }
 
 // ---------------------------------------------------------------------------
@@ -584,5 +736,7 @@ export function createPrismaBackedAttendanceService(
 const built = createPrismaBackedAttendanceService(prisma, liveWithPermission);
 
 export const markAttendance = built.markAttendance;
+export const saveSessionAttendance = built.saveSessionAttendance;
+export const loadSessionRegister = built.loadSessionRegister;
 
 export { OFF_ROSTER_STATUSES };
