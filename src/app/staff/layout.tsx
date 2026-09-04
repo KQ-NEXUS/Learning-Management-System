@@ -16,13 +16,13 @@ import { LEARNER_LANDING_PATH } from "@/server/auth/landing";
  */
 
 const NAV = [
-  { label: "Cohorts", href: null },
+  { label: "Cohorts", href: "/staff/cohorts" },
   { label: "Courses", href: "/staff/courses" },
   { label: "Programmes", href: "/staff/programmes" },
   { label: "Roles", href: "/staff/roles" },
   { label: "Users", href: "/staff/users" },
   { label: "Audit", href: "/staff/audit" },
-  { label: "Enrolments", href: null },
+  { label: "Enrolments", href: "/staff/enrolments" },
   { label: "Assessment", href: null },
   { label: "Certificates", href: null },
   { label: "Support", href: null },
