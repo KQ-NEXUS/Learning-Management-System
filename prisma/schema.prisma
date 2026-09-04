@@ -260,6 +260,9 @@ model User {
   // D-28 — audit completeness on the upload pipeline (RBAC-08).
   lessonResourceUploads LessonResource[]
 
+  // ATT-03 — attribution for a post-window attendance correction.
+  attendanceCorrections AttendanceRecord[] @relation("AttendanceCorrectedBy")
+
   @@index([status])
   @@index([isStaff])
 }
@@ -885,8 +888,9 @@ model AttendanceRecord {
   correctedAt      DateTime?
   correctionReason String?
 
-  session   ScheduledSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  enrolment Enrolment        @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  session     ScheduledSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrolment   Enrolment        @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  correctedBy User?            @relation("AttendanceCorrectedBy", fields: [correctedById], references: [id])
 
   @@unique([sessionId, enrolmentId])
   @@index([enrolmentId])
