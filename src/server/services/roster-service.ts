@@ -481,6 +481,114 @@ export function exceptionsToCsv(rows: AttendanceException[]): string {
 }
 
 // ---------------------------------------------------------------------------
+// Global staff enrolments list (UI-SPEC `/staff/enrolments`, line 186)
+//
+// Added in plan 05-14 — no capability to list enrolments across cohorts
+// existed anywhere yet, and per `eslint.config.mjs`'s "Data access is
+// confined to the service layer" rule, the mounting page cannot query
+// `prisma.enrolment` itself. Extending this file (already the read-only,
+// DI-factory home for cohort-scoped enrolment reads) keeps the surface in
+// one place rather than adding a second service file for one screen.
+// ---------------------------------------------------------------------------
+
+export type StaffEnrolmentRow = {
+  id: string;
+  status: string;
+  learnerName: string;
+  learnerEmail: string;
+  cohortId: string;
+  cohortCode: string;
+  offerTitle: string;
+  accessStartsAt: Date | null;
+  accessEndsAt: Date | null;
+  createdAt: Date;
+};
+
+export type StaffEnrolmentFilters = {
+  search?: string;
+  status?: string;
+  cohortId?: string;
+};
+
+type StaffEnrolmentStoreRow = {
+  id: string;
+  status: string;
+  accessStartsAt: Date | null;
+  accessEndsAt: Date | null;
+  createdAt: Date;
+  user: { name: string; email: string };
+  cohort: { id: string; code: string; title: string };
+};
+
+export type StaffEnrolmentStore = {
+  findMany(args: Record<string, unknown>): Promise<StaffEnrolmentStoreRow[]>;
+};
+
+const STAFF_ENROLMENT_SELECT = {
+  id: true,
+  status: true,
+  accessStartsAt: true,
+  accessEndsAt: true,
+  createdAt: true,
+  user: { select: { name: true, email: true } },
+  cohort: { select: { id: true, code: true, title: true } },
+} as const;
+
+export type StaffEnrolmentListDeps = {
+  store: StaffEnrolmentStore;
+  withPermission: WithPermission;
+};
+
+/**
+ * The `/staff/enrolments` global list. Gated on `enrolments.view` with NO
+ * scope resolver — an empty `ResourceScope` (`() => ({})`) means only a
+ * GLOBAL grant reaches it (`grantMatches`, `src/server/permissions/scope.ts`):
+ * a COHORT/PROGRAMME/COURSE-scoped grant is DENIED by that same
+ * deny-by-default rule `resource-service.ts`'s own unscoped `list`
+ * documents, never fetched-then-filtered client-side (T-05-95).
+ */
+export function createStaffEnrolmentListService(deps: StaffEnrolmentListDeps) {
+  const loadStaffEnrolments = deps.withPermission<StaffEnrolmentFilters>(
+    "enrolments.view",
+    () => ({}),
+  )(async (input): Promise<StaffEnrolmentRow[]> => {
+    const rows = await deps.store.findMany({
+      where: {
+        ...(input.cohortId ? { cohortId: input.cohortId } : {}),
+        ...(input.status ? { status: input.status } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      select: STAFF_ENROLMENT_SELECT,
+    });
+
+    const search = input.search?.trim().toLowerCase() ?? "";
+    const matched = search
+      ? rows.filter(
+          (r) =>
+            r.user.name.toLowerCase().includes(search) ||
+            r.user.email.toLowerCase().includes(search) ||
+            r.cohort.code.toLowerCase().includes(search),
+        )
+      : rows;
+
+    return matched.map((r) => ({
+      id: r.id,
+      status: r.status,
+      learnerName: r.user.name,
+      learnerEmail: r.user.email,
+      cohortId: r.cohort.id,
+      cohortCode: r.cohort.code,
+      offerTitle: r.cohort.title,
+      accessStartsAt: r.accessStartsAt,
+      accessEndsAt: r.accessEndsAt,
+      createdAt: r.createdAt,
+    }));
+  });
+
+  return { loadStaffEnrolments };
+}
+
+// ---------------------------------------------------------------------------
 // The service
 // ---------------------------------------------------------------------------
 
@@ -605,3 +713,10 @@ const built = createRosterService({
 
 export const loadCohortRoster = built.loadCohortRoster;
 export const loadAttendanceExceptions = built.loadAttendanceExceptions;
+
+const staffEnrolmentListBuilt = createStaffEnrolmentListService({
+  store: prisma.enrolment as unknown as StaffEnrolmentStore,
+  withPermission: liveWithPermission,
+});
+
+export const loadStaffEnrolments = staffEnrolmentListBuilt.loadStaffEnrolments;
