@@ -1,6 +1,7 @@
 import { PgBoss } from "pg-boss";
-import { RECONCILE_QUEUE, SCAN_QUEUE } from "@/server/jobs/queue";
+import { HOLD_SWEEP_QUEUE, RECONCILE_QUEUE, SCAN_QUEUE } from "@/server/jobs/queue";
 import { reconcileLessonResources } from "./handlers/reconcile-lesson-resources";
+import { releaseExpiredHolds } from "./handlers/release-expired-holds";
 import { scanLessonResource } from "./handlers/scan-lesson-resource";
 
 const connectionString = process.env.DATABASE_URL;
@@ -35,6 +36,13 @@ async function main(): Promise<void> {
   await boss.start();
   await boss.createQueue(SCAN_QUEUE);
   await boss.createQueue(RECONCILE_QUEUE);
+  // Bounded retry (T-05-59): a poison row must not hammer the database
+  // indefinitely. retryBackoff spaces out the (at most 3) retries instead of
+  // hammering on a fixed cadence.
+  await boss.createQueue(HOLD_SWEEP_QUEUE, {
+    retryLimit: 3,
+    retryBackoff: true,
+  });
 
   await boss.work<{ lessonResourceId: string }>(SCAN_QUEUE, async ([job]) => {
     if (!job?.data.lessonResourceId) {
@@ -46,9 +54,16 @@ async function main(): Promise<void> {
     if (!job) throw new Error("Reconciliation handler received no job.");
     await reconcileLessonResources();
   });
+  await boss.work(HOLD_SWEEP_QUEUE, async ([job]) => {
+    if (!job) throw new Error("Hold-sweep handler received no job.");
+    await releaseExpiredHolds();
+  });
   await boss.schedule(RECONCILE_QUEUE, "*/5 * * * *");
+  await boss.schedule(HOLD_SWEEP_QUEUE, "*/5 * * * *");
 
-  console.info(`[worker] queues ready: ${SCAN_QUEUE}, ${RECONCILE_QUEUE}`);
+  console.info(
+    `[worker] queues ready: ${SCAN_QUEUE}, ${RECONCILE_QUEUE}, ${HOLD_SWEEP_QUEUE}`,
+  );
 }
 
 main().catch((error: unknown) => {

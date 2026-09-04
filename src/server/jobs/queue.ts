@@ -29,6 +29,10 @@ export const SCAN_QUEUE = "lesson-resource.scan";
 /** The reconciliation queue name — plan 04-10 schedules the cron that drains it. */
 export const RECONCILE_QUEUE = "lesson-resource.reconcile";
 
+/** The hold-sweep queue name (plan 05-09) — a typo here cannot split the
+ * queue in two since every reader imports this constant. */
+export const HOLD_SWEEP_QUEUE = "enrolment.hold-sweep";
+
 let bossPromise: Promise<PgBoss> | null = null;
 
 async function getBoss(): Promise<PgBoss> {
