@@ -481,3 +481,244 @@ describe("approveEnrolment (D-12)", () => {
     expect(audit?.after).toEqual({ status: "ACTIVE" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// withdrawEnrolment / cancelEnrolment (D-14)
+// ---------------------------------------------------------------------------
+
+describe("withdrawEnrolment (D-14)", () => {
+  it("on an ACTIVE enrolment: WITHDRAWN, withdrawnAt, reason, seat released, event + audit", async () => {
+    const { service, cohorts, enrolments, events, audits } = harness({
+      cohorts: [coh({ seatsTaken: 1, capacity: 5 })],
+      enrolments: [enr({ id: "enr-1", status: "ACTIVE" })],
+    });
+    await service.withdrawEnrolment({
+      enrolmentId: "enr-1",
+      reason: "learner requested withdrawal",
+    });
+    const row = enrolments.get("enr-1")!;
+    expect(row.status).toBe("WITHDRAWN");
+    expect(row.withdrawnAt).toEqual(NOW);
+    expect(row.reason).toBe("learner requested withdrawal");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(0);
+    expect(events.filter((e) => e.type === "enrolment.withdrawn")).toHaveLength(1);
+    const audit = audits.find((a) => a.action === "enrolment.withdrawn");
+    expect(audit?.before).toEqual({ status: "ACTIVE" });
+    expect(audit?.after).toEqual({ status: "WITHDRAWN" });
+  });
+
+  it("refuses a blank reason", async () => {
+    const { service } = harness({
+      enrolments: [enr({ id: "enr-1", status: "ACTIVE" })],
+    });
+    await expect(
+      service.withdrawEnrolment({ enrolmentId: "enr-1", reason: "  " }),
+    ).rejects.toBeInstanceOf(ReasonRequiredError);
+  });
+
+  it("refuses a terminal-status source with IllegalTransitionError", async () => {
+    const { service, cohorts } = harness({
+      cohorts: [coh({ seatsTaken: 0 })],
+      enrolments: [enr({ id: "enr-1", status: "WITHDRAWN" })],
+    });
+    await expect(
+      service.withdrawEnrolment({ enrolmentId: "enr-1", reason: "again" }),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(0);
+  });
+});
+
+describe("cancelEnrolment (D-14)", () => {
+  it("on an ACTIVE enrolment: CANCELLED, reason, seat released", async () => {
+    const { service, cohorts, enrolments, events } = harness({
+      cohorts: [coh({ seatsTaken: 1, capacity: 5 })],
+      enrolments: [enr({ id: "enr-1", status: "ACTIVE" })],
+    });
+    await service.cancelEnrolment({
+      enrolmentId: "enr-1",
+      reason: "administrative void",
+    });
+    expect(enrolments.get("enr-1")!.status).toBe("CANCELLED");
+    expect(enrolments.get("enr-1")!.withdrawnAt).toBeNull();
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(0);
+    expect(events.filter((e) => e.type === "enrolment.cancelled")).toHaveLength(1);
+  });
+
+  it("on a PENDING_PAYMENT WITH a live hold: releases the seat (heldSeat true)", async () => {
+    const hold = new Date(NOW.getTime() + 15 * 60_000);
+    const { service, cohorts } = harness({
+      cohorts: [coh({ seatsTaken: 1, capacity: 5 })],
+      enrolments: [
+        enr({ id: "enr-1", status: "PENDING_PAYMENT", holdExpiresAt: hold }),
+      ],
+    });
+    await service.cancelEnrolment({ enrolmentId: "enr-1", reason: "hold void" });
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(0);
+  });
+
+  it("on a hold-less PENDING_PAYMENT: passes heldSeat:false — seatsTaken is NOT decremented", async () => {
+    const { service, cohorts, enrolments } = harness({
+      cohorts: [coh({ seatsTaken: 2, capacity: 5 })],
+      enrolments: [
+        enr({ id: "enr-1", status: "PENDING_PAYMENT", holdExpiresAt: null }),
+      ],
+    });
+    await service.cancelEnrolment({
+      enrolmentId: "enr-1",
+      reason: "hold lapsed, no seat held",
+    });
+    expect(enrolments.get("enr-1")!.status).toBe("CANCELLED");
+    // heldSeat:false path — no decrement.
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(2);
+  });
+
+  it("refuses a blank reason and a terminal source", async () => {
+    const { service } = harness({
+      enrolments: [
+        enr({ id: "enr-1", status: "ACTIVE" }),
+        enr({ id: "enr-2", status: "CANCELLED" }),
+      ],
+    });
+    await expect(
+      service.cancelEnrolment({ enrolmentId: "enr-1", reason: "" }),
+    ).rejects.toBeInstanceOf(ReasonRequiredError);
+    await expect(
+      service.cancelEnrolment({ enrolmentId: "enr-2", reason: "x" }),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// transferEnrolment (D-13) — same offer only, no history carried across
+// ---------------------------------------------------------------------------
+
+describe("transferEnrolment (D-13)", () => {
+  const twoCourseCohorts = (over?: {
+    source?: Partial<CohortRow>;
+    target?: Partial<CohortRow>;
+  }) => [
+    coh({ id: "cohort-1", courseId: "course-1", seatsTaken: 1, capacity: 5, ...over?.source }),
+    coh({ id: "cohort-2", courseId: "course-1", seatsTaken: 0, capacity: 5, ...over?.target }),
+  ];
+
+  it("to a cohort sharing courseId succeeds: source TRANSFERRED + seat released, new ACTIVE row in target with transferredFromId", async () => {
+    const { service, cohorts, enrolments } = harness({
+      cohorts: twoCourseCohorts(),
+      enrolments: [enr({ id: "enr-1", userId: "user-1", cohortId: "cohort-1", status: "ACTIVE" })],
+    });
+    const res = await service.transferEnrolment({
+      enrolmentId: "enr-1",
+      targetCohortId: "cohort-2",
+      reason: "moved to the evening cohort",
+    });
+    expect(enrolments.get("enr-1")!.status).toBe("TRANSFERRED");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(0);
+    expect(cohorts.get("cohort-2")!.seatsTaken).toBe(1);
+    const target = enrolments.get(res.targetEnrolmentId)!;
+    expect(target.status).toBe("ACTIVE");
+    expect(target.cohortId).toBe("cohort-2");
+    expect(target.transferredFromId).toBe("enr-1");
+    expect(target.userId).toBe("user-1");
+  });
+
+  it("to a cohort sharing programmeId succeeds", async () => {
+    const { service, enrolments } = harness({
+      cohorts: [
+        coh({ id: "cohort-1", courseId: null, programmeId: "prog-1", seatsTaken: 1 }),
+        coh({ id: "cohort-2", courseId: null, programmeId: "prog-1", seatsTaken: 0 }),
+      ],
+      enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+    });
+    const res = await service.transferEnrolment({
+      enrolmentId: "enr-1",
+      targetCohortId: "cohort-2",
+      reason: "programme cohort swap",
+    });
+    expect(enrolments.get(res.targetEnrolmentId)!.status).toBe("ACTIVE");
+  });
+
+  it("to a different-offer cohort throws CrossOfferTransferError and changes nothing", async () => {
+    const { service, cohorts, enrolments } = harness({
+      cohorts: [
+        coh({ id: "cohort-1", courseId: "course-1", seatsTaken: 1 }),
+        coh({ id: "cohort-2", courseId: "course-2", seatsTaken: 0 }),
+      ],
+      enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+    });
+    await expect(
+      service.transferEnrolment({
+        enrolmentId: "enr-1",
+        targetCohortId: "cohort-2",
+        reason: "cross offer",
+      }),
+    ).rejects.toBeInstanceOf(CrossOfferTransferError);
+    expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    expect(cohorts.get("cohort-2")!.seatsTaken).toBe(0);
+  });
+
+  it("to the same cohort throws CrossOfferTransferError", async () => {
+    const { service } = harness({
+      cohorts: twoCourseCohorts(),
+      enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+    });
+    await expect(
+      service.transferEnrolment({
+        enrolmentId: "enr-1",
+        targetCohortId: "cohort-1",
+        reason: "same",
+      }),
+    ).rejects.toBeInstanceOf(CrossOfferTransferError);
+  });
+
+  it("a full target makes the whole transfer fail atomically — source stays ACTIVE, no target row", async () => {
+    const { service, cohorts, enrolments } = harness({
+      cohorts: twoCourseCohorts({ target: { seatsTaken: 3, capacity: 3 } }),
+      enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+    });
+    await expect(
+      service.transferEnrolment({
+        enrolmentId: "enr-1",
+        targetCohortId: "cohort-2",
+        reason: "target full",
+      }),
+    ).rejects.toBeInstanceOf(CapacityExceededError);
+    expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    expect(cohorts.get("cohort-2")!.seatsTaken).toBe(3);
+    expect([...enrolments.values()].filter((e) => e.cohortId === "cohort-2")).toHaveLength(0);
+  });
+
+  it("refuses a terminal-status source and a blank reason", async () => {
+    const { service } = harness({
+      cohorts: twoCourseCohorts(),
+      enrolments: [
+        enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" }),
+        enr({ id: "enr-2", cohortId: "cohort-1", status: "WITHDRAWN" }),
+      ],
+    });
+    await expect(
+      service.transferEnrolment({ enrolmentId: "enr-1", targetCohortId: "cohort-2", reason: " " }),
+    ).rejects.toBeInstanceOf(ReasonRequiredError);
+    await expect(
+      service.transferEnrolment({ enrolmentId: "enr-2", targetCohortId: "cohort-2", reason: "x" }),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+  });
+
+  it("emits one enrolment.transferred event and writes an audit row for BOTH the source and the target", async () => {
+    const { service, events, audits } = harness({
+      cohorts: twoCourseCohorts(),
+      enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+    });
+    const res = await service.transferEnrolment({
+      enrolmentId: "enr-1",
+      targetCohortId: "cohort-2",
+      reason: "cohort swap",
+    });
+    expect(events.filter((e) => e.type === "enrolment.transferred")).toHaveLength(1);
+    const transferAudits = audits.filter((a) => a.action === "enrolment.transferred");
+    expect(transferAudits.map((a) => a.targetId).sort()).toEqual(
+      ["enr-1", res.targetEnrolmentId].sort(),
+    );
+  });
+});
