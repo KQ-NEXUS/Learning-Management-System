@@ -36,8 +36,20 @@ import {
   type ResourceAuditEntry,
 } from "./resource-service";
 import { cohortResourceScope } from "./cohort-scope";
+import {
+  blockingFailures,
+  evaluateCohortReadiness,
+  type ReadinessCohortInput,
+  type ReadinessItem,
+} from "./readiness-service";
+import { StaleOrderError } from "./reorder-service";
+import { writeDomainEvent } from "./domain-event-service";
+import { CohortNotFoundError } from "./seat-accounting";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
+
+/** The `CohortStatus` member a published cohort carries (`schema.prisma:53`). */
+const PUBLISHED_STATUS = "PUBLISHED";
 
 /** The Cohort columns the factory and the offer-lock wrapper touch. */
 export type CohortRecord = {
@@ -112,12 +124,194 @@ export function createCohortGuards(deps: { enrolment: CohortGuardEnrolmentDelega
 }
 
 // ---------------------------------------------------------------------------
+// Publish (COH-04 / D-27 / D-28 / D-29) — the operation the factory has no
+// concept of: a named-failure readiness refusal, a catalogue pin, and a
+// stale-token check.
+// ---------------------------------------------------------------------------
+
+/**
+ * A publish was refused because one or more blocking readiness items still
+ * FAIL. Carries the failing items so the caller can list them (plan 05-15).
+ */
+export class CohortReadinessRefusedError extends Error {
+  readonly failures: ReadinessItem[];
+
+  constructor(failures: ReadinessItem[]) {
+    super(
+      `This cohort has ${failures.length} check${failures.length === 1 ? "" : "s"} ` +
+        `that must pass before it can be published: ${failures
+          .map((item) => item.label)
+          .join(", ")}.`,
+    );
+    this.name = "CohortReadinessRefusedError";
+    this.failures = failures;
+  }
+}
+
+/**
+ * The Course or Programme this cohort delivers has no publication row to pin
+ * to (D-29 — only a frozen publication can back a cohort).
+ */
+export class NoPublishedOfferError extends Error {
+  readonly cohortId: string;
+  readonly offerKind: "course" | "programme";
+
+  constructor(cohortId: string, offerKind: "course" | "programme") {
+    super(
+      `This cohort's ${offerKind} has no published version to pin to. ` +
+        `Publish the ${offerKind} first, then publish the cohort.`,
+    );
+    this.name = "NoPublishedOfferError";
+    this.cohortId = cohortId;
+    this.offerKind = offerKind;
+  }
+}
+
+/** One frozen publication row — the id is the pin, the payload carries the
+ *  completion rule the readiness evaluator reads. */
+type CohortPublicationRow = { id: string; payload: unknown };
+
+/**
+ * The readiness-relevant slice of a cohort plus its offer target's latest
+ * publication. `loadCohortReadinessAggregate` reads this and hands plain
+ * values to the pure evaluator so no readiness rule leaves
+ * `readiness-service.ts`.
+ */
+export type CohortAggregateRow = {
+  status: string;
+  deliveryMode: string;
+  startsAt: Date;
+  endsAt: Date;
+  capacity: number;
+  seatsTaken: number;
+  priceMinor: number;
+  currency: string | null;
+  attendanceThresholdPct: number | null;
+  courseId: string | null;
+  programmeId: string | null;
+  scheduledSessions: Array<{
+    startsAt: Date;
+    endsAt: Date;
+    cancelledAt: Date | null;
+  }>;
+  _count: { instructors: number };
+  course: { status: string; publications: CohortPublicationRow[] } | null;
+  programme: { status: string; publications: CohortPublicationRow[] } | null;
+};
+
+/** Injected so the transform is unit-testable without a real Postgres. */
+export type CohortAggregateDelegate = {
+  findUnique(args: {
+    where: { id: string };
+    select: Record<string, unknown>;
+  }): Promise<CohortAggregateRow | null>;
+};
+
+/** The Prisma select the production binding passes to `cohort.findUnique`. */
+const AGGREGATE_SELECT = {
+  status: true,
+  deliveryMode: true,
+  startsAt: true,
+  endsAt: true,
+  capacity: true,
+  seatsTaken: true,
+  priceMinor: true,
+  currency: true,
+  attendanceThresholdPct: true,
+  courseId: true,
+  programmeId: true,
+  scheduledSessions: {
+    select: { startsAt: true, endsAt: true, cancelledAt: true },
+  },
+  _count: { select: { instructors: true } },
+  course: {
+    select: {
+      status: true,
+      publications: {
+        orderBy: { version: "desc" },
+        take: 1,
+        select: { id: true, payload: true },
+      },
+    },
+  },
+  programme: {
+    select: {
+      status: true,
+      publications: {
+        orderBy: { version: "desc" },
+        take: 1,
+        select: { id: true, payload: true },
+      },
+    },
+  },
+} as const;
+
+/** Reads `completionRule` off the frozen publication payload — never off the
+ *  live Course/Programme, which is exactly what the pin protects against. */
+function extractCompletionRule(payload: unknown): unknown {
+  if (payload != null && typeof payload === "object" && "completionRule" in payload) {
+    return (payload as { completionRule: unknown }).completionRule ?? null;
+  }
+  return null;
+}
+
+function toReadinessInput(row: CohortAggregateRow): ReadinessCohortInput {
+  const kind: "course" | "programme" = row.courseId ? "course" : "programme";
+  const target = kind === "course" ? row.course : row.programme;
+  const latestPublication = target?.publications?.[0] ?? null;
+  const sessions = row.scheduledSessions.map((session) => ({
+    startsAt: session.startsAt,
+    endsAt: session.endsAt,
+    cancelledAt: session.cancelledAt,
+  }));
+
+  return {
+    deliveryMode: row.deliveryMode,
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
+    capacity: row.capacity,
+    seatsTaken: row.seatsTaken,
+    priceMinor: row.priceMinor,
+    currency: row.currency,
+    attendanceThresholdPct: row.attendanceThresholdPct,
+    instructorCount: row._count.instructors,
+    nonCancelledSessionCount: sessions.filter((session) => session.cancelledAt == null)
+      .length,
+    sessions,
+    pin: {
+      kind,
+      publicationId: latestPublication?.id ?? null,
+      targetStatus: target?.status ?? null,
+      completionRule: extractCompletionRule(latestPublication?.payload),
+    },
+  };
+}
+
+/** The transaction client `publishCohort` needs — structurally satisfied by a
+ *  Prisma `tx` and by a unit-test fake, so no `@prisma/client` import. */
+export type CohortPublishTx = {
+  cohort: {
+    updateMany(args: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    }): Promise<{ count: number }>;
+  };
+  domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
+};
+
+export type CohortPublishDb = {
+  $transaction: <R>(fn: (tx: CohortPublishTx) => Promise<R>) => Promise<R>;
+};
+
+// ---------------------------------------------------------------------------
 // The service
 // ---------------------------------------------------------------------------
 
 export type CohortServiceDeps = {
   delegate: Delegate<CohortRecord>;
   enrolment: CohortGuardEnrolmentDelegate;
+  aggregate: CohortAggregateDelegate;
+  db: CohortPublishDb;
   toScope: (id: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
@@ -173,7 +367,102 @@ export function createCohortService(deps: CohortServiceDeps) {
     return cohortService.update(input.id, input.data, input.reason);
   });
 
-  return { cohortService, updateCohort };
+  const now = deps.now ?? (() => new Date());
+
+  async function loadAggregateRow(cohortId: string): Promise<CohortAggregateRow | null> {
+    return deps.aggregate.findUnique({
+      where: { id: cohortId },
+      select: AGGREGATE_SELECT as unknown as Record<string, unknown>,
+    });
+  }
+
+  /**
+   * The cohort detail page's readiness input (D-27). Reads the cohort row, its
+   * non-cancelled sessions, its instructor count and its offer target's latest
+   * publication, then hands plain values to the pure evaluator. Returns `null`
+   * for a missing cohort.
+   */
+  async function loadCohortReadinessAggregate(
+    cohortId: string,
+  ): Promise<ReadinessCohortInput | null> {
+    const row = await loadAggregateRow(cohortId);
+    return row ? toReadinessInput(row) : null;
+  }
+
+  /**
+   * COH-04 / D-27 / D-29. Gated on the dedicated publish permission —
+   * a manage grant is not enough. Order: load the aggregate; refuse
+   * with `NoPublishedOfferError` when the offer target has no publication to
+   * pin; run `blockingFailures(evaluateCohortReadiness(...))` and refuse with
+   * `CohortReadinessRefusedError` when non-empty — this server-side check is
+   * the gate, the disabled button is only a courtesy echo; then, in one
+   * transaction, claim `updatedAt` with a conditional `updateMany`
+   * (`StaleOrderError` on a lost race), pin the latest publication, stamp
+   * status + `publishedAt`, and append one `cohort.published` outbox row.
+   * Audit after commit.
+   */
+  const publishCohort = withPermission<{
+    cohortId: string;
+    expectedUpdatedAt: Date;
+    reason?: string;
+  }>("cohorts.publish", (input) => deps.toScope(input.cohortId))(
+    async (input, ctx) => {
+      const row = await loadAggregateRow(input.cohortId);
+      if (!row) throw new CohortNotFoundError(input.cohortId);
+
+      const aggregate = toReadinessInput(row);
+      const pin = aggregate.pin!;
+      if (pin.publicationId == null) {
+        throw new NoPublishedOfferError(input.cohortId, pin.kind);
+      }
+
+      const failures = blockingFailures(evaluateCohortReadiness(aggregate));
+      if (failures.length > 0) {
+        throw new CohortReadinessRefusedError(failures);
+      }
+
+      const publishedAt = now();
+      const pinColumn =
+        pin.kind === "course" ? "coursePublicationId" : "programmePublicationId";
+
+      await deps.db.$transaction(async (tx) => {
+        const claimed = await tx.cohort.updateMany({
+          where: { id: input.cohortId, updatedAt: input.expectedUpdatedAt },
+          data: {
+            status: PUBLISHED_STATUS,
+            publishedAt,
+            [pinColumn]: pin.publicationId,
+          },
+        });
+        if (claimed.count === 0) throw new StaleOrderError();
+
+        await writeDomainEvent(tx, {
+          type: "cohort.published",
+          payload: {
+            cohortId: input.cohortId,
+            publicationId: pin.publicationId,
+            actorId: ctx.actor.userId,
+          },
+        });
+      });
+
+      const reason = input.reason?.trim() ? input.reason.trim() : null;
+      await deps.audit({
+        action: "cohort.published",
+        targetType: "Cohort",
+        targetId: input.cohortId,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason,
+        before: { status: row.status },
+        after: { status: PUBLISHED_STATUS, publicationId: pin.publicationId },
+      });
+
+      return { publicationId: pin.publicationId, status: PUBLISHED_STATUS };
+    },
+  );
+
+  return { cohortService, updateCohort, loadCohortReadinessAggregate, publishCohort };
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +472,11 @@ export function createCohortService(deps: CohortServiceDeps) {
 const built = createCohortService({
   delegate: prisma.cohort as unknown as Delegate<CohortRecord>,
   enrolment: prisma.enrolment as unknown as CohortGuardEnrolmentDelegate,
+  aggregate: prisma.cohort as unknown as CohortAggregateDelegate,
+  db: {
+    $transaction: (fn) =>
+      prisma.$transaction((tx) => fn(tx as unknown as CohortPublishTx)),
+  },
   toScope: cohortResourceScope,
   withPermission: liveWithPermission,
   audit: (entry) =>
@@ -201,6 +495,8 @@ const built = createCohortService({
 
 export const cohortService = built.cohortService;
 export const updateCohort = built.updateCohort;
+export const publishCohort = built.publishCohort;
+export const loadCohortReadinessAggregate = built.loadCohortReadinessAggregate;
 
 /** Bound to `prisma.enrolment` — the guard plan 05-11/05-12 call directly. */
 export const { assertOfferMutable } = createCohortGuards({

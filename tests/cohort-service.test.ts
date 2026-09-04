@@ -18,6 +18,7 @@ import {
   NoPublishedOfferError,
   type CohortRecord,
   type CohortAggregateRow,
+  type CohortPublishTx,
 } from "@/server/services/cohort-service";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import { StaleOrderError } from "@/server/services/reorder-service";
@@ -126,8 +127,8 @@ function harness(opts?: {
   };
 
   const enrolment = { count: vi.fn(async () => opts?.enrolmentCount ?? 0) };
-  const aggregateRow =
-    opts && "aggregateRow" in opts ? opts.aggregateRow : readyAggregateRow();
+  const aggregateRow: CohortAggregateRow | null =
+    opts && "aggregateRow" in opts ? (opts.aggregateRow ?? null) : readyAggregateRow();
   const aggregate = { findUnique: vi.fn(async () => aggregateRow) };
   const tx = opts?.tx ?? makeTx();
 
@@ -143,7 +144,7 @@ function harness(opts?: {
     delegate,
     enrolment,
     aggregate,
-    db: { $transaction: async (fn) => fn(tx) },
+    db: { $transaction: async (fn) => fn(tx as unknown as CohortPublishTx) },
     toScope: (id) => ({ cohortId: id, courseIds: ["course-1"] }),
     withPermission,
     audit: async (entry) => {
