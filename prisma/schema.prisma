@@ -747,6 +747,12 @@ model Cohort {
   capacity   Int
   seatsTaken Int @default(0)
 
+  // D-02 — per-cohort seat-hold TTL in minutes. Default 30. `null` or `0`
+  // means "no hold": a PENDING_PAYMENT enrolment does not take a seat and the
+  // seat is only counted when the enrolment reaches ACTIVE. The non-negative
+  // CHECK lives in prisma/sql/003_cohort_operations.sql.
+  holdMinutes Int? @default(30)
+
   priceMinor Int
   currency   String @default("NGN")
 
@@ -904,12 +910,27 @@ model Enrolment {
   withdrawnAt    DateTime?
   reason         String?
 
+  // D-03 — set only while status = PENDING_PAYMENT (D-02's hold window). This
+  // is the seat-held predicate: a PENDING_PAYMENT enrolment holds a seat iff
+  // holdExpiresAt IS NOT NULL. The hold-sweep worker job finds expired holds
+  // with a cheap indexed lookup on (status, holdExpiresAt). Every transition
+  // out of PENDING_PAYMENT MUST null this column in the same write — enforced
+  // by enrolment_hold_expiry_only_when_pending in
+  // prisma/sql/003_cohort_operations.sql.
+  holdExpiresAt DateTime?
+
+  // D-13 — a transferred-in enrolment records the enrolment it came from.
+  // Same offer only; attendance and progress do NOT carry across.
+  transferredFromId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user   User   @relation(fields: [userId], references: [id])
-  cohort Cohort @relation(fields: [cohortId], references: [id])
-  order  Order? @relation(fields: [orderId], references: [id])
+  user            User        @relation(fields: [userId], references: [id])
+  cohort          Cohort      @relation(fields: [cohortId], references: [id])
+  order           Order?      @relation(fields: [orderId], references: [id])
+  transferredFrom Enrolment?  @relation("EnrolmentTransfer", fields: [transferredFromId], references: [id])
+  transferredTo   Enrolment[] @relation("EnrolmentTransfer")
 
   lessonProgress LessonProgress[]
   attendance     AttendanceRecord[]
@@ -924,6 +945,26 @@ model Enrolment {
   // block re-enrolment after a withdrawal.
   @@index([userId, status])
   @@index([cohortId, status])
+  @@index([status, holdExpiresAt])
+  @@index([transferredFromId])
+}
+
+// Append-only transactional outbox. A domain event is INSERTed in the same
+// $transaction as the mutation that caused it (D-14, D-20) so the event and
+// the state change commit or roll back together — a bare pg-boss enqueue is
+// not transactional on Prisma 6.x. Phase 13 adds the drain job that turns
+// unprocessed rows into emails/notifications; Phase 9/11 read the attendance
+// component out of the payload without recomputing. This is NOT an audit
+// table and never replaces AuditEvent.
+model DomainEvent {
+  id          String    @id @default(cuid())
+  type        String
+  payload     Json
+  occurredAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([processedAt, occurredAt])
+  @@index([type])
 }
 
 // LRN-04 — progress is idempotent, attributable, and recalculable.
