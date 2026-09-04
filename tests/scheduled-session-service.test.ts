@@ -151,7 +151,7 @@ function harness(opts?: {
     delegate,
     cohort: cohort as never,
     db: db as never,
-    sessionScope: (id) => ({ cohortId: "cohort-1", courseIds: ["course-1"] }),
+    sessionScope: () => ({ cohortId: "cohort-1", courseIds: ["course-1"] }),
     cohortScope: (id) => ({ cohortId: id, courseIds: ["course-1"] }),
     isViewerEnrolled: async () => opts?.enrolled ?? true,
     withPermission,
@@ -442,7 +442,9 @@ describe("readSessionForViewer — server-side link gate", () => {
       enrolled: true,
       now: new Date("2026-02-01T00:00:00.000Z"),
     });
-    const result = await service.readSessionForViewer({ sessionId: "session-1" });
+    const result = (await service.readSessionForViewer({
+      sessionId: "session-1",
+    })) as Record<string, unknown>;
     expect(result.meetingUrl).toBe("https://meet.example/abc");
   });
 
@@ -452,7 +454,9 @@ describe("readSessionForViewer — server-side link gate", () => {
       enrolled: true,
       now: new Date("2026-02-01T00:00:00.000Z"),
     });
-    const result = await service.readSessionForViewer({ sessionId: "session-1" });
+    const result = (await service.readSessionForViewer({
+      sessionId: "session-1",
+    })) as Record<string, unknown>;
     expect("meetingUrl" in result).toBe(false);
     expect(result.meetingUrlAvailableFrom).toBeInstanceOf(Date);
   });
