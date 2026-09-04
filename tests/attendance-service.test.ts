@@ -617,3 +617,257 @@ describe("markAttendance — after the marking window closes (D-08)", () => {
     expect((payload.component as Record<string, unknown>).kind).toBe("computed");
   });
 });
+
+// ---------------------------------------------------------------------------
+// saveSessionAttendance — roster-scoped bulk (D-10, ATT-01)
+// ---------------------------------------------------------------------------
+
+const roster = () => [
+  enr({ id: "enr-1", cohortId: "cohort-1" }),
+  enr({ id: "enr-2", cohortId: "cohort-1" }),
+  enr({ id: "enr-3", cohortId: "cohort-1" }),
+];
+
+describe("saveSessionAttendance — roster scoping (D-10)", () => {
+  it("requires attendance.manage", async () => {
+    const { service } = harness({
+      grants: [grant("attendance.view")],
+      enrolments: roster(),
+    });
+    await expect(
+      service.saveSessionAttendance({
+        sessionId: "ses-1",
+        entries: [{ enrolmentId: "enr-1", state: "PRESENT" }],
+      }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("writes every roster learner in one pass", async () => {
+    const { service, records, events } = harness({ now: DURING, enrolments: roster() });
+    const res = await service.saveSessionAttendance({
+      sessionId: "ses-1",
+      entries: [
+        { enrolmentId: "enr-1", state: "PRESENT" },
+        { enrolmentId: "enr-2", state: "ABSENT" },
+        { enrolmentId: "enr-3", state: "LATE" },
+      ],
+    });
+    expect(res.changed).toBe(3);
+    expect(records.get(key("ses-1", "enr-1"))!.state).toBe("PRESENT");
+    expect(records.get(key("ses-1", "enr-2"))!.state).toBe("ABSENT");
+    expect(records.get(key("ses-1", "enr-3"))!.state).toBe("LATE");
+    expect(changedEvents(events)).toHaveLength(3);
+  });
+
+  it("one out-of-roster entry causes ZERO writes and ZERO events — not even the valid entries", async () => {
+    const { service, records, events } = harness({
+      now: DURING,
+      enrolments: [
+        enr({ id: "enr-1", cohortId: "cohort-1" }),
+        enr({ id: "enr-2", cohortId: "cohort-1" }),
+        enr({ id: "enr-foreign", cohortId: "cohort-2" }),
+      ],
+    });
+    await expect(
+      service.saveSessionAttendance({
+        sessionId: "ses-1",
+        entries: [
+          { enrolmentId: "enr-1", state: "PRESENT" },
+          { enrolmentId: "enr-2", state: "PRESENT" },
+          { enrolmentId: "enr-foreign", state: "PRESENT" },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(LearnerNotOnRosterError);
+    expect(records.size).toBe(0);
+    expect(events).toHaveLength(0);
+  });
+
+  it("an unknown enrolment id is refused the same way", async () => {
+    const { service, records } = harness({ now: DURING, enrolments: roster() });
+    await expect(
+      service.saveSessionAttendance({
+        sessionId: "ses-1",
+        entries: [
+          { enrolmentId: "enr-1", state: "PRESENT" },
+          { enrolmentId: "ghost", state: "PRESENT" },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(LearnerNotOnRosterError);
+    expect(records.size).toBe(0);
+  });
+
+  it("a duplicate enrolmentId in the submitted list is refused with zero writes", async () => {
+    const { service, records } = harness({ now: DURING, enrolments: roster() });
+    await expect(
+      service.saveSessionAttendance({
+        sessionId: "ses-1",
+        entries: [
+          { enrolmentId: "enr-1", state: "PRESENT" },
+          { enrolmentId: "enr-1", state: "ABSENT" },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(LearnerNotOnRosterError);
+    expect(records.size).toBe(0);
+  });
+});
+
+describe("saveSessionAttendance — per-entry timing rules", () => {
+  it("a pre-start PRESENT entry fails the whole batch atomically", async () => {
+    const { service, records } = harness({ now: BEFORE_START, enrolments: roster() });
+    await expect(
+      service.saveSessionAttendance({
+        sessionId: "ses-1",
+        entries: [
+          { enrolmentId: "enr-1", state: "EXCUSED" },
+          { enrolmentId: "enr-2", state: "PRESENT" },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(PreMarkingStateError);
+    expect(records.size).toBe(0);
+  });
+
+  it("a post-window entry without a reason fails the whole batch atomically", async () => {
+    const { service, records } = harness({ now: JUST_AFTER_CLOSE, enrolments: roster() });
+    await expect(
+      service.saveSessionAttendance({
+        sessionId: "ses-1",
+        entries: [
+          { enrolmentId: "enr-1", state: "PRESENT", reason: "roll error" },
+          { enrolmentId: "enr-2", state: "ABSENT" },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(CorrectionReasonRequiredError);
+    expect(records.size).toBe(0);
+  });
+
+  it("a post-window batch with a reason per entry stamps the correction fields", async () => {
+    const { service, records } = harness({
+      now: JUST_AFTER_CLOSE,
+      enrolments: roster(),
+      records: [rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "ABSENT" })],
+    });
+    await service.saveSessionAttendance({
+      sessionId: "ses-1",
+      entries: [{ enrolmentId: "enr-1", state: "PRESENT", reason: "medical note produced" }],
+    });
+    const row = records.get(key("ses-1", "enr-1"))!;
+    expect(row.correctedById).toBe("user-1");
+    expect(row.correctionReason).toBe("medical note produced");
+  });
+});
+
+describe("saveSessionAttendance — unchanged entries", () => {
+  it("a save-all over an already-marked register emits zero events and writes nothing new", async () => {
+    const { service, events, audits } = harness({
+      now: DURING,
+      enrolments: roster(),
+      records: [
+        rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT" }),
+        rec({ sessionId: "ses-1", enrolmentId: "enr-2", state: "ABSENT" }),
+      ],
+    });
+    const res = await service.saveSessionAttendance({
+      sessionId: "ses-1",
+      entries: [
+        { enrolmentId: "enr-1", state: "PRESENT" },
+        { enrolmentId: "enr-2", state: "ABSENT" },
+        { enrolmentId: "enr-3", state: "NOT_RECORDED" },
+      ],
+    });
+    expect(res.changed).toBe(0);
+    expect(changedEvents(events)).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("only the changed entries produce an event and an audit row", async () => {
+    const { service, events, audits } = harness({
+      now: DURING,
+      enrolments: roster(),
+      records: [
+        rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT" }),
+        rec({ sessionId: "ses-1", enrolmentId: "enr-2", state: "ABSENT" }),
+      ],
+    });
+    const res = await service.saveSessionAttendance({
+      sessionId: "ses-1",
+      entries: [
+        { enrolmentId: "enr-1", state: "PRESENT" },
+        { enrolmentId: "enr-2", state: "LATE" },
+        { enrolmentId: "enr-3", state: "EXCUSED" },
+      ],
+    });
+    expect(res.changed).toBe(2);
+    expect(changedEvents(events)).toHaveLength(2);
+    expect(audits.filter((a) => a.targetType === "Enrolment")).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadSessionRegister — the marking-screen read (D-21)
+// ---------------------------------------------------------------------------
+
+describe("loadSessionRegister", () => {
+  it("requires attendance.view", async () => {
+    const { service } = harness({ grants: [grant("cohorts.view")], enrolments: roster() });
+    await expect(
+      service.loadSessionRegister({ sessionId: "ses-1" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("returns one row per non-terminal enrolment with identity, state and flags", async () => {
+    const { service } = harness({
+      now: DURING,
+      enrolments: [
+        enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE", userName: "Ada" }),
+        enr({ id: "enr-2", cohortId: "cohort-1", status: "PENDING_PAYMENT", userName: "Bo" }),
+        enr({ id: "enr-gone", cohortId: "cohort-1", status: "TRANSFERRED" }),
+        enr({ id: "enr-void", cohortId: "cohort-1", status: "CANCELLED" }),
+      ],
+      records: [
+        rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT", note: "on time" }),
+      ],
+    });
+    const rows = await service.loadSessionRegister({ sessionId: "ses-1" });
+    expect(rows.map((r) => r.enrolmentId).sort()).toEqual(["enr-1", "enr-2"]);
+    const ada = rows.find((r) => r.enrolmentId === "enr-1")!;
+    expect(ada.learnerName).toBe("Ada");
+    expect(ada.state).toBe("PRESENT");
+    expect(ada.note).toBe("on time");
+    expect(ada.isCorrection).toBe(false);
+    const bo = rows.find((r) => r.enrolmentId === "enr-2")!;
+    expect(bo.state).toBe("NOT_RECORDED");
+    expect(bo.note).toBeNull();
+  });
+
+  it("canSetLiveStates is false before the session starts, true once it has begun", async () => {
+    const before = await harness({ now: BEFORE_START, enrolments: roster() }).service.loadSessionRegister(
+      { sessionId: "ses-1" },
+    );
+    expect(before.every((r) => r.canSetLiveStates === false)).toBe(true);
+
+    const during = await harness({ now: DURING, enrolments: roster() }).service.loadSessionRegister(
+      { sessionId: "ses-1" },
+    );
+    expect(during.every((r) => r.canSetLiveStates === true)).toBe(true);
+  });
+
+  it("flags a corrected record and exposes windowClosesAt", async () => {
+    const { service } = harness({
+      now: JUST_AFTER_CLOSE,
+      enrolments: roster(),
+      records: [
+        rec({
+          sessionId: "ses-1",
+          enrolmentId: "enr-1",
+          state: "PRESENT",
+          correctionReason: "fixed after review",
+          correctedById: "user-9",
+        }),
+      ],
+    });
+    const rows = await service.loadSessionRegister({ sessionId: "ses-1" });
+    const row = rows.find((r) => r.enrolmentId === "enr-1")!;
+    expect(row.isCorrection).toBe(true);
+    expect(row.windowClosesAt).toEqual(WINDOW_CLOSES_AT);
+  });
+});
