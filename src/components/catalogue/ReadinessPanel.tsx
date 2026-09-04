@@ -21,6 +21,7 @@ import type {
  * missing heading reads as "not applicable" when the truth is "not yet
  * checked" (D-26). */
 const CATEGORY_ORDER: readonly ReadinessCategory[] = [
+  "Catalogue",
   "Content",
   "Schedule",
   "Price",
