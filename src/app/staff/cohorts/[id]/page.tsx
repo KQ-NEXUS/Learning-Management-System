@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
-import { cohortService, loadCohortReadinessAggregate } from "@/server/services/cohort-service";
+import {
+  cohortService,
+  loadCohortReadinessAggregate,
+  loadCohortInstructors,
+} from "@/server/services/cohort-service";
 import { evaluateCohortReadiness } from "@/server/services/readiness-service";
 import { listSessionsForCohort } from "@/server/services/scheduled-session-service";
 import {
@@ -17,6 +21,7 @@ import { CohortDetailActions } from "@/components/catalogue/CohortDetailActions"
 import { SessionsTab, type SessionRow } from "./SessionsTab";
 import { RosterTab, type RosterRowView } from "./RosterTab";
 import { ExceptionsTab, type AttendanceExceptionView } from "./ExceptionsTab";
+import { InstructorsPanel, type InstructorRow } from "./InstructorsPanel";
 
 export const metadata = { title: "Cohort" };
 
@@ -225,6 +230,21 @@ export default async function CohortDetailPage({
     can("cohorts.manage", { cohortId }),
   ]);
 
+  let instructorRows: InstructorRow[] = [];
+  try {
+    const rows = await loadCohortInstructors({ cohortId });
+    instructorRows = rows.map((r) => ({
+      id: r.id,
+      userId: r.user.id,
+      userName: r.user.name,
+      userEmail: r.user.email,
+    }));
+  } catch (error) {
+    if (!(error instanceof AuthorizationError || error instanceof AuthenticationError)) {
+      throw error;
+    }
+  }
+
   return (
     <DetailLayout
       mode="tabbed"
@@ -296,6 +316,11 @@ export default async function CohortDetailPage({
                 ]}
               />
               <ReadinessPanel items={readinessItems} />
+              <InstructorsPanel
+                cohortId={cohortId}
+                instructors={instructorRows}
+                canManage={canManage}
+              />
             </div>
           ),
         },

@@ -68,6 +68,8 @@ function buildCohortService(
     delegate: p.cohort as Delegate<CohortRecord>,
     enrolment: p.enrolment as CohortGuardEnrolmentDelegate,
     aggregate: p.cohort as CohortAggregateDelegate,
+    instructor: p.cohortInstructor,
+    user: p.user,
     db: {
       $transaction: (fn) => p.$transaction((tx: unknown) => fn(tx as CohortPublishTx)),
     },

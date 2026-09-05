@@ -17,6 +17,7 @@ import {
   CohortReadinessRefusedError,
   NoPublishedOfferError,
   CohortCancelBlockedError,
+  InstructorUserNotFoundError,
   type CohortRecord,
   type CohortAggregateRow,
   type CohortPublishTx,
@@ -134,6 +135,43 @@ function harness(opts?: {
   const aggregate = { findUnique: vi.fn(async () => aggregateRow) };
   const tx = opts?.tx ?? makeTx();
 
+  const instructorRows = new Map<string, { id: string; cohortId: string; userId: string }>();
+  const users = new Map<string, { id: string; name: string; email: string }>([
+    ["user-instructor-1", { id: "user-instructor-1", name: "Ije Instructor", email: "instructor@kqnexus.test" }],
+  ]);
+  const instructor = {
+    findMany: vi.fn(async ({ where }: { where: { cohortId: string } }) =>
+      [...instructorRows.values()]
+        .filter((r) => r.cohortId === where.cohortId)
+        .map((r) => ({ id: r.id, user: users.get(r.userId)! })),
+    ),
+    findUnique: vi.fn(
+      async ({ where }: { where: { cohortId_userId: { cohortId: string; userId: string } } }) =>
+        [...instructorRows.values()].find(
+          (r) =>
+            r.cohortId === where.cohortId_userId.cohortId &&
+            r.userId === where.cohortId_userId.userId,
+        ) ?? null,
+    ),
+    create: vi.fn(async ({ data }: { data: { cohortId: string; userId: string } }) => {
+      const row = { id: `instr-${instructorRows.size + 1}`, ...data };
+      instructorRows.set(row.id, row);
+      return row;
+    }),
+    delete: vi.fn(
+      async ({ where }: { where: { cohortId_userId: { cohortId: string; userId: string } } }) => {
+        const match = [...instructorRows.values()].find(
+          (r) =>
+            r.cohortId === where.cohortId_userId.cohortId &&
+            r.userId === where.cohortId_userId.userId,
+        );
+        if (match) instructorRows.delete(match.id);
+        return match ?? null;
+      },
+    ),
+  };
+  const user = { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => users.get(where.id) ?? null) };
+
   const { withPermission } = createTestWithPermission(
     opts?.grants ?? [
       grant("cohorts.view"),
@@ -146,6 +184,8 @@ function harness(opts?: {
     delegate,
     enrolment,
     aggregate,
+    instructor,
+    user,
     db: { $transaction: async (fn) => fn(tx as unknown as CohortPublishTx) },
     toScope: (id) => ({ cohortId: id, courseIds: ["course-1"] }),
     withPermission,
@@ -156,8 +196,80 @@ function harness(opts?: {
     now: () => NOW,
   });
 
-  return { service, delegate, enrolment, aggregate, tx, audits, rows };
+  return { service, delegate, enrolment, aggregate, instructor, user, tx, audits, rows };
 }
+
+describe("instructor assignment (D-27) — the readiness gate's only writer", () => {
+  it("assigns an instructor and audits cohort.instructor_assigned", async () => {
+    const { service, instructor, audits } = harness();
+    const result = await service.assignCohortInstructor({
+      cohortId: "cohort-1",
+      userId: "user-instructor-1",
+    });
+    expect(result).toEqual({
+      cohortId: "cohort-1",
+      userId: "user-instructor-1",
+      userName: "Ije Instructor",
+    });
+    expect(instructor.create).toHaveBeenCalledTimes(1);
+    expect(audits.at(-1)).toMatchObject({
+      action: "cohort.instructor_assigned",
+      targetType: "Cohort",
+      targetId: "cohort-1",
+    });
+
+    const rows = await service.loadCohortInstructors({ cohortId: "cohort-1" });
+    expect(rows).toEqual([
+      {
+        id: "instr-1",
+        user: { id: "user-instructor-1", name: "Ije Instructor", email: "instructor@kqnexus.test" },
+      },
+    ]);
+  });
+
+  it("is idempotent — assigning an already-assigned user does not error or duplicate", async () => {
+    const { service, instructor } = harness();
+    await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).resolves.toBeDefined();
+    expect(instructor.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws InstructorUserNotFoundError for an id with no matching user", async () => {
+    const { service } = harness();
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "no-such-user" }),
+    ).rejects.toBeInstanceOf(InstructorUserNotFoundError);
+  });
+
+  it("removes an instructor and audits cohort.instructor_removed", async () => {
+    const { service, instructor, audits } = harness();
+    await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
+    await service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
+    expect(instructor.delete).toHaveBeenCalledTimes(1);
+    expect(audits.at(-1)).toMatchObject({ action: "cohort.instructor_removed" });
+    expect(await service.loadCohortInstructors({ cohortId: "cohort-1" })).toEqual([]);
+  });
+
+  it("is idempotent — removing a user who is not assigned does not error", async () => {
+    const { service, instructor } = harness();
+    await expect(
+      service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).resolves.toBeDefined();
+    expect(instructor.delete).not.toHaveBeenCalled();
+  });
+
+  it("refuses assign/remove without cohorts.manage", async () => {
+    const { service } = harness({ grants: [grant("cohorts.view")] });
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(
+      service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+});
 
 describe("createCohortGuards / assertOfferMutable (D-30)", () => {
   it("resolves when zero Enrolment rows exist for the cohort", async () => {
@@ -674,6 +786,13 @@ function cancelHarness(opts?: {
     delegate,
     enrolment: { count: vi.fn(async () => 0) },
     aggregate: { findUnique: vi.fn(async () => null) },
+    instructor: {
+      findMany: vi.fn(async () => []),
+      findUnique: vi.fn(async () => null),
+      create: vi.fn(async ({ data }) => ({ id: "instr-1", ...data })),
+      delete: vi.fn(async () => null),
+    },
+    user: { findUnique: vi.fn(async () => null) },
     db,
     toScope: (id) => ({ cohortId: id, courseIds: ["course-1"] }),
     withPermission,

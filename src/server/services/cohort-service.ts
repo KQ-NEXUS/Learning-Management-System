@@ -382,6 +382,48 @@ export type CohortPublishDb = {
 };
 
 // ---------------------------------------------------------------------------
+// Instructor assignment — the readiness gate's "Instructors" check (D-27)
+// otherwise has no writer anywhere in the app; only `prisma/seed.ts` could
+// ever populate `CohortInstructor`, so a staff-created instructor-led or
+// blended cohort could never clear that check and could never be published.
+// ---------------------------------------------------------------------------
+
+export class InstructorUserNotFoundError extends Error {
+  constructor(readonly userId: string) {
+    super(`No user with id ${userId} exists.`);
+    this.name = "InstructorUserNotFoundError";
+  }
+}
+
+export type CohortInstructorRow = {
+  id: string;
+  user: { id: string; name: string; email: string };
+};
+
+/** Injected so assignment is unit-testable without a real Postgres. */
+export type CohortInstructorDelegate = {
+  findMany(args: {
+    where: { cohortId: string };
+    select: Record<string, unknown>;
+    orderBy: Record<string, unknown>;
+  }): Promise<CohortInstructorRow[]>;
+  findUnique(args: {
+    where: { cohortId_userId: { cohortId: string; userId: string } };
+  }): Promise<{ id: string } | null>;
+  create(args: { data: { cohortId: string; userId: string } }): Promise<{ id: string }>;
+  delete(args: {
+    where: { cohortId_userId: { cohortId: string; userId: string } };
+  }): Promise<unknown>;
+};
+
+export type UserExistsDelegate = {
+  findUnique(args: {
+    where: { id: string };
+    select: { id: true; name: true; email: true };
+  }): Promise<{ id: string; name: string; email: string } | null>;
+};
+
+// ---------------------------------------------------------------------------
 // The service
 // ---------------------------------------------------------------------------
 
@@ -389,6 +431,8 @@ export type CohortServiceDeps = {
   delegate: Delegate<CohortRecord>;
   enrolment: CohortGuardEnrolmentDelegate;
   aggregate: CohortAggregateDelegate;
+  instructor: CohortInstructorDelegate;
+  user: UserExistsDelegate;
   db: CohortPublishDb;
   toScope: (id: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
@@ -466,6 +510,87 @@ export function createCohortService(deps: CohortServiceDeps) {
     const row = await loadAggregateRow(cohortId);
     return row ? toReadinessInput(row) : null;
   }
+
+  /**
+   * The Overview tab's instructor list — read side of the assignment
+   * feature below. Gated on `cohorts.view` like every other read of this
+   * resource.
+   */
+  const loadCohortInstructors = withPermission<{ cohortId: string }>(
+    "cohorts.view",
+    (input) => deps.toScope(input.cohortId),
+  )(async (input) => {
+    return deps.instructor.findMany({
+      where: { cohortId: input.cohortId },
+      select: { id: true, user: { select: { id: true, name: true, email: true } } },
+      orderBy: { user: { name: "asc" } },
+    });
+  });
+
+  /**
+   * Assigns a user as an instructor on this cohort — the only writer
+   * `CohortInstructor` has anywhere in the app (previously only
+   * `prisma/seed.ts` could populate it, which meant a staff-created
+   * instructor-led/blended cohort could never clear the readiness panel's
+   * "Instructors" check and could never be published). Idempotent: assigning
+   * an already-assigned user is a no-op success, not a unique-constraint
+   * error.
+   */
+  const assignCohortInstructor = withPermission<{ cohortId: string; userId: string }>(
+    "cohorts.manage",
+    (input) => deps.toScope(input.cohortId),
+  )(async (input, ctx) => {
+    const user = await deps.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, name: true, email: true },
+    });
+    if (!user) throw new InstructorUserNotFoundError(input.userId);
+
+    const existing = await deps.instructor.findUnique({
+      where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
+    });
+    if (!existing) {
+      await deps.instructor.create({ data: { cohortId: input.cohortId, userId: input.userId } });
+      await deps.audit({
+        action: "cohort.instructor_assigned",
+        targetType: "Cohort",
+        targetId: input.cohortId,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason: null,
+        before: null,
+        after: { userId: user.id, userName: user.name },
+      });
+    }
+    return { cohortId: input.cohortId, userId: user.id, userName: user.name };
+  });
+
+  /** Removes a user's instructor assignment. Idempotent: removing one that
+   *  is not there is a no-op success. */
+  const removeCohortInstructor = withPermission<{ cohortId: string; userId: string }>(
+    "cohorts.manage",
+    (input) => deps.toScope(input.cohortId),
+  )(async (input, ctx) => {
+    const existing = await deps.instructor.findUnique({
+      where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
+    });
+    if (existing) {
+      await deps.instructor.delete({
+        where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
+      });
+      await deps.audit({
+        action: "cohort.instructor_removed",
+        targetType: "Cohort",
+        targetId: input.cohortId,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason: null,
+        before: { userId: input.userId },
+        after: null,
+      });
+    }
+    return { cohortId: input.cohortId, userId: input.userId };
+  });
 
   /**
    * COH-04 / D-27 / D-29. Gated on the dedicated publish permission —
@@ -673,6 +798,9 @@ export function createCohortService(deps: CohortServiceDeps) {
     cohortService,
     updateCohort,
     loadCohortReadinessAggregate,
+    loadCohortInstructors,
+    assignCohortInstructor,
+    removeCohortInstructor,
     publishCohort,
     cancelCohort,
   };
@@ -686,6 +814,8 @@ const built = createCohortService({
   delegate: prisma.cohort as unknown as Delegate<CohortRecord>,
   enrolment: prisma.enrolment as unknown as CohortGuardEnrolmentDelegate,
   aggregate: prisma.cohort as unknown as CohortAggregateDelegate,
+  instructor: prisma.cohortInstructor as unknown as CohortInstructorDelegate,
+  user: prisma.user as unknown as UserExistsDelegate,
   db: {
     $transaction: (fn) =>
       prisma.$transaction((tx) => fn(tx as unknown as CohortPublishTx)),
@@ -711,6 +841,9 @@ export const updateCohort = built.updateCohort;
 export const publishCohort = built.publishCohort;
 export const cancelCohort = built.cancelCohort;
 export const loadCohortReadinessAggregate = built.loadCohortReadinessAggregate;
+export const loadCohortInstructors = built.loadCohortInstructors;
+export const assignCohortInstructor = built.assignCohortInstructor;
+export const removeCohortInstructor = built.removeCohortInstructor;
 
 /** Bound to `prisma.enrolment` — the guard plan 05-11/05-12 call directly. */
 export const { assertOfferMutable } = createCohortGuards({
