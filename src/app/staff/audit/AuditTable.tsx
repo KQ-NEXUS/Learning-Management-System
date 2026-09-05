@@ -3,6 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
 import type { AuditRow, AuditFilterOptions } from "@/server/services/audit-read-service";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 /**
  * A sibling of ResourceTable, not a consumer of it — expand-in-place is the
@@ -281,7 +282,7 @@ export function AuditTable({
                                 {row.targetType} <span className="font-mono">{shortenId(row.targetId)}</span>
                               </span>
                               <span className="self-center text-right font-mono text-xs tabular-nums text-zinc-500">
-                                {row.createdAt.toLocaleString()}
+                                {formatTimestamp(row.createdAt)}
                               </span>
                             </button>
                           </td>

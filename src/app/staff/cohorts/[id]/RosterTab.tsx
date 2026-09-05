@@ -22,6 +22,7 @@ import { ResourceTable, StatusPill, type Column, type ResourceTableState } from 
 import type { AttendanceComponent } from "@/server/services/attendance-component";
 import type { DeferredColumn } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 export type RosterTransitionView = {
   action: string;
@@ -162,7 +163,7 @@ export function RosterTab({
               {r.latestTransition ? (
                 <span>
                   Latest: {r.latestTransition.action} by {r.latestTransition.actorName ?? "system"} on{" "}
-                  {new Date(r.latestTransition.at).toLocaleString()}
+                  {formatTimestamp(new Date(r.latestTransition.at))}
                   {r.latestTransition.reason ? ` — "${r.latestTransition.reason}"` : ""}
                 </span>
               ) : (

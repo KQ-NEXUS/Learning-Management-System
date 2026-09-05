@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 export type MissingRegisterExceptionView = {
   category: "missing-register";
@@ -103,7 +104,7 @@ function detail(row: AttendanceExceptionView): string {
     return `${row.earnedPct}% / ${row.requiredPct}%`;
   }
   const who = row.correctedByName ?? "an unknown corrector";
-  const when = row.correctedAt ? new Date(row.correctedAt).toLocaleString() : "an unknown time";
+  const when = row.correctedAt ? formatTimestamp(new Date(row.correctedAt)) : "an unknown time";
   return `${row.correctionReason} — corrected by ${who} on ${when}`;
 }
 

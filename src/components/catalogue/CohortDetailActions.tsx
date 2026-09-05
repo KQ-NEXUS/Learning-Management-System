@@ -254,7 +254,9 @@ function PublishCohortDialogBody({
             Publish cohort {code}?
           </h2>
           <p className="text-sm text-zinc-600">
-            Learners can find and enrol once it is published. All blocking readiness checks pass.
+            {blocking.length === 0
+              ? "Learners can find and enrol once it is published. All blocking readiness checks pass."
+              : "Learners can find and enrol once it is published, but this cohort still has blocking readiness checks outstanding."}
           </p>
           <ReadinessSummary items={items} />
         </div>
