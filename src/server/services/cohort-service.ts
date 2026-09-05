@@ -395,6 +395,32 @@ export class InstructorUserNotFoundError extends Error {
   }
 }
 
+/**
+ * True for a Prisma `PrismaClientKnownRequestError` with code `P2002`
+ * (unique-constraint violation), duck-typed on `.code` so this file stays
+ * free of a Prisma client import (copied from `seat-accounting.ts:132-139`).
+ */
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "P2002"
+  );
+}
+
+/** True for Prisma's "record to delete/update does not exist" (P2025) —
+ *  the delete-side counterpart of the race `isUniqueConstraintViolation`
+ *  guards on the create side. */
+function isRecordNotFoundError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "P2025"
+  );
+}
+
 export type CohortInstructorRow = {
   id: string;
   user: { id: string; name: string; email: string };
@@ -534,7 +560,9 @@ export function createCohortService(deps: CohortServiceDeps) {
    * instructor-led/blended cohort could never clear the readiness panel's
    * "Instructors" check and could never be published). Idempotent: assigning
    * an already-assigned user is a no-op success, not a unique-constraint
-   * error.
+   * error — including when two concurrent requests both pass the
+   * check-then-write race (the `@@unique([cohortId, userId])` constraint is
+   * the real guard; a losing `create` here is swallowed, not rethrown).
    */
   const assignCohortInstructor = withPermission<{ cohortId: string; userId: string }>(
     "cohorts.manage",
@@ -550,7 +578,12 @@ export function createCohortService(deps: CohortServiceDeps) {
       where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
     });
     if (!existing) {
-      await deps.instructor.create({ data: { cohortId: input.cohortId, userId: input.userId } });
+      try {
+        await deps.instructor.create({ data: { cohortId: input.cohortId, userId: input.userId } });
+      } catch (err) {
+        if (!isUniqueConstraintViolation(err)) throw err;
+        return { cohortId: input.cohortId, userId: user.id, userName: user.name };
+      }
       await deps.audit({
         action: "cohort.instructor_assigned",
         targetType: "Cohort",
@@ -566,7 +599,8 @@ export function createCohortService(deps: CohortServiceDeps) {
   });
 
   /** Removes a user's instructor assignment. Idempotent: removing one that
-   *  is not there is a no-op success. */
+   *  is not there — including one a concurrent request just removed — is a
+   *  no-op success, never a rethrown "record not found". */
   const removeCohortInstructor = withPermission<{ cohortId: string; userId: string }>(
     "cohorts.manage",
     (input) => deps.toScope(input.cohortId),
@@ -575,9 +609,14 @@ export function createCohortService(deps: CohortServiceDeps) {
       where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
     });
     if (existing) {
-      await deps.instructor.delete({
-        where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
-      });
+      try {
+        await deps.instructor.delete({
+          where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
+        });
+      } catch (err) {
+        if (!isRecordNotFoundError(err)) throw err;
+        return { cohortId: input.cohortId, userId: input.userId };
+      }
       await deps.audit({
         action: "cohort.instructor_removed",
         targetType: "Cohort",

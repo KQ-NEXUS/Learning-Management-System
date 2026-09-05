@@ -236,6 +236,29 @@ describe("instructor assignment (D-27) — the readiness gate's only writer", ()
     expect(instructor.create).toHaveBeenCalledTimes(1);
   });
 
+  it("is idempotent under a concurrent double-assign race (P2002 on create is swallowed)", async () => {
+    const { service, instructor } = harness();
+    // Simulates the check-then-write window: findUnique said "not assigned yet"
+    // but a concurrent request's create already landed, so this create loses
+    // to the @@unique([cohortId, userId]) constraint.
+    instructor.create.mockRejectedValueOnce({ code: "P2002" });
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).resolves.toEqual({
+      cohortId: "cohort-1",
+      userId: "user-instructor-1",
+      userName: "Ije Instructor",
+    });
+  });
+
+  it("rethrows a non-P2002 error from create", async () => {
+    const { service, instructor } = harness();
+    instructor.create.mockRejectedValueOnce(new Error("boom"));
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).rejects.toThrow("boom");
+  });
+
   it("throws InstructorUserNotFoundError for an id with no matching user", async () => {
     const { service } = harness();
     await expect(
@@ -258,6 +281,26 @@ describe("instructor assignment (D-27) — the readiness gate's only writer", ()
       service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
     ).resolves.toBeDefined();
     expect(instructor.delete).not.toHaveBeenCalled();
+  });
+
+  it("is idempotent under a concurrent double-remove race (P2025 on delete is swallowed)", async () => {
+    const { service, instructor } = harness();
+    await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
+    // Simulates the check-then-delete window: findUnique said "still assigned"
+    // but a concurrent request's delete already landed first.
+    instructor.delete.mockRejectedValueOnce({ code: "P2025" });
+    await expect(
+      service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).resolves.toEqual({ cohortId: "cohort-1", userId: "user-instructor-1" });
+  });
+
+  it("rethrows a non-P2025 error from delete", async () => {
+    const { service, instructor } = harness();
+    await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
+    instructor.delete.mockRejectedValueOnce(new Error("boom"));
+    await expect(
+      service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).rejects.toThrow("boom");
   });
 
   it("refuses assign/remove without cohorts.manage", async () => {
