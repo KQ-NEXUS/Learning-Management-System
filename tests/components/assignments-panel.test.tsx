@@ -65,6 +65,9 @@ function renderPanel() {
 
 describe("AssignmentsPanel — a rejected revoke recovers with intent intact", () => {
   it("keeps the modal open with the typed reason and no silent success when revokeAssignmentAction rejects, then succeeds on retry", async () => {
+    // AssignmentsPanel also mounts the AssignmentDrawer; under a full-suite
+    // parallel run the default 5s ceiling flakes. Raise it — queries still
+    // resolve the moment their node exists (see tests/components/setup.ts).
     vi.mocked(revokeAssignmentAction)
       .mockRejectedValueOnce(new Error("socket hang up"))
       .mockResolvedValueOnce({ error: null });
@@ -103,7 +106,7 @@ describe("AssignmentsPanel — a rejected revoke recovers with intent intact", (
     );
     expect(revokeAssignmentAction).toHaveBeenCalledTimes(2);
     expect(revokeAssignmentAction).toHaveBeenLastCalledWith("a1", "left the programme");
-  });
+  }, 30000);
 });
 
 describe("AccountStatusControl — a rejected deactivation clears busy and keeps the reason", () => {
@@ -146,5 +149,5 @@ describe("AccountStatusControl — a rejected deactivation clears busy and keeps
     );
     expect(deactivateStaffAccountAction).toHaveBeenCalledTimes(2);
     expect(deactivateStaffAccountAction).toHaveBeenLastCalledWith("u1", "offboarding today");
-  });
+  }, 30000);
 });

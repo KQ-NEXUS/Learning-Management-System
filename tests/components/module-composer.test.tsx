@@ -24,7 +24,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const flush = () => act(async () => { await Promise.resolve(); });
+const flush = () =>
+  act(async () => {
+    // Cover the callback promise plus the component's own `finally`.
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 
 function addInput() {
   return screen.getByLabelText(/module title/i) as HTMLInputElement;

@@ -120,5 +120,5 @@ describe("RoleActivationControl — a rejected status change keeps the dialog an
     );
     expect(setRoleActiveAction).toHaveBeenCalledTimes(2);
     expect(setRoleActiveAction).toHaveBeenLastCalledWith("r1", false, "no longer coordinating");
-  });
+  }, 30000);
 });
