@@ -43,7 +43,7 @@ function makeRow(overrides: Partial<AuditRow> = {}): AuditRow {
     action: "course.publish",
     targetType: "course",
     targetId: LONG_TARGET_ID,
-    scopeType: "programme",
+    scopeType: "PROGRAMME",
     scopeId: "prog-42",
     before: { status: "draft" },
     after: { status: "published" },
@@ -72,7 +72,7 @@ describe("AuditTable — mobile detail card (task 1)", () => {
     expect(card.getByText("Ada Lovelace")).toBeTruthy();
     expect(card.getByText("ada.lovelace@example.com")).toBeTruthy();
     expect(card.getByText("course.publish")).toBeTruthy();
-    expect(card.getByText(/course/)).toBeTruthy();
+    expect(card.getByText(LONG_TARGET_ID)).toBeTruthy();
     expect(card.getByText(formatTimestamp(row.createdAt))).toBeTruthy();
   });
 
@@ -120,6 +120,6 @@ describe("AuditTable — mobile detail card (task 1)", () => {
 
     const list = mobileList();
     fireEvent.click(within(list).getByRole("button", { name: /ada lovelace/i }));
-    expect(screen.getByText(/no field-level changes recorded/i)).toBeTruthy();
+    expect(within(list).getByText(/no field-level changes recorded/i)).toBeTruthy();
   });
 });
