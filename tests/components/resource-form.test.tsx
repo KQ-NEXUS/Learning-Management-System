@@ -176,6 +176,102 @@ describe("ResourceForm", () => {
     });
   });
 
+  it("renders form-level errors (no matching field) as plain alert text, never as dead links", async () => {
+    const ResourceForm = await loadResourceForm();
+    const FormField = await loadFormField();
+
+    render(
+      <ResourceForm
+        title="Edit lesson"
+        errors={[
+          { name: "title", message: "Title is required" },
+          { name: "form", message: "Choose exactly one of course or programme" },
+        ]}
+        onSubmit={() => {}}
+      >
+        <FormField name="title" label="Title">
+          {(fieldProps) => <input {...fieldProps} />}
+        </FormField>
+      </ResourceForm>,
+    );
+
+    const summary = screen.getByRole("alert");
+    // The cross-field failure is visible as text...
+    expect(summary.textContent).toMatch(
+      /Choose exactly one of course or programme/,
+    );
+    // ...but is never offered as a link to a field that does not exist.
+    expect(
+      screen.queryByRole("link", {
+        name: "Choose exactly one of course or programme",
+      }),
+    ).toBeNull();
+    // The genuine field error still links to its control.
+    const fieldLink = screen.getByRole("link", { name: "Title is required" });
+    expect(fieldLink.getAttribute("href")).toBe("#field-title");
+  });
+
+  it("only links summary entries that resolve to a real control in this form", async () => {
+    const ResourceForm = await loadResourceForm();
+    const FormField = await loadFormField();
+
+    render(
+      <ResourceForm
+        title="Edit lesson"
+        errors={[
+          { name: "title", message: "Title is required" },
+          { name: "slug", message: "That slug is already taken" },
+        ]}
+        onSubmit={() => {}}
+      >
+        <FormField name="title" label="Title">
+          {(fieldProps) => <input {...fieldProps} />}
+        </FormField>
+      </ResourceForm>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Title is required" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "That slug is already taken" }),
+    ).toBeNull();
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /That slug is already taken/,
+    );
+  });
+
+  it("every rendered summary link points at an element that exists in the document", async () => {
+    const ResourceForm = await loadResourceForm();
+    const FormField = await loadFormField();
+
+    render(
+      <ResourceForm
+        title="Edit lesson"
+        errors={[
+          { name: "title", message: "Title is required" },
+          { name: "body", message: "Add some lesson content" },
+          { name: "form", message: "This record cannot be saved yet" },
+        ]}
+        onSubmit={() => {}}
+      >
+        <FormField name="title" label="Title">
+          {(fieldProps) => <input {...fieldProps} />}
+        </FormField>
+        <FormField name="body" label="Body">
+          {(fieldProps) => <textarea {...fieldProps} />}
+        </FormField>
+      </ResourceForm>,
+    );
+
+    const links = screen.getAllByRole("link");
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      const target = (link.getAttribute("href") ?? "").replace(/^#/, "");
+      expect(document.getElementById(target)).not.toBeNull();
+    }
+  });
+
   it("a failed submit leaves previously entered field values in the DOM and renders no success wording", async () => {
     const ResourceForm = await loadResourceForm();
     const FormField = await loadFormField();
