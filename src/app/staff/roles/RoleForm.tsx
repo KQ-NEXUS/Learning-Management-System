@@ -92,7 +92,7 @@ export function RoleForm({
               {...props}
               value={cloneId}
               onChange={(e) => handleCloneChange(e.target.value)}
-              className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+              className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground"
             >
               <option value="">Blank slate</option>
               {cloneSources.map((source) => (

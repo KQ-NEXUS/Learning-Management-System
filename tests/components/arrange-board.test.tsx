@@ -115,7 +115,7 @@ describe("ArrangeBoard — keyboard parity", () => {
 
     const rowLabels = screen
       .getAllByRole("listitem")
-      .map((li) => li.querySelector("span.font-medium")?.textContent)
+      .map((li) => li.querySelector("span.font-semibold")?.textContent)
       .filter(Boolean);
 
     expect(rowLabels).toEqual(["Lesson 1", "Lesson 3", "Lesson 2"]);
@@ -159,7 +159,7 @@ describe("ArrangeBoard — keyboard parity", () => {
 
     const rowLabels = screen
       .getAllByRole("listitem")
-      .map((li) => li.querySelector("span.font-medium")?.textContent);
+      .map((li) => li.querySelector("span.font-semibold")?.textContent);
     expect(rowLabels).toEqual(["Lesson 1", "Lesson 2", "Lesson 3"]);
 
     // And a same-slot move through the pure reducer is a genuine no-op.
@@ -186,7 +186,7 @@ describe("ArrangeBoard — keyboard parity", () => {
     const rowLabels = () =>
       screen
         .getAllByRole("listitem")
-        .map((li) => li.querySelector("span.font-medium")?.textContent);
+        .map((li) => li.querySelector("span.font-semibold")?.textContent);
     const before = rowLabels();
     fireEvent.click(lastMoveDown);
     expect(rowLabels()).toEqual(before);

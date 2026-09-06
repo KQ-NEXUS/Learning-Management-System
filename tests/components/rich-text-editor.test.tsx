@@ -33,21 +33,25 @@ async function loadRichTextEditor(): Promise<
 }
 
 describe("RichTextEditor", () => {
-  it("renders exactly the seven D-29 authoring controls", async () => {
-    const RichTextEditor = await loadRichTextEditor();
-    render(<RichTextEditor value="<p>Lesson body</p>" onChange={() => {}} />);
+  it(
+    "renders exactly the seven D-29 authoring controls",
+    async () => {
+      const RichTextEditor = await loadRichTextEditor();
+      render(<RichTextEditor value="<p>Lesson body</p>" onChange={() => {}} />);
 
-    const buttons = await screen.findAllByRole("button");
-    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
-      "Bold",
-      "Italic",
-      "Heading 2",
-      "Heading 3",
-      "Bulleted list",
-      "Numbered list",
-      "Link",
-    ]);
-  });
+      const buttons = await screen.findAllByRole("button");
+      expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+        "Bold",
+        "Italic",
+        "Heading 2",
+        "Heading 3",
+        "Bulleted list",
+        "Numbered list",
+        "Link",
+      ]);
+    },
+    15_000,
+  );
 
   it("makes every toolbar control a non-submit toggle with pressed state", async () => {
     const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());

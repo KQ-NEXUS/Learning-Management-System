@@ -111,9 +111,10 @@ export function RolePermissionsPanel({
   );
 }
 
-const BTN = "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-zinc-50";
+const BTN =
+  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2";
 const BTN_DANGER =
-  "border border-danger/30 bg-white px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface";
+  "rounded-md border border-danger/30 bg-surface px-2.5 py-1.5 text-xs font-semibold text-danger hover:bg-danger-surface";
 
 /** Rendered in DetailLayout's `actions` slot. */
 export function RoleActivationControl({

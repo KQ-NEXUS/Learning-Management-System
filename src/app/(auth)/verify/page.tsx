@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AlertCircle } from "lucide-react";
+import { AuthIconChip, AuthTitle } from "../AuthPanel";
 import { verificationService } from "@/server/services/verification-service";
 import { ResendVerificationForm } from "./ResendVerificationForm";
 
@@ -20,28 +22,21 @@ export default async function VerifyPage({
       ? await verificationService.verifyEmail(token)
       : ({ ok: false } as const);
 
-  return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
-      {result.ok ? (
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">Email verified</h1>
-          <p className="text-sm text-zinc-600">You can now sign in.</p>
-          <Link href="/signin" className="text-accent underline underline-offset-2">
-            Continue to sign in
-          </Link>
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-col gap-1">
-            <h1 className="text-xl font-semibold tracking-tight">This link is no longer valid</h1>
-            <p className="text-sm text-zinc-600">
-              Links expire after 24 hours or can only be used once. Enter your email below to get a
-              new one.
-            </p>
-          </div>
-          <ResendVerificationForm />
-        </>
-      )}
-    </main>
+  return result.ok ? (
+    <>
+      <AuthTitle title="Email verified" subtitle="You can now sign in." />
+      <Link href="/signin" className="text-sm font-semibold text-accent underline underline-offset-2">
+        Continue to sign in
+      </Link>
+    </>
+  ) : (
+    <>
+      <AuthIconChip icon={AlertCircle} tone="danger" />
+      <AuthTitle
+        title="This link is no longer valid"
+        subtitle="Links expire after 24 hours or can only be used once. Enter your email below to get a new one."
+      />
+      <ResendVerificationForm />
+    </>
   );
 }

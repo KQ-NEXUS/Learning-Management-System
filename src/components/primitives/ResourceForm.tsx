@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 /**
  * ResourceForm — the create/edit primitive.
@@ -41,6 +41,11 @@ export type ResourceFormProps = {
   children: ReactNode;
 };
 
+const BTN =
+  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_PRIMARY =
+  "rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+
 export function ResourceForm({
   title,
   subtitle,
@@ -57,15 +62,25 @@ export function ResourceForm({
   const summaryId = useId();
   const summaryRef = useRef<HTMLDivElement>(null);
 
+  // Move focus to the error summary whenever it appears — the summary is
+  // the first thing a screen reader user needs after a failed submit
+  // (WCAG 2.2 AA, NFR-09). tabIndex={-1} on the summary makes it a valid
+  // focus target without adding it to the normal tab order.
+  useEffect(() => {
+    if (errors.length > 0) {
+      summaryRef.current?.focus();
+    }
+  }, [errors]);
+
   if (state.status === "denied") {
     return (
-      <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-6 py-10">
-        <span className="font-mono text-xs tracking-wide text-zinc-500">403</span>
-        <p className="text-sm font-semibold">Editing needs additional permission</p>
-        <p className="max-w-prose text-sm text-zinc-600">
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-card">
+        <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
+        <p className="text-sm font-semibold text-foreground">Editing needs additional permission</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
           Your role does not include{" "}
           {state.permission ? (
-            <code className="bg-zinc-100 px-1 font-mono text-xs">
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-xs">
               {state.permission}
             </code>
           ) : (
@@ -79,17 +94,13 @@ export function ResourceForm({
 
   if (state.status === "error") {
     return (
-      <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-6 py-10">
-        <p className="text-sm font-semibold">Could not load this record</p>
-        <p className="max-w-prose text-sm text-zinc-600">
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-card">
+        <p className="text-sm font-semibold text-foreground">Could not load this record</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
           {state.message ?? "The request failed. Nothing has been changed."}
         </p>
         {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-zinc-50"
-          >
+          <button type="button" onClick={onRetry} className={BTN}>
             Retry
           </button>
         )}
@@ -99,12 +110,15 @@ export function ResourceForm({
 
   if (state.status === "loading") {
     return (
-      <div aria-busy className="flex flex-col gap-4 border border-zinc-200 px-4 py-4">
-        <span className="h-4 w-48 animate-pulse bg-zinc-200" />
+      <div
+        aria-busy
+        className="mx-auto flex w-full max-w-[700px] flex-col gap-4 rounded-xl border border-border bg-surface px-6 py-6 shadow-card"
+      >
+        <span className="h-4 w-48 animate-pulse rounded-sm bg-surface-2" />
         {Array.from({ length: 5 }, (_, i) => (
           <div key={i} className="flex flex-col gap-1.5">
-            <span className="h-2.5 w-24 animate-pulse bg-zinc-200" />
-            <span className="h-8 w-full animate-pulse bg-zinc-100" />
+            <span className="h-2.5 w-24 animate-pulse rounded-sm bg-surface-2" />
+            <span className="h-8 w-full animate-pulse rounded-sm bg-surface-2" />
           </div>
         ))}
         <p aria-live="polite" className="sr-only">
@@ -118,64 +132,60 @@ export function ResourceForm({
     <form
       action={onSubmit}
       noValidate
-      className="flex flex-col gap-5 border border-zinc-200 bg-white px-4 py-4"
+      className="mx-auto flex w-full max-w-[700px] flex-col rounded-xl border border-border bg-surface shadow-card"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-          {subtitle && <p className="text-xs text-zinc-600">{subtitle}</p>}
+      <div className="flex flex-col gap-5 px-6 py-6">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+          </div>
         </div>
-        {draftStatus && (
-          <p className="font-mono text-[11px] text-zinc-500">{draftStatus}</p>
+
+        {errors.length > 0 && (
+          <div
+            ref={summaryRef}
+            role="alert"
+            aria-labelledby={summaryId}
+            tabIndex={-1}
+            className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2.5"
+          >
+            <p id={summaryId} className="text-sm font-semibold text-danger">
+              {errors.length} {errors.length === 1 ? "field needs" : "fields need"}{" "}
+              attention before this can be saved
+            </p>
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {errors.map((error) => (
+                <li key={error.name}>
+                  <a
+                    href={`#field-${error.name}`}
+                    className="text-sm text-danger underline underline-offset-2"
+                  >
+                    {error.message}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
+
+        <div className="flex flex-col gap-4">{children}</div>
       </div>
 
-      {errors.length > 0 && (
-        <div
-          ref={summaryRef}
-          role="alert"
-          aria-labelledby={summaryId}
-          tabIndex={-1}
-          className="border border-danger/30 bg-danger-surface px-3 py-2.5"
-        >
-          <p id={summaryId} className="text-sm font-medium text-danger">
-            {errors.length} {errors.length === 1 ? "field needs" : "fields need"}{" "}
-            attention before this can be saved
-          </p>
-          <ul className="mt-1.5 flex flex-col gap-1">
-            {errors.map((error) => (
-              <li key={error.name}>
-                <a
-                  href={`#field-${error.name}`}
-                  className="text-sm text-danger underline underline-offset-2"
-                >
-                  {error.message}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-4">{children}</div>
-
-      <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4">
-        <button
-          type="submit"
-          disabled={pending}
-          className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50"
-        >
-          {pending ? "Saving…" : submitLabel}
-        </button>
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
-          >
-            Cancel
-          </button>
+      <div className="flex flex-wrap items-center gap-3 rounded-b-xl border-t border-border bg-surface-2 px-6 py-4">
+        {draftStatus && (
+          <p className="font-mono text-[11px] text-muted-foreground">{draftStatus}</p>
         )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <button type="submit" disabled={pending} className={BTN_PRIMARY}>
+            {pending ? "Saving…" : submitLabel}
+          </button>
+          {onCancel && (
+            <button type="button" onClick={onCancel} className={BTN}>
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );
@@ -218,13 +228,10 @@ export function FormField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={id}
-        className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600"
-      >
+      <label htmlFor={id} className="text-sm font-semibold text-foreground">
         {label}
         {required && (
-          <span className="ml-1 font-normal text-zinc-400" aria-hidden>
+          <span className="ml-1 text-[11px] font-normal text-muted-foreground" aria-hidden>
             required
           </span>
         )}
@@ -238,7 +245,7 @@ export function FormField({
       })}
 
       {hint && !error && (
-        <p id={hintId} className="text-xs text-zinc-500">
+        <p id={hintId} className="text-[11px] text-muted-foreground">
           {hint}
         </p>
       )}
@@ -259,7 +266,7 @@ export function TextInput(
   return (
     <input
       {...rest}
-      className={`border border-zinc-300 bg-white px-2.5 py-1.5 text-sm placeholder:text-zinc-400 aria-[invalid=true]:border-danger ${
+      className={`h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger ${
         mono ? "font-mono tabular-nums" : ""
       } ${className ?? ""}`}
     />

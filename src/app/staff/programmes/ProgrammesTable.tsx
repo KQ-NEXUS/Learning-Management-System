@@ -166,7 +166,7 @@ export function ProgrammesTable({
       headerActions={
         <Link
           href="/staff/programmes/new"
-          className="bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+          className="rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90"
         >
           New programme
         </Link>

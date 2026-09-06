@@ -28,9 +28,9 @@ export type ModuleComposerProps = {
 };
 
 const BTN =
-  "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50";
+  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50";
 const PRIMARY =
-  "bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50";
+  "rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90 disabled:opacity-50";
 
 function ModuleRenameRow({
   module,
@@ -114,11 +114,11 @@ export function ModuleComposer({
   }
 
   return (
-    <section className="flex flex-col gap-3 border border-zinc-200 bg-white px-4 py-4">
+    <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-4 shadow-xs">
       <div className="flex flex-col gap-0.5">
         <h2 className="text-sm font-semibold tracking-tight">Modules</h2>
         {hasNoModules && (
-          <p className="max-w-prose text-xs text-zinc-600">
+          <p className="max-w-prose text-xs text-muted-foreground">
             This course has no modules yet. A module has to exist before a lesson
             can — add the first one below.
           </p>
@@ -149,7 +149,7 @@ export function ModuleComposer({
       </form>
 
       {modules.length > 0 && (
-        <ul className="flex flex-col gap-1.5 border-t border-zinc-200 pt-3">
+        <ul className="flex flex-col gap-1.5 border-t border-border pt-3">
           {modules.map((module) => (
             <ModuleRenameRow
               key={module.id}

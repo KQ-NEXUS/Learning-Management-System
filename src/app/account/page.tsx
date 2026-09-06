@@ -13,8 +13,15 @@ export default async function AccountPage() {
   if (!profile) redirect("/signin");
 
   return (
-    <div className="flex flex-col gap-1">
-      <h1 className="text-xl font-semibold tracking-tight">Your account</h1>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-[25px] font-semibold tracking-[-0.02em] text-foreground">
+          Your account
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Details, sign-in and communication preferences.
+        </p>
+      </div>
       <ProfileForm
         name={profile.name}
         phone={profile.phone}

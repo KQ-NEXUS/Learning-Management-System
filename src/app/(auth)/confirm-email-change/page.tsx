@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Check } from "lucide-react";
+import { AuthIconChip, AuthTitle } from "../AuthPanel";
 import { profileService } from "@/server/services/profile-service";
 
 export const metadata = { title: "Confirm your new email address" };
@@ -18,30 +20,26 @@ export default async function ConfirmEmailChangePage({
       ? await profileService.confirmEmailChange(token)
       : ({ ok: false } as const);
 
-  return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
-      {result.ok ? (
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">Email address updated</h1>
-          <p className="text-sm text-zinc-600">
-            You now sign in with your new email address.
-          </p>
-          <Link href="/signin" className="text-accent underline underline-offset-2">
-            Continue to sign in
-          </Link>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">This link is no longer valid</h1>
-          <p className="text-sm text-zinc-600">
-            Links expire after 24 hours or can only be used once. Start the change again from your
-            account page.
-          </p>
-          <Link href="/account" className="text-accent underline underline-offset-2">
-            Go to your account
-          </Link>
-        </div>
-      )}
-    </main>
+  return result.ok ? (
+    <>
+      <AuthIconChip icon={Check} tone="success" />
+      <AuthTitle
+        title="Email address updated"
+        subtitle="You now sign in with your new email address."
+      />
+      <Link href="/signin" className="text-sm font-semibold text-accent underline underline-offset-2">
+        Continue to sign in
+      </Link>
+    </>
+  ) : (
+    <>
+      <AuthTitle
+        title="This link is no longer valid"
+        subtitle="Links expire after 24 hours or can only be used once. Start the change again from your account page."
+      />
+      <Link href="/account" className="text-sm font-semibold text-accent underline underline-offset-2">
+        Go to your account
+      </Link>
+    </>
   );
 }

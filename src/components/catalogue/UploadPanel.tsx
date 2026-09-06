@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FileText, Upload } from "lucide-react";
 import { StatusPill } from "@/components/primitives";
 import {
   UPLOAD_LIMITS,
@@ -237,42 +238,45 @@ export function UploadPanel({
   return (
     <fieldset
       aria-label={`${noun} resources`}
-      className="flex flex-col gap-3 border border-zinc-200 bg-zinc-50 p-3"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-xs"
     >
-      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-600">
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-foreground">
         Resources
       </legend>
 
-      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+      <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
         Resource title
         <input
           type="text"
           value={title}
           maxLength={300}
           onChange={(event) => setTitle(event.target.value)}
-          className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+          className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
         />
       </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-        {`Choose ${noun}`}
+      <label className="flex flex-col gap-2 rounded-md border border-dashed border-input-border bg-surface-2 p-3 text-xs font-semibold text-foreground">
+        <span className="flex items-center gap-2">
+          <Upload aria-hidden className="size-4 text-accent" />
+          {`Choose ${noun}`}
+        </span>
         <input
           type="file"
           accept={limit.mimeTypes.join(",")}
           onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
-          className="text-sm file:mr-3 file:border file:border-zinc-300 file:bg-white file:px-2.5 file:py-1.5 file:text-xs file:font-medium"
+          className="text-sm file:mr-3 file:rounded-md file:border file:border-input-border file:bg-surface file:px-2.5 file:py-1.5 file:text-xs file:font-semibold"
         />
       </label>
       <button
         type="button"
         disabled={!selectedFile || uploading}
         onClick={() => void upload()}
-        className="self-start bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast disabled:opacity-50"
+        className="self-start rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast disabled:opacity-50"
       >
         Upload resource
       </button>
 
       {uploading && (
-        <div aria-live="polite" className="flex items-center gap-2 text-xs text-zinc-600">
+        <div aria-live="polite" className="flex items-center gap-2 text-xs text-muted-foreground">
           <progress aria-label="Upload progress" className="h-1.5 w-32" />
           Uploading…
         </div>
@@ -284,27 +288,32 @@ export function UploadPanel({
       )}
 
       {resources.length === 0 ? (
-        <p className="text-xs text-zinc-500">No resources uploaded yet.</p>
+        <p className="text-xs text-muted-foreground">No resources uploaded yet.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-zinc-200 border-t border-zinc-200">
+        <ul className="flex flex-col divide-y divide-border border-t border-border">
           {resources.map((resource) => {
             const status = statusPresentation(resource.scanStatus);
             return (
               <li key={resource.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{resource.title}</p>
-                  <p className="truncate text-xs text-zinc-500">{resource.filename}</p>
-                  {(resource.scanStatus === "INFECTED" || resource.scanStatus === "ERROR") &&
-                    resource.scanDetail && (
-                      <p className="mt-1 text-xs text-zinc-600">{resource.scanDetail}</p>
-                    )}
+                <div className="flex min-w-0 flex-1 items-start gap-2">
+                  <FileText aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-semibold">{resource.title}</p>
+                    <p className="break-all text-xs text-muted-foreground">{resource.filename}</p>
+                    {(resource.scanStatus === "INFECTED" || resource.scanStatus === "ERROR") &&
+                      resource.scanDetail && (
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
+                          {resource.scanDetail}
+                        </p>
+                      )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill label={status.label} tone={status.tone} />
                   {resource.scanStatus === "CLEAN" && (
                     <a
                       href={`/api/lesson-resources/${resource.id}/download`}
-                      className="text-xs font-medium text-accent underline underline-offset-2"
+                      className="text-xs font-semibold text-accent underline underline-offset-2"
                     >
                       Download
                     </a>
@@ -315,7 +324,7 @@ export function UploadPanel({
                       aria-label="Retry scan"
                       disabled={retryingId === resource.id}
                       onClick={() => void retry(resource.id)}
-                      className="border border-zinc-300 bg-white px-2 py-1 text-xs font-medium disabled:opacity-50"
+                      className="rounded-md border border-input-border bg-surface px-2 py-1 text-xs font-semibold disabled:opacity-50"
                     >
                       {retryingId === resource.id ? "Retrying…" : "Retry"}
                     </button>

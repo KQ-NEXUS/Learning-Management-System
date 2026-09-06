@@ -93,16 +93,16 @@ export function ProgrammeForm(
           )}
         </FormField>
 
-        <label className="flex items-start gap-2 border border-zinc-200 px-3 py-2.5 text-sm">
+        <label className="flex items-start gap-2 rounded-md border border-input-border bg-surface px-3 py-2.5 text-sm">
           <input
             type="checkbox"
             name="sequential"
             defaultChecked={values.sequential ?? true}
-            className="mt-0.5 size-4"
+            className="mt-0.5 size-4 rounded-[4px] border-[1.5px] border-input-border accent-accent"
           />
           <span>
-            <span className="block font-medium">Sequential</span>
-            <span className="block text-xs text-zinc-500">
+            <span className="block font-semibold text-foreground">Sequential</span>
+            <span className="block text-xs text-muted-foreground">
               Learners must complete the member courses in order.
             </span>
           </span>

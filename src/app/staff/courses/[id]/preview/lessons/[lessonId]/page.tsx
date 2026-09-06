@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Eye } from "lucide-react";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import {
@@ -66,21 +67,24 @@ export default async function LearnerLessonPreviewPage({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1 border-2 border-warning bg-warning/10 px-4 py-2.5">
-        <p className="text-sm font-semibold text-warning">
-          Preview — the learner view of this lesson.
-        </p>
-        <Link
-          href={`/staff/courses/${id}/preview`}
-          className="w-fit text-xs text-zinc-700 underline underline-offset-2"
-        >
-          Back to the public page preview
-        </Link>
+      <div className="flex w-full items-start gap-2 rounded-md border border-border bg-surface-2 px-4 py-2.5">
+        <Eye aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-foreground">
+            Preview — the learner view of this lesson.
+          </p>
+          <Link
+            href={`/staff/courses/${id}/preview`}
+            className="w-fit text-xs text-accent underline underline-offset-2"
+          >
+            Back to the public page preview
+          </Link>
+        </div>
       </div>
 
       <header className="flex flex-col gap-1">
         {moduleTitle && (
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {moduleTitle}
           </p>
         )}
@@ -100,7 +104,7 @@ export default async function LearnerLessonPreviewPage({
         resources={previewResources}
       />
 
-      <nav className="flex items-center justify-between border-t border-zinc-200 pt-4 text-sm">
+      <nav className="flex items-center justify-between border-t border-border pt-4 text-sm">
         {prev ? (
           <Link
             href={`/staff/courses/${id}/preview/lessons/${prev.id}`}

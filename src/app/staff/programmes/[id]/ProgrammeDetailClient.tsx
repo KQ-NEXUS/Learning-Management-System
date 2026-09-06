@@ -149,7 +149,7 @@ export function ProgrammeDetailClient({
       {feedback && (
         <p
           role="alert"
-          className={`px-3 py-2 text-xs ${
+          className={`rounded-md px-3 py-2 text-xs ${
             feedback.tone === "success"
               ? "border border-success/30 bg-success/10 text-success"
               : "border border-danger/30 bg-danger-surface text-danger"
@@ -167,7 +167,7 @@ export function ProgrammeDetailClient({
               setPublishError(null);
               setPublishOpen(true);
             }}
-            className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+            className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90"
           >
             Publish content
           </button>
@@ -176,7 +176,7 @@ export function ProgrammeDetailClient({
           <button
             type="button"
             onClick={() => openModal("unpublish")}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2"
           >
             Unpublish
           </button>
@@ -186,7 +186,7 @@ export function ProgrammeDetailClient({
             type="button"
             disabled={busy === "list"}
             onClick={() => runListing(true)}
-            className="border border-accent bg-white px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/5 disabled:opacity-50"
+            className="rounded-md border border-accent bg-surface px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/5 disabled:opacity-50"
           >
             List publicly
           </button>
@@ -196,7 +196,7 @@ export function ProgrammeDetailClient({
             type="button"
             disabled={busy === "unlist"}
             onClick={() => runListing(false)}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
+            className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50"
           >
             Unlist
           </button>
@@ -206,7 +206,7 @@ export function ProgrammeDetailClient({
             <button
               type="button"
               onClick={() => openModal("archive")}
-              className="border border-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface"
+              className="rounded-md border border-danger/40 bg-surface px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger-surface"
             >
               Archive
             </button>
@@ -214,14 +214,14 @@ export function ProgrammeDetailClient({
             <button
               type="button"
               onClick={() => openModal("unarchive")}
-              className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+              className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2"
             >
               Un-archive
             </button>
           ))}
         <a
           href={`/staff/programmes/${programmeId}/arrange`}
-          className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+          className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2"
         >
           Arrange courses
         </a>

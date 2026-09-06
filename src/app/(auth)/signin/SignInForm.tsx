@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { AuthFooterLine } from "../AuthPanel";
 import { signInAction, type SignInState } from "./actions";
 
 const INITIAL: SignInState = { error: null };
@@ -14,48 +15,48 @@ export function SignInForm() {
       {state.error && (
         <p
           role="alert"
-          className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger"
+          className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger"
         >
           {state.error}
         </p>
       )}
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">Email address</span>
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="font-semibold text-foreground">Email address</span>
         <input
           name="email"
           type="email"
           autoComplete="username"
           required
-          className="border border-zinc-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
+          className="h-[38px] rounded-md border border-input-border bg-surface px-3 text-sm text-foreground"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">Password</span>
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="flex items-baseline justify-between">
+          <span className="font-semibold text-foreground">Password</span>
+          <Link href="/forgot-password" className="text-[11px] text-accent">
+            Forgot?
+          </Link>
+        </span>
         <input
           name="password"
           type="password"
           autoComplete="current-password"
           required
-          className="border border-zinc-300 px-3 py-2 focus:outline-2 focus:outline-offset-2"
+          className="h-[38px] rounded-md border border-input-border bg-surface px-3 text-sm text-foreground"
         />
       </label>
 
       <button
         type="submit"
         disabled={pending}
-        className="bg-accent px-3 py-2 text-sm font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50"
+        className="w-full rounded-md bg-accent px-3 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:opacity-50"
       >
         {pending ? "Signing in…" : "Sign in"}
       </button>
 
-      <Link href="/forgot-password" className="text-accent underline underline-offset-2">
-        Forgot your password?
-      </Link>
-      <Link href="/register" className="text-accent underline underline-offset-2">
-        New here? Create an account
-      </Link>
+      <AuthFooterLine text="New here?" href="/register" linkLabel="Create an account" />
     </form>
   );
 }

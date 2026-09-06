@@ -13,14 +13,14 @@ import { formatTimestamp } from "@/lib/format-timestamp";
  */
 
 const HEAD =
-  "px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500";
+  "px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
 const CELL = "px-3 py-2 align-middle";
 const BTN =
-  "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50";
+  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2";
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-6 py-10">
+    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-xs">
       {children}
     </div>
   );
@@ -106,18 +106,18 @@ export function AuditTable({
 
   const header = (
     <div className="flex flex-col gap-3">
-      <h2 className="text-base font-semibold tracking-tight text-zinc-900">Audit</h2>
+      <h2 className="text-base font-semibold tracking-tight text-foreground">Audit</h2>
 
       {filterOptions && filters && (
-        <div className="flex flex-wrap items-center gap-3 border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface-2 px-3 py-2.5 shadow-xs">
           <label className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Actor
             </span>
             <select
               value={filters.actorId}
               onChange={(e) => setParam("actorId", e.target.value)}
-              className="border border-zinc-300 bg-white px-2 py-1 text-xs"
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-xs"
             >
               <option value="">Any</option>
               {filterOptions.actors.map((actor) => (
@@ -129,13 +129,13 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Action
             </span>
             <select
               value={filters.action}
               onChange={(e) => setParam("action", e.target.value)}
-              className="border border-zinc-300 bg-white px-2 py-1 text-xs"
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-xs"
             >
               <option value="">Any</option>
               {filterOptions.actions.map((action) => (
@@ -147,26 +147,26 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               From
             </span>
             <input
               type="date"
               value={filters.from}
               onChange={(e) => setParam("from", e.target.value)}
-              className="border border-zinc-300 bg-white px-2 py-1 text-xs"
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-xs"
             />
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               To
             </span>
             <input
               type="date"
               value={filters.to}
               onChange={(e) => setParam("to", e.target.value)}
-              className="border border-zinc-300 bg-white px-2 py-1 text-xs"
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-xs"
             />
           </label>
 
@@ -189,11 +189,11 @@ export function AuditTable({
       <div className="flex flex-col gap-3">
         {header}
         <Panel>
-          <span className="font-mono text-xs tracking-wide text-zinc-500">403</span>
-          <p className="text-sm font-semibold text-zinc-900">You do not have access to audit events</p>
-          <p className="max-w-prose text-sm text-zinc-600">
+          <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
+          <p className="text-sm font-semibold text-foreground">You do not have access to audit events</p>
+          <p className="max-w-prose text-sm text-muted-foreground">
             Your role does not include{" "}
-            <code className="bg-zinc-100 px-1 font-mono text-xs">{denied.permission}</code> at this
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-xs">{denied.permission}</code> at this
             scope. Ask a workspace administrator to grant it.
           </p>
         </Panel>
@@ -206,8 +206,8 @@ export function AuditTable({
       <div className="flex flex-col gap-3">
         {header}
         <Panel>
-          <p className="text-sm font-semibold text-zinc-900">Could not load audit events</p>
-          <p className="max-w-prose text-sm text-zinc-600">
+          <p className="text-sm font-semibold text-foreground">Could not load audit events</p>
+          <p className="max-w-prose text-sm text-muted-foreground">
             {error.message ?? "The request failed. Your filters are kept, so retrying returns to exactly this view."}
           </p>
         </Panel>
@@ -220,14 +220,14 @@ export function AuditTable({
       {header}
 
       {validationError && (
-        <div role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+        <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
           {validationError.message}
         </div>
       )}
 
       {!rows || rows.length === 0 ? (
         <Panel>
-          <p className="text-sm font-semibold text-zinc-900">
+          <p className="text-sm font-semibold text-foreground">
             {activeFilterCount > 0 ? "No audit events match these filters" : "No audit events yet"}
           </p>
           {activeFilterCount > 0 && (
@@ -237,9 +237,9 @@ export function AuditTable({
           )}
         </Panel>
       ) : (
-        <div className="border border-zinc-200">
+        <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
           <table className="w-full border-collapse text-sm">
-            <thead className="bg-zinc-50">
+            <thead className="bg-surface-2">
               <tr>
                 <th scope="col" className={HEAD}>Actor</th>
                 <th scope="col" className={HEAD}>Action</th>
@@ -250,9 +250,9 @@ export function AuditTable({
             <tbody aria-busy={isPending || undefined}>
               {isPending
                 ? Array.from({ length: 5 }, (_, i) => (
-                    <tr key={i} className="border-t border-zinc-200">
+                    <tr key={i} className="border-t border-border">
                       <td colSpan={4} className={CELL}>
-                        <span className="block h-3 w-full max-w-[20rem] animate-pulse bg-zinc-200" />
+                        <span className="block h-3 w-full max-w-[20rem] animate-pulse rounded-sm bg-surface-2" />
                       </td>
                     </tr>
                   ))
@@ -261,7 +261,7 @@ export function AuditTable({
                     const diff = computeDiff(row.before, row.after);
                     return (
                       <Fragment key={row.id}>
-                        <tr className="border-t border-zinc-200 hover:bg-zinc-50">
+                        <tr className="border-t border-border hover:bg-surface-2">
                           <td colSpan={4} className="p-0">
                             <button
                               type="button"
@@ -270,30 +270,30 @@ export function AuditTable({
                               className="grid w-full grid-cols-4 gap-2 px-3 py-2 text-left"
                             >
                               <span className="flex flex-col gap-0.5">
-                                <span className="font-medium text-zinc-900">
+                                <span className="font-semibold text-foreground">
                                   {row.actorName ?? "System"}
                                 </span>
-                                <span className="text-[11px] text-zinc-500">{row.actorEmail ?? "—"}</span>
+                                <span className="text-[11px] text-muted-foreground">{row.actorEmail ?? "—"}</span>
                               </span>
-                              <span className="self-center font-mono text-xs text-zinc-700">
+                              <span className="self-center font-mono text-xs text-foreground">
                                 {row.action}
                               </span>
-                              <span className="self-center text-xs text-zinc-700">
+                              <span className="self-center text-xs text-foreground">
                                 {row.targetType} <span className="font-mono">{shortenId(row.targetId)}</span>
                               </span>
-                              <span className="self-center text-right font-mono text-xs tabular-nums text-zinc-500">
+                              <span className="self-center text-right font-mono text-xs tabular-nums text-muted-foreground">
                                 {formatTimestamp(row.createdAt)}
                               </span>
                             </button>
                           </td>
                         </tr>
                         {expanded && (
-                          <tr className="border-t border-zinc-200 bg-zinc-50/60">
+                          <tr className="bg-surface-2">
                             <td colSpan={4} className="px-3 py-3">
                               <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
-                                <div className="flex flex-wrap gap-4 text-xs text-zinc-600">
+                                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                                   <span>
-                                    <span className="font-semibold uppercase tracking-wide text-zinc-500">
+                                    <span className="font-semibold uppercase tracking-wide text-muted-foreground">
                                       Scope:
                                     </span>{" "}
                                     {row.scopeType && row.scopeId
@@ -303,31 +303,31 @@ export function AuditTable({
                                         : "—"}
                                   </span>
                                   <span>
-                                    <span className="font-semibold uppercase tracking-wide text-zinc-500">
+                                    <span className="font-semibold uppercase tracking-wide text-muted-foreground">
                                       Outcome:
                                     </span>{" "}
                                     {row.outcome}
                                   </span>
                                 </div>
 
-                                <p className="text-sm text-zinc-700">
-                                  <span className="font-semibold uppercase tracking-wide text-[11px] text-zinc-500">
+                                <p className="text-sm text-foreground">
+                                  <span className="font-semibold uppercase tracking-wide text-[11px] text-muted-foreground">
                                     Reason:
                                   </span>{" "}
                                   {row.reason ?? "—"}
                                 </p>
 
                                 {diff.length > 0 ? (
-                                  <ul className="flex flex-col gap-1 font-mono text-xs text-zinc-700">
+                                  <ul className="flex flex-col gap-1 font-mono text-xs text-foreground">
                                     {diff.map((d) => (
                                       <li key={d.key}>
-                                        <span className="text-zinc-500">{d.key}:</span>{" "}
+                                        <span className="text-muted-foreground">{d.key}:</span>{" "}
                                         {formatValue(d.oldValue)} → {formatValue(d.newValue)}
                                       </li>
                                     ))}
                                   </ul>
                                 ) : (
-                                  <p className="text-xs text-zinc-500">No field-level changes recorded.</p>
+                                  <p className="text-xs text-muted-foreground">No field-level changes recorded.</p>
                                 )}
                               </div>
                             </td>

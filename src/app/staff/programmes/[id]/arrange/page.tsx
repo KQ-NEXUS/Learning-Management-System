@@ -34,13 +34,13 @@ export default async function ProgrammeArrangePage({
     <UnsavedOrderProvider>
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1">
-          <p className="font-mono text-[11px] text-zinc-500">{composition.slug}</p>
+          <p className="font-mono text-[11px] text-muted-foreground">{composition.slug}</p>
           <h1 className="text-lg font-semibold tracking-tight">
             {composition.title} — courses
           </h1>
           <GuardedLink
             href={`/staff/programmes/${id}`}
-            className="text-xs text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
           >
             Back to programme
           </GuardedLink>
