@@ -123,3 +123,120 @@ describe("AuditTable — mobile detail card (task 1)", () => {
     expect(within(list).getByText(/no field-level changes recorded/i)).toBeTruthy();
   });
 });
+
+describe("AuditTable — state parity and narrow text (task 2)", () => {
+  const ROWS: AuditRow[] = [
+    makeRow({ id: "evt-1", actorName: "Ada Lovelace", action: "course.publish" }),
+    makeRow({
+      id: "evt-2",
+      actorName: "Grace Hopper",
+      actorEmail: "grace.hopper@example.com",
+      action: "role.assignment.create",
+      targetType: "assignment",
+      targetId: "assignment-abcdef0123456789-another-long-identifier",
+      before: null,
+      after: { roleId: "role-7" },
+      reason: null,
+      outcome: "success",
+    }),
+    makeRow({
+      id: "evt-3",
+      actorName: null,
+      actorEmail: null,
+      action: "session.expire",
+      targetType: "session",
+      targetId: null,
+      before: {},
+      after: {},
+      reason: "Automatic housekeeping",
+      outcome: "success",
+    }),
+  ];
+
+  it("renders one mobile card for every returned event", () => {
+    render(<AuditTable rows={ROWS} />);
+    const cards = within(mobileList()).getAllByRole("listitem");
+    expect(cards).toHaveLength(3);
+    expect(within(cards[1]).getByText("Grace Hopper")).toBeTruthy();
+    expect(within(cards[2]).getByText("System")).toBeTruthy();
+  });
+
+  it("gives every expansion control a unique id across both responsive representations", () => {
+    render(<AuditTable rows={ROWS} />);
+
+    const toggles = screen.getAllByRole("button", { name: /grace hopper/i });
+    // one desktop, one mobile control for the same event.
+    expect(toggles).toHaveLength(2);
+    const controlIds = toggles.map((t) => t.getAttribute("aria-controls") as string);
+    expect(new Set(controlIds).size).toBe(2);
+
+    // The two representations share one expansion state, so each is exercised
+    // on its own; the revealed detail's id must match that control's target.
+    for (const toggle of toggles) {
+      fireEvent.click(toggle);
+      expect(document.getElementById(toggle.getAttribute("aria-controls") as string)).toBeTruthy();
+      fireEvent.click(toggle);
+      expect(document.getElementById(toggle.getAttribute("aria-controls") as string)).toBeNull();
+    }
+  });
+
+  it("keeps long actor, action and target values in the rendered mobile content, wrapping not clipping", () => {
+    render(<AuditTable rows={ROWS} />);
+    const card = within(within(mobileList()).getAllByRole("listitem")[1]);
+
+    const target = card.getByText("assignment-abcdef0123456789-another-long-identifier");
+    expect(target.className).toMatch(/overflow-wrap:anywhere/);
+    expect(target.closest("[class*='min-w-0']")).toBeTruthy();
+
+    const action = card.getByText("role.assignment.create");
+    expect(action.className).toMatch(/overflow-wrap:anywhere/);
+    expect(action.className).toMatch(/min-w-0/);
+  });
+
+  it("preserves the filter controls alongside the mobile cards", () => {
+    render(
+      <AuditTable
+        rows={ROWS}
+        filters={{ actorId: "", action: "", from: "", to: "" }}
+        filterOptions={{
+          actions: ["course.publish", "role.assignment.create"],
+          actors: [{ id: "user-1", name: "Ada Lovelace", email: "ada.lovelace@example.com" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("combobox", { name: /actor/i })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: /action/i })).toBeTruthy();
+    expect(within(mobileList()).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("shows the empty state with no table and no card list", () => {
+    render(<AuditTable rows={[]} />);
+    expect(screen.getByText(/no audit events yet/i)).toBeTruthy();
+    expect(screen.queryByRole("list", { name: /audit history/i })).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("renders the error branch without exposing a card list", () => {
+    render(<AuditTable error={{ message: "The request failed." }} rows={ROWS} />);
+    expect(screen.getByText(/could not load audit events/i)).toBeTruthy();
+    expect(screen.queryByRole("list", { name: /audit history/i })).toBeNull();
+  });
+
+  it("denied: renders byte-identical output regardless of whether events exist, leaking no count", () => {
+    const { container: a, unmount } = render(
+      <AuditTable denied={{ permission: "audit.view" }} rows={ROWS} />,
+    );
+    const withRows = a.innerHTML;
+    unmount();
+
+    const { container: b } = render(<AuditTable denied={{ permission: "audit.view" }} />);
+    expect(b.innerHTML).toBe(withRows);
+    expect(withRows).not.toContain("Grace Hopper");
+    expect(withRows).not.toContain("evt-2");
+  });
+
+  // jsdom measures no geometry, so a genuine 360px reflow — no horizontal
+  // scrollbar, every value legible — is a manual gate recorded in the SUMMARY.
+  it.skip("[manual gate] audit history reflows with no sideways scroll at 360px", () => {});
+});
