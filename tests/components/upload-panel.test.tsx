@@ -161,6 +161,137 @@ describe("UploadPanel", () => {
     expect(screen.getByRole("button", { name: "Retry scan" })).toBeTruthy();
   });
 
+  it("recovers scanning resources after a transient poll rejection", async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network blip"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ resources: [resource("CLEAN", { id: "r1" })] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+    render(
+      <UploadPanel
+        lessonId="lesson-1"
+        lessonType="FILE"
+        initialResources={[resource("PENDING", { id: "r1" })]}
+        pollIntervalMs={25}
+        maxPolls={5}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25);
+    });
+    expect(screen.getByRole("alert").textContent).toContain("trying again");
+    expect(screen.getByText("Scanning")).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Clean")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("stops polling once the budget is spent and instructs a reload", async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.fn(() => Promise.reject(new Error("still down")));
+    vi.stubGlobal("fetch", fetchSpy);
+    render(
+      <UploadPanel
+        lessonId="lesson-1"
+        lessonType="FILE"
+        initialResources={[resource("PENDING", { id: "r1" })]}
+        pollIntervalMs={10}
+        maxPolls={3}
+      />,
+    );
+
+    for (let i = 0; i < 6; i += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+    }
+
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("alert").textContent).toContain("Reload the page");
+    expect(screen.getByText("Scanning")).toBeTruthy();
+  });
+
+  it("never has two status polls in flight at once", async () => {
+    vi.useFakeTimers();
+    let resolveFirst: ((value: Response) => void) | undefined;
+    const fetchSpy = vi.fn(() => {
+      if (fetchSpy.mock.calls.length === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return jsonResponse({ resources: [resource("PENDING", { id: "r1" })] });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(
+      <UploadPanel
+        lessonId="lesson-1"
+        lessonType="FILE"
+        initialResources={[resource("PENDING", { id: "r1" })]}
+        pollIntervalMs={10}
+        maxPolls={5}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst?.(
+        new Response(JSON.stringify({ resources: [resource("PENDING", { id: "r1" })] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels a scheduled poll retry after unmount", async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.fn(() => Promise.reject(new Error("down")));
+    vi.stubGlobal("fetch", fetchSpy);
+    const view = render(
+      <UploadPanel
+        lessonId="lesson-1"
+        lessonType="FILE"
+        initialResources={[resource("PENDING", { id: "r1" })]}
+        pollIntervalMs={10}
+        maxPolls={5}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds status polling and stops scheduling work after unmount", async () => {
     vi.useFakeTimers();
     const fetchSpy = vi.fn(() =>

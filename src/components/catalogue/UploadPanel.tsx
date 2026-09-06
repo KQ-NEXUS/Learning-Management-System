@@ -36,6 +36,20 @@ const FRIENDLY_LIMIT_MESSAGES: Record<UploadableLessonType, string> = {
   VIDEO: "Videos must be MP4 or WebM and under 2 GB.",
 };
 
+/**
+ * A single failed status refresh is transient: the attempt is still spent from
+ * the poll budget, but the loop keeps going. Kept distinct from the
+ * exhausted-budget instruction below so a flake never looks like a dead end.
+ */
+const POLL_RETRY_MESSAGE = "Could not refresh scan status just now — trying again.";
+
+/**
+ * Shown once the finite poll budget is spent. This is an instruction, not a
+ * transient notice: nothing further will happen automatically.
+ */
+const POLL_EXHAUSTED_MESSAGE =
+  "Automatic scan-status checks have stopped for now. Reload the page to keep checking.";
+
 function statusPresentation(status: LessonResourceView["scanStatus"]) {
   switch (status) {
     case "CLEAN":
@@ -72,6 +86,11 @@ export function UploadPanel({
   const [uploading, setUploading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const pollCount = useRef(0);
+  // Bumped whenever a fresh upload or a manual retry queues new scanning work,
+  // so the recursive poll effect below restarts with a full budget even if
+  // other resources were already pending (a boolean `hasPending` would not
+  // change and would leave the loop stranded on its spent budget).
+  const [pollEpoch, setPollEpoch] = useState(0);
 
   const fetchResources = useCallback(
     async (signal?: AbortSignal): Promise<LessonResourceView[]> => {
@@ -89,10 +108,6 @@ export function UploadPanel({
   );
 
   useEffect(() => {
-    pollCount.current = 0;
-  }, [lessonId]);
-
-  useEffect(() => {
     if (initialResources !== undefined) return;
     const controller = new AbortController();
     void fetchResources(controller.signal)
@@ -106,28 +121,60 @@ export function UploadPanel({
   }, [fetchResources, initialResources]);
 
   const hasPending = resources.some((resource) => resource.scanStatus === "PENDING");
-  useEffect(() => {
-    if (!hasPending || maxPolls <= 0 || pollCount.current >= maxPolls) return;
 
+  // A recursive, bounded poll. It reschedules itself from `finally` — so a
+  // rejected refresh does NOT strand the scanning rows the way a
+  // dependency-triggered one-shot did (it would never re-run because a failed
+  // poll changes no state) — while a rejected attempt still counts against the
+  // finite budget so a permanently failing endpoint cannot spin forever. Only
+  // one request is ever in flight; the timer is cleared on unmount or once no
+  // resource is pending.
+  useEffect(() => {
+    if (!hasPending || maxPolls <= 0) return;
+
+    let cancelled = false;
+    let inFlight = false;
+    let timer: number | undefined;
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
+    pollCount.current = 0;
+
+    function scheduleNext() {
+      if (cancelled) return;
+      if (pollCount.current >= maxPolls) {
+        setMessage(POLL_EXHAUSTED_MESSAGE);
+        return;
+      }
+      timer = window.setTimeout(runPoll, pollIntervalMs);
+    }
+
+    function runPoll() {
+      if (cancelled || inFlight) return;
+      inFlight = true;
       pollCount.current += 1;
       void fetchResources(controller.signal)
         .then((next) => {
-          if (!controller.signal.aborted) setResources(next);
+          if (cancelled || controller.signal.aborted) return;
+          setResources(next);
+          setMessage((current) => (current === POLL_RETRY_MESSAGE ? null : current));
         })
-        .catch((error: unknown) => {
-          if (!controller.signal.aborted) {
-            setMessage(error instanceof Error ? error.message : "Could not refresh scan status.");
-          }
+        .catch(() => {
+          if (cancelled || controller.signal.aborted) return;
+          setMessage(POLL_RETRY_MESSAGE);
+        })
+        .finally(() => {
+          inFlight = false;
+          scheduleNext();
         });
-    }, pollIntervalMs);
+    }
+
+    timer = window.setTimeout(runPoll, pollIntervalMs);
 
     return () => {
-      window.clearTimeout(timer);
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
       controller.abort();
     };
-  }, [fetchResources, hasPending, maxPolls, pollIntervalMs, resources]);
+  }, [fetchResources, hasPending, maxPolls, pollIntervalMs, pollEpoch]);
 
   function chooseFile(file: File | null) {
     setMessage(null);
@@ -191,7 +238,7 @@ export function UploadPanel({
         position: resources.length,
       };
       setResources((current) => [...current, pending]);
-      pollCount.current = 0;
+      setPollEpoch((epoch) => epoch + 1);
       setSelectedFile(null);
       setTitle("");
     } catch (error) {
@@ -224,7 +271,7 @@ export function UploadPanel({
       if (!response.ok) {
         throw new Error(body?.error ?? "Could not retry this scan.");
       }
-      pollCount.current = 0;
+      setPollEpoch((epoch) => epoch + 1);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not retry this scan.");
     } finally {
