@@ -104,9 +104,20 @@ export function CourseDetailActions({
   async function runListing(listed: boolean) {
     setBusy(listed ? "list" : "unlist");
     setFeedback(null);
-    const result = await setListingAction({ courseId, listed });
-    settle(result, listed ? "Course is now publicly listed." : "Course is no longer publicly listed.");
-    setBusy(null);
+    try {
+      const result = await setListingAction({ courseId, listed });
+      settle(result, listed ? "Course is now publicly listed." : "Course is no longer publicly listed.");
+    } catch {
+      // An unexpected rejection (transport/server fault) — never a silent
+      // success, never a raw exception on screen, and the control must not
+      // stay stuck disabled. `finally` clears busy so the user can retry.
+      setFeedback({
+        tone: "danger",
+        text: "Something went wrong and the listing change was not applied. Please try again.",
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function runPublish(input: {
@@ -116,24 +127,34 @@ export function CourseDetailActions({
   }) {
     setBusy("publish");
     setPublishError(null);
-    const result = await publishCourseAction({
-      courseId,
-      expectedUpdatedAt: input.expectedUpdatedAt,
-      reason: input.reason ?? undefined,
-      migrateCohortIds: input.migrateCohortIds,
-    });
-    setBusy(null);
-    if (result.ok) {
-      setPublishOpen(false);
-      const migrated = result.migratedCohortIds.length;
-      settle(result, migrated > 0 ? `Published. ${migrated} cohort(s) migrated.` : "Course published.");
-      return;
+    try {
+      const result = await publishCourseAction({
+        courseId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+        reason: input.reason ?? undefined,
+        migrateCohortIds: input.migrateCohortIds,
+      });
+      if (result.ok) {
+        setPublishOpen(false);
+        const migrated = result.migratedCohortIds.length;
+        settle(result, migrated > 0 ? `Published. ${migrated} cohort(s) migrated.` : "Course published.");
+        return;
+      }
+      setPublishError(
+        result.reason === "COHORTS_RUNNING"
+          ? `Blocked by running cohorts: ${cohortCodes(result)}.`
+          : result.message,
+      );
+    } catch {
+      // A rejected publish is not a publish. Keep the dialog, the ticked
+      // cohorts and the typed reason so the user can retry deliberately —
+      // never auto-repeat the mutation.
+      setPublishError(
+        "Something went wrong and the course was not published. Your selections are still here — try again.",
+      );
+    } finally {
+      setBusy(null);
     }
-    setPublishError(
-      result.reason === "COHORTS_RUNNING"
-        ? `Blocked by running cohorts: ${cohortCodes(result)}.`
-        : result.message,
-    );
   }
 
   async function runReasoned(
@@ -147,8 +168,16 @@ export function CourseDetailActions({
         : kind === "archive"
           ? archiveCourseAction
           : unarchiveCourseAction;
-    const result = await action({ courseId, reason });
-    setBusy(null);
+    let result: CatalogueActionResult;
+    try {
+      result = await action({ courseId, reason });
+    } catch {
+      // Keep the modal and the typed reason so a retry is one click away.
+      setModalError("Something went wrong and the action was not applied. Please try again.");
+      return;
+    } finally {
+      setBusy(null);
+    }
     if (result.ok) {
       const warnings =
         kind === "archive" && "programmeWarnings" in result && result.programmeWarnings?.length
