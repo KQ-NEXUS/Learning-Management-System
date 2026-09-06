@@ -7,7 +7,7 @@ import {
   GuardedLink,
   type ArrangeContainer,
 } from "@/components/catalogue";
-import { ModuleComposer } from "./ModuleComposer";
+import { ModuleComposer, type ComposerResult } from "./ModuleComposer";
 import {
   createModuleAction,
   renameModuleAction,
@@ -95,7 +95,6 @@ export function ArrangeClient({
   const [lessonError, setLessonError] = useState<string | null>(null);
   const [moduleStale, setModuleStale] = useState(false);
   const [lessonStale, setLessonStale] = useState(false);
-  const [composerError, setComposerError] = useState<string | null>(null);
 
   const moduleDirty = idKey(moduleContainers) !== savedModuleKey;
   const lessonDirty = idKey(lessonContainers) !== savedLessonKey;
@@ -141,18 +140,45 @@ export function ArrangeClient({
     setSavingLessons(false);
   }
 
-  async function handleAddModule(title: string) {
-    setComposerError(null);
-    const res = await createModuleAction({ courseId, title });
-    if (res.ok) router.refresh();
-    else setComposerError(res.message);
+  // Both handlers translate the already-resolved discriminated action result
+  // for the composer and catch an unexpected rejection (network drop, action
+  // runtime error) so the composer always receives a definite result and can
+  // keep the edited text for a retry. There is no pending state to strand here
+  // — the composer owns per-control busy state and clears it in its own
+  // `finally`.
+  async function handleAddModule(title: string): Promise<ComposerResult> {
+    try {
+      const res = await createModuleAction({ courseId, title });
+      if (res.ok) {
+        router.refresh();
+        return { ok: true };
+      }
+      return { ok: false, message: res.message };
+    } catch {
+      return {
+        ok: false,
+        message: "Something went wrong adding the module. Try again.",
+      };
+    }
   }
 
-  async function handleRenameModule(moduleId: string, title: string) {
-    setComposerError(null);
-    const res = await renameModuleAction({ courseId, moduleId, title });
-    if (res.ok) router.refresh();
-    else setComposerError(res.message);
+  async function handleRenameModule(
+    moduleId: string,
+    title: string,
+  ): Promise<ComposerResult> {
+    try {
+      const res = await renameModuleAction({ courseId, moduleId, title });
+      if (res.ok) {
+        router.refresh();
+        return { ok: true };
+      }
+      return { ok: false, message: res.message };
+    } catch {
+      return {
+        ok: false,
+        message: "Something went wrong renaming the module. Try again.",
+      };
+    }
   }
 
   async function handleRestore(kind: "module" | "lesson", id: string) {
@@ -166,7 +192,6 @@ export function ArrangeClient({
         modules={modules.map((m) => ({ id: m.id, title: m.title }))}
         onAddModule={handleAddModule}
         onRenameModule={handleRenameModule}
-        error={composerError}
       />
 
       {modules.length > 0 && (
