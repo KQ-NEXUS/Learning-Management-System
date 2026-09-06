@@ -15,17 +15,52 @@ import { FormField, TextInput } from "@/components/primitives";
  * When the Course has no Modules, an empty-state prompt explains that a
  * Module has to exist before a Lesson can, rather than showing an empty board
  * with no way forward.
+ *
+ * WR-04 (04.1 gap closure): a failed add keeps the typed title in the add
+ * input and surfaces the error under that input; a failed rename keeps the
+ * row in edit mode with the typed name and surfaces the error next to that
+ * row. Neither failure ever moves the other operation's error, and neither
+ * clears its field. Success is the only path that clears the add input or
+ * exits rename mode.
  */
 
 export type ComposerModule = { id: string; title: string };
 
+/**
+ * The result contract every composer callback resolves to. A `void`/`undefined`
+ * resolution is treated as success — only an explicit `{ ok: false }` keeps the
+ * field populated and shows an error.
+ */
+export type ComposerResult = { ok: true } | { ok: false; message: string };
+
+type ComposerCallbackResult = void | ComposerResult | Promise<void | ComposerResult>;
+
 export type ModuleComposerProps = {
   modules: ComposerModule[];
-  onAddModule: (title: string) => void | Promise<void>;
-  onRenameModule: (moduleId: string, title: string) => void | Promise<void>;
-  pending?: boolean;
-  error?: string | null;
+  onAddModule: (title: string) => ComposerCallbackResult;
+  onRenameModule: (moduleId: string, title: string) => ComposerCallbackResult;
 };
+
+const ADD_FALLBACK_ERROR =
+  "That module could not be added. Your title is still here — try again.";
+const RENAME_FALLBACK_ERROR =
+  "That name could not be saved. Your text is still here — try again.";
+
+/**
+ * Normalises a callback resolution into an error message or `null`. A rejected
+ * promise is caught by the caller; a resolved `void` or `{ ok: true }` is
+ * success; a resolved `{ ok: false }` yields its message (or a generic
+ * fallback).
+ */
+function failureMessage(
+  result: void | ComposerResult,
+  fallback: string,
+): string | null {
+  if (result && result.ok === false) {
+    return result.message || fallback;
+  }
+  return null;
+}
 
 const BTN =
   "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50";
@@ -35,27 +70,60 @@ const PRIMARY =
 function ModuleRenameRow({
   module,
   onRename,
-  pending,
 }: {
   module: ComposerModule;
-  onRename: (moduleId: string, title: string) => void | Promise<void>;
-  pending: boolean;
+  onRename: (moduleId: string, title: string) => ComposerCallbackResult;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(module.title);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function startEditing() {
+    setName(module.title);
+    setError(null);
+    setEditing(true);
+  }
+
+  function cancel() {
+    setEditing(false);
+    setError(null);
+  }
+
+  async function save() {
+    if (saving) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Enter a name for the module.");
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const message = failureMessage(
+        await onRename(module.id, trimmed),
+        RENAME_FALLBACK_ERROR,
+      );
+      if (message) {
+        // Stay in edit mode with the typed name intact so the retry happens
+        // at this control, not under the unrelated add input.
+        setError(message);
+        return;
+      }
+      setEditing(false);
+      setError(null);
+    } catch {
+      setError(RENAME_FALLBACK_ERROR);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (!editing) {
     return (
       <li className="flex items-center justify-between gap-2 text-sm">
         <span className="truncate">{module.title}</span>
-        <button
-          type="button"
-          className={BTN}
-          onClick={() => {
-            setName(module.title);
-            setEditing(true);
-          }}
-        >
+        <button type="button" className={BTN} onClick={startEditing}>
           Rename
         </button>
       </li>
@@ -63,29 +131,38 @@ function ModuleRenameRow({
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-2">
-      <label className="sr-only" htmlFor={`rename-${module.id}`}>
-        Rename {module.title}
-      </label>
-      <TextInput
-        id={`rename-${module.id}`}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <button
-        type="button"
-        className={PRIMARY}
-        disabled={pending || !name.trim()}
-        onClick={() => {
-          void onRename(module.id, name.trim());
-          setEditing(false);
-        }}
-      >
-        Save name
-      </button>
-      <button type="button" className={BTN} onClick={() => setEditing(false)}>
-        Cancel
-      </button>
+    <li className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="sr-only" htmlFor={`rename-${module.id}`}>
+          Rename {module.title}
+        </label>
+        <TextInput
+          id={`rename-${module.id}`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button
+          type="button"
+          className={PRIMARY}
+          disabled={saving || !name.trim()}
+          onClick={save}
+        >
+          Save name
+        </button>
+        <button
+          type="button"
+          className={BTN}
+          disabled={saving}
+          onClick={cancel}
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      )}
     </li>
   );
 }
@@ -94,23 +171,39 @@ export function ModuleComposer({
   modules,
   onAddModule,
   onRenameModule,
-  pending = false,
-  error = null,
 }: ModuleComposerProps) {
   const [title, setTitle] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const hasNoModules = modules.length === 0;
 
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (submitting) return;
     const trimmed = title.trim();
     if (!trimmed) {
       setLocalError("Enter a title for the module.");
       return;
     }
     setLocalError(null);
-    void onAddModule(trimmed);
-    setTitle("");
+    setSubmitting(true);
+    try {
+      const message = failureMessage(
+        await onAddModule(trimmed),
+        ADD_FALLBACK_ERROR,
+      );
+      if (message) {
+        // Keep the typed title so the staff member retries here, not by
+        // re-typing.
+        setLocalError(message);
+        return;
+      }
+      setTitle("");
+    } catch {
+      setLocalError(ADD_FALLBACK_ERROR);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -130,7 +223,7 @@ export function ModuleComposer({
           name="module-title"
           label="Module title"
           required
-          error={localError ?? error ?? undefined}
+          error={localError ?? undefined}
         >
           {(field) => (
             <TextInput
@@ -143,7 +236,7 @@ export function ModuleComposer({
             />
           )}
         </FormField>
-        <button type="submit" className={PRIMARY} disabled={pending}>
+        <button type="submit" className={PRIMARY} disabled={submitting}>
           Add module
         </button>
       </form>
@@ -155,7 +248,6 @@ export function ModuleComposer({
               key={module.id}
               module={module}
               onRename={onRenameModule}
-              pending={pending}
             />
           ))}
         </ul>
