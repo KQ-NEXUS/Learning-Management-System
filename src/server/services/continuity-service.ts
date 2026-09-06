@@ -11,12 +11,11 @@
  * set, deactivating a role that grants `roles.manage`, and deactivating the
  * last user account holding it.
  *
- * Concurrency: transaction-scoped count only (checkpoint decision, this
- * plan). Each call site passes `tx.assignment.count` from inside its own
- * `prisma.$transaction`, co-locating the check with the write it guards. The
- * residual READ COMMITTED race — two simultaneous revocations of the last two
- * administrators both succeeding — is accepted as a recorded, low-severity
- * risk (T-02-10) rather than closed with a row-level lock.
+ * All removal paths acquire the same transaction-scoped advisory lock BEFORE
+ * reading current state. The count and guarded write then run in that same
+ * READ COMMITTED transaction, so a waiter sees the preceding committed removal.
+ * Role edits/activation changes also lock before determining whether access is
+ * being removed; a stale permission read must never bypass the safeguard.
  */
 
 export const CONTINUITY_BLOCK_MESSAGE =
@@ -81,10 +80,22 @@ export function buildContinuityWhere(
 
 export type ContinuityCount = (where: Record<string, unknown>) => Promise<number>;
 
+export type ContinuityLockTx = {
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
+};
+
+/** Acquire before any role/assignment/user row locks; release is automatic at transaction end. */
+export async function lockRoleManagementContinuity(tx: ContinuityLockTx): Promise<void> {
+  // Application-reserved two-integer key: namespace LMS (0x4c4d53), safeguard 1.
+  // Project a supported integer instead of PostgreSQL's void advisory-lock result.
+  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(5000531, 1)`;
+}
+
 /**
  * Throws `ContinuityError` when the hypothetical post-action count of other
  * active GLOBAL roles.manage holders is zero. `count` is injected so a call
  * site inside its own `prisma.$transaction` can pass `tx.assignment.count`.
+ * The caller must first acquire `lockRoleManagementContinuity(tx)`.
  */
 export async function assertRoleManagementContinuity(
   count: ContinuityCount,

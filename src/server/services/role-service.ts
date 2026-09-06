@@ -20,7 +20,7 @@ import { isPermission, type Permission } from "@/server/permissions/catalogue";
 import type { ResourceScope } from "@/server/permissions/scope";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
-import { assertRoleManagementContinuity } from "@/server/services/continuity-service";
+import { assertRoleManagementContinuity, lockRoleManagementContinuity, type ContinuityLockTx } from "@/server/services/continuity-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 
@@ -125,7 +125,7 @@ export type RoleVersionRecord = {
 };
 
 /** The narrow slice of the Prisma client this service actually uses. */
-export type RoleStore = {
+export type RoleStore = ContinuityLockTx & {
   role: {
     findMany(args?: { where?: unknown }): Promise<RoleRecord[]>;
     findUnique(args: { where: { id: string } }): Promise<RoleRecord | null>;
@@ -219,33 +219,30 @@ export function createRoleService(deps: {
     () => roleScope(),
   )(async (input, ctx) => {
     const permissions = validateRolePermissionSet(input.permissions);
-
-    const current = await store.role.findUnique({ where: { id: input.id } });
-    if (!current) {
-      throw new Error(`Role ${input.id} not found.`);
-    }
-
-    // Optimistic lock — must compare before anything is written (edge
-    // RBAC-02/concurrency).
-    if (current.version !== input.expectedVersion) {
-      throw new RoleVersionConflictError();
-    }
-
-    const nextPermissionSet = new Set<string>(permissions);
-    const removed = current.permissions.filter((p) => !nextPermissionSet.has(p));
     const reason = input.reason?.trim() ?? "";
-    // D-09/D-10/D-15 — a reduction demands one reason for the whole edit;
-    // an addition-only edit demands none. Never diff to suppress a no-op
-    // resubmission (edge RBAC-02/idempotency) — that branch simply never
-    // occurs here because nothing short-circuits before the transaction.
-    if (removed.length > 0 && reason.length < MIN_REASON_LENGTH) {
-      throw new ReasonRequiredError();
-    }
-
-    const willLoseRolesManage =
-      current.permissions.includes("roles.manage") && !permissions.includes("roles.manage");
-
     const { before, after } = await store.$transaction(async (tx) => {
+      await lockRoleManagementContinuity(tx);
+      const current = await tx.role.findUnique({ where: { id: input.id } });
+      if (!current) {
+        throw new Error(`Role ${input.id} not found.`);
+      }
+
+      // Compare the version after waiting for any preceding role mutation.
+      if (current.version !== input.expectedVersion) {
+        throw new RoleVersionConflictError();
+      }
+
+      const nextPermissionSet = new Set<string>(permissions);
+      const removed = current.permissions.filter((p) => !nextPermissionSet.has(p));
+      // D-09/D-10/D-15 — a reduction demands one reason for the whole edit;
+      // an addition-only edit demands none. Identical resubmissions are recorded.
+      if (removed.length > 0 && reason.length < MIN_REASON_LENGTH) {
+        throw new ReasonRequiredError();
+      }
+
+      const willLoseRolesManage =
+        current.permissions.includes("roles.manage") && !permissions.includes("roles.manage");
+
       // D-24b — removing roles.manage from a role's permission set.
       if (willLoseRolesManage) {
         await assertRoleManagementContinuity(
@@ -304,20 +301,17 @@ export function createRoleService(deps: {
     "roles.manage",
     () => roleScope(),
   )(async (input, ctx) => {
-    const current = await store.role.findUnique({ where: { id: input.id } });
-    if (!current) {
-      throw new Error(`Role ${input.id} not found.`);
-    }
-
     const reason = input.reason?.trim() ?? "";
     // D-11 — deactivation demands a reason; reactivation demands none.
     if (!input.active && reason.length < MIN_REASON_LENGTH) {
       throw new ReasonRequiredError();
     }
 
-    const willLoseRolesManage = !input.active && current.permissions.includes("roles.manage");
-
     const { before, after } = await store.$transaction(async (tx) => {
+      await lockRoleManagementContinuity(tx);
+      const current = await tx.role.findUnique({ where: { id: input.id } });
+      if (!current) throw new Error(`Role ${input.id} not found.`);
+      const willLoseRolesManage = !input.active && current.permissions.includes("roles.manage");
       // D-24c — deactivating a role that grants roles.manage.
       if (willLoseRolesManage) {
         await assertRoleManagementContinuity(
