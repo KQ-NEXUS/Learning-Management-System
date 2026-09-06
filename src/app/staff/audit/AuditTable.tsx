@@ -403,7 +403,9 @@ export function AuditTable({
                         </span>
                         <span className="min-w-0 text-xs text-foreground [overflow-wrap:anywhere]">
                           {row.targetType}{" "}
-                          <span className="font-mono">{row.targetId ?? "—"}</span>
+                          <span className="font-mono [overflow-wrap:anywhere]">
+                            {row.targetId ?? "—"}
+                          </span>
                         </span>
                         <span className="font-mono text-xs tabular-nums text-muted-foreground">
                           {formatTimestamp(row.createdAt)}
