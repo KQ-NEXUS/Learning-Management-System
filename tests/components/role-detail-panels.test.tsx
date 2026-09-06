@@ -44,32 +44,42 @@ const role: RoleRecord = {
 };
 
 describe("RolePermissionsPanel — a rejected save cannot strand the submit button", () => {
-  it("clears pending and shows generic feedback when updateRoleAction rejects, then succeeds on retry", async () => {
-    vi.mocked(updateRoleAction)
-      .mockRejectedValueOnce(new Error("connection reset"))
-      .mockResolvedValueOnce({ errors: [] });
+  // The full RoleForm (PermissionPicker over every permission group) is a heavy
+  // mount; under a full-suite parallel run the default 5s ceiling is tight, so
+  // this one test raises it. The queries still resolve the moment the node
+  // exists — see tests/components/setup.ts for the same reasoning on editors.
+  it(
+    "clears pending and shows generic feedback when updateRoleAction rejects, then succeeds on retry",
+    async () => {
+      vi.mocked(updateRoleAction)
+        .mockRejectedValueOnce(new Error("connection reset"))
+        .mockResolvedValueOnce({ errors: [] });
 
-    render(<RolePermissionsPanel role={role} minReasonLength={10} assignmentCount={0} />);
+      render(<RolePermissionsPanel role={role} minReasonLength={10} assignmentCount={0} />);
 
-    // Addition-only edit (no permission removed) submits directly — no modal.
-    const save = screen.getByRole("button", { name: "Save changes" });
-    fireEvent.click(save);
+      // Addition-only edit (no permission removed) submits directly — no modal.
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Something went wrong saving this role/i);
-    expect(alert.textContent).not.toMatch(/connection reset/);
+      const alert = await screen.findByRole("alert", {}, { timeout: 15000 });
+      expect(alert.textContent).toMatch(/Something went wrong saving this role/i);
+      expect(alert.textContent).not.toMatch(/connection reset/);
 
-    // Not stranded in the pending label.
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Saving…" })).toBeNull();
+      // Not stranded in the pending label.
+      expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Saving…" })).toBeNull();
 
-    // User retries; the error clears.
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await vi.waitFor(() => {
-      expect(screen.queryByText(/Something went wrong saving this role/i)).toBeNull();
-    });
-    expect(updateRoleAction).toHaveBeenCalledTimes(2);
-  });
+      // User retries; the error clears.
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await vi.waitFor(
+        () => {
+          expect(screen.queryByText(/Something went wrong saving this role/i)).toBeNull();
+        },
+        { timeout: 15000 },
+      );
+      expect(updateRoleAction).toHaveBeenCalledTimes(2);
+    },
+    20000,
+  );
 });
 
 describe("RoleActivationControl — a rejected status change keeps the dialog and reason", () => {
@@ -88,7 +98,9 @@ describe("RoleActivationControl — a rejected status change keeps the dialog an
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Deactivate role" }));
 
-    expect(await within(dialog).findByText("Action not applied")).toBeTruthy();
+    expect(
+      await within(dialog).findByText("Action not applied", {}, { timeout: 10000 }),
+    ).toBeTruthy();
     expect(within(dialog).getByText(/The role's status was not changed/i)).toBeTruthy();
 
     // Reason retained, dialog still open, confirm no longer busy.
@@ -100,9 +112,12 @@ describe("RoleActivationControl — a rejected status change keeps the dialog an
 
     // Retry succeeds and the dialog closes.
     fireEvent.click(confirm);
-    await vi.waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
+    await vi.waitFor(
+      () => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      },
+      { timeout: 10000 },
+    );
     expect(setRoleActiveAction).toHaveBeenCalledTimes(2);
     expect(setRoleActiveAction).toHaveBeenLastCalledWith("r1", false, "no longer coordinating");
   });

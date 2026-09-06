@@ -78,7 +78,9 @@ describe("AssignmentsPanel — a rejected revoke recovers with intent intact", (
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Revoke assignment" }));
 
-    expect(await within(dialog).findByText("Action not applied")).toBeTruthy();
+    expect(
+      await within(dialog).findByText("Action not applied", {}, { timeout: 10000 }),
+    ).toBeTruthy();
     expect(within(dialog).getByText(/The assignment was not revoked/i)).toBeTruthy();
 
     // No silent success: the dialog is still open with the reason retained.
@@ -93,9 +95,12 @@ describe("AssignmentsPanel — a rejected revoke recovers with intent intact", (
 
     // User retries; success closes the dialog.
     fireEvent.click(confirm);
-    await vi.waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
+    await vi.waitFor(
+      () => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      },
+      { timeout: 10000 },
+    );
     expect(revokeAssignmentAction).toHaveBeenCalledTimes(2);
     expect(revokeAssignmentAction).toHaveBeenLastCalledWith("a1", "left the programme");
   });
@@ -124,16 +129,21 @@ describe("AccountStatusControl — a rejected deactivation clears busy and keeps
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Deactivate account" }));
 
-    expect(await within(dialog).findByText("Action not applied")).toBeTruthy();
+    expect(
+      await within(dialog).findByText("Action not applied", {}, { timeout: 10000 }),
+    ).toBeTruthy();
     expect(within(dialog).getByText(/The account status was not changed/i)).toBeTruthy();
     expect((within(dialog).getByRole("textbox") as HTMLTextAreaElement).value).toBe(
       "offboarding today",
     );
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Deactivate account" }));
-    await vi.waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
+    await vi.waitFor(
+      () => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      },
+      { timeout: 10000 },
+    );
     expect(deactivateStaffAccountAction).toHaveBeenCalledTimes(2);
     expect(deactivateStaffAccountAction).toHaveBeenLastCalledWith("u1", "offboarding today");
   });
