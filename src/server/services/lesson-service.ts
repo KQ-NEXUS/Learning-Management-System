@@ -251,6 +251,29 @@ export async function getLessonTypeById(lessonId: string): Promise<string | null
   });
   return row?.type ?? null;
 }
+
+/**
+ * The parent Course id for a Lesson, resolved through the REAL
+ * `Lesson -> Module -> Course` relation and INCLUDING withdrawn lessons and
+ * withdrawn modules.
+ *
+ * No permission wrapper, in the same spirit as `getLessonTypeById`: the only
+ * caller (the learner-view preview page) invokes this AFTER it has authorized
+ * `courses.view` on both the route's course and the lesson's own parent via
+ * `lessonService.get`, so it opens no new access surface. It exists so the
+ * preview can reject a cross-course context
+ * (`/courses/{A}/preview/lessons/{lesson-in-B}`) BEFORE loading any lesson
+ * resources. `loadCourseTree` membership cannot serve as that check: it
+ * filters `withdrawnAt: null`, and a withdrawn lesson must stay previewable.
+ * Returns null when the lesson (or its module) does not exist.
+ */
+export async function resolveCourseIdForLesson(lessonId: string): Promise<string | null> {
+  const row = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: { module: { select: { courseId: true } } },
+  });
+  return row?.module?.courseId ?? null;
+}
 export const createLesson = built.createLesson;
 export const updateLesson = built.updateLesson;
 export const listActiveLessons = built.listActiveLessons;

@@ -6,6 +6,7 @@ import { courseService } from "@/server/services/course-service";
 import {
   lessonService,
   loadCourseTree,
+  resolveCourseIdForLesson,
   type LessonRecord,
 } from "@/server/services/lesson-service";
 import { listLessonResources } from "@/server/services/lesson-resource-service";
@@ -36,6 +37,14 @@ export default async function LearnerLessonPreviewPage({
     // sub-loads inherit the same scope.
     if (!(await courseService.get(id))) notFound();
     lesson = (await lessonService.get(lessonId)) as unknown as LessonRecord | null;
+    // Reject a cross-course preview context — e.g.
+    // `/staff/courses/{A}/preview/lessons/{lesson-that-lives-in-B}` — BEFORE
+    // loading any lesson resources. `loadCourseTree` membership below cannot be
+    // this check: it excludes withdrawn rows, and an authorized withdrawn
+    // lesson must stay previewable. Resolve the lesson's REAL parent course
+    // instead. A missing/unknown lesson resolves to null and takes the same
+    // notFound() path as an id from another course.
+    if ((await resolveCourseIdForLesson(lessonId)) !== id) notFound();
     tree = await loadCourseTree(id);
     resources = await listLessonResources(lessonId);
   } catch (error) {
