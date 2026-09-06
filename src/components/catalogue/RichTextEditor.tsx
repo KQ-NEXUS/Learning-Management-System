@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -9,6 +9,14 @@ import { sanitizeLessonBody } from "@/lib/sanitize";
 export type RichTextEditorProps = {
   value: string;
   onChange: (html: string) => void;
+  /**
+   * Applied to the actual ProseMirror editable textbox (not a wrapper), so a
+   * form error summary can link straight to the focusable control and a screen
+   * reader announces the error when the editor takes focus (WR-03, NFR-09).
+   */
+  id?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 };
 
 const EMPTY_ACTIVE_STATE = {
@@ -29,13 +37,31 @@ function isAllowedLink(value: string): boolean {
   }
 }
 
-export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
+export function RichTextEditor({
+  value,
+  onChange,
+  id,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedby,
+}: RichTextEditorProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
 
+  // Attributes land on the ProseMirror editable node itself. A stable
+  // reference means Tiptap re-applies them only when the wiring actually
+  // changes, but a change *does* propagate because the object identity flips.
+  const editorProps = useMemo(() => {
+    const attributes: Record<string, string> = { "aria-label": "Lesson body" };
+    if (id) attributes.id = id;
+    if (ariaInvalid) attributes["aria-invalid"] = "true";
+    if (ariaDescribedby) attributes["aria-describedby"] = ariaDescribedby;
+    return { attributes };
+  }, [id, ariaInvalid, ariaDescribedby]);
+
   const editor = useEditor({
     immediatelyRender: false,
+    editorProps,
     // This array IS the D-29 allow-list. Adding an extension widens what
     // staff can produce and must be reconciled with src/lib/sanitize.ts.
     extensions: [
