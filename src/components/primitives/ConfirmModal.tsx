@@ -124,9 +124,9 @@ function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-5 shadow-card"
+        className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-6 shadow-card"
       >
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {eyebrow}
           </span>
@@ -139,17 +139,17 @@ function ConfirmDialog({
         {error && (
           <div
             role="alert"
-            className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2"
+            className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-danger">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
               Action not applied
             </p>
-            <p className="mt-0.5 text-sm text-danger">{error}</p>
+            <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}
 
         {requiresReason && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label
               htmlFor={reasonId}
               className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
@@ -169,7 +169,7 @@ function ConfirmDialog({
               aria-describedby={counterId}
               onChange={(e) => setReason(e.target.value)}
               onBlur={() => setTouched(true)}
-              className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground aria-[invalid=true]:border-danger disabled:bg-surface-2"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground aria-[invalid=true]:border-danger disabled:bg-surface-2"
             />
             <p
               id={counterId}
@@ -191,7 +191,7 @@ function ConfirmDialog({
             disabled={!canConfirm}
             aria-disabled={!canConfirm}
             onClick={() => canConfirm && onConfirm(reason.trim())}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${confirmClasses}`}
+            className={`rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${confirmClasses}`}
           >
             {pending ? "Working…" : confirmLabel}
           </button>
@@ -199,11 +199,11 @@ function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
-          <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
             {pending ? "ESC suppressed" : "ESC cancels"}
           </span>
         </div>

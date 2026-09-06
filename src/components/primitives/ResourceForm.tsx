@@ -65,9 +65,9 @@ export type ResourceFormProps = {
 };
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function ResourceForm({
   title,
@@ -128,13 +128,13 @@ export function ResourceForm({
 
   if (state.status === "denied") {
     return (
-      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-card">
-        <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+        <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
         <p className="text-sm font-semibold text-foreground">Editing needs additional permission</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           Your role does not include{" "}
           {state.permission ? (
-            <code className="rounded-sm bg-surface-2 px-1 font-mono text-xs">
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">
               {state.permission}
             </code>
           ) : (
@@ -148,7 +148,7 @@ export function ResourceForm({
 
   if (state.status === "error") {
     return (
-      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-card">
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
         <p className="text-sm font-semibold text-foreground">Could not load this record</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           {state.message ?? "The request failed. Nothing has been changed."}
@@ -170,7 +170,7 @@ export function ResourceForm({
       >
         <span className="h-4 w-48 animate-pulse rounded-sm bg-surface-2" />
         {Array.from({ length: 5 }, (_, i) => (
-          <div key={i} className="flex flex-col gap-1.5">
+          <div key={i} className="flex flex-col gap-1">
             <span className="h-2.5 w-24 animate-pulse rounded-sm bg-surface-2" />
             <span className="h-8 w-full animate-pulse rounded-sm bg-surface-2" />
           </div>
@@ -189,11 +189,11 @@ export function ResourceForm({
       noValidate
       className="mx-auto flex w-full max-w-[700px] flex-col rounded-xl border border-border bg-surface shadow-card"
     >
-      <div className="flex flex-col gap-5 px-6 py-6">
+      <div className="flex flex-col gap-4 px-6 py-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-1">
             <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+            {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
           </div>
         </div>
 
@@ -203,13 +203,13 @@ export function ResourceForm({
             role="alert"
             aria-labelledby={summaryId}
             tabIndex={-1}
-            className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2.5"
+            className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
           >
             <p id={summaryId} className="text-sm font-semibold text-danger">
               {errors.length} {errors.length === 1 ? "issue needs" : "issues need"}{" "}
               attention before this can be saved
             </p>
-            <ul className="mt-1.5 flex flex-col gap-1">
+            <ul className="mt-2 flex flex-col gap-1">
               {errors.map((error) => (
                 <li key={error.name}>
                   {linkableNames.has(error.name) ? (
@@ -231,7 +231,7 @@ export function ResourceForm({
         <div className="flex flex-col gap-4">{children}</div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-b-xl border-t border-border bg-surface-2 px-6 py-4">
+      <div className="flex flex-wrap items-center gap-4 rounded-b-xl border-t border-border bg-surface-2 px-6 py-4">
         {draftStatus && (
           <p className="font-mono text-[11px] text-muted-foreground">{draftStatus}</p>
         )}
@@ -286,7 +286,7 @@ export function FormField({
     undefined;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-semibold text-foreground">
         {label}
         {required && (
@@ -309,7 +309,7 @@ export function FormField({
         </p>
       )}
       {error && (
-        <p id={errorId} role="alert" className="text-xs text-danger">
+        <p id={errorId} role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
@@ -325,7 +325,7 @@ export function TextInput(
   return (
     <input
       {...rest}
-      className={`h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger ${
+      className={`h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger ${
         mono ? "font-mono tabular-nums" : ""
       } ${className ?? ""}`}
     />
