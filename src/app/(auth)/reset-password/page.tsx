@@ -1,3 +1,4 @@
+import { AuthTitle } from "../AuthPanel";
 import { ResendVerificationForm } from "../verify/ResendVerificationForm";
 import { forgotPasswordAction } from "../forgot-password/actions";
 import { ResetPasswordForm } from "./ResetPasswordForm";
@@ -13,32 +14,25 @@ export default async function ResetPasswordPage({
   const token = params.token;
   const hasToken = typeof token === "string" && token.length > 0;
 
-  return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
-      {hasToken ? (
-        <>
-          <div className="flex flex-col gap-1">
-            <h1 className="text-xl font-semibold tracking-tight">Choose a new password</h1>
-            <p className="text-sm text-zinc-600">Your new password takes effect immediately.</p>
-          </div>
-          <ResetPasswordForm token={token} />
-        </>
-      ) : (
-        <>
-          <div className="flex flex-col gap-1">
-            <h1 className="text-xl font-semibold tracking-tight">This link is no longer valid</h1>
-            <p className="text-sm text-zinc-600">
-              Links expire after 24 hours or can only be used once. Enter your email below to get a
-              new one.
-            </p>
-          </div>
-          <ResendVerificationForm
-            label="Send new reset link"
-            action={forgotPasswordAction}
-            successMessage="If an account exists for that email, we've sent a link to reset your password."
-          />
-        </>
-      )}
-    </main>
+  return hasToken ? (
+    <>
+      <AuthTitle
+        title="Choose a new password"
+        subtitle="Your new password takes effect immediately."
+      />
+      <ResetPasswordForm token={token} />
+    </>
+  ) : (
+    <>
+      <AuthTitle
+        title="This link is no longer valid"
+        subtitle="Links expire after 24 hours or can only be used once. Enter your email below to get a new one."
+      />
+      <ResendVerificationForm
+        label="Send new reset link"
+        action={forgotPasswordAction}
+        successMessage="If an account exists for that email, we've sent a link to reset your password."
+      />
+    </>
   );
 }

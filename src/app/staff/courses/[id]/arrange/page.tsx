@@ -81,7 +81,7 @@ export default async function ArrangePage({
     <UnsavedOrderProvider>
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1">
-          <p className="font-mono text-[11px] text-zinc-500">
+          <p className="font-mono text-[11px] text-muted-foreground">
             {course.slug ?? course.id}
           </p>
           <h1 className="text-lg font-semibold tracking-tight">
@@ -89,7 +89,7 @@ export default async function ArrangePage({
           </h1>
           <GuardedLink
             href={`/staff/courses/${id}`}
-            className="text-xs text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
           >
             Back to course
           </GuardedLink>

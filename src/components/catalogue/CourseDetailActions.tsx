@@ -42,6 +42,11 @@ export type CourseDetailActionsProps = {
 
 type Feedback = { tone: "success" | "danger"; text: string } | null;
 
+const BTN =
+  "rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_PRIMARY =
+  "rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+
 function cohortCodes(result: Extract<CatalogueActionResult, { reason: "COHORTS_RUNNING" }>): string {
   return result.cohorts.map((cohort) => cohort.code).join(", ");
 }
@@ -170,7 +175,7 @@ export function CourseDetailActions({
       {feedback && (
         <p
           role="alert"
-          className={`px-3 py-2 text-xs ${
+          className={`rounded-md px-3 py-2 text-xs ${
             feedback.tone === "success"
               ? "border border-success/30 bg-success/10 text-success"
               : "border border-danger/30 bg-danger-surface text-danger"
@@ -188,7 +193,7 @@ export function CourseDetailActions({
               setPublishError(null);
               setPublishOpen(true);
             }}
-            className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+            className={BTN_PRIMARY}
           >
             Publish content
           </button>
@@ -197,7 +202,7 @@ export function CourseDetailActions({
           <button
             type="button"
             onClick={() => openModal("unpublish")}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            className={BTN}
           >
             Unpublish
           </button>
@@ -208,7 +213,7 @@ export function CourseDetailActions({
             type="button"
             disabled={busy === "list"}
             onClick={() => runListing(true)}
-            className="border border-accent bg-white px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/5 disabled:opacity-50"
+            className={`${BTN} border-accent text-accent hover:bg-accent/5`}
           >
             List publicly
           </button>
@@ -218,7 +223,7 @@ export function CourseDetailActions({
             type="button"
             disabled={busy === "unlist"}
             onClick={() => runListing(false)}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
+            className={BTN}
           >
             Unlist
           </button>
@@ -228,7 +233,7 @@ export function CourseDetailActions({
           <button
             type="button"
             onClick={() => openModal("archive")}
-            className="border border-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface"
+            className={`${BTN} border-danger/40 text-danger hover:bg-danger-surface`}
           >
             Archive
           </button>
@@ -236,7 +241,7 @@ export function CourseDetailActions({
           <button
             type="button"
             onClick={() => openModal("unarchive")}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            className={BTN}
           >
             Un-archive
           </button>
@@ -244,7 +249,7 @@ export function CourseDetailActions({
 
         <a
           href={`/staff/courses/${courseId}/arrange`}
-          className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+          className={BTN}
         >
           Arrange
         </a>

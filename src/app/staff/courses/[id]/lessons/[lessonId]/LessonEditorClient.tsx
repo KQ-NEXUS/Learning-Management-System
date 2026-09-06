@@ -65,7 +65,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-zinc-500">{courseId}</p>
+        <p className="font-mono text-[11px] text-muted-foreground">{courseId}</p>
         <h1 className="text-lg font-semibold tracking-tight">
           {props.mode === "create" ? "New lesson" : "Edit lesson"}
         </h1>
@@ -112,7 +112,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor="lesson-type"
-            className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600"
+            className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
           >
             Lesson type
           </label>
@@ -120,7 +120,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
             id="lesson-type"
             value={type}
             onChange={(event) => setType(event.target.value as LessonType)}
-            className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+            className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground"
           >
             {TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -139,16 +139,16 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
       </ResourceForm>
 
       {props.mode === "edit" && (
-        <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-4 py-3">
-          <p className="text-sm font-medium">Withdraw this lesson</p>
-          <p className="max-w-prose text-xs text-zinc-600">
+        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-4 py-3 shadow-card">
+          <p className="text-sm font-semibold">Withdraw this lesson</p>
+          <p className="max-w-prose text-xs text-muted-foreground">
             A withdrawn lesson leaves published cohorts untouched and can be restored from the
             arrange screen. It is never deleted.
           </p>
           <button
             type="button"
             onClick={() => setWithdrawOpen(true)}
-            className="border border-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface"
+            className="rounded-md border border-danger/40 bg-surface px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger-surface"
           >
             Withdraw lesson
           </button>

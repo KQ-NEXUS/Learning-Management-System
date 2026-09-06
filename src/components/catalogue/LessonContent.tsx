@@ -55,13 +55,13 @@ function humanSize(bytes: string): string {
 function ScanBlocked({ status }: { status: "PENDING" | "INFECTED" | "ERROR" }) {
   if (status === "PENDING") {
     return (
-      <p role="status" className="border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+      <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
         Scanning — this file will be available once its security scan finishes.
       </p>
     );
   }
   return (
-    <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+    <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
       This file is blocked: it did not pass a security scan and cannot be downloaded.
     </p>
   );
@@ -84,7 +84,7 @@ function BodyProse({ html }: { html: string }) {
 
 function Placeholder({ type }: { type: string }) {
   return (
-    <p className="border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm text-zinc-600">
+    <p className="rounded-md border border-border bg-surface-2 px-3 py-3 text-sm text-muted-foreground">
       {type === "QUIZ" ? "Quiz" : "Assignment"} content — assessment authoring and delivery arrive in
       Phase 10. This lesson still holds its place in the order.
     </p>
@@ -116,10 +116,10 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
               loading="lazy"
               referrerPolicy="no-referrer"
               allowFullScreen
-              className="aspect-video w-full max-w-2xl border border-zinc-200"
+              className="aspect-video w-full max-w-2xl rounded-lg border border-border bg-surface-2"
             />
           ) : (
-            <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+            <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
               This embedded content cannot be shown — its address is not an allowed video host.
             </p>
           )}
@@ -142,7 +142,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
               {lesson.linkUrl}
             </a>
           ) : (
-            <p className="text-sm text-zinc-500">No link was provided for this lesson.</p>
+            <p className="text-sm text-muted-foreground">No link was provided for this lesson.</p>
           )}
         </>
       );
@@ -154,14 +154,14 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
         <>
           <BodyProse html={lesson.body ?? ""} />
           {!first ? (
-            <p className="text-sm text-zinc-500">No file has been uploaded for this lesson yet.</p>
+            <p className="text-sm text-muted-foreground">No file has been uploaded for this lesson yet.</p>
           ) : first.scanStatus === "CLEAN" ? (
             <a
               href={DOWNLOAD_ROUTE(first.id)}
-              className="inline-flex items-center gap-2 border border-zinc-300 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50"
+              className="inline-flex items-center gap-2 rounded-md border border-input-border bg-surface px-3 py-2 text-sm font-semibold hover:bg-surface-2"
             >
               <span>Download {first.filename}</span>
-              <span className="text-xs text-zinc-500">{humanSize(first.sizeBytes)}</span>
+              <span className="text-xs text-muted-foreground">{humanSize(first.sizeBytes)}</span>
             </a>
           ) : (
             <ScanBlocked status={first.scanStatus} />
@@ -176,20 +176,23 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
         <>
           <BodyProse html={lesson.body ?? ""} />
           {!first ? (
-            <p className="text-sm text-zinc-500">No image has been uploaded for this lesson yet.</p>
+            <p className="text-sm text-muted-foreground">No image has been uploaded for this lesson yet.</p>
           ) : first.scanStatus === "CLEAN" ? (
             <figure className="flex flex-col gap-1">
               {/* No alt text was authored, so `alt` is the empty string and the
                   authored resource title carries the meaning as a visible
                   caption — a filename in `alt` is worse than no alt. */}
-              {/* eslint-disable-next-line @next/next/no-img-element -- the src is a 302 to a
-                  short-lived presigned URL; next/image cannot proxy an authorized redirect. */}
-              <img
-                src={DOWNLOAD_ROUTE(first.id)}
-                alt=""
-                className="max-w-full border border-zinc-200"
-              />
-              <figcaption className="text-xs text-zinc-600">{first.title || first.filename}</figcaption>
+              <div className="aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-surface-2">
+                {/* eslint-disable-next-line @next/next/no-img-element -- the src is a 302 to a
+                    short-lived presigned URL; next/image cannot proxy an authorized redirect. */}
+                <img
+                  src={DOWNLOAD_ROUTE(first.id)}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full max-w-full object-contain"
+                />
+              </div>
+              <figcaption className="text-xs text-muted-foreground">{first.title || first.filename}</figcaption>
             </figure>
           ) : (
             <ScanBlocked status={first.scanStatus} />
@@ -204,7 +207,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
         <>
           <BodyProse html={lesson.body ?? ""} />
           {!first ? (
-            <p className="text-sm text-zinc-500">No video has been uploaded for this lesson yet.</p>
+            <p className="text-sm text-muted-foreground">No video has been uploaded for this lesson yet.</p>
           ) : first.scanStatus === "CLEAN" ? (
             <LessonMediaPlayer src={DOWNLOAD_ROUTE(first.id)} title={lesson.title} />
           ) : (
@@ -229,7 +232,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
   return (
     <article className="flex flex-col gap-4">
       {withdrawn && (
-        <p className="inline-flex w-fit items-center gap-2 border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-warning">
+        <p className="inline-flex w-fit items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-warning">
           Withdrawn — kept visible for cohorts pinned to a version that still includes it
         </p>
       )}

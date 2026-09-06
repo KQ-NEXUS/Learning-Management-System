@@ -30,24 +30,26 @@ export type LessonMediaPlayerProps = {
 
 export function LessonMediaPlayer({ src, title }: LessonMediaPlayerProps) {
   return (
-    <video
-      controls
-      preload="metadata"
-      src={src}
-      aria-label={title}
-      className="w-full max-w-2xl border border-zinc-200 bg-black"
-    >
-      {/*
-        Caption slot. No caption upload exists yet — Phase 9 or 15 should
-        REQUIRE a captions file for WCAG 1.2.2 rather than leaving this empty
-        forever. Kept in the markup so that requirement has somewhere to land.
-      */}
-      <track kind="captions" srcLang="en" label="English captions" />
-      Your browser cannot play this video.{" "}
-      <a href={src} className="underline">
-        Download it instead
-      </a>
-      .
-    </video>
+    <div className="aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-surface-2">
+      <video
+        controls
+        preload="metadata"
+        src={src}
+        aria-label={title}
+        className="h-full w-full bg-foreground"
+      >
+        {/*
+          Caption slot. No caption upload exists yet — Phase 9 or 15 should
+          REQUIRE a captions file for WCAG 1.2.2 rather than leaving this empty
+          forever. Kept in the markup so that requirement has somewhere to land.
+        */}
+        <track kind="captions" srcLang="en" label="English captions" />
+        Your browser cannot play this video.{" "}
+        <a href={src} className="underline">
+          Download it instead
+        </a>
+        .
+      </video>
+    </div>
   );
 }

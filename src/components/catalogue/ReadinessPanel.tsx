@@ -52,7 +52,7 @@ function statePresentation(item: ReadinessItem): StatePresentation {
   return {
     label: `Not yet checked — ${item.deferredTo ?? "a later phase"}`,
     glyph: "•",
-    className: "text-zinc-500",
+    className: "text-muted-foreground",
   };
 }
 
@@ -68,23 +68,23 @@ function ReadinessRow({ item }: { item: ReadinessItem }) {
     <li
       data-testid={`readiness-item-${item.id}`}
       data-state={item.state}
-      className="flex flex-col gap-0.5 border-b border-zinc-100 py-2 last:border-b-0"
+      className="flex flex-col gap-0.5 border-b border-border py-2 last:border-b-0"
     >
-      <div className="flex items-baseline gap-2 text-sm">
+      <div className="flex min-w-0 items-start gap-2 text-sm">
         <span aria-hidden className={`font-mono ${presentation.className}`}>
           {presentation.glyph}
         </span>
-        <span className="font-medium">
+        <span className="min-w-0 flex-1 break-words font-semibold">
           {item.label}
           {blocking && (
             <span className="font-normal text-danger"> — blocks public listing</span>
           )}
         </span>
-        <span className={`ml-auto text-xs font-medium ${presentation.className}`}>
+        <span className={`shrink-0 text-xs font-semibold ${presentation.className}`}>
           {presentation.label}
         </span>
       </div>
-      {item.detail && <p className="pl-6 text-xs text-zinc-600">{item.detail}</p>}
+      {item.detail && <p className="break-words pl-6 text-xs text-muted-foreground">{item.detail}</p>}
     </li>
   );
 }
@@ -95,7 +95,7 @@ export function ReadinessPanel({ items }: { items: ReadinessItem[] }) {
   return (
     <section
       aria-labelledby={headingId}
-      className="flex flex-col gap-4 border border-zinc-200 bg-white p-4"
+      className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-card"
     >
       <div className="flex flex-col gap-1">
         <h2 id={headingId} className="text-sm font-semibold tracking-tight">
@@ -109,13 +109,13 @@ export function ReadinessPanel({ items }: { items: ReadinessItem[] }) {
           const categoryItems = itemsByCategory(items, category);
           return (
             <div key={category} className="flex flex-col gap-1">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
+              <h3 className="text-sm font-semibold text-foreground">
                 {category}
               </h3>
               {categoryItems.length === 0 ? (
-                <p className="text-xs text-zinc-400">Not yet checked — a later phase.</p>
+                <p className="text-xs text-muted-foreground">Not yet checked — a later phase.</p>
               ) : (
-                <ul className="flex flex-col">
+                <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface px-3 shadow-xs">
                   {categoryItems.map((item) => (
                     <ReadinessRow key={item.id} item={item} />
                   ))}
@@ -135,7 +135,7 @@ export function ReadinessSummary({ items }: { items: ReadinessItem[] }) {
   const notYetChecked = items.filter((item) => item.state === "NOT_YET_CHECKED").length;
 
   return (
-    <p className="text-xs text-zinc-600">
+    <p className="text-xs text-muted-foreground">
       {blocking} blocking, {warnings} {warnings === 1 ? "warning" : "warnings"}, {notYetChecked} not yet
       checked
     </p>

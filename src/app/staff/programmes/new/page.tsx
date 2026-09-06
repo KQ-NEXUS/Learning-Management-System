@@ -19,7 +19,7 @@ export default async function NewProgrammePage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-zinc-500">Staff · Programmes</p>
+        <p className="font-mono text-[11px] text-muted-foreground">Staff · Programmes</p>
         <h1 className="text-lg font-semibold tracking-tight">New programme</h1>
       </div>
       <ProgrammeForm mode="create" />
