@@ -59,13 +59,13 @@ export function DetailLayout({
 
   if (state.status === "denied") {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-card">
-        <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
+      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+        <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
         <p className="text-sm font-semibold text-foreground">You do not have access to this record</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           Your role does not include{" "}
           {state.permission ? (
-            <code className="rounded-sm bg-surface-2 px-1 font-mono text-xs">
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">
               {state.permission}
             </code>
           ) : (
@@ -79,7 +79,7 @@ export function DetailLayout({
 
   if (state.status === "error") {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-card">
+      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
         <p className="text-sm font-semibold text-foreground">Could not load this record</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           {state.message ?? "The request failed. Nothing has been changed."}
@@ -88,7 +88,7 @@ export function DetailLayout({
           <button
             type="button"
             onClick={state.onRetry}
-            className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
           >
             Retry
           </button>
@@ -101,7 +101,7 @@ export function DetailLayout({
     return (
       <div
         aria-busy
-        className="flex flex-col gap-5 rounded-xl border border-border bg-surface px-6 py-6 shadow-card"
+        className="flex flex-col gap-6 rounded-xl border border-border bg-surface px-6 py-6 shadow-card"
       >
         <span className="h-5 w-64 animate-pulse rounded-sm bg-surface-2" />
         <span className="h-3 w-40 animate-pulse rounded-sm bg-surface-2" />
@@ -122,12 +122,12 @@ export function DetailLayout({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav aria-label="Breadcrumb">
-          <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+          <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
             {breadcrumbs.map((crumb, i) => (
-              <li key={crumb.label} className="flex items-center gap-1.5">
+              <li key={crumb.label} className="flex items-center gap-1">
                 {i > 0 && <span aria-hidden>/</span>}
                 {crumb.href ? (
                   <Link href={crumb.href} className="hover:text-foreground hover:underline">
@@ -143,17 +143,17 @@ export function DetailLayout({
       )}
 
       <header className="flex flex-col gap-2 border-b border-border pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight text-foreground">
                 {title}
               </h1>
               {badges && (
-                <div className="flex flex-wrap items-center gap-1.5">{badges}</div>
+                <div className="flex flex-wrap items-center gap-1">{badges}</div>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-4">
               {identifier && (
                 <p className="font-mono text-[11px] text-muted-foreground">{identifier}</p>
               )}
@@ -189,7 +189,7 @@ export function DetailLayout({
                     if (e.key === "Home") moveFocus(i, -i);
                     if (e.key === "End") moveFocus(i, sections.length - 1 - i);
                   }}
-                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-1 py-2 text-sm ${
+                  className={`-mb-px flex items-center gap-1 border-b-2 px-1 py-2 text-sm ${
                     selected
                       ? "border-accent font-semibold text-foreground"
                       : "border-transparent font-normal text-muted-foreground hover:text-foreground"
@@ -212,7 +212,7 @@ export function DetailLayout({
               role="tabpanel"
               aria-labelledby={`tab-${active.id}`}
               tabIndex={0}
-              className="rounded-xl border border-border bg-surface p-5 shadow-card"
+              className="rounded-xl border border-border bg-surface p-6 shadow-card"
             >
               <SectionBody section={active} />
             </div>
@@ -228,7 +228,7 @@ export function DetailLayout({
               >
                 {section.label}
               </h2>
-              <div className="rounded-xl border border-border bg-surface p-5 shadow-card">
+              <div className="rounded-xl border border-border bg-surface p-6 shadow-card">
                 <SectionBody section={section} />
               </div>
             </section>
@@ -253,7 +253,7 @@ function SectionBody({ section }: { section: DetailSection }) {
         <button
           type="button"
           onClick={section.error.onRetry}
-          className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2"
+          className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
         >
           Retry
         </button>
@@ -269,9 +269,9 @@ export function DetailFacts({
   facts: { label: string; value: ReactNode; mono?: boolean }[];
 }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
       {facts.map((fact) => (
-        <div key={fact.label} className="flex flex-col gap-0.5">
+        <div key={fact.label} className="flex flex-col gap-1">
           <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
             {fact.label}
           </dt>

@@ -132,17 +132,17 @@ export type ResourceTableProps<T> = {
   emptyHeading?: string;
 };
 
-const CELL = "px-3 py-2 align-middle";
+const CELL = "px-4 py-2 align-middle";
 const HEAD =
-  "px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+  "px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
 const BTN =
-  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90";
 
 function Panel({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-xs">
+    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-xs">
       {children}
     </div>
   );
@@ -251,17 +251,17 @@ export function ResourceTable<T>({
     allIds.length > 0 && selectedVisible.length === allIds.length;
 
   const header = (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {(title || headerActions || shownCount !== undefined) && (
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-col gap-0.5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
             {title && (
               <h2 className="text-base font-semibold tracking-tight text-foreground">
                 {title}
               </h2>
             )}
             {shownCount !== undefined && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {totalCount !== undefined
                   ? `${shownCount} of ${totalCount}`
                   : `${shownCount} ${noun}`}
@@ -276,7 +276,7 @@ export function ResourceTable<T>({
       )}
 
       {filters && filters.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-2/60 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-4 rounded-md border border-border bg-surface-2/60 px-4 py-2">
           {filters.map((filter, index) => {
             const filterId = `${controlId}-filter-${index}`;
             // A small option count lays out as the mockup's segmented
@@ -289,7 +289,7 @@ export function ResourceTable<T>({
 
             return (
               <div key={filter.name} className="flex items-center gap-2">
-                <label htmlFor={isSegmented ? undefined : filterId} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <label htmlFor={isSegmented ? undefined : filterId} className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {filter.label}
                 </label>
                 {filter.kind === "search" ? (
@@ -306,14 +306,14 @@ export function ResourceTable<T>({
                       onChange={(e) =>
                         onFilterChange?.(filter.name, e.target.value)
                       }
-                      className="h-[38px] rounded-md border border-input-border bg-surface py-1 pr-2 pl-7 text-xs"
+                      className="h-[38px] rounded-md border border-input-border bg-surface py-1 pr-2 pl-8 text-sm"
                     />
                   </div>
                 ) : isSegmented ? (
                   <div
                     role="group"
                     aria-label={filter.label}
-                    className="flex h-8 items-center gap-0.5 rounded-md border border-input-border bg-surface-2 p-0.5"
+                    className="flex h-8 items-center gap-1 rounded-md border border-input-border bg-surface-2 p-1"
                   >
                     {filter.options.map((option) => {
                       const active = option.value === filter.value;
@@ -325,7 +325,7 @@ export function ResourceTable<T>({
                           onClick={() =>
                             onFilterChange?.(filter.name, option.value)
                           }
-                          className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
+                          className={`rounded-md px-2 py-1 text-sm font-semibold ${
                             active
                               ? "bg-surface text-foreground shadow-xs"
                               : "text-muted-foreground hover:text-foreground"
@@ -343,7 +343,7 @@ export function ResourceTable<T>({
                     onChange={(e) =>
                       onFilterChange?.(filter.name, e.target.value)
                     }
-                    className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-xs"
+                    className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-sm"
                   >
                     {filter.options.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -357,7 +357,7 @@ export function ResourceTable<T>({
           })}
 
           {activeQuery && (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted-foreground">
               {activeQuery}
               <button
                 type="button"
@@ -374,7 +374,7 @@ export function ResourceTable<T>({
             <button
               type="button"
               onClick={onClearFilters}
-              className="ml-auto text-xs text-accent underline underline-offset-2"
+              className="ml-auto text-sm text-accent underline underline-offset-2"
             >
               Clear all
             </button>
@@ -388,19 +388,19 @@ export function ResourceTable<T>({
   // Deliberately identical whether or not any record exists.
   if (state.status === "denied") {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {title && (
           <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         )}
         <Panel>
-          <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
+          <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
           <p className="text-sm font-semibold text-foreground">
             You do not have access to {noun}
           </p>
           <p className="max-w-prose text-sm text-muted-foreground">
             Your role does not include{" "}
             {state.permission ? (
-              <code className="rounded-sm bg-surface-2 px-1 font-mono text-xs">
+              <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">
                 {state.permission}
               </code>
             ) : (
@@ -408,7 +408,7 @@ export function ResourceTable<T>({
             )}{" "}
             at this scope. Ask a workspace administrator to grant it.
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Same copy whether or not the record exists. No counts, titles or IDs
             leak.
           </p>
@@ -420,7 +420,7 @@ export function ResourceTable<T>({
   // ---- recoverable failure ----------------------------------------------
   if (state.status === "error") {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {header}
         <Panel>
           <p className="text-sm font-semibold text-foreground">
@@ -454,7 +454,7 @@ export function ResourceTable<T>({
   if (state.status === "empty") {
     const filtered = (state.activeFilterCount ?? 0) > 0;
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {header}
         <Panel>
           <p className="text-sm font-semibold text-foreground">
@@ -481,7 +481,7 @@ export function ResourceTable<T>({
               <button
                 type="button"
                 onClick={onCreate}
-                className={`inline-flex items-center gap-1.5 ${BTN_PRIMARY}`}
+                className={`inline-flex items-center gap-1 ${BTN_PRIMARY}`}
               >
                 <Plus aria-hidden className="size-3.5" />
                 {createLabel ?? `New ${noun.replace(/s$/, "")}`}
@@ -494,13 +494,13 @@ export function ResourceTable<T>({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {header}
 
       {validationError && (
         <div
           role="alert"
-          className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger"
+          className="border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
         >
           {validationError.message}{" "}
           {validationError.fieldHref && (
@@ -512,8 +512,8 @@ export function ResourceTable<T>({
       )}
 
       {selection && selectedCount > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2">
-          <span className="text-xs font-semibold text-accent">
+        <div className="flex flex-wrap items-center gap-4 rounded-md border border-accent/30 bg-accent/5 px-4 py-2">
+          <span className="text-sm font-semibold text-accent">
             {selectedCount} selected
           </span>
           {selection.actions.map((action, index) => (
@@ -523,12 +523,12 @@ export function ResourceTable<T>({
               disabled={action.disabled}
               aria-describedby={action.description ? `${controlId}-action-${index}` : undefined}
               onClick={() => action.onClick(selection.selectedIds)}
-              className="text-xs font-semibold text-foreground underline underline-offset-2 hover:text-accent disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+              className="text-sm font-semibold text-foreground underline underline-offset-2 hover:text-accent disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
             >
               {action.label}
             </button>
             {action.description && (
-              <p id={`${controlId}-action-${index}`} className="text-xs text-muted-foreground">
+              <p id={`${controlId}-action-${index}`} className="text-sm text-muted-foreground">
                 {action.description}
               </p>
             )}
@@ -537,7 +537,7 @@ export function ResourceTable<T>({
           <button
             type="button"
             onClick={() => selection.onChange([])}
-            className="ml-auto text-xs text-muted-foreground underline underline-offset-2"
+            className="ml-auto text-sm text-muted-foreground underline underline-offset-2"
           >
             Deselect
           </button>
@@ -676,7 +676,7 @@ export function ResourceTable<T>({
                         i === 0 ? (
                           <td
                             key={c.key}
-                            className={`${CELL} ${c.mono ? "font-mono text-xs tabular-nums" : ""}`}
+                            className={`${CELL} ${c.mono ? "font-mono text-sm tabular-nums" : ""}`}
                           >
                             <span className="flex items-center gap-2">
                               <span
@@ -685,7 +685,7 @@ export function ResourceTable<T>({
                               >
                                 {initials}
                               </span>
-                              <span className="flex flex-col gap-0.5">
+                              <span className="flex flex-col gap-1">
                                 {href ? (
                                   <Link
                                     href={href}
@@ -709,9 +709,9 @@ export function ResourceTable<T>({
                             key={c.key}
                             className={`${CELL} ${
                               c.align === "right" ? "text-right" : ""
-                            } ${c.mono ? "font-mono text-xs tabular-nums" : ""}`}
+                            } ${c.mono ? "font-mono text-sm tabular-nums" : ""}`}
                           >
-                            <span className="flex flex-col gap-0.5">
+                            <span className="flex flex-col gap-1">
                               {c.render(row)}
                               {c.subtitle && (
                                 <span className="text-[11px] text-muted-foreground">
@@ -735,7 +735,7 @@ export function ResourceTable<T>({
           ? Array.from({ length: 3 }, (_, i) => (
               <li
                 key={i}
-                className="rounded-xl border border-border bg-surface px-3 py-3 shadow-xs"
+                className="rounded-xl border border-border bg-surface p-4 shadow-xs"
               >
                 <span className="block h-3 w-32 animate-pulse rounded-sm bg-surface-2" />
               </li>
@@ -753,7 +753,7 @@ export function ResourceTable<T>({
               return (
                 <li
                   key={getRowKey(row)}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-3 shadow-xs"
+                  className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-xs"
                 >
                   <div className="flex items-center gap-2">
                     {selection && (
@@ -777,7 +777,7 @@ export function ResourceTable<T>({
                     >
                       {initials}
                     </span>
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-1">
                       <span className="text-sm font-semibold text-foreground">
                         {href ? (
                           <Link
@@ -797,10 +797,10 @@ export function ResourceTable<T>({
                       )}
                     </div>
                   </div>
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                     {rest.map((c) => (
                       <div key={c.key} className="flex flex-col">
-                        <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
                           {c.header}
                         </dt>
                         <dd className={c.mono ? "font-mono tabular-nums" : ""}>
@@ -851,7 +851,7 @@ export function StatusPill({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${classes}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold whitespace-nowrap ${classes}`}
     >
       <span aria-hidden className={`size-1.5 rounded-full ${dot}`} />
       {label}
