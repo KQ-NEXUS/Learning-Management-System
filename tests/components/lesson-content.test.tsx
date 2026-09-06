@@ -106,7 +106,7 @@ describe("LessonContent", () => {
     expect(screen.getByText("Site plan")).toBeTruthy();
   });
 
-  it("renders a native video with metadata preload, an authorized src, a captions track and no crossorigin", () => {
+  it("renders a native video with metadata preload, an authorized src, no crossorigin and no source-less track", () => {
     const { container } = render(
       <LessonContent
         lesson={lesson({ type: "VIDEO" })}
@@ -120,7 +120,39 @@ describe("LessonContent", () => {
     expect(video?.getAttribute("src")).toBe("/api/lesson-resources/res-1/download");
     expect(video?.getAttribute("src")).not.toContain("?");
     expect(video?.hasAttribute("crossorigin")).toBe(false);
-    expect(container.querySelector('track[kind="captions"]')).not.toBeNull();
+
+    // CR-11 partial remediation: no <track> may be emitted without a real
+    // source. An empty captions track advertises captions that do not exist.
+    const tracks = Array.from(container.querySelectorAll("track"));
+    for (const track of tracks) {
+      expect(track.getAttribute("src")).toBeTruthy();
+    }
+    expect(container.querySelector("track:not([src])")).toBeNull();
+  });
+
+  it("keeps a CLEAN video playable — the track removal does not remove the video", () => {
+    const { container } = render(
+      <LessonContent
+        lesson={lesson({ type: "VIDEO" })}
+        resources={[resource({ scanStatus: "CLEAN", filename: "intro.webm", mimeType: "video/webm" })]}
+      />,
+    );
+    const video = container.querySelector("video");
+    expect(video).not.toBeNull();
+    expect(video?.getAttribute("src")).toBe("/api/lesson-resources/res-1/download");
+    const fallback = container.querySelector("video a");
+    expect(fallback?.getAttribute("href")).toBe("/api/lesson-resources/res-1/download");
+  });
+
+  it("blocks a non-CLEAN video and renders no <video> element", () => {
+    const { container } = render(
+      <LessonContent
+        lesson={lesson({ type: "VIDEO" })}
+        resources={[resource({ scanStatus: "INFECTED", filename: "intro.mp4", mimeType: "video/mp4" })]}
+      />,
+    );
+    expect(container.querySelector("video")).toBeNull();
+    expect(screen.getByText(/blocked|did not pass|security scan/i)).toBeTruthy();
   });
 
   it("renders a LINK as an anchor with rel noopener noreferrer nofollow", () => {
