@@ -83,11 +83,21 @@ export function ProgrammeDetailClient({
   async function runListing(listed: boolean) {
     setBusy(listed ? "list" : "unlist");
     setFeedback(null);
-    settle(
-      await setProgrammeListingAction({ programmeId, listed }),
-      listed ? "Programme is now publicly listed." : "Programme is no longer publicly listed.",
-    );
-    setBusy(null);
+    try {
+      settle(
+        await setProgrammeListingAction({ programmeId, listed }),
+        listed ? "Programme is now publicly listed." : "Programme is no longer publicly listed.",
+      );
+    } catch {
+      // Unexpected rejection: no silent success, no raw exception, and the
+      // control is freed in `finally` so a retry is possible.
+      setFeedback({
+        tone: "danger",
+        text: "Something went wrong and the listing change was not applied. Please try again.",
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function runPublish(input: {
@@ -97,20 +107,29 @@ export function ProgrammeDetailClient({
   }) {
     setBusy("publish");
     setPublishError(null);
-    const result = await publishProgrammeAction({
-      programmeId,
-      expectedUpdatedAt: input.expectedUpdatedAt,
-      reason: input.reason ?? undefined,
-      migrateCohortIds: input.migrateCohortIds,
-    });
-    setBusy(null);
-    if (result.ok) {
-      setPublishOpen(false);
-      const migrated = result.migratedCohortIds.length;
-      settle(result, migrated > 0 ? `Published. ${migrated} cohort(s) migrated.` : "Programme published.");
-      return;
+    try {
+      const result = await publishProgrammeAction({
+        programmeId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+        reason: input.reason ?? undefined,
+        migrateCohortIds: input.migrateCohortIds,
+      });
+      if (result.ok) {
+        setPublishOpen(false);
+        const migrated = result.migratedCohortIds.length;
+        settle(result, migrated > 0 ? `Published. ${migrated} cohort(s) migrated.` : "Programme published.");
+        return;
+      }
+      setPublishError(failureText(result));
+    } catch {
+      // A rejected publish is not a publish. Keep the dialog, ticked cohorts
+      // and typed reason for a deliberate retry — never auto-repeat.
+      setPublishError(
+        "Something went wrong and the programme was not published. Your selections are still here — try again.",
+      );
+    } finally {
+      setBusy(null);
     }
-    setPublishError(failureText(result));
   }
 
   async function runReasoned(kind: "unpublish" | "archive" | "unarchive", reason: string) {
@@ -121,8 +140,16 @@ export function ProgrammeDetailClient({
         : kind === "archive"
           ? archiveProgrammeAction
           : unarchiveProgrammeAction;
-    const result = await action({ programmeId, reason });
-    setBusy(null);
+    let result: CatalogueActionResult;
+    try {
+      result = await action({ programmeId, reason });
+    } catch {
+      // Keep the modal and the typed reason so a retry is one click away.
+      setModalError("Something went wrong and the action was not applied. Please try again.");
+      return;
+    } finally {
+      setBusy(null);
+    }
     if (result.ok) {
       settle(
         result,
