@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ResourceForm, FormField, TextInput } from "@/components/primitives";
 import {
@@ -27,6 +27,10 @@ export function ProgrammeForm(
   const action = props.mode === "create" ? createProgrammeAction : updateProgrammeAction;
   const [state, formAction, pending] = useActionState(action, INITIAL);
   const values = props.mode === "edit" ? props.values : {};
+  // Controlled so an attempted edit survives React 19's post-action form reset
+  // and a rejected submission — a failed save must never discard entered text
+  // (CR-09 / NFR-09). The existing action still receives it via FormData.
+  const [outcomes, setOutcomes] = useState(values.outcomes ?? "");
   const errorFor = (name: string) =>
     (!state.ok ? state.errors : []).find((error) => error.name === name)?.message;
 
@@ -84,6 +88,24 @@ export function ProgrammeForm(
         <FormField name="summary" label="Summary" error={errorFor("summary")}>
           {(field) => (
             <TextInput {...field} type="text" maxLength={2000} defaultValue={values.summary ?? ""} />
+          )}
+        </FormField>
+
+        <FormField
+          name="outcomes"
+          label="Outcomes"
+          error={errorFor("outcomes")}
+          hint="What learners will be able to do after completing this programme."
+        >
+          {(field) => (
+            <textarea
+              {...field}
+              rows={4}
+              maxLength={4000}
+              value={outcomes}
+              onChange={(event) => setOutcomes(event.target.value)}
+              className="min-h-[92px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
+            />
           )}
         </FormField>
 
