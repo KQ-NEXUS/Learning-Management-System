@@ -25,6 +25,12 @@ export type LessonFormFieldsProps = {
   initialResources?: LessonResourceView[];
 };
 
+// The editable textbox carries this id so the ResourceForm error summary can
+// link straight to it; the error paragraph carries a matching stable id so the
+// editor's aria-describedby resolves (WR-03, NFR-09).
+const BODY_FIELD_ID = "field-body";
+const BODY_ERROR_ID = "body-error";
+
 function BodyEditor({
   initialBody,
   error,
@@ -42,9 +48,15 @@ function BodyEditor({
         {!optional && <span className="ml-1 font-normal text-muted-foreground">required</span>}
       </p>
       <input type="hidden" name="body" value={body} />
-      <RichTextEditor value={body} onChange={setBody} />
+      <RichTextEditor
+        value={body}
+        onChange={setBody}
+        id={BODY_FIELD_ID}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? BODY_ERROR_ID : undefined}
+      />
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p id={BODY_ERROR_ID} role="alert" className="text-xs text-danger">
           {error}
         </p>
       )}
