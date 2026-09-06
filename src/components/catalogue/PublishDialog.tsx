@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import { ReadinessSummary } from "./ReadinessPanel";
 
@@ -72,8 +72,55 @@ function PublishDialogBody({
 }: PublishDialogProps) {
   const titleId = useId();
   const reasonId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState("");
+
+  // Move focus into the dialog on open, and return it to whatever opened it on
+  // close — the ConfirmModal precedent, so a keyboard user is never stranded on
+  // the inert background.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+    );
+    (focusable && focusable.length > 0 ? focusable[0] : dialogRef.current)?.focus();
+    return () => previouslyFocused?.focus();
+  }, []);
+
+  // Escape while idle cancels; Tab wraps inside the dialog. Escape is suppressed
+  // while a publish is in flight so a stray keypress cannot leave the user unsure
+  // whether it applied.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !pending) {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable || focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [pending, onCancel]);
 
   const migrateCohortIds = useMemo(
     () => affectedCohorts.filter((cohort) => ticked[cohort.id]).map((cohort) => cohort.id),
@@ -88,15 +135,29 @@ function PublishDialogBody({
   const canPublish = blockingCount === 0 && reasonValid && !pending;
 
   function toggle(id: string) {
+    // Cohort selection is frozen while a publish is in flight — the submitted
+    // payload must match exactly what the user confirmed.
+    if (pending) return;
     setTicked((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  function submit() {
+    if (!canPublish) return;
+    onPublish({
+      migrateCohortIds,
+      reason: reason.trim() === "" ? null : reason.trim(),
+      expectedUpdatedAt,
+    });
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-card"
       >
         <div className="flex flex-col gap-1">
@@ -174,8 +235,9 @@ function PublishDialogBody({
                           <input
                             id={boxId}
                             type="checkbox"
-                            className="size-4"
+                            className="size-4 disabled:cursor-not-allowed disabled:opacity-50"
                             checked={Boolean(ticked[cohort.id])}
+                            disabled={pending}
                             onChange={() => toggle(cohort.id)}
                           />
                         </td>
@@ -212,9 +274,10 @@ function PublishDialogBody({
             id={reasonId}
             rows={3}
             value={reason}
+            disabled={pending}
             onChange={(event) => setReason(event.target.value)}
             aria-invalid={reasonRequired && !reasonValid ? true : undefined}
-            className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm aria-[invalid=true]:border-danger"
+            className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:bg-surface-2"
             placeholder={
               reasonRequired
                 ? "Why are these cohorts moving to the new version?"
@@ -235,13 +298,7 @@ function PublishDialogBody({
           <button
             type="button"
             disabled={!canPublish}
-            onClick={() =>
-              onPublish({
-                migrateCohortIds,
-                reason: reason.trim() === "" ? null : reason.trim(),
-                expectedUpdatedAt,
-              })
-            }
+            onClick={submit}
             className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? "Publishing…" : "Publish"}
