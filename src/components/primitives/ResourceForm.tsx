@@ -1,6 +1,20 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
+// The link/plain-text decision reads child DOM that only exists after commit,
+// so it must run synchronously before paint to avoid a flash of the wrong
+// element. `useLayoutEffect` warns during SSR, where there is nothing to
+// measure, so fall back to `useEffect` on the server.
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 /**
  * ResourceForm — the create/edit primitive.
@@ -10,12 +24,21 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
  *     focus after a failed submit (WCAG 2.2 AA, PRD NFR-09).
  *   - Fields validate on blur, not on every keystroke.
  *   - Cross-field errors (for example "exactly one of course or programme")
- *     appear in the summary, since they belong to no single input.
+ *     appear in the summary, since they belong to no single input. These have
+ *     no `field-<name>` control to focus, so they render as plain alert text
+ *     rather than as a link that would go nowhere (WR-02).
+ *   - Field errors only become links once a matching `field-<name>` control is
+ *     actually present in this form; an error for an absent field stays as
+ *     plain text so the summary never contains a dead link.
  *   - A failed save never shows success and never clears the entered values.
  */
 
 export type FieldError = {
-  /** Must match the FormField `name`, so the summary link can focus it. */
+  /**
+   * Matches a FormField `name`. If a control with id `field-<name>` exists in
+   * this form the summary links to it; otherwise the message is shown as plain
+   * text (cross-field / form-level failures, or fields not rendered yet).
+   */
   name: string;
   message: string;
 };
@@ -61,6 +84,37 @@ export function ResourceForm({
 }: ResourceFormProps) {
   const summaryId = useId();
   const summaryRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Which error names resolve to a real `field-<name>` control *inside this
+  // form*. Recomputed after every render because the offending fields are
+  // rendered as children and only exist in the DOM after mount/update. An
+  // error whose target is missing (cross-field failures, form-level failures,
+  // or a field not currently rendered) stays as plain text — never a link
+  // that leads nowhere (WR-02).
+  const [linkableNames, setLinkableNames] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  useIsomorphicLayoutEffect(() => {
+    const form = formRef.current;
+    if (!form) {
+      if (linkableNames.size > 0) setLinkableNames(new Set());
+      return;
+    }
+    const presentIds = new Set(
+      Array.from(form.querySelectorAll<HTMLElement>("[id]")).map((el) => el.id),
+    );
+    const next = new Set(
+      errors
+        .filter((error) => presentIds.has(`field-${error.name}`))
+        .map((error) => error.name),
+    );
+    const unchanged =
+      next.size === linkableNames.size &&
+      [...next].every((name) => linkableNames.has(name));
+    if (!unchanged) setLinkableNames(next);
+  }, [errors, linkableNames]);
 
   // Move focus to the error summary whenever it appears — the summary is
   // the first thing a screen reader user needs after a failed submit
@@ -130,6 +184,7 @@ export function ResourceForm({
 
   return (
     <form
+      ref={formRef}
       action={onSubmit}
       noValidate
       className="mx-auto flex w-full max-w-[700px] flex-col rounded-xl border border-border bg-surface shadow-card"
@@ -151,18 +206,22 @@ export function ResourceForm({
             className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2.5"
           >
             <p id={summaryId} className="text-sm font-semibold text-danger">
-              {errors.length} {errors.length === 1 ? "field needs" : "fields need"}{" "}
+              {errors.length} {errors.length === 1 ? "issue needs" : "issues need"}{" "}
               attention before this can be saved
             </p>
             <ul className="mt-1.5 flex flex-col gap-1">
               {errors.map((error) => (
                 <li key={error.name}>
-                  <a
-                    href={`#field-${error.name}`}
-                    className="text-sm text-danger underline underline-offset-2"
-                  >
-                    {error.message}
-                  </a>
+                  {linkableNames.has(error.name) ? (
+                    <a
+                      href={`#field-${error.name}`}
+                      className="text-sm text-danger underline underline-offset-2"
+                    >
+                      {error.message}
+                    </a>
+                  ) : (
+                    <span className="text-sm text-danger">{error.message}</span>
+                  )}
                 </li>
               ))}
             </ul>
