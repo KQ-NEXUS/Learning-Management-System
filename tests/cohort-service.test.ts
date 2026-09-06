@@ -199,6 +199,45 @@ function harness(opts?: {
   return { service, delegate, enrolment, aggregate, instructor, user, tx, audits, rows };
 }
 
+it.each(["CANCELLED", "COMPLETED"])("cannot republish a %s cohort even when ready", async (status) => {
+  const { service, tx, audits } = harness({ aggregateRow: readyAggregateRow({ status }) });
+  await expect(service.publishCohort({
+    cohortId: "cohort-1", expectedUpdatedAt: T0,
+  })).rejects.toThrow(/cohort.*(cancelled|completed)/i);
+  expect(tx.cohort.updateMany).not.toHaveBeenCalled();
+  expect(tx.domainEvent.create).not.toHaveBeenCalled();
+  expect(audits).toHaveLength(0);
+});
+
+it("puts the editor version on the cohort write and advances it", async () => {
+  const { service, delegate } = harness();
+  await service.updateCohort({ id: "cohort-1", expectedUpdatedAt: T0, data: { title: "Edited" } });
+  expect(delegate.update).toHaveBeenCalledWith({
+    where: { id: "cohort-1", updatedAt: T0 },
+    data: { title: "Edited", updatedAt: NOW },
+  });
+});
+
+it("refuses an already stale editor version without a write or success audit", async () => {
+  const { service, delegate, audits } = harness({ rows: [makeCohortRow({ updatedAt: NOW })] });
+  await expect(service.updateCohort({ id: "cohort-1", expectedUpdatedAt: T0, data: { title: "Stale" } })).rejects.toBeInstanceOf(StaleOrderError);
+  expect(delegate.update).not.toHaveBeenCalled();
+  expect(audits).toHaveLength(0);
+});
+
+it("maps a lost conditional write to the stale-editor error without auditing success", async () => {
+  const { service, delegate, audits } = harness();
+  vi.mocked(delegate.update).mockRejectedValueOnce({ code: "P2025" });
+  await expect(service.updateCohort({ id: "cohort-1", expectedUpdatedAt: T0, data: { title: "Lost race" } })).rejects.toBeInstanceOf(StaleOrderError);
+  expect(audits).toHaveLength(0);
+});
+
+it("advances the version even when the clock matches the old update time", async () => {
+  const { service } = harness({ rows: [makeCohortRow({ updatedAt: NOW })] });
+  const after = await service.updateCohort({ id: "cohort-1", expectedUpdatedAt: NOW, data: { title: "Same millisecond" } });
+  expect(after.updatedAt.getTime()).toBe(NOW.getTime() + 1);
+});
+
 describe("instructor assignment (D-27) — the readiness gate's only writer", () => {
   it("assigns an instructor and audits cohort.instructor_assigned", async () => {
     const { service, instructor, audits } = harness();
@@ -558,7 +597,9 @@ describe("publishCohort — permission-, readiness- and token-gated", () => {
     });
 
     expect(tx.cohort.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "cohort-1", updatedAt: T0 } }),
+      expect.objectContaining({
+        where: { id: "cohort-1", updatedAt: T0, status: { in: ["DRAFT", "PUBLISHED", "IN_PROGRESS"] } },
+      }),
     );
     expect(captured[0]).toMatchObject({
       status: "PUBLISHED",
@@ -696,7 +737,7 @@ function cancelHarness(opts?: {
     return {
       $queryRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);
-        return c ? [{ seatsTaken: c.seatsTaken, capacity: c.capacity }] : [];
+        return c ? [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }] : [];
       },
       $executeRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);

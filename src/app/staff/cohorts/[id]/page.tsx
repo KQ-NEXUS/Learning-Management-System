@@ -15,6 +15,7 @@ import {
 import { courseService } from "@/server/services/course-service";
 import { programmeService } from "@/server/services/programme-service";
 import { utcToWallParts } from "@/lib/timezone";
+import { cohortResourceScope } from "@/server/services/cohort-scope";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { ReadinessPanel } from "@/components/catalogue/ReadinessPanel";
 import { CohortDetailActions } from "@/components/catalogue/CohortDetailActions";
@@ -225,9 +226,10 @@ export default async function CohortDetailPage({
         .catch(() => "—")
     : "—";
 
+  const resource = await cohortResourceScope(cohortId);
   const [canPublish, canManage] = await Promise.all([
-    can("cohorts.publish", { cohortId }),
-    can("cohorts.manage", { cohortId }),
+    can("cohorts.publish", resource),
+    can("cohorts.manage", resource),
   ]);
 
   let instructorRows: InstructorRow[] = [];

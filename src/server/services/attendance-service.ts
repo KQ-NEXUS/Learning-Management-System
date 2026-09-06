@@ -355,7 +355,7 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
       afterClose: boolean;
       actorId: string;
     },
-  ): Promise<{ before: AttendanceStateValue; after: AttendanceStateValue }> {
+  ): Promise<{ before: AttendanceStateValue; after: AttendanceStateValue; beforeNote: string | null; afterNote: string | null }> {
     const { session, enrolmentId, state, note, reason, afterClose, actorId } = args;
 
     const existing = await tx.attendanceRecord.findUnique({
@@ -391,10 +391,14 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
       },
     });
 
-    return { before, after: state };
+    return { before, after: state, beforeNote: existing?.note ?? null, afterNote: note };
   }
 
   async function auditChange(args: {
+    sessionId: string;
+    cohortId: string;
+    beforeNote: string | null;
+    afterNote: string | null;
     enrolmentId: string;
     actorId: string;
     before: AttendanceStateValue;
@@ -408,8 +412,8 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
       actorId: args.actorId,
       outcome: "SUCCESS",
       reason: args.reason,
-      before: { state: args.before },
-      after: { state: args.after },
+      before: { sessionId: args.sessionId, cohortId: args.cohortId, state: args.before, note: args.beforeNote },
+      after: { sessionId: args.sessionId, cohortId: args.cohortId, state: args.after, note: args.afterNote },
     });
   }
 
@@ -441,7 +445,7 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
       const timing = timingFor(session, now());
       assertMarkAllowed(session, input.enrolmentId, input.state, reason, timing);
 
-      const { before, after } = await deps.runInTransaction((tx) =>
+      const { before, after, beforeNote, afterNote } = await deps.runInTransaction((tx) =>
         writeOneRecord(tx, {
           session,
           enrolmentId: input.enrolmentId,
@@ -454,6 +458,10 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
       );
 
       await auditChange({
+        sessionId: session.id,
+        cohortId: session.cohortId,
+        beforeNote,
+        afterNote,
         enrolmentId: input.enrolmentId,
         actorId: ctx.actor.userId,
         before,
@@ -536,13 +544,15 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
 
       const results = await deps.runInTransaction(async (tx) => {
         const out: Array<{
+          beforeNote: string | null;
+          afterNote: string | null;
           enrolmentId: string;
           before: AttendanceStateValue;
           after: AttendanceStateValue;
           reason: string | null;
         }> = [];
         for (const entry of changed) {
-          const { before, after } = await writeOneRecord(tx, {
+          const { before, after, beforeNote, afterNote } = await writeOneRecord(tx, {
             session,
             enrolmentId: entry.enrolmentId,
             state: entry.state,
@@ -551,7 +561,7 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
             afterClose: timing.afterClose,
             actorId: ctx.actor.userId,
           });
-          out.push({ enrolmentId: entry.enrolmentId, before, after, reason: entry.reason });
+          out.push({ enrolmentId: entry.enrolmentId, before, after, beforeNote, afterNote, reason: entry.reason });
         }
         return out;
       });
@@ -560,6 +570,10 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
       // per learner, not per batch.
       for (const r of results) {
         await auditChange({
+          sessionId: session.id,
+          cohortId: session.cohortId,
+          beforeNote: r.beforeNote,
+          afterNote: r.afterNote,
           enrolmentId: r.enrolmentId,
           actorId: ctx.actor.userId,
           before: r.before,

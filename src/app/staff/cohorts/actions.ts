@@ -27,6 +27,7 @@ import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { cohortService, updateCohort, OfferLockedError } from "@/server/services/cohort-service";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { isValidTimeZone } from "@/lib/timezone";
+import { parseCohortDateTime } from "@/lib/cohort-datetime";
 
 export type CohortFormError = { name: string; message: string };
 export type CohortActionResult =
@@ -35,19 +36,9 @@ export type CohortActionResult =
 
 const DELIVERY_MODES = ["SELF_PACED", "INSTRUCTOR_LED", "BLENDED"] as const;
 
-/** A `datetime-local` input value ("2026-01-10T09:00") parsed to a `Date`. */
+/** Dates are converted in the submitted cohort zone by `fields`. */
 function dateField(label: string) {
-  return z
-    .string({ error: `Enter ${label}.` })
-    .min(1, `Enter ${label}.`)
-    .transform((value, ctx) => {
-      const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Enter a valid ${label}.` });
-        return z.NEVER;
-      }
-      return parsed;
-    });
+  return z.date({ error: `Enter a valid ${label} in the selected timezone.` });
 }
 
 const baseSchema = z
@@ -118,6 +109,10 @@ function fields(form: FormData) {
     const trimmed = raw.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   };
+  const date = (key: string) => {
+    const raw = value(key);
+    return raw ? parseCohortDateTime(raw, value("timezone") ?? "") ?? undefined : undefined;
+  };
   return {
     code: value("code"),
     title: value("title"),
@@ -125,10 +120,10 @@ function fields(form: FormData) {
     programmeId: value("programmeId"),
     deliveryMode: value("deliveryMode"),
     timezone: value("timezone"),
-    startsAt: value("startsAt"),
-    endsAt: value("endsAt"),
-    enrolmentOpensAt: value("enrolmentOpensAt"),
-    enrolmentClosesAt: value("enrolmentClosesAt"),
+    startsAt: date("startsAt"),
+    endsAt: date("endsAt"),
+    enrolmentOpensAt: date("enrolmentOpensAt"),
+    enrolmentClosesAt: date("enrolmentClosesAt"),
     capacity: value("capacity"),
     priceMinor: value("priceMinor"),
     currency: value("currency"),
@@ -222,7 +217,7 @@ export async function createCohortAction(
 const updateSchema = baseSchema.extend({
   cohortId: z.string().min(1),
   // Optimistic-concurrency token — the cohort's `updatedAt` as of page load.
-  expectedUpdatedAt: z.string().min(1),
+  expectedUpdatedAt: z.iso.datetime().transform((value) => new Date(value)),
 });
 
 export async function updateCohortAction(
@@ -242,17 +237,8 @@ export async function updateCohortAction(
       expectedUpdatedAt: typeof expectedUpdatedAt === "string" ? expectedUpdatedAt : "",
     });
 
-    // Best-effort optimistic-concurrency check (T-05-81). `updateCohort`'s
-    // underlying write has no conditional-update primitive of its own (that
-    // lives in `publishCohort`'s transaction only), so this action reads the
-    // stored `updatedAt` first and refuses on a mismatch before writing.
-    const current = (await cohortService.get(cohortId)) as { updatedAt: Date } | null;
-    if (current && current.updatedAt.toISOString() !== parsed.expectedUpdatedAt) {
-      throw new StaleOrderError();
-    }
-
     const data = toCreatePayload(parsed);
-    await updateCohort({ id: cohortId, data, reason: "Edited from the cohort editor." });
+    await updateCohort({ id: cohortId, expectedUpdatedAt: parsed.expectedUpdatedAt, data, reason: "Edited from the cohort editor." });
   } catch (error) {
     return toFailure(error);
   }

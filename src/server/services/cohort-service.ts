@@ -44,7 +44,7 @@ import {
 } from "./readiness-service";
 import { StaleOrderError } from "./reorder-service";
 import { writeDomainEvent } from "./domain-event-service";
-import { CohortNotFoundError } from "./seat-accounting";
+import { CohortNotFoundError, assertCohortOpen, lockCohort } from "./seat-accounting";
 import {
   applyEnrolmentExit,
   ReasonRequiredError,
@@ -489,20 +489,23 @@ export function createCohortService(deps: CohortServiceDeps) {
 
   /**
    * The D-30 wrapper around `cohortService.update`. Runs `assertOfferMutable`
-   * first whenever the payload carries a `courseId`/`programmeId` whose
-   * submitted value differs from the stored one, then delegates to the
-   * factory's audited update.
+   * first whenever the offer changes, then conditionally writes the page
+   * version so competing editors cannot silently overwrite one another.
    */
   const updateCohort = withPermission<{
     id: string;
     data: Record<string, unknown>;
+    expectedUpdatedAt?: Date;
     reason?: string;
-  }>("cohorts.manage", (input) => deps.toScope(input.id))(async (input) => {
+  }>("cohorts.manage", (input) => deps.toScope(input.id))(async (input, ctx) => {
+    const current = await deps.delegate.findUnique({ where: { id: input.id } });
+    if (!current) throw new CohortNotFoundError(input.id);
+    const expectedUpdatedAt = input.expectedUpdatedAt ?? current.updatedAt;
+    if (current.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new StaleOrderError();
     const changesCourse = "courseId" in input.data;
     const changesProgramme = "programmeId" in input.data;
 
     if (changesCourse || changesProgramme) {
-      const current = await deps.delegate.findUnique({ where: { id: input.id } });
       const courseDiffers =
         changesCourse && input.data.courseId !== (current?.courseId ?? null);
       const programmeDiffers =
@@ -512,7 +515,25 @@ export function createCohortService(deps: CohortServiceDeps) {
       }
     }
 
-    return cohortService.update(input.id, input.data, input.reason);
+    // Prisma's extended unique filter checks the version in the UPDATE itself.
+    // Always advance it, even for two writes within one clock millisecond.
+    const where = { id: input.id, updatedAt: expectedUpdatedAt };
+    let after: CohortRecord;
+    try {
+      after = await deps.delegate.update({
+        where,
+        data: { ...input.data, updatedAt: new Date(Math.max(now().getTime(), current.updatedAt.getTime() + 1)) },
+      });
+    } catch (error) {
+      if (isRecordNotFoundError(error)) throw new StaleOrderError();
+      throw error;
+    }
+    await deps.audit({
+      action: "cohort.updated", targetType: "Cohort", targetId: input.id,
+      actorId: ctx.actor.userId, outcome: "SUCCESS", reason: input.reason ?? null,
+      before: current, after,
+    });
+    return after;
   });
 
   const now = deps.now ?? (() => new Date());
@@ -651,6 +672,7 @@ export function createCohortService(deps: CohortServiceDeps) {
     async (input, ctx) => {
       const row = await loadAggregateRow(input.cohortId);
       if (!row) throw new CohortNotFoundError(input.cohortId);
+      assertCohortOpen(input.cohortId, row.status);
 
       const aggregate = toReadinessInput(row);
       const pin = aggregate.pin!;
@@ -669,7 +691,11 @@ export function createCohortService(deps: CohortServiceDeps) {
 
       await deps.db.$transaction(async (tx) => {
         const claimed = await tx.cohort.updateMany({
-          where: { id: input.cohortId, updatedAt: input.expectedUpdatedAt },
+          where: {
+            id: input.cohortId,
+            updatedAt: input.expectedUpdatedAt,
+            status: { in: ["DRAFT", "PUBLISHED", "IN_PROGRESS"] },
+          },
           data: {
             status: PUBLISHED_STATUS,
             publishedAt,
@@ -737,6 +763,10 @@ export function createCohortService(deps: CohortServiceDeps) {
       const cancelledAt = now();
 
       const { affected, cancelledSessionIds } = await deps.db.$transaction(async (tx) => {
+        // Lock BEFORE taking the roster snapshot, including an empty roster.
+        // Admission paths take this same lock and re-check status after waiting.
+        const current = await lockCohort(tx, input.cohortId);
+        if (current.status === "CANCELLED") throw new CohortCancelBlockedError(input.cohortId);
         // D-14: ACTIVE -> WITHDRAWN, PENDING_PAYMENT -> CANCELLED. Every
         // other status (WITHDRAWN/CANCELLED/TRANSFERRED/COMPLETED) is left
         // untouched by construction — this query never selects it.

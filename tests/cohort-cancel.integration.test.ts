@@ -101,6 +101,19 @@ function serviceWithGrants(grants: Parameters<typeof createTestWithPermission>[0
 
 const globalService = () => serviceWithGrants([grant("cohorts.manage")]);
 
+it("allows only one competing cohort edit for the same page version", async () => {
+  const { cohortId } = await seedCohortFixture(testDb.prisma);
+  const before = await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
+  const service = globalService();
+  const results = await Promise.allSettled(["First editor", "Second editor"].map((title) =>
+    service.updateCohort({ id: cohortId, expectedUpdatedAt: before.updatedAt, data: { title } }),
+  ));
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+  expect(rejected.reason).toBeInstanceOf(StaleOrderError);
+  expect(await testDb.prisma.auditEvent.count({ where: { targetId: cohortId, action: "cohort.updated" } })).toBe(1);
+});
+
 async function countEvents(type: string): Promise<number> {
   return testDb.prisma.domainEvent.count({ where: { type } });
 }

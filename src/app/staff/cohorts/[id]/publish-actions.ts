@@ -29,6 +29,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { StaleOrderError } from "@/server/services/reorder-service";
+import { CohortClosedError } from "@/server/services/seat-accounting";
 import { ReasonRequiredError } from "@/server/services/enrolment-service";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import {
@@ -72,6 +73,9 @@ export type CancelCohortActionResult =
 // ---------------------------------------------------------------------------
 
 function toFailure(error: unknown): CommonFailure {
+  if (error instanceof CohortClosedError) {
+    return { ok: false, reason: "INVALID", message: error.message };
+  }
   if (error instanceof CohortReadinessRefusedError) {
     const n = error.failures.length;
     return {

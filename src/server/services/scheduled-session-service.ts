@@ -9,7 +9,7 @@
  *
  *   1. Storage of the instant (D-23). Staff enter a date and time in the
  *      cohort's IANA `timezone`; the value is stored UTC on `startsAt` /
- *      `endsAt` via `wallTimeToUtc`. Never a hard-coded one-hour offset, never
+ *      `endsAt` via validated wall-time conversion. Never a hard-coded one-hour offset, never
  *      the host's local time — `Africa/Lagos` observes no DST so a naive fixed
  *      offset passes today's tests and silently drifts for any other zone.
  *
@@ -37,9 +37,8 @@ import { recordAudit } from "@/server/services/audit-service";
 import {
   isValidTimeZone,
   utcToWallParts,
-  wallTimeToUtc,
-  type WallTimeParts,
 } from "@/lib/timezone";
+import { parseCohortDateTime } from "@/lib/cohort-datetime";
 import {
   createResourceService,
   type Delegate,
@@ -204,8 +203,15 @@ function toUtcRange(
   end: { hour: number; minute: number },
   timeZone: string,
 ): { startsAt: Date; endsAt: Date } {
-  const startsAt = wallTimeToUtc({ ...dateParts, ...start } as WallTimeParts, timeZone);
-  const endsAt = wallTimeToUtc({ ...dateParts, ...end } as WallTimeParts, timeZone);
+  const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+  const date = `${pad(dateParts.year, 4)}-${pad(dateParts.month)}-${pad(dateParts.day)}`;
+  const startsAt = parseCohortDateTime(`${date}T${pad(start.hour)}:${pad(start.minute)}`, timeZone);
+  const endsAt = parseCohortDateTime(`${date}T${pad(end.hour)}:${pad(end.minute)}`, timeZone);
+  if (!startsAt || !endsAt) {
+    throw new SessionTimeRangeError(
+      "Enter a valid calendar date and local times that exist in the cohort's timezone.",
+    );
+  }
   if (endsAt.getTime() <= startsAt.getTime()) {
     throw new SessionTimeRangeError();
   }

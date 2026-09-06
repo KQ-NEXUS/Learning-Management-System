@@ -43,6 +43,8 @@ import { recordAudit } from "@/server/services/audit-service";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
 import {
   claimSeat,
+  lockOpenCohort,
+  updateCurrentEnrolment,
   CohortNotFoundError,
   holdExpiryFrom,
   holdsSeat,
@@ -269,6 +271,7 @@ export async function applyEnrolmentExit(
     toStatus,
     reason,
     heldSeat: holdsSeat(e),
+    expected: { status: e.status, holdExpiresAt: e.holdExpiresAt },
     ...(toStatus === "WITHDRAWN" ? { withdrawnAt: now } : {}),
   });
 
@@ -360,6 +363,8 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
       };
 
       const created = await db.$transaction(async (tx) => {
+        // Even a hold-less pending row must serialize with cohort cancellation.
+        if (!takesSeat) await lockOpenCohort(tx, input.cohortId);
         const row = takesSeat
           ? await takeSeat(tx, { cohortId: input.cohortId, enrolment: data })
           : await tx.enrolment.create({ data, select: { id: true } });
@@ -421,10 +426,12 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
         const heldSeat = holdsSeat(e);
         if (!heldSeat) {
           await claimSeat(tx, { cohortId: e.cohortId });
+        } else {
+          await lockOpenCohort(tx, e.cohortId);
         }
 
-        await tx.enrolment.update({
-          where: { id: e.id },
+        await updateCurrentEnrolment(tx, {
+          where: { id: e.id, status: e.status, holdExpiresAt: e.holdExpiresAt },
           data: {
             status: "ACTIVE",
             holdExpiresAt: null,
@@ -522,10 +529,9 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
   // -------------------------------------------------------------------------
   // transferEnrolment (D-13) — same offer only
   //
-  // Authorization is resolved on the SOURCE cohort (`enrolmentScope`). The
-  // target is confined below to a sibling cohort of the SAME offer, which is
-  // what stops a transfer from becoming a write into a cohort the caller's
-  // grant does not cover (T-05-40). Cross-offer transfer is deferred — there
+  // Authorization is required on BOTH the source and destination cohorts.
+  // The same-offer restriction below checks compatibility, not permission:
+  // a cohort-scoped grant does not cover sibling cohorts. Cross-offer transfer is deferred — there
   // is no compatibility path. History (see the file header) is never copied;
   // the source row is retained as TRANSFERRED, linked from the new row's
   // `transferredFromId`.
@@ -537,6 +543,10 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
     reason: string;
   }>("enrolments.manage", (input) => deps.enrolmentScope(input.enrolmentId))(
     async (input, ctx) => {
+      await withPermission<{ targetCohortId: string }>(
+        "enrolments.manage",
+        (target) => deps.cohortScope(target.targetCohortId),
+      )(async () => {})(input);
       const reason = requireReason(input.reason);
 
       const source = await deps.enrolment.findUnique({
@@ -586,6 +596,7 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
           toStatus: "TRANSFERRED",
           reason,
           heldSeat: holdsSeat(e),
+          expected: { status: e.status, holdExpiresAt: e.holdExpiresAt },
         });
 
         // takeSeat enforces the TARGET cohort's capacity with the same row

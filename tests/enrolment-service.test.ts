@@ -32,6 +32,7 @@ import { AuthorizationError } from "@/server/permissions/with-permission";
 
 type CohortRow = {
   id: string;
+  status: string;
   capacity: number;
   seatsTaken: number;
   holdMinutes: number | null;
@@ -72,6 +73,7 @@ function enr(over: Partial<EnrolmentRow> = {}): EnrolmentRow {
 function coh(over: Partial<CohortRow> = {}): CohortRow {
   return {
     id: over.id ?? "cohort-1",
+    status: over.status ?? "PUBLISHED",
     capacity: over.capacity ?? 10,
     seatsTaken: over.seatsTaken ?? 0,
     holdMinutes: over.holdMinutes === undefined ? 30 : over.holdMinutes,
@@ -106,7 +108,7 @@ function harness(opts?: {
     return {
       $queryRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);
-        return c ? [{ seatsTaken: c.seatsTaken, capacity: c.capacity }] : [];
+        return c ? [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }] : [];
       },
       $executeRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);
@@ -216,6 +218,58 @@ function harness(opts?: {
 
   return { service, cohorts, enrolments, events, audits };
 }
+
+describe.each(["CANCELLED", "COMPLETED"])("%s cohorts reject new access", (status) => {
+  it.each([
+    { target: "ACTIVE" as const, holdMinutes: 30 },
+    { target: "PENDING_PAYMENT" as const, holdMinutes: 30 },
+    { target: "PENDING_PAYMENT" as const, holdMinutes: null },
+    { target: "PENDING_PAYMENT" as const, holdMinutes: 0 },
+  ])("refuses new enrolment %j without side effects", async ({ target, holdMinutes }) => {
+    const { service, enrolments, cohorts, events, audits } = harness({
+      cohorts: [coh({ status, holdMinutes })],
+    });
+    await expect(service.addEnrolment({
+      cohortId: "cohort-1", userId: "user-1", target, reason: "manual enrolment",
+    })).rejects.toThrow(/cohort.*(cancelled|completed)/i);
+    expect(enrolments.size).toBe(0);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it.each([null, new Date("2026-02-02T00:00:00.000Z")])("refuses approval with hold %s", async (holdExpiresAt) => {
+    const seatsTaken = holdExpiresAt ? 1 : 0;
+    const { service, enrolments, cohorts, events, audits } = harness({
+      cohorts: [coh({ status, seatsTaken })],
+      enrolments: [enr({ holdExpiresAt })],
+    });
+    await expect(service.approveEnrolment({
+      enrolmentId: "enr-1", reason: "payment confirmed",
+    })).rejects.toThrow(/cohort.*(cancelled|completed)/i);
+    expect(enrolments.get("enr-1")!.status).toBe("PENDING_PAYMENT");
+    expect(enrolments.get("enr-1")!.holdExpiresAt).toEqual(holdExpiresAt);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(seatsTaken);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("refuses transfers into a terminal cohort without changing the source", async () => {
+    const { service, enrolments, cohorts, events, audits } = harness({
+      cohorts: [coh({ seatsTaken: 1 }), coh({ id: "cohort-2", status })],
+      enrolments: [enr({ status: "ACTIVE" })],
+    });
+    await expect(service.transferEnrolment({
+      enrolmentId: "enr-1", targetCohortId: "cohort-2", reason: "cohort transfer",
+    })).rejects.toThrow(/cohort.*(cancelled|completed)/i);
+    expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");
+    expect(enrolments.size).toBe(1);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    expect(cohorts.get("cohort-2")!.seatsTaken).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // assertTransition / VALID_TRANSITIONS
@@ -593,6 +647,38 @@ describe("cancelEnrolment (D-14)", () => {
 // ---------------------------------------------------------------------------
 
 describe("transferEnrolment (D-13)", () => {
+  it.each(["cohort-1", "cohort-2"])("requires permission on both ends, not just %s", async (scopeId) => {
+    const { service, cohorts, enrolments, events, audits } = harness({
+      grants: [grant("enrolments.manage", "COHORT", scopeId)],
+      cohorts: [coh({ seatsTaken: 1 }), coh({ id: "cohort-2" })],
+      enrolments: [enr({ status: "ACTIVE" })],
+    });
+    await expect(service.transferEnrolment({
+      enrolmentId: "enr-1", targetCohortId: "cohort-2", reason: "cohort swap",
+    })).rejects.toBeInstanceOf(AuthorizationError);
+    expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");
+    expect(enrolments.size).toBe(1);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    expect(cohorts.get("cohort-2")!.seatsTaken).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("accepts separate cohort grants covering both ends", async () => {
+    const { service, enrolments } = harness({
+      grants: [
+        grant("enrolments.manage", "COHORT", "cohort-1"),
+        grant("enrolments.manage", "COHORT", "cohort-2"),
+      ],
+      cohorts: [coh({ seatsTaken: 1 }), coh({ id: "cohort-2" })],
+      enrolments: [enr({ status: "ACTIVE" })],
+    });
+    const result = await service.transferEnrolment({
+      enrolmentId: "enr-1", targetCohortId: "cohort-2", reason: "cohort swap",
+    });
+    expect(enrolments.get(result.targetEnrolmentId)!.status).toBe("ACTIVE");
+  });
+
   const twoCourseCohorts = (over?: {
     source?: Partial<CohortRow>;
     target?: Partial<CohortRow>;

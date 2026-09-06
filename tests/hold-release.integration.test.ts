@@ -86,6 +86,39 @@ afterAll(async () => {
 }, TEST_DB_TIMEOUT_MS);
 
 describe("releaseExpiredHolds — real Postgres (COH-06)", () => {
+  it("releases a shared stale candidate only once across overlapping sweeps", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 3, seatsTaken: 2 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "PENDING_PAYMENT", holdExpiresAt: PAST });
+    await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "ACTIVE" });
+    const candidate = await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } });
+    const service = createHoldReleaseSystemService({
+      enrolment: { findMany: async () => [candidate] },
+      runInTransaction: (fn) => testDb.prisma.$transaction((tx) => fn(tx as unknown as ReleaseTx)),
+      writeEvent: writeDomainEvent, audit: async () => {}, now: () => FIXED_NOW,
+    });
+    const results = await Promise.all([service.releaseExpiredHolds(), service.releaseExpiredHolds()]);
+    expect(results.reduce((sum, r) => sum + r.released, 0)).toBe(1);
+    expect(results.reduce((sum, r) => sum + r.failed, 0)).toBe(0);
+    expect((await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } })).seatsTaken).toBe(1);
+    const events = await testDb.prisma.domainEvent.findMany({ where: { type: "enrolment.hold_expired" } });
+    expect(events.filter((e) => (e.payload as { enrolmentId: string }).enrolmentId === enrolmentId)).toHaveLength(1);
+  });
+  it("does not cancel an enrolment approved after the expiry candidate read", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 1 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "PENDING_PAYMENT", holdExpiresAt: PAST });
+    const candidate = await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } });
+    await testDb.prisma.enrolment.update({ where: { id: enrolmentId }, data: { status: "ACTIVE", holdExpiresAt: null } });
+    const service = createHoldReleaseSystemService({
+      enrolment: { findMany: async () => [candidate] },
+      runInTransaction: (fn) => testDb.prisma.$transaction((tx) => fn(tx as unknown as ReleaseTx)),
+      writeEvent: writeDomainEvent,
+      audit: async () => {},
+      now: () => FIXED_NOW,
+    });
+    expect((await service.releaseExpiredHolds()).released).toBe(0);
+    expect((await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } })).status).toBe("ACTIVE");
+    expect((await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } })).seatsTaken).toBe(1);
+  });
   it("case 1: releases an expired hold, cancels with reason, and returns the seat", async () => {
     const { cohortId } = await seedCohortFixture(testDb.prisma, {
       capacity: 2,
@@ -315,21 +348,15 @@ describe("releaseExpiredHolds — real Postgres (COH-06)", () => {
       holdExpiresAt: PAST,
     });
 
-    // Simulate the row vanishing between the sweep's read and its write (a
-    // race with something else deleting it) by deleting it directly,
-    // bypassing the service entirely — the read already happened once
-    // `releaseExpiredHolds` calls `findMany` below.
+    // A disappeared candidate is now a harmless stale-state skip. Exercise
+    // a genuine per-row write failure instead, after the seat write, proving
+    // both rollback and continued processing.
     const originalFindMany = testDb.prisma.enrolment.findMany.bind(
       testDb.prisma.enrolment,
     );
-    let deleted = false;
     const enrolmentSpy = {
       findMany: async (args: Parameters<typeof originalFindMany>[0]) => {
         const rows = await originalFindMany(args);
-        if (!deleted) {
-          deleted = true;
-          await testDb.prisma.enrolment.delete({ where: { id: poison } });
-        }
         return rows;
       },
     };
@@ -340,7 +367,12 @@ describe("releaseExpiredHolds — real Postgres (COH-06)", () => {
       >[0]["enrolment"],
       audit: (event) =>
         testDb.prisma.auditEvent.create({ data: buildAuditRow(event) }) as unknown as Promise<void>,
-      writeEvent: writeDomainEvent,
+      writeEvent: async (tx, event) => {
+        if ((event.payload as { enrolmentId?: string }).enrolmentId === poison) {
+          throw new Error("simulated per-row event write failure");
+        }
+        return writeDomainEvent(tx, event);
+      },
       runInTransaction: (fn) =>
         testDb.prisma.$transaction((tx) => fn(tx as unknown as ReleaseTx)),
       now: () => FIXED_NOW,
@@ -359,6 +391,11 @@ describe("releaseExpiredHolds — real Postgres (COH-06)", () => {
     });
     expect(good1.status).toBe("CANCELLED");
     expect(good2.status).toBe("CANCELLED");
+    expect((await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: poison } })).status).toBe("PENDING_PAYMENT");
+    expect((await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } })).seatsTaken).toBe(1);
+    // The next healthy sweep retries the rolled-back row, and leaves no
+    // expired fixture behind for the following batch-limit test.
+    expect((await buildService().releaseExpiredHolds()).released).toBe(1);
   });
 
   it("case 9: batchLimit caps a single run; the remainder releases on the next", async () => {

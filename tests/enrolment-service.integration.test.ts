@@ -68,6 +68,74 @@ function serviceWithGrants(
 
 const globalService = () => serviceWithGrants([grant("enrolments.manage")]);
 
+// Force both requests to observe the same pre-transition row, while leaving
+// all reads, writes, constraints and transaction commits in real Postgres.
+function racingService(): Svc {
+  let arrivals = 0;
+  let open!: () => void;
+  const barrier = new Promise<void>((resolve) => { open = resolve; });
+  const { withPermission } = createTestWithPermission([grant("enrolments.manage")], { userId: actorId });
+  const client = new Proxy(testDb.prisma, {
+    get(target, key) {
+      if (key !== "$transaction") return Reflect.get(target, key);
+      return (fn: (tx: unknown) => Promise<unknown>) => target.$transaction(async (tx) => {
+        const wrapped = new Proxy(tx, {
+          get(t, k) {
+            if (k !== "enrolment") return Reflect.get(t, k);
+            return new Proxy(t.enrolment, {
+              get(delegate, method) {
+                if (method !== "findUnique") return Reflect.get(delegate, method);
+                return async (args: Parameters<typeof delegate.findUnique>[0]) => {
+                  const row = await delegate.findUnique(args);
+                  if (++arrivals === 2) open();
+                  await barrier;
+                  return row;
+                };
+              },
+            });
+          },
+        });
+        return fn(wrapped);
+      });
+    },
+  });
+  return createPrismaBackedEnrolmentService(client, withPermission, async () => {});
+}
+
+describe("security: competing enrolment transitions", () => {
+  it("creates only one destination enrolment for simultaneous transfers", async () => {
+    const source = await seedCohortFixture(testDb.prisma, { capacity: 5, seatsTaken: 1 });
+    const target = await seedCohortFixture(testDb.prisma, { courseId: source.courseId, capacity: 5, seatsTaken: 0 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId: source.cohortId, status: "ACTIVE" });
+    const service = racingService();
+    const outcomes = await Promise.allSettled([1, 2].map(() => service.transferEnrolment({
+      enrolmentId, targetCohortId: target.cohortId, reason: "requested transfer",
+    })));
+    expect(outcomes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await seatsTaken(source.cohortId)).toBe(0);
+    expect(await seatsTaken(target.cohortId)).toBe(1);
+    expect(await testDb.prisma.enrolment.count({ where: { transferredFromId: enrolmentId } })).toBe(1);
+  });
+  it("claims exactly one seat for two simultaneous approvals of the same holdless enrolment", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 5, seatsTaken: 0 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "PENDING_PAYMENT", holdExpiresAt: null });
+    const service = racingService();
+    const outcomes = await Promise.allSettled([1, 2].map(() => service.approveEnrolment({ enrolmentId, reason: "manual approval" })));
+    expect(outcomes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await seatsTaken(cohortId)).toBe(1);
+  });
+
+  it("releases exactly one seat for two simultaneous withdrawals", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 5, seatsTaken: 2 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "ACTIVE" });
+    await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "ACTIVE" });
+    const service = racingService();
+    const outcomes = await Promise.allSettled([1, 2].map(() => service.withdrawEnrolment({ enrolmentId, reason: "requested withdrawal" })));
+    expect(outcomes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await seatsTaken(cohortId)).toBe(1);
+  });
+});
+
 async function seatsTaken(cohortId: string): Promise<number> {
   const c = await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
   return c.seatsTaken;

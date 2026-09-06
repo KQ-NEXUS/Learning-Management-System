@@ -506,8 +506,8 @@ describe("markAttendance — inside the marking window (D-07)", () => {
     const attendanceAudits = audits.filter((a) => a.targetType === "Enrolment");
     expect(attendanceAudits).toHaveLength(1);
     expect(attendanceAudits[0].targetId).toBe("enr-1");
-    expect(attendanceAudits[0].before).toEqual({ state: "ABSENT" });
-    expect(attendanceAudits[0].after).toEqual({ state: "PRESENT" });
+    expect(attendanceAudits[0].before).toEqual({ sessionId: "ses-1", cohortId: "cohort-1", state: "ABSENT", note: null });
+    expect(attendanceAudits[0].after).toEqual({ sessionId: "ses-1", cohortId: "cohort-1", state: "PRESENT", note: null });
     expect(attendanceAudits[0].reason).toBeNull();
   });
 
@@ -805,6 +805,22 @@ describe("saveSessionAttendance — unchanged entries", () => {
 // ---------------------------------------------------------------------------
 // loadSessionRegister — the marking-screen read (D-21)
 // ---------------------------------------------------------------------------
+
+describe("attendance audit context", () => {
+  it.each(["single", "bulk"])("captures session and note-only changes for %s saves", async (mode) => {
+    const { service, audits } = harness({ now: DURING, enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+      records: [rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT", note: "original note" })] });
+    const entry = { enrolmentId: "enr-1", state: "PRESENT" as const, note: "corrected note" };
+    if (mode === "single") await service.markAttendance({ sessionId: "ses-1", ...entry });
+    else await service.saveSessionAttendance({ sessionId: "ses-1", entries: [entry] });
+    expect(audits.filter((a) => a.action === "attendance.changed")).toEqual([
+      expect.objectContaining({
+        before: { sessionId: "ses-1", cohortId: "cohort-1", state: "PRESENT", note: "original note" },
+        after: { sessionId: "ses-1", cohortId: "cohort-1", state: "PRESENT", note: "corrected note" },
+      }),
+    ]);
+  });
+});
 
 describe("loadSessionRegister", () => {
   it("requires attendance.view", async () => {

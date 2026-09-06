@@ -68,14 +68,14 @@ function harness(opts?: {
   const audits: Array<Record<string, unknown>> = [];
   const events: Array<Record<string, unknown>> = [];
 
-  const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+  const create = vi.fn(async ({ data }: { data: Record<string, unknown> }, target = store) => {
     if (opts?.createImpl) return opts.createImpl(data);
     seq += 1;
     const row = makeSessionRow({
       id: `session-new-${seq}`,
       ...(data as Partial<ScheduledSessionRecord>),
     });
-    store.set(row.id, row);
+    target.set(row.id, row);
     return row;
   });
 
@@ -110,10 +110,11 @@ function harness(opts?: {
   const db = {
     $transaction: async <R>(fn: (tx: unknown) => Promise<R>): Promise<R> => {
       const staged = new Map<string, ScheduledSessionRecord>();
+      const stagedEvents: Array<Record<string, unknown>> = [];
       const tx = {
         scheduledSession: {
           create: async ({ data }: { data: Record<string, unknown> }) => {
-            const row = await create({ data });
+            const row = await create({ data }, staged);
             staged.set(row.id, row);
             return row;
           },
@@ -132,13 +133,14 @@ function harness(opts?: {
         },
         domainEvent: {
           create: async ({ data }: { data: Record<string, unknown> }) => {
-            events.push(data);
-            return { id: `evt-${events.length}` };
+            stagedEvents.push(data);
+            return { id: `evt-${stagedEvents.length}` };
           },
         },
       };
       const result = await fn(tx);
       for (const [id, row] of staged) store.set(id, row);
+      events.push(...stagedEvents);
       return result;
     },
   };
@@ -172,6 +174,70 @@ const BASE_CREATE = {
   startTime: "09:00",
   endTime: "12:00",
 };
+
+describe("validated single and repeated session dates", () => {
+  const nyCohort = { timezone: NY, courseId: "course-1", programmeId: null, cohortCourses: [] };
+
+  it.each(["2026-02-30", "2026-13-01", "2025-02-29"])("rejects invalid calendar date %s in both creation paths", async (date) => {
+    const { service, store, events, audits } = harness();
+    await expect(service.createSessionFromWallTime({ ...BASE_CREATE, date })).rejects.toBeInstanceOf(SessionTimeRangeError);
+    await expect(service.repeatWeeklySessions({ ...BASE_CREATE, date, occurrences: 2 })).rejects.toBeInstanceOf(SessionTimeRangeError);
+    expect(store.size).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("stores the correct instant immediately after spring-forward", async () => {
+    const { service } = harness({ cohort: nyCohort });
+    const row = await service.createSessionFromWallTime({
+      ...BASE_CREATE, date: "2026-03-08", startTime: "03:30", endTime: "04:30",
+    });
+    expect(row.startsAt.toISOString()).toBe("2026-03-08T07:30:00.000Z");
+    expect(row.endsAt.toISOString()).toBe("2026-03-08T08:30:00.000Z");
+  });
+
+  it.each([
+    { startTime: "02:30", endTime: "04:30" },
+    { startTime: "01:30", endTime: "02:30" },
+  ])("rejects a nonexistent start or end time: %j", async (times) => {
+    const { service, store, events, audits } = harness({ cohort: nyCohort });
+    await expect(service.createSessionFromWallTime({
+      ...BASE_CREATE, date: "2026-03-08", ...times,
+    })).rejects.toBeInstanceOf(SessionTimeRangeError);
+    expect(store.size).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("keeps a weekly 03:30 session at the same local time across spring-forward", async () => {
+    const { service } = harness({ cohort: nyCohort });
+    const rows = await service.repeatWeeklySessions({
+      ...BASE_CREATE, date: "2026-03-01", startTime: "03:30", endTime: "04:30", occurrences: 3,
+    });
+    expect(rows.map((row) => row.startsAt.toISOString())).toEqual([
+      "2026-03-01T08:30:00.000Z", "2026-03-08T07:30:00.000Z", "2026-03-15T07:30:00.000Z",
+    ]);
+  });
+
+  it("rolls back the entire weekly series if a later occurrence falls in a DST gap", async () => {
+    const { service, store, events, audits } = harness({ cohort: nyCohort });
+    await expect(service.repeatWeeklySessions({
+      ...BASE_CREATE, date: "2026-03-01", startTime: "02:30", endTime: "04:30", occurrences: 3,
+    })).rejects.toBeInstanceOf(SessionTimeRangeError);
+    expect(store.size).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("chooses the earlier instant for an ambiguous fall-back time", async () => {
+    const { service } = harness({ cohort: nyCohort });
+    const row = await service.createSessionFromWallTime({
+      ...BASE_CREATE, date: "2026-11-01", startTime: "01:30", endTime: "02:30",
+    });
+    expect(row.startsAt.toISOString()).toBe("2026-11-01T05:30:00.000Z");
+    expect(row.endsAt.toISOString()).toBe("2026-11-01T07:30:00.000Z");
+  });
+});
 
 describe("createSessionFromWallTime — timezone-correct creation (D-23)", () => {
   it("stores the exact UTC instant for a 09:00 Africa/Lagos wall time", async () => {

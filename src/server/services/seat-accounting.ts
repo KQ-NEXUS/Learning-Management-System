@@ -45,6 +45,28 @@
  */
 export const HOLD_MINUTES_DEFAULT = 30;
 
+export class StaleEnrolmentError extends Error {
+  constructor() {
+    super("This enrolment changed while you were working. Refresh and try again.");
+    this.name = "StaleEnrolmentError";
+  }
+}
+
+/** A failed conditional write aborts the caller's transaction, including seat changes. */
+export async function updateCurrentEnrolment(
+  tx: Pick<SeatTxClient, "enrolment">,
+  args: Parameters<SeatTxClient["enrolment"]["update"]>[0],
+): Promise<unknown> {
+  try {
+    return await tx.enrolment.update(args);
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") {
+      throw new StaleEnrolmentError();
+    }
+    throw error;
+  }
+}
+
 /** Refused by the row-lock guard because the cohort is at capacity (D-05). */
 export class CapacityExceededError extends Error {
   readonly cohortId: string;
@@ -89,6 +111,41 @@ export class CohortNotFoundError extends Error {
     this.name = "CohortNotFoundError";
     this.cohortId = cohortId;
   }
+}
+
+export class CohortClosedError extends Error {
+  constructor(readonly cohortId: string, readonly status: string) {
+    super(`Cohort ${cohortId} is ${status.toLowerCase()} and cannot accept new enrolments, approvals, transfers, or publication.`);
+    this.name = "CohortClosedError";
+  }
+}
+
+export function assertCohortOpen(cohortId: string, status: string): void {
+  if (!["DRAFT", "PUBLISHED", "IN_PROGRESS"].includes(status)) {
+    throw new CohortClosedError(cohortId, status);
+  }
+}
+
+/** Shared lock for admission and cancellation; held until the caller commits. */
+export async function lockCohort(
+  tx: Pick<SeatTxClient, "$queryRaw">,
+  cohortId: string,
+): Promise<{ status: string; seatsTaken: number; capacity: number }> {
+  const rows = await tx.$queryRaw<{ status: string; seatsTaken: number; capacity: number }[]>`
+    SELECT "status", "seatsTaken", "capacity" FROM "Cohort" WHERE "id" = ${cohortId} FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) throw new CohortNotFoundError(cohortId);
+  return row;
+}
+
+export async function lockOpenCohort(
+  tx: Pick<SeatTxClient, "$queryRaw">,
+  cohortId: string,
+) {
+  const row = await lockCohort(tx, cohortId);
+  assertCohortOpen(cohortId, row.status);
+  return row;
 }
 
 /**
@@ -191,11 +248,7 @@ export async function takeSeat(
   tx: SeatTxClient,
   args: { cohortId: string; enrolment: Record<string, unknown> },
 ): Promise<{ id: string }> {
-  const rows = await tx.$queryRaw<{ seatsTaken: number; capacity: number }[]>`
-    SELECT "seatsTaken", "capacity" FROM "Cohort" WHERE "id" = ${args.cohortId} FOR UPDATE
-  `;
-  const row = rows[0];
-  if (!row) throw new CohortNotFoundError(args.cohortId);
+  const row = await lockOpenCohort(tx, args.cohortId);
   if (row.seatsTaken >= row.capacity) {
     throw new CapacityExceededError(args.cohortId, row.capacity, row.seatsTaken);
   }
@@ -243,11 +296,7 @@ export async function claimSeat(
   tx: SeatTxClient,
   args: { cohortId: string },
 ): Promise<void> {
-  const rows = await tx.$queryRaw<{ seatsTaken: number; capacity: number }[]>`
-    SELECT "seatsTaken", "capacity" FROM "Cohort" WHERE "id" = ${args.cohortId} FOR UPDATE
-  `;
-  const row = rows[0];
-  if (!row) throw new CohortNotFoundError(args.cohortId);
+  const row = await lockOpenCohort(tx, args.cohortId);
   if (row.seatsTaken >= row.capacity) {
     throw new CapacityExceededError(args.cohortId, row.capacity, row.seatsTaken);
   }
@@ -277,6 +326,7 @@ export async function releaseSeat(
     toStatus: "WITHDRAWN" | "CANCELLED" | "TRANSFERRED";
     reason: string;
     heldSeat: boolean;
+    expected?: { status: string; holdExpiresAt: Date | null };
     withdrawnAt?: Date;
   },
 ): Promise<void> {
@@ -284,8 +334,17 @@ export async function releaseSeat(
     SELECT "seatsTaken" FROM "Cohort" WHERE "id" = ${args.cohortId} FOR UPDATE
   `;
 
-  await tx.enrolment.update({
-    where: { id: args.enrolmentId },
+  await updateCurrentEnrolment(tx, {
+    where: {
+      id: args.enrolmentId,
+      cohortId: args.cohortId,
+      ...(args.expected ?? {
+        status: { in: ["ACTIVE", "PENDING_PAYMENT"] },
+        OR: args.heldSeat
+          ? [{ status: "ACTIVE" }, { status: "PENDING_PAYMENT", holdExpiresAt: { not: null } }]
+          : [{ status: "PENDING_PAYMENT", holdExpiresAt: null }],
+      }),
+    },
     data: {
       status: args.toStatus,
       reason: args.reason,

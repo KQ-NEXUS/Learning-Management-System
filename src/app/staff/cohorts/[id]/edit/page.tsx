@@ -4,6 +4,7 @@ import { cohortService } from "@/server/services/cohort-service";
 import { courseService } from "@/server/services/course-service";
 import { programmeService } from "@/server/services/programme-service";
 import { CohortForm, type OfferOption, type Values } from "../../CohortForm";
+import { formatCohortDateTime } from "@/lib/cohort-datetime";
 
 /**
  * The cohort edit route.
@@ -20,11 +21,6 @@ import { CohortForm, type OfferOption, type Values } from "../../CohortForm";
  */
 
 type StatusRow = { id: string; title: string; status: string };
-
-function toDateTimeLocal(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 export const metadata = { title: "Edit cohort" };
 
@@ -65,10 +61,10 @@ export default async function EditCohortPage({
     programmeId: cohort.programmeId ?? undefined,
     deliveryMode: cohort.deliveryMode,
     timezone: cohort.timezone,
-    startsAt: toDateTimeLocal(cohort.startsAt),
-    endsAt: toDateTimeLocal(cohort.endsAt),
-    enrolmentOpensAt: toDateTimeLocal(cohort.enrolmentOpensAt),
-    enrolmentClosesAt: toDateTimeLocal(cohort.enrolmentClosesAt),
+    startsAt: formatCohortDateTime(cohort.startsAt, cohort.timezone),
+    endsAt: formatCohortDateTime(cohort.endsAt, cohort.timezone),
+    enrolmentOpensAt: formatCohortDateTime(cohort.enrolmentOpensAt, cohort.timezone),
+    enrolmentClosesAt: formatCohortDateTime(cohort.enrolmentClosesAt, cohort.timezone),
     capacity: cohort.capacity,
     priceMinor: cohort.priceMinor,
     currency: cohort.currency,

@@ -272,6 +272,7 @@ describe("markAttendance — ATT-03 audit history", () => {
       enrolmentId,
       state: "ABSENT",
       reason: "corrected after the register was reviewed",
+      note: "Confirmed absence with the instructor",
     });
 
     const audits = await testDb.prisma.auditEvent.findMany({
@@ -281,8 +282,10 @@ describe("markAttendance — ATT-03 audit history", () => {
     expect(audits.length).toBeGreaterThanOrEqual(2);
     const correctionAudit = audits.find((a) => a.reason === "corrected after the register was reviewed");
     expect(correctionAudit).toBeDefined();
-    expect(correctionAudit?.before).toEqual({ state: "NOT_RECORDED" });
-    expect(correctionAudit?.after).toEqual({ state: "ABSENT" });
+    expect(correctionAudit?.before).toEqual({ sessionId: closedSessionId, cohortId, state: "NOT_RECORDED", note: null });
+    expect(correctionAudit?.after).toEqual({
+      sessionId: closedSessionId, cohortId, state: "ABSENT", note: "Confirmed absence with the instructor",
+    });
 
     // Append-only: no row was updated or deleted — every audited change has
     // its own distinct row id.

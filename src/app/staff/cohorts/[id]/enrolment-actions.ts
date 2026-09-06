@@ -24,7 +24,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
-import { CapacityExceededError, AlreadyEnrolledError } from "@/server/services/seat-accounting";
+import { CapacityExceededError, AlreadyEnrolledError, StaleEnrolmentError, CohortClosedError } from "@/server/services/seat-accounting";
 import {
   addEnrolment,
   approveEnrolment,
@@ -78,6 +78,9 @@ function toFailure(error: unknown): Extract<EnrolmentActionResult, { ok: false }
       ok: false,
       message: `This enrolment is currently ${error.from.toLowerCase()} and cannot be changed to ${error.to.toLowerCase()}.`,
     };
+  }
+  if (error instanceof StaleEnrolmentError || error instanceof CohortClosedError) {
+    return { ok: false, message: error.message };
   }
   if (error instanceof ReasonRequiredError) {
     return { ok: false, message: "A reason is required." };

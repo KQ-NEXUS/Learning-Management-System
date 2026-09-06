@@ -54,6 +54,7 @@ import { prisma } from "@/server/db";
 import { recordAudit } from "@/server/services/audit-service";
 import {
   releaseSeat,
+  StaleEnrolmentError,
   type SeatTxClient,
 } from "@/server/services/seat-accounting";
 import {
@@ -159,6 +160,7 @@ export function createHoldReleaseSystemService(
             toStatus: "CANCELLED",
             reason: "hold expired",
             heldSeat: true,
+            expected: { status: "PENDING_PAYMENT", holdExpiresAt: row.holdExpiresAt },
           });
           await deps.writeEvent(tx, {
             type: "enrolment.hold_expired",
@@ -184,6 +186,8 @@ export function createHoldReleaseSystemService(
 
         released += 1;
       } catch (err) {
+        // Approval, extension or another sweep won. No release/event was committed.
+        if (err instanceof StaleEnrolmentError) continue;
         failed += 1;
         console.error(
           `[hold-release] failed to release enrolment ${row.id}`,
