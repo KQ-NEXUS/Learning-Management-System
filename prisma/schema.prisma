@@ -309,6 +309,8 @@ model Session {
 
 // Single-use, expiring. Covers email verification and password reset (IAM-02).
 model VerificationToken {
+  // Immutable account binding for email changes; legacy unbound links fail closed.
+  userId     String?
   identifier String
   token      String    @unique
   expires    DateTime

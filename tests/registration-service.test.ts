@@ -49,6 +49,11 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
 
   const store = {
     user: {
+      updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        const matches = users.filter((u) => Object.entries(where).every(([key, value]) => u[key as keyof RegisteredUserRow] === value));
+        matches.forEach((u) => Object.assign(u, data));
+        return { count: matches.length };
+      },
       // Guarded per plan 07's schema-derived contract (tests/support/prisma-contract.ts):
       // this fake can never answer a findUnique selector the real Prisma client would refuse.
       findUnique: vi.fn(

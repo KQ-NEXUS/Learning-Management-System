@@ -11,7 +11,6 @@
 
 import { prisma } from "@/server/db";
 import { hashPassword } from "@/server/auth/password";
-import { signOutAllForUser } from "@/server/services/auth-service";
 import { verificationService, type VerificationStore, type VerificationTokenRow } from "@/server/services/verification-service";
 import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
 import { recordAudit } from "@/server/services/audit-service";
@@ -67,12 +66,19 @@ export function createPasswordResetService(deps: {
   dispatch: (params: DispatchParams) => Promise<unknown>;
   audit: (event: BusinessAuditEvent) => Promise<void>;
   hash?: (plaintext: string) => Promise<string>;
-  signOutAll?: (userId: string) => Promise<number>;
+  signOutAll?: (userId: string, tx: VerificationStore) => Promise<number>;
   now?: () => Date;
 }) {
   const { store, issueToken, consumeToken, dispatch, audit } = deps;
   const hash = deps.hash ?? hashPassword;
-  const signOutAll = deps.signOutAll ?? signOutAllForUser;
+  const now = deps.now ?? (() => new Date());
+  const signOutAll = deps.signOutAll ?? (async (userId: string, tx: VerificationStore) => {
+    const result = await tx.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: now() },
+    });
+    return result.count;
+  });
 
   async function requestReset(email: string): Promise<PasswordResetRequestResult> {
     const identifier = email.toLowerCase().trim();
@@ -140,6 +146,9 @@ export function createPasswordResetService(deps: {
         const user = await tx.user.findUnique({ where: { email: row.identifier } });
         if (!user) return;
         await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+        // The password write locks the user row until all revocations commit.
+        // Sign-in takes that same lock and rechecks its verified password hash.
+        await signOutAll(user.id, tx);
         resetUserId = user.id;
       },
     );
@@ -147,9 +156,6 @@ export function createPasswordResetService(deps: {
     if (!claimed.ok || !resetUserId) {
       return RESET_INVALID_TOKEN;
     }
-
-    // D-16 — any session that predates the reset is no longer trusted.
-    await signOutAll(resetUserId);
 
     await audit({
       actorId: resetUserId,

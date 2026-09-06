@@ -96,6 +96,7 @@ async function readMarketingOptIn(
 export function createProfileService(deps: {
   store: ProfileStore;
   issueToken: (params: {
+    userId: string;
     identifier: string;
     purpose: typeof TOKEN_PURPOSE.EMAIL_CHANGE;
     ttlMs: number;
@@ -192,21 +193,10 @@ export function createProfileService(deps: {
       return EMAIL_CHANGE_ACCEPTED;
     }
 
-    // findFirst is how confirmEmailChange resolves the pending account (it
-    // must be: pendingEmail carries no @unique — see the design note above
-    // requestEmailChange in the plan, and the comment in
-    // verification-service.ts's VerificationStore type). findFirst can only
-    // ever resolve unambiguously if at most one row holds a given pending
-    // address, so clear it from every other row before claiming it here.
-    // This is the row-level analogue of D-03 (issueToken already
-    // invalidates the prior unconsumed token for this identifier+purpose,
-    // so a superseded request's link is already dead — this just makes the
-    // User rows agree with the tokens instead of leaving a stale pending
-    // address behind that a later findFirst could resolve to the wrong
-    // account). The alternative, a unique constraint on the column, was
-    // rejected: requestEmailChange has no constraint-violation handling and
-    // would surface a database error for a contested address while
-    // returning the frozen accepted value for an uncontested one.
+    // Preserve last-request-wins pending-address presentation. This clearing
+    // write is NOT an authorization guarantee: concurrent requests and the
+    // issuance cooldown can leave older tokens alive. Confirmation therefore
+    // requires the token's immutable userId as well as the pending address.
     await store.user.updateMany({
       where: { pendingEmail: newEmail },
       data: { pendingEmail: null },
@@ -218,6 +208,7 @@ export function createProfileService(deps: {
     });
 
     const issued = await issueToken({
+      userId: actor.userId,
       identifier: newEmail,
       purpose: TOKEN_PURPOSE.EMAIL_CHANGE,
       ttlMs: EMAIL_CHANGE_TOKEN_TTL_MS,
@@ -255,12 +246,11 @@ export function createProfileService(deps: {
     const result = await consumeToken(
       { token, purpose: TOKEN_PURPOSE.EMAIL_CHANGE },
       async (tx, row) => {
-        // findFirst, not findUnique — pendingEmail carries no @unique (see
-        // the comment on VerificationStore's user slice in
-        // verification-service.ts). requestEmailChange's clearing write
-        // guarantees at most one row can match, so this resolves
-        // unambiguously to the account that actually requested the change.
-        const user = await tx.user.findFirst({ where: { pendingEmail: row.identifier } });
+        // Resolve the immutable requesting account AND its still-pending
+        // address. Never transfer authority to whoever currently claims
+        // that address. Legacy unbound tokens fail closed.
+        if (!row.userId) return;
+        const user = await tx.user.findFirst({ where: { id: row.userId, pendingEmail: row.identifier } });
         if (!user) return;
 
         // Re-check inside the claim transaction: the address may have been
@@ -270,11 +260,11 @@ export function createProfileService(deps: {
         const collision = await tx.user.findFirst({ where: { email: row.identifier } });
         if (collision) return;
 
-        await tx.user.update({
-          where: { id: user.id },
+        const changed = await tx.user.updateMany({
+          where: { id: user.id, pendingEmail: row.identifier },
           data: { email: row.identifier, pendingEmail: null, emailVerified: new Date() },
         });
-        confirmedUserId = user.id;
+        if (changed.count === 1) confirmedUserId = user.id;
       },
     );
 

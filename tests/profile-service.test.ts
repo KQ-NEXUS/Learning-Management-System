@@ -60,10 +60,7 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
         }),
       ),
       findFirst: vi.fn(async ({ where }: { where: { id?: string; email?: string; pendingEmail?: string } }) => {
-        if (where.email) return users.find((u) => u.email === where.email) ?? null;
-        if (where.pendingEmail) return users.find((u) => u.pendingEmail === where.pendingEmail) ?? null;
-        if (where.id) return users.find((u) => u.id === where.id) ?? null;
-        return null;
+        return users.find((u) => Object.entries(where).every(([key, value]) => u[key as keyof ProfileUserRow] === value)) ?? null;
       }),
       update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
         const u = users.find((x) => x.id === where.id);
@@ -73,9 +70,10 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
       }),
       // Not guarded — updateMany takes a filter, not a unique selector, so
       // the findUnique contract does not apply here.
-      updateMany: vi.fn(async ({ where, data }: { where: { pendingEmail?: string }; data: Record<string, unknown> }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: string; pendingEmail?: string }; data: Record<string, unknown> }) => {
         let count = 0;
         for (const u of users) {
+          if (where.id !== undefined && u.id !== where.id) continue;
           if (where.pendingEmail !== undefined && u.pendingEmail !== where.pendingEmail) continue;
           Object.assign(u, data);
           count++;
@@ -201,6 +199,19 @@ function makeUser(overrides: Partial<ProfileUserRow> = {}): ProfileUserRow {
 }
 
 describe("updateOwnProfile", () => {
+  it("does not redirect an email-change token to another account during cooldown", async () => {
+    const h = sharedHarness();
+    h.users.push(makeUser(), makeUser({ id: "u2", email: "second@example.com" }));
+    await h.profileService.requestEmailChange({ userId: "u1" }, {
+      currentPassword: "password", newEmail: "shared@example.com",
+    });
+    const token = extractToken(h.dispatched[0].textContent);
+    await h.profileService.requestEmailChange({ userId: "u2" }, {
+      currentPassword: "password", newEmail: "shared@example.com",
+    });
+    await h.profileService.confirmEmailChange(token);
+    expect(h.users[1].email).toBe("second@example.com");
+  });
   it("updates name and phone directly, writes one audit event, issues no token, dispatches nothing", async () => {
     const { profileService, users, audits, tokens, dispatched } = sharedHarness();
     users.push(makeUser());
