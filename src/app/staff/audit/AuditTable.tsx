@@ -56,6 +56,57 @@ function computeDiff(
   return diffs;
 }
 
+/**
+ * The revealed event evidence, shared byte-for-byte between the desktop
+ * expand-in-place row and the below-`sm` card so a mobile reader inspects the
+ * exact same detail. Long identifiers wrap rather than clip (D-04, NFR-09).
+ */
+function EventDetail({ row }: { row: AuditRow }) {
+  const diff = computeDiff(row.before, row.after);
+  return (
+    <div className="flex max-h-64 min-w-0 flex-col gap-3 overflow-y-auto">
+      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <span className="font-semibold uppercase tracking-wide text-muted-foreground">
+            Scope:
+          </span>{" "}
+          {row.scopeType && row.scopeId
+            ? `${row.scopeType} ${row.scopeId}`
+            : row.scopeType
+              ? row.scopeType
+              : "—"}
+        </span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <span className="font-semibold uppercase tracking-wide text-muted-foreground">
+            Outcome:
+          </span>{" "}
+          {row.outcome}
+        </span>
+      </div>
+
+      <p className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+        <span className="font-semibold uppercase tracking-wide text-[11px] text-muted-foreground">
+          Reason:
+        </span>{" "}
+        {row.reason ?? "—"}
+      </p>
+
+      {diff.length > 0 ? (
+        <ul className="flex min-w-0 flex-col gap-1 font-mono text-xs text-foreground">
+          {diff.map((d) => (
+            <li key={d.key} className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+              <span className="text-muted-foreground">{d.key}:</span>{" "}
+              {formatValue(d.oldValue)} → {formatValue(d.newValue)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">No field-level changes recorded.</p>
+      )}
+    </div>
+  );
+}
+
 export type AuditTableFilters = {
   actorId: string;
   action: string;
@@ -237,108 +288,142 @@ export function AuditTable({
           )}
         </Panel>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-surface-2">
-              <tr>
-                <th scope="col" className={HEAD}>Actor</th>
-                <th scope="col" className={HEAD}>Action</th>
-                <th scope="col" className={HEAD}>Target</th>
-                <th scope="col" className={`${HEAD} text-right`}>Time</th>
-              </tr>
-            </thead>
-            <tbody aria-busy={isPending || undefined}>
-              {isPending
-                ? Array.from({ length: 5 }, (_, i) => (
-                    <tr key={i} className="border-t border-border">
-                      <td colSpan={4} className={CELL}>
-                        <span className="block h-3 w-full max-w-[20rem] animate-pulse rounded-sm bg-surface-2" />
-                      </td>
-                    </tr>
-                  ))
-                : rows.map((row) => {
-                    const expanded = expandedId === row.id;
-                    const diff = computeDiff(row.before, row.after);
-                    return (
-                      <Fragment key={row.id}>
-                        <tr className="border-t border-border hover:bg-surface-2">
-                          <td colSpan={4} className="p-0">
-                            <button
-                              type="button"
-                              aria-expanded={expanded}
-                              onClick={() => setExpandedId(expanded ? null : row.id)}
-                              className="grid w-full grid-cols-4 gap-2 px-3 py-2 text-left"
-                            >
-                              <span className="flex flex-col gap-0.5">
-                                <span className="font-semibold text-foreground">
-                                  {row.actorName ?? "System"}
+        <>
+          {/* Desktop — hidden below sm, where the card list takes over so
+              nothing scrolls sideways (D-04). */}
+          <div className="hidden overflow-hidden rounded-xl border border-border bg-surface shadow-xs sm:block">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-surface-2">
+                <tr>
+                  <th scope="col" className={HEAD}>Actor</th>
+                  <th scope="col" className={HEAD}>Action</th>
+                  <th scope="col" className={HEAD}>Target</th>
+                  <th scope="col" className={`${HEAD} text-right`}>Time</th>
+                </tr>
+              </thead>
+              <tbody aria-busy={isPending || undefined}>
+                {isPending
+                  ? Array.from({ length: 5 }, (_, i) => (
+                      <tr key={i} className="border-t border-border">
+                        <td colSpan={4} className={CELL}>
+                          <span className="block h-3 w-full max-w-[20rem] animate-pulse rounded-sm bg-surface-2" />
+                        </td>
+                      </tr>
+                    ))
+                  : rows.map((row) => {
+                      const expanded = expandedId === row.id;
+                      const detailId = `audit-row-detail-${row.id}`;
+                      return (
+                        <Fragment key={row.id}>
+                          <tr className="border-t border-border hover:bg-surface-2">
+                            <td colSpan={4} className="p-0">
+                              <button
+                                type="button"
+                                aria-expanded={expanded}
+                                aria-controls={detailId}
+                                onClick={() => setExpandedId(expanded ? null : row.id)}
+                                className="grid w-full grid-cols-4 gap-2 px-3 py-2 text-left"
+                              >
+                                <span className="flex min-w-0 flex-col gap-0.5">
+                                  <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
+                                    {row.actorName ?? "System"}
+                                  </span>
+                                  <span className="min-w-0 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                                    {row.actorEmail ?? "—"}
+                                  </span>
                                 </span>
-                                <span className="text-[11px] text-muted-foreground">{row.actorEmail ?? "—"}</span>
-                              </span>
-                              <span className="self-center font-mono text-xs text-foreground">
-                                {row.action}
-                              </span>
-                              <span className="self-center text-xs text-foreground">
-                                {row.targetType} <span className="font-mono">{shortenId(row.targetId)}</span>
-                              </span>
-                              <span className="self-center text-right font-mono text-xs tabular-nums text-muted-foreground">
-                                {formatTimestamp(row.createdAt)}
-                              </span>
-                            </button>
-                          </td>
-                        </tr>
-                        {expanded && (
-                          <tr className="bg-surface-2">
-                            <td colSpan={4} className="px-3 py-3">
-                              <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
-                                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                                  <span>
-                                    <span className="font-semibold uppercase tracking-wide text-muted-foreground">
-                                      Scope:
-                                    </span>{" "}
-                                    {row.scopeType && row.scopeId
-                                      ? `${row.scopeType} ${row.scopeId}`
-                                      : row.scopeType
-                                        ? row.scopeType
-                                        : "—"}
-                                  </span>
-                                  <span>
-                                    <span className="font-semibold uppercase tracking-wide text-muted-foreground">
-                                      Outcome:
-                                    </span>{" "}
-                                    {row.outcome}
-                                  </span>
-                                </div>
-
-                                <p className="text-sm text-foreground">
-                                  <span className="font-semibold uppercase tracking-wide text-[11px] text-muted-foreground">
-                                    Reason:
-                                  </span>{" "}
-                                  {row.reason ?? "—"}
-                                </p>
-
-                                {diff.length > 0 ? (
-                                  <ul className="flex flex-col gap-1 font-mono text-xs text-foreground">
-                                    {diff.map((d) => (
-                                      <li key={d.key}>
-                                        <span className="text-muted-foreground">{d.key}:</span>{" "}
-                                        {formatValue(d.oldValue)} → {formatValue(d.newValue)}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">No field-level changes recorded.</p>
-                                )}
-                              </div>
+                                <span className="min-w-0 self-center font-mono text-xs text-foreground [overflow-wrap:anywhere]">
+                                  {row.action}
+                                </span>
+                                <span className="min-w-0 self-center text-xs text-foreground [overflow-wrap:anywhere]">
+                                  {row.targetType} <span className="font-mono">{shortenId(row.targetId)}</span>
+                                </span>
+                                <span className="self-center text-right font-mono text-xs tabular-nums text-muted-foreground">
+                                  {formatTimestamp(row.createdAt)}
+                                </span>
+                              </button>
                             </td>
                           </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-            </tbody>
-          </table>
-        </div>
+                          {expanded && (
+                            <tr className="bg-surface-2">
+                              <td colSpan={4} className="px-3 py-3" id={detailId}>
+                                <EventDetail row={row} />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile — semantic cards below sm carry the same event and the
+              same expand-in-place evidence, with long values wrapping rather
+              than clipping (CR-12, NFR-09). */}
+          <ul
+            aria-label="Audit history"
+            aria-busy={isPending || undefined}
+            className="flex flex-col gap-2 sm:hidden"
+          >
+            {isPending
+              ? Array.from({ length: 5 }, (_, i) => (
+                  <li
+                    key={i}
+                    className="rounded-xl border border-border bg-surface px-3 py-3 shadow-xs"
+                  >
+                    <span className="block h-3 w-full max-w-[16rem] animate-pulse rounded-sm bg-surface-2" />
+                  </li>
+                ))
+              : rows.map((row) => {
+                  const expanded = expandedId === row.id;
+                  const detailId = `audit-card-detail-${row.id}`;
+                  return (
+                    <li
+                      key={row.id}
+                      className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs"
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-controls={detailId}
+                        onClick={() => setExpandedId(expanded ? null : row.id)}
+                        className="flex w-full min-w-0 flex-col gap-1.5 px-3 py-3 text-left"
+                      >
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
+                            {row.actorName ?? "System"}
+                          </span>
+                          <span className="min-w-0 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                            {row.actorEmail ?? "—"}
+                          </span>
+                        </span>
+                        <span className="min-w-0 font-mono text-xs text-foreground [overflow-wrap:anywhere]">
+                          {row.action}
+                        </span>
+                        <span className="min-w-0 text-xs text-foreground [overflow-wrap:anywhere]">
+                          {row.targetType}{" "}
+                          <span className="font-mono [overflow-wrap:anywhere]">
+                            {row.targetId ?? "—"}
+                          </span>
+                        </span>
+                        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                          {formatTimestamp(row.createdAt)}
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div
+                          id={detailId}
+                          className="border-t border-border bg-surface-2 px-3 py-3"
+                        >
+                          <EventDetail row={row} />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+          </ul>
+        </>
       )}
     </div>
   );
