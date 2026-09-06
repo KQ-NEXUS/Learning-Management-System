@@ -7,12 +7,21 @@ vi.mock("@/components/catalogue/RichTextEditor", () => ({
   RichTextEditor: ({
     value,
     onChange,
+    id,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
   }: {
     value: string;
     onChange: (html: string) => void;
+    id?: string;
+    "aria-invalid"?: boolean;
+    "aria-describedby"?: string;
   }) => (
     <textarea
       aria-label="Lesson body"
+      id={id}
+      aria-invalid={ariaInvalid}
+      aria-describedby={ariaDescribedby}
       value={value}
       onChange={(event) => onChange(event.target.value)}
     />
@@ -99,6 +108,57 @@ describe("LessonFormFields", () => {
           "No assessments exist yet — assessment authoring arrives in Phase 10.",
         ),
       ).toBeTruthy();
+    },
+  );
+
+  it.each(["TEXT", "FILE", "IMAGE", "VIDEO", "EMBED", "LINK"] as const)(
+    "wires a server body error to the rich editor and the summary target for %s",
+    (lessonType) => {
+      vi.stubGlobal("fetch", vi.fn());
+      render(
+        <LessonFormFields
+          lessonType={lessonType}
+          lessonId="lesson-1"
+          initialResources={[]}
+          errors={[{ name: "body", message: "Lesson body cannot be empty" }]}
+        />,
+      );
+
+      const editor = screen.getByLabelText("Lesson body");
+      // The summary's `#field-body` link now reaches the focusable editor.
+      expect(editor.getAttribute("id")).toBe("field-body");
+      expect(editor.getAttribute("aria-invalid")).toBe("true");
+
+      const describedBy = editor.getAttribute("aria-describedby");
+      expect(describedBy).toBeTruthy();
+      const description = document.getElementById(describedBy as string);
+      expect(description?.textContent).toMatch(/Lesson body cannot be empty/);
+
+      // The submitted body still travels in a hidden field.
+      expect(
+        document.querySelector('input[type="hidden"][name="body"]'),
+      ).toBeTruthy();
+    },
+  );
+
+  it("leaves the editor without an invalid association when there is no body error", () => {
+    render(<LessonFormFields lessonType="TEXT" />);
+    const editor = screen.getByLabelText("Lesson body");
+    expect(editor.getAttribute("id")).toBe("field-body");
+    expect(editor.getAttribute("aria-invalid")).toBeNull();
+    expect(editor.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it.each(["QUIZ", "ASSIGNMENT"] as const)(
+    "exposes no rich body editor for %s even when a body error is present",
+    (lessonType) => {
+      render(
+        <LessonFormFields
+          lessonType={lessonType}
+          errors={[{ name: "body", message: "ignored for this type" }]}
+        />,
+      );
+      expect(screen.queryByLabelText("Lesson body")).toBeNull();
     },
   );
 });
