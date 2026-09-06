@@ -69,15 +69,25 @@ export function AssignmentsPanel({
   async function confirmRevoke(reason: string) {
     if (!revokeTarget) return;
     setPending(true);
-    const result = await revokeAssignmentAction(revokeTarget.id, reason);
-    setPending(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await revokeAssignmentAction(revokeTarget.id, reason);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setRevokeTarget(null);
+      setError(null);
+    } catch {
+      // A rejection keeps the ConfirmModal open with the target and typed
+      // reason intact (the modal owns the reason) and clears busy. The
+      // assignment is bound by id; nothing is retried automatically and the
+      // revocation is never reported as done.
+      setError(
+        "Something went wrong. The assignment was not revoked — try again.",
+      );
+    } finally {
+      setPending(false);
     }
-    setRevokeTarget(null);
-    setError(null);
   }
 
   return (
@@ -192,16 +202,25 @@ export function AccountStatusControl({
 
   async function confirm(reason: string) {
     setPending(true);
-    const result = isActive
-      ? await deactivateStaffAccountAction(userId, reason)
-      : await reactivateStaffAccountAction(userId);
-    setPending(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = isActive
+        ? await deactivateStaffAccountAction(userId, reason)
+        : await reactivateStaffAccountAction(userId);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+    } catch {
+      // Keep the dialog open with the typed reason intact and clear busy; the
+      // account status change is bound by userId and is never retried
+      // automatically or reported as applied.
+      setError(
+        "Something went wrong. The account status was not changed — try again.",
+      );
+    } finally {
+      setPending(false);
     }
-    setOpen(false);
   }
 
   return (
