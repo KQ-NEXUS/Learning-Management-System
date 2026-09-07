@@ -193,13 +193,43 @@ const GROUPS: Record<string, string[]> = {
     "src/components/shell/LearnerShell.tsx",
     "src/components/shell/BrandMark.tsx",
   ],
+  "staff-shell-access": [
+    "src/app/staff/layout.tsx",
+    "src/app/staff/StaffShell.tsx",
+    "src/app/staff/audit/AuditTable.tsx",
+    "src/app/staff/roles/RolesTable.tsx",
+    "src/app/staff/roles/RoleForm.tsx",
+    "src/app/staff/roles/RoleDetailPanels.tsx",
+    "src/app/staff/roles/PermissionPicker.tsx",
+    "src/app/staff/roles/EffectiveAccessPreview.tsx",
+    "src/app/staff/roles/[id]/page.tsx",
+    "src/app/staff/users/UsersTable.tsx",
+    "src/app/staff/users/AssignmentDrawer.tsx",
+    "src/app/staff/users/AssignmentsPanel.tsx",
+    "src/app/staff/users/StaffAccountForm.tsx",
+  ],
+  "staff-courses-programmes": [
+    "src/app/staff/courses/CoursesTable.tsx",
+    "src/app/staff/courses/[id]/page.tsx",
+    "src/app/staff/courses/[id]/arrange/page.tsx",
+    "src/app/staff/courses/[id]/arrange/ArrangeClient.tsx",
+    "src/app/staff/courses/[id]/arrange/ModuleComposer.tsx",
+    "src/app/staff/courses/[id]/lessons/[lessonId]/LessonEditorClient.tsx",
+    "src/app/staff/courses/[id]/preview/page.tsx",
+    "src/app/staff/courses/[id]/preview/lessons/[lessonId]/page.tsx",
+    "src/app/staff/programmes/ProgrammesTable.tsx",
+    "src/app/staff/programmes/ProgrammeForm.tsx",
+    "src/app/staff/programmes/[id]/page.tsx",
+    "src/app/staff/programmes/[id]/ProgrammeDetailClient.tsx",
+    "src/app/staff/programmes/[id]/arrange/ProgrammeArrangeClient.tsx",
+  ],
 };
 
 /** Every manifest group key — asserted deep-equal to `Object.keys(GROUPS)` by the
  * anti-vacuity fixtures so a renamed or dropped group fails loudly instead of
  * silently making a `-t <group>` run assert nothing (the G-RV-02 root cause).
- * `staff-shell-access` and `staff-courses-programmes` land with this plan's
- * Task 2 and are appended to both this literal and `GROUPS` there together. */
+ * All ten groups — the six pre-existing plus the four added across this plan's
+ * two source tasks — are named here and asserted deep-equal to `GROUPS`. */
 const EXPECTED_GROUPS = [
   "primitives-table",
   "primitives-forms",
@@ -209,6 +239,8 @@ const EXPECTED_GROUPS = [
   "catalogue-reading-expansion",
   "auth-shell",
   "public-account-shell",
+  "staff-shell-access",
+  "staff-courses-programmes",
 ];
 
 /** Primitives are strictly the 4-size app scale; catalogue/shell/marketing surfaces

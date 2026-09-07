@@ -58,7 +58,7 @@ export default async function StaffLayout({
     <form action={signOutAction}>
       <button
         type="submit"
-        className="text-xs font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        className="text-sm font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground"
       >
         Sign out
       </button>
