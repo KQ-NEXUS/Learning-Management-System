@@ -147,7 +147,10 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
           </p>
           <button
             type="button"
-            onClick={() => setWithdrawOpen(true)}
+            onClick={() => {
+              setWithdrawError(null);
+              setWithdrawOpen(true);
+            }}
             className="rounded-md border border-danger/40 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface"
           >
             Withdraw lesson
@@ -165,7 +168,10 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
         pending={withdrawing}
         error={withdrawError}
         onConfirm={confirmWithdraw}
-        onCancel={() => setWithdrawOpen(false)}
+        onCancel={() => {
+          setWithdrawError(null);
+          setWithdrawOpen(false);
+        }}
       />
     </div>
   );
