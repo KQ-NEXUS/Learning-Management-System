@@ -73,16 +73,16 @@ export function LearnerShell({ nav, rightSlot, children }: LearnerShellProps) {
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-surface-2">
       <header className="shrink-0 border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-4 px-6 py-4">
-          <div className="flex min-w-0 items-center gap-7">
-            <Link href="/courses" className="flex shrink-0 items-center gap-2.5">
+        <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-4 px-7 py-3.5">
+          <div className="flex min-w-0 items-center gap-6">
+            <Link href="/courses" className="flex shrink-0 items-center gap-2">
               <BrandMark />
               <span className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
                 KQ Nexus
               </span>
             </Link>
 
-            <nav aria-label="Main" className="hidden items-center gap-5 text-sm sm:flex">
+            <nav aria-label="Main" className="hidden items-center gap-6 text-sm sm:flex">
               {nav.map((item) => {
                 const active = isActiveNavItem(pathname, item.href);
                 return (
@@ -90,7 +90,7 @@ export function LearnerShell({ nav, rightSlot, children }: LearnerShellProps) {
                     key={item.href}
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`border-b-2 pb-0.5 ${
+                    className={`border-b-2 pb-1 ${
                       active
                         ? "border-accent font-semibold text-foreground"
                         : "border-transparent font-normal text-muted-foreground hover:text-foreground"
@@ -103,7 +103,7 @@ export function LearnerShell({ nav, rightSlot, children }: LearnerShellProps) {
             </nav>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             {rightSlot}
             <button
               type="button"
@@ -125,7 +125,7 @@ export function LearnerShell({ nav, rightSlot, children }: LearnerShellProps) {
           <nav
             id={menuId}
             aria-label="Main"
-            className="flex flex-col gap-0.5 border-t border-border px-6 py-3 sm:hidden"
+            className="flex flex-col gap-1 border-t border-border px-7 py-2 sm:hidden"
           >
             {nav.map((item) => {
               const active = isActiveNavItem(pathname, item.href);
@@ -134,7 +134,7 @@ export function LearnerShell({ nav, rightSlot, children }: LearnerShellProps) {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-md px-2 py-1.5 text-sm ${
+                  className={`rounded-md px-2 py-2 text-sm ${
                     active
                       ? "font-semibold text-foreground"
                       : "font-normal text-muted-foreground"
