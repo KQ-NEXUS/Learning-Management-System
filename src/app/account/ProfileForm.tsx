@@ -14,17 +14,17 @@ const UPDATE_INITIAL: UpdateProfileState = { error: null, saved: false, saveCoun
 const EMAIL_CHANGE_INITIAL: RequestEmailChangeState = { error: null, requested: false };
 
 const INPUT =
-  "h-[38px] rounded-md border border-input-border bg-surface px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-2 focus:outline-offset-2 focus:outline-accent";
+  "h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-2 focus:outline-offset-2 focus:outline-accent";
 const LABEL = "text-sm font-semibold text-foreground";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 const CARD = "flex flex-col rounded-xl border border-border bg-surface shadow-card";
-const CARD_HEADER = "flex flex-col gap-0.5 border-b border-border px-5 py-4";
-const CARD_TITLE = "text-sm font-semibold text-foreground";
+const CARD_HEADER = "flex flex-col gap-1 border-b border-border px-6 py-4";
+const CARD_TITLE = "text-base font-semibold text-foreground";
 const CARD_SUBCOPY = "text-[11px] text-muted-foreground";
-const CARD_BODY = "flex flex-col gap-4 px-5 py-5";
+const CARD_BODY = "flex flex-col gap-4 px-6 py-6";
 const ERROR_BANNER =
-  "rounded-md border border-danger/30 bg-danger-surface px-3 py-2.5 text-sm text-danger";
+  "rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger";
 
 export function ProfileForm({
   name,
@@ -40,12 +40,12 @@ export function ProfileForm({
   marketingOptIn: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-[1fr_300px]">
-      <div className="flex flex-col gap-5">
+    <div className="grid grid-cols-1 items-start gap-6 sm:grid-cols-[1fr_300px]">
+      <div className="flex flex-col gap-6">
         <NameAndPhoneSection name={name} phone={phone} />
         <EmailChangeSection email={email} pendingEmail={pendingEmail} />
       </div>
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         <MarketingPreferenceSection initialMarketingOptIn={marketingOptIn} />
       </div>
     </div>
@@ -74,7 +74,7 @@ function NameAndPhoneSection({ name, phone }: { name: string; phone: string | nu
           </p>
         )}
 
-        <label className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-2">
           <span className={LABEL}>Full name</span>
           <input
             // React 19 resets an uncontrolled form after a form action
@@ -94,7 +94,7 @@ function NameAndPhoneSection({ name, phone }: { name: string; phone: string | nu
           />
         </label>
 
-        <label className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-2">
           <span className={LABEL}>Phone</span>
           <input
             key={`phone-${state.saveCount}`}
@@ -106,7 +106,7 @@ function NameAndPhoneSection({ name, phone }: { name: string; phone: string | nu
           />
         </label>
 
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-2 pt-1">
           <button type="submit" disabled={pending} className={BTN_PRIMARY}>
             {pending ? "Saving…" : "Save changes"}
           </button>
@@ -142,7 +142,7 @@ function EmailChangeSection({ email, pendingEmail }: { email: string; pendingEma
           </p>
         ) : (
           <>
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className={LABEL}>Email address</span>
               <input
                 name="newEmail"
@@ -154,7 +154,7 @@ function EmailChangeSection({ email, pendingEmail }: { email: string; pendingEma
               />
             </label>
 
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className={LABEL}>Current password</span>
               <input
                 name="currentPassword"
@@ -194,9 +194,9 @@ function MarketingPreferenceSection({ initialMarketingOptIn }: { initialMarketin
       className={CARD}
       onChange={(event) => event.currentTarget.requestSubmit()}
     >
-      <div className="flex flex-col gap-2 px-5 py-5">
+      <div className="flex flex-col gap-2 px-6 py-6">
         <h2 className={CARD_TITLE}>Marketing emails</h2>
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           Occasional news about new programmes. Never affects your enrolment.
         </p>
 
@@ -206,7 +206,7 @@ function MarketingPreferenceSection({ initialMarketingOptIn }: { initialMarketin
           </p>
         )}
 
-        <label className="flex items-center gap-2.5 pt-1">
+        <label className="flex items-center gap-2 pt-1">
           <span className="relative inline-flex h-[22px] w-[38px] shrink-0 items-center">
             <input
               name="marketingOptIn"
@@ -222,7 +222,7 @@ function MarketingPreferenceSection({ initialMarketingOptIn }: { initialMarketin
             />
             <span
               aria-hidden
-              className="relative left-0.5 size-[18px] translate-x-0 rounded-full bg-white shadow-[0_1px_2px_rgba(16,24,40,0.15)] transition-transform peer-checked:translate-x-[16px]"
+              className="relative left-0.5 size-[18px] translate-x-0 rounded-full bg-surface shadow-xs transition-transform peer-checked:translate-x-[16px]"
             />
           </span>
           <span className="text-sm text-muted-foreground">
