@@ -71,7 +71,7 @@ const columns: Column<RoleRow>[] = [
 ];
 
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90";
 
 export function RolesTable({
   rows,

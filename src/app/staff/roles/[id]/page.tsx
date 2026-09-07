@@ -85,7 +85,7 @@ export default async function RoleDetailPage({
           // zero-one-many rule reused here for the History tab).
           badge: versions.length,
           content: (
-            <ul className="flex flex-col gap-3">
+            <ul className="flex flex-col gap-2">
               {versions.map((version, index) => {
                 // versions is ordered newest-first; the next array entry is
                 // the prior (older) version.
@@ -98,15 +98,15 @@ export default async function RoleDetailPage({
                   : [];
 
                 return (
-                  <li key={version.id} className="rounded-xl border border-border bg-surface px-3 py-2.5 shadow-xs">
+                  <li key={version.id} className="rounded-xl border border-border bg-surface px-4 py-2 shadow-xs">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                         v{version.version}
                       </span>
                       <span className="font-mono text-[11px] text-muted-foreground">
                         {version.createdAt.toLocaleString()}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground">
                         by {version.createdById ?? "system"}
                       </span>
                     </div>
@@ -114,7 +114,7 @@ export default async function RoleDetailPage({
                       <p className="mt-1 text-sm text-foreground">{version.reason}</p>
                     )}
                     {(added.length > 0 || removed.length > 0) && (
-                      <p className="mt-1 font-mono text-xs text-foreground">
+                      <p className="mt-1 font-mono text-[11px] text-foreground">
                         {added.length > 0 && <span>+ {added.join(", ")} </span>}
                         {removed.length > 0 && <span>− {removed.join(", ")}</span>}
                       </p>
