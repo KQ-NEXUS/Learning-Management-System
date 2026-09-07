@@ -75,16 +75,16 @@ export default async function LearnerLessonPreviewPage({
   }));
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex w-full items-start gap-2 rounded-md border border-border bg-surface-2 px-4 py-2.5">
-        <Eye aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+    <div className="flex flex-col gap-6">
+      <div className="flex w-full items-start gap-2 rounded-md border border-border bg-surface-2 px-4 py-2">
+        <Eye aria-hidden className="mt-1 size-4 shrink-0 text-muted-foreground" />
         <div className="flex flex-col gap-1">
           <p className="text-sm font-semibold text-foreground">
             Preview — the learner view of this lesson.
           </p>
           <Link
             href={`/staff/courses/${id}/preview`}
-            className="w-fit text-xs text-accent underline underline-offset-2"
+            className="w-fit text-sm text-accent underline underline-offset-2"
           >
             Back to the public page preview
           </Link>
@@ -97,7 +97,7 @@ export default async function LearnerLessonPreviewPage({
             {moduleTitle}
           </p>
         )}
-        <h1 className="text-xl font-semibold tracking-tight">{lesson.title}</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight">{lesson.title}</h1>
       </header>
 
       <LessonContent
