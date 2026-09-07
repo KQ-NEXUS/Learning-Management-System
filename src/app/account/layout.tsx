@@ -68,7 +68,7 @@ export default async function AccountLayout({
         role="img"
         aria-label={display ? `Signed in as ${display.label}` : "Signed in"}
         title={display?.label ?? "Signed in"}
-        className="flex size-[30px] shrink-0 items-center justify-center rounded-full text-xs font-semibold text-accent-contrast"
+        className="flex size-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-accent-contrast"
         style={{
           background: "linear-gradient(140deg, var(--color-teal-fill), var(--color-teal-deep))",
         }}
@@ -78,7 +78,7 @@ export default async function AccountLayout({
       <form action={signOutAction}>
         <button
           type="submit"
-          className="text-xs font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          className="text-sm font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground"
         >
           Sign out
         </button>

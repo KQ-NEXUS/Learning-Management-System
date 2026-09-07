@@ -120,7 +120,7 @@ const LOCKED_EXCEPTIONS: { file: string; tokens: Set<string>; rationale: string 
     rationale: "D-21 — auth form-stack gap is fixed at 20px",
   },
   {
-    file: "src/components/shell/AuthPanel.tsx",
+    file: "src/app/(auth)/AuthPanel.tsx",
     tokens: new Set(["gap-5"]),
     rationale: "D-21 — auth form-stack gap is fixed at 20px",
   },
@@ -164,7 +164,52 @@ const GROUPS: Record<string, string[]> = {
     "src/components/catalogue/LessonContent.tsx",
     "src/components/catalogue/LessonMediaPlayer.tsx",
   ],
+  "auth-shell": [
+    "src/app/(auth)/layout.tsx",
+    "src/app/(auth)/AuthPanel.tsx",
+    "src/app/(auth)/signin/page.tsx",
+    "src/app/(auth)/signin/SignInForm.tsx",
+    "src/app/(auth)/register/page.tsx",
+    "src/app/(auth)/register/RegisterForm.tsx",
+    "src/app/(auth)/forgot-password/page.tsx",
+    "src/app/(auth)/forgot-password/ForgotPasswordForm.tsx",
+    "src/app/(auth)/reset-password/page.tsx",
+    "src/app/(auth)/reset-password/ResetPasswordForm.tsx",
+    "src/app/(auth)/verify/page.tsx",
+    "src/app/(auth)/verify/ResendVerificationForm.tsx",
+    "src/app/(auth)/confirm-email-change/page.tsx",
+  ],
+  "public-account-shell": [
+    "src/app/(public)/layout.tsx",
+    "src/app/(public)/courses/page.tsx",
+    "src/app/(public)/courses/[slug]/page.tsx",
+    "src/app/(public)/programmes/page.tsx",
+    "src/app/(public)/programmes/[slug]/page.tsx",
+    "src/app/(public)/not-found.tsx",
+    "src/app/not-found.tsx",
+    "src/app/account/layout.tsx",
+    "src/app/account/page.tsx",
+    "src/app/account/ProfileForm.tsx",
+    "src/components/shell/LearnerShell.tsx",
+    "src/components/shell/BrandMark.tsx",
+  ],
 };
+
+/** Every manifest group key — asserted deep-equal to `Object.keys(GROUPS)` by the
+ * anti-vacuity fixtures so a renamed or dropped group fails loudly instead of
+ * silently making a `-t <group>` run assert nothing (the G-RV-02 root cause).
+ * `staff-shell-access` and `staff-courses-programmes` land with this plan's
+ * Task 2 and are appended to both this literal and `GROUPS` there together. */
+const EXPECTED_GROUPS = [
+  "primitives-table",
+  "primitives-forms",
+  "catalogue-controls-entry",
+  "catalogue-controls-expansion",
+  "catalogue-reading-entry",
+  "catalogue-reading-expansion",
+  "auth-shell",
+  "public-account-shell",
+];
 
 /** Primitives are strictly the 4-size app scale; catalogue/shell/marketing surfaces
  * may also draw the display scale (the two contexts never share a screen, UI-SPEC §4.3). */
@@ -513,5 +558,46 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
     expect(strings).toContain("text-sm gap-4");
     expect(strings.some((s) => s.includes("text-7xl"))).toBe(false);
     expect(strings.some((s) => looksLikeHtml(s))).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Anti-vacuity / anti-stale guards — a dropped group or a dead path fails loud
+  // -------------------------------------------------------------------------
+
+  it("GROUPS keys deep-equal EXPECTED_GROUPS — a renamed or dropped group fails loudly", () => {
+    expect([...Object.keys(GROUPS)].sort()).toEqual([...EXPECTED_GROUPS].sort());
+  });
+
+  it("every manifest group has at least one file", () => {
+    for (const [group, files] of Object.entries(GROUPS)) {
+      expect(files.length, `group "${group}" is empty`).toBeGreaterThan(0);
+    }
+  });
+
+  it("every manifest file exists on disk", () => {
+    const missing = Object.values(GROUPS)
+      .flat()
+      .filter((rel) => !existsSync(path.join(REPO_ROOT, rel)));
+    expect(missing).toEqual([]);
+  });
+
+  it("no relative path appears in two manifest groups", () => {
+    const seen = new Map<string, string>();
+    const dupes: string[] = [];
+    for (const [group, files] of Object.entries(GROUPS)) {
+      for (const rel of files) {
+        const prior = seen.get(rel);
+        if (prior) dupes.push(`${rel} (in "${prior}" and "${group}")`);
+        else seen.set(rel, group);
+      }
+    }
+    expect(dupes).toEqual([]);
+  });
+
+  it("every LOCKED_EXCEPTIONS file exists on disk — a dead exception path cannot be reintroduced", () => {
+    const missing = LOCKED_EXCEPTIONS.map((e) => e.file).filter(
+      (rel) => !existsSync(path.join(REPO_ROOT, rel)),
+    );
+    expect(missing).toEqual([]);
   });
 });
