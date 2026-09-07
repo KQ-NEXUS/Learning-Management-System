@@ -84,12 +84,12 @@ export default async function ArrangePage({
           <p className="font-mono text-[11px] text-muted-foreground">
             {course.slug ?? course.id}
           </p>
-          <h1 className="text-lg font-semibold tracking-tight">
+          <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">
             {course.title ?? "Course"} — structure
           </h1>
           <GuardedLink
             href={`/staff/courses/${id}`}
-            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
           >
             Back to course
           </GuardedLink>

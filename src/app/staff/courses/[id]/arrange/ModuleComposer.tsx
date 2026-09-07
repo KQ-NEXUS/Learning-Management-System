@@ -63,9 +63,9 @@ function failureMessage(
 }
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50";
 const PRIMARY =
-  "rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90 disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:opacity-50";
 
 function ModuleRenameRow({
   module,
@@ -159,7 +159,7 @@ function ModuleRenameRow({
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
@@ -207,11 +207,11 @@ export function ModuleComposer({
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-4 shadow-xs">
-      <div className="flex flex-col gap-0.5">
-        <h2 className="text-sm font-semibold tracking-tight">Modules</h2>
+    <section className="flex flex-col gap-4 rounded-xl border border-border bg-surface px-4 py-4 shadow-xs">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-base font-semibold tracking-tight">Modules</h2>
         {hasNoModules && (
-          <p className="max-w-prose text-xs text-muted-foreground">
+          <p className="max-w-prose text-sm text-muted-foreground">
             This course has no modules yet. A module has to exist before a lesson
             can — add the first one below.
           </p>
@@ -242,7 +242,7 @@ export function ModuleComposer({
       </form>
 
       {modules.length > 0 && (
-        <ul className="flex flex-col gap-1.5 border-t border-border pt-3">
+        <ul className="flex flex-col gap-1 border-t border-border pt-4">
           {modules.map((module) => (
             <ModuleRenameRow
               key={module.id}

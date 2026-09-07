@@ -246,12 +246,12 @@ export function ArrangeClient({
 
 function ReloadRow({ onReload }: { onReload: () => void }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-xs">
+    <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground shadow-xs">
       <span>Someone else changed this order while you were working.</span>
       <button
         type="button"
         onClick={onReload}
-        className="rounded-md border border-input-border bg-surface px-2 py-1 text-xs font-semibold hover:bg-surface-2"
+        className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold hover:bg-surface-2"
       >
         Reload
       </button>
