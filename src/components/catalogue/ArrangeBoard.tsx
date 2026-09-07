@@ -123,7 +123,7 @@ export function arrangementFromDragResult(
 }
 
 const ROW =
-  "flex flex-wrap items-center gap-2 border-t border-border bg-surface px-2.5 py-1.5 text-sm first:border-t-0";
+  "flex flex-wrap items-center gap-2 border-t border-border bg-surface px-4 py-2 text-sm first:border-t-0";
 const BTN =
   "rounded-md border border-input-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -196,7 +196,7 @@ export function ArrangeBoard({
       {error && (
         <div
           role="alert"
-          className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger"
+          className="border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
         >
           {error}
         </div>
@@ -213,7 +213,7 @@ export function ArrangeBoard({
             key={container.id}
             className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-2 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-2 px-4 py-2">
               <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {container.label}
               </h3>
@@ -232,7 +232,7 @@ export function ArrangeBoard({
                   }`}
                 >
                   {container.items.length === 0 && (
-                    <li className="border-t border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+                    <li className="border-t border-dashed border-border px-4 py-2 text-sm text-muted-foreground">
                       {emptyContainerLabel}
                     </li>
                   )}
@@ -256,13 +256,13 @@ export function ArrangeBoard({
                               {item.label}
                             </span>
                             {item.sublabel && (
-                              <span className="truncate text-xs text-muted-foreground">
+                              <span className="truncate text-[11px] text-muted-foreground">
                                 {item.sublabel}
                               </span>
                             )}
                           </span>
                           {item.badge && (
-                            <span className="rounded-full bg-pill-grey-bg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pill-grey-ink">
+                            <span className="rounded-full bg-pill-grey-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-pill-grey-ink">
                               {item.badge}
                             </span>
                           )}
@@ -344,12 +344,12 @@ export function ArrangeBoard({
           type="button"
           onClick={() => onSave()}
           disabled={!dirty || saving}
-          className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save order"}
         </button>
         {dirty && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-pill-amber-bg px-1.5 py-0.5 text-[11px] font-semibold text-pill-amber-ink">
+          <span className="inline-flex items-center gap-1 rounded-full bg-pill-amber-bg px-2 py-1 text-[11px] font-semibold text-pill-amber-ink">
             <span aria-hidden className="size-1.5 rounded-full bg-pill-amber-dot" />
             Unsaved changes
           </span>
@@ -357,11 +357,11 @@ export function ArrangeBoard({
       </div>
 
       {withdrawn.length > 0 && (
-        <details className="rounded-xl border border-border bg-surface-2 px-3 py-2 shadow-xs">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <details className="rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
+          <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Withdrawn ({withdrawn.length})
           </summary>
-          <ul className="mt-2 flex flex-col gap-1.5">
+          <ul className="mt-2 flex flex-col gap-1">
             {withdrawn.map((entry) => (
               <li
                 key={entry.id}
@@ -369,7 +369,7 @@ export function ArrangeBoard({
               >
                 <span className="flex-1 truncate">{entry.label}</span>
                 {entry.kind && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {entry.kind}
                   </span>
                 )}
