@@ -19,7 +19,7 @@ export default async function PublicCoursesPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-[28px] font-semibold leading-tight">Courses</h1>
       {courses.length === 0 ? (
-        <p className="rounded-xl border border-border bg-surface px-6 py-10 text-sm text-muted-foreground shadow-card">
+        <p className="rounded-xl border border-border bg-surface px-6 py-12 text-sm text-muted-foreground shadow-card">
           No courses are listed right now.
         </p>
       ) : (
@@ -27,7 +27,7 @@ export default async function PublicCoursesPage() {
           {courses.map((course) => (
             <li
               key={course.slug}
-              className="flex min-h-32 min-w-0 flex-col rounded-xl border border-border bg-surface p-5 shadow-card"
+              className="flex min-h-32 min-w-0 flex-col rounded-xl border border-border bg-surface p-6 shadow-card"
             >
               <Link
                 href={`/courses/${course.slug}`}

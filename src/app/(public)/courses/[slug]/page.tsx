@@ -48,7 +48,7 @@ export default async function PublicCourseDetailPage({
     <article className="flex flex-col gap-6">
       <Link
         href="/courses"
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-accent"
+        className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-accent"
       >
         <ChevronLeft aria-hidden className="size-4" />
         Back to courses
@@ -62,7 +62,7 @@ export default async function PublicCourseDetailPage({
       </header>
 
       {course.outcomes && (
-        <section className="flex flex-col gap-1.5">
+        <section className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             What you&apos;ll be able to do
           </h2>
@@ -71,11 +71,11 @@ export default async function PublicCourseDetailPage({
       )}
 
       {facts.length > 0 && (
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {facts.map(([label, value]) => (
             <div
               key={label}
-              className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs"
+              className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs"
             >
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {label}
@@ -86,7 +86,7 @@ export default async function PublicCourseDetailPage({
         </dl>
       )}
 
-      <section className="flex flex-col gap-1.5">
+      <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Upcoming dates</h2>
         {course.upcomingCohorts.length === 0 ? (
           <p className="text-sm text-muted-foreground">No dates are scheduled yet.</p>

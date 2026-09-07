@@ -13,7 +13,7 @@ export default async function PublicProgrammesPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-[28px] font-semibold leading-tight">Programmes</h1>
       {programmes.length === 0 ? (
-        <p className="rounded-xl border border-border bg-surface px-6 py-10 text-sm text-muted-foreground shadow-card">
+        <p className="rounded-xl border border-border bg-surface px-6 py-12 text-sm text-muted-foreground shadow-card">
           No programmes are listed right now.
         </p>
       ) : (
@@ -21,7 +21,7 @@ export default async function PublicProgrammesPage() {
           {programmes.map((programme) => (
             <li
               key={programme.slug}
-              className="flex min-h-32 min-w-0 flex-col rounded-xl border border-border bg-surface p-5 shadow-card"
+              className="flex min-h-32 min-w-0 flex-col rounded-xl border border-border bg-surface p-6 shadow-card"
             >
               <Link
                 href={`/programmes/${programme.slug}`}
