@@ -9,6 +9,7 @@ import {
   type DroppableProvided,
   type DropResult,
 } from "@hello-pangea/dnd";
+import { GripVertical } from "lucide-react";
 import { useUnsavedOrder } from "./UnsavedOrderGuard";
 
 /**
@@ -122,9 +123,9 @@ export function arrangementFromDragResult(
 }
 
 const ROW =
-  "flex flex-wrap items-center gap-2 border border-zinc-200 bg-white px-2.5 py-1.5 text-sm";
+  "flex flex-wrap items-center gap-2 border-t border-border bg-surface px-4 py-2 text-sm first:border-t-0";
 const BTN =
-  "border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40";
+  "rounded-md border border-input-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40";
 
 export function ArrangeBoard({
   containers,
@@ -195,7 +196,7 @@ export function ArrangeBoard({
       {error && (
         <div
           role="alert"
-          className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger"
+          className="border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
         >
           {error}
         </div>
@@ -208,23 +209,30 @@ export function ArrangeBoard({
 
       <DragDropContext onDragEnd={handleDragEnd}>
         {containers.map((container, ci) => (
-          <section key={container.id} className="flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
+          <section
+            key={container.id}
+            className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-2 px-4 py-2">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {container.label}
               </h3>
               {renderContainerAction?.(container.id)}
             </div>
 
             <Droppable droppableId={container.id}>
-              {(dp: DroppableProvided) => (
+              {(dp: DroppableProvided, snapshot) => (
                 <ul
                   ref={dp.innerRef}
                   {...dp.droppableProps}
-                  className="flex flex-col gap-1.5"
+                  className={`flex flex-col outline-2 outline-offset-[-2px] transition-colors ${
+                    snapshot.isDraggingOver
+                      ? "bg-surface-2 outline-dashed outline-accent"
+                      : "outline-transparent"
+                  }`}
                 >
                   {container.items.length === 0 && (
-                    <li className="border border-dashed border-zinc-300 px-2.5 py-2 text-xs text-zinc-500">
+                    <li className="border-t border-dashed border-border px-4 py-2 text-sm text-muted-foreground">
                       {emptyContainerLabel}
                     </li>
                   )}
@@ -239,22 +247,22 @@ export function ArrangeBoard({
                           <span
                             {...drag.dragHandleProps}
                             aria-hidden
-                            className="cursor-grab select-none text-zinc-400"
+                            className="cursor-grab select-none text-muted-foreground"
                           >
-                            ⠿
+                            <GripVertical aria-hidden className="size-4" />
                           </span>
                           <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate font-medium">
+                            <span className="truncate font-semibold text-foreground">
                               {item.label}
                             </span>
                             {item.sublabel && (
-                              <span className="truncate text-xs text-zinc-500">
+                              <span className="truncate text-[11px] text-muted-foreground">
                                 {item.sublabel}
                               </span>
                             )}
                           </span>
                           {item.badge && (
-                            <span className="border border-zinc-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
+                            <span className="rounded-full bg-pill-grey-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-pill-grey-ink">
                               {item.badge}
                             </span>
                           )}
@@ -331,23 +339,29 @@ export function ArrangeBoard({
         ))}
       </DragDropContext>
 
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => onSave()}
           disabled={!dirty || saving}
-          className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save order"}
         </button>
+        {dirty && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-pill-amber-bg px-2 py-1 text-[11px] font-semibold text-pill-amber-ink">
+            <span aria-hidden className="size-1.5 rounded-full bg-pill-amber-dot" />
+            Unsaved changes
+          </span>
+        )}
       </div>
 
       {withdrawn.length > 0 && (
-        <details className="border border-zinc-200 bg-zinc-50/60 px-3 py-2">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-zinc-600">
+        <details className="rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
+          <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Withdrawn ({withdrawn.length})
           </summary>
-          <ul className="mt-2 flex flex-col gap-1.5">
+          <ul className="mt-2 flex flex-col gap-1">
             {withdrawn.map((entry) => (
               <li
                 key={entry.id}
@@ -355,7 +369,7 @@ export function ArrangeBoard({
               >
                 <span className="flex-1 truncate">{entry.label}</span>
                 {entry.kind && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {entry.kind}
                   </span>
                 )}

@@ -68,24 +68,24 @@ export default async function ProgrammeDetailPage({
 
   const courseList =
     composition.members.length === 0 ? (
-      <p className="text-sm text-zinc-600">
+      <p className="text-sm text-foreground">
         No courses yet.{" "}
         <Link href={`/staff/programmes/${id}/arrange`} className="text-accent underline underline-offset-2">
           Add courses on the arrange screen.
         </Link>
       </p>
     ) : (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <Link
           href={`/staff/programmes/${id}/arrange`}
-          className="self-start text-xs text-accent underline underline-offset-2"
+          className="self-start text-sm text-accent underline underline-offset-2"
         >
           Arrange courses
         </Link>
         <ol className="flex flex-col gap-1">
           {composition.members.map((member) => (
             <li key={member.membershipId} className="flex items-baseline gap-2 text-sm">
-              <span className="font-mono text-xs text-zinc-400">{member.position + 1}</span>
+              <span className="font-mono text-[11px] text-muted-foreground">{member.position + 1}</span>
               <Link
                 href={`/staff/courses/${member.courseId}`}
                 className="text-accent underline underline-offset-2"
@@ -154,12 +154,12 @@ export default async function ProgrammeDetailPage({
           content: (
             <div className="flex flex-col gap-4">
               {changeSummary.hasChanges && (
-                <div role="status" className="border border-warning/40 bg-warning/10 px-3 py-2.5">
-                  <p className="text-sm font-medium text-warning">
+                <div role="status" className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2 shadow-xs">
+                  <p className="text-sm font-semibold text-warning">
                     This programme has obligation changes that have not been published.
                   </p>
                   {changeSummary.changes.length > 0 && (
-                    <ul className="mt-1 list-disc pl-5 text-xs text-zinc-700">
+                    <ul className="mt-1 list-disc pl-6 text-sm text-foreground">
                       {changeSummary.changes.map((change) => (
                         <li key={change}>{change}</li>
                       ))}

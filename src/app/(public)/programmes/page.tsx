@@ -11,21 +11,28 @@ export default async function PublicProgrammesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Programmes</h1>
+      <h1 className="text-[28px] font-semibold leading-tight">Programmes</h1>
       {programmes.length === 0 ? (
-        <p className="text-sm text-zinc-600">No programmes are listed right now.</p>
+        <p className="rounded-xl border border-border bg-surface px-6 py-12 text-sm text-muted-foreground shadow-card">
+          No programmes are listed right now.
+        </p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {programmes.map((programme) => (
-            <li key={programme.slug} className="border border-zinc-200 p-4">
+            <li
+              key={programme.slug}
+              className="flex min-h-32 min-w-0 flex-col rounded-xl border border-border bg-surface p-6 shadow-card"
+            >
               <Link
                 href={`/programmes/${programme.slug}`}
-                className="text-lg font-medium text-accent underline underline-offset-2"
+                className="break-words text-sm font-semibold text-accent underline underline-offset-2"
               >
                 {programme.title}
               </Link>
               {programme.summary && (
-                <p className="mt-1 max-w-prose text-sm text-zinc-600">{programme.summary}</p>
+                <p className="mt-2 max-w-prose break-words text-sm text-muted-foreground">
+                  {programme.summary}
+                </p>
               )}
             </li>
           ))}

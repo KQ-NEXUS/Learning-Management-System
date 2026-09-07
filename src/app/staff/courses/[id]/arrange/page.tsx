@@ -44,15 +44,21 @@ export default async function ArrangePage({
   ];
 
   const withdrawnLessons: { id: string; title: string; moduleTitle: string }[] = [];
-  for (const meta of moduleMeta) {
-    const rows = await listWithdrawnLessons(meta.id);
-    for (const lesson of rows) {
-      withdrawnLessons.push({
-        id: lesson.id,
-        title: lesson.title,
-        moduleTitle: meta.title,
-      });
+  try {
+    for (const meta of moduleMeta) {
+      const rows = await listWithdrawnLessons(meta.id);
+      for (const lesson of rows) {
+        withdrawnLessons.push({
+          id: lesson.id,
+          title: lesson.title,
+          moduleTitle: meta.title,
+        });
+      }
     }
+  } catch (error) {
+    // A denial must not confirm existence — same response as "not found".
+    if (error instanceof AuthorizationError) notFound();
+    throw error;
   }
 
   const modules = tree.modules.map((m) => ({
@@ -81,15 +87,15 @@ export default async function ArrangePage({
     <UnsavedOrderProvider>
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1">
-          <p className="font-mono text-[11px] text-zinc-500">
+          <p className="font-mono text-[11px] text-muted-foreground">
             {course.slug ?? course.id}
           </p>
-          <h1 className="text-lg font-semibold tracking-tight">
+          <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">
             {course.title ?? "Course"} — structure
           </h1>
           <GuardedLink
             href={`/staff/courses/${id}`}
-            className="text-xs text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+            className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
           >
             Back to course
           </GuardedLink>

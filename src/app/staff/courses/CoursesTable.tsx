@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   ResourceTable,
   StatusPill,
@@ -65,7 +65,9 @@ const columns: Column<CourseRow>[] = [
 ];
 
 const BTN =
-  "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60";
+
+const UNAVAILABLE = "Not available on this screen";
 
 export function CoursesTable({
   rows,
@@ -74,6 +76,7 @@ export function CoursesTable({
   rows?: CourseRow[];
   denied?: { permission: string };
 }) {
+  const unavailableId = useId();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState<SortState>({ key: "title", direction: "asc" });
@@ -175,21 +178,26 @@ export function CoursesTable({
         // Archive replaces delete throughout — there is no delete affordance
         // in any state (PRD CAT-08).
         actions: [
-          { label: "Publish", onClick: () => {} },
-          { label: "Archive…", onClick: () => {} },
+          { label: "Publish", onClick: () => {}, disabled: true, description: UNAVAILABLE },
+          { label: "Archive…", onClick: () => {}, disabled: true, description: UNAVAILABLE },
         ],
       }}
       headerActions={
         <>
-          <button type="button" className={BTN}>
+          <button type="button" disabled aria-describedby={unavailableId} className={BTN}>
             Export CSV
           </button>
           <button
             type="button"
-            className="bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+            disabled
+            aria-describedby={unavailableId}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             New course
           </button>
+          <p id={unavailableId} className="basis-full text-sm text-muted-foreground">
+            {UNAVAILABLE}
+          </p>
         </>
       }
     />

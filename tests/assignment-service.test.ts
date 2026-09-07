@@ -33,6 +33,7 @@ function harness(
   assignmentCount = 1,
 ) {
   const store: AssignmentStore = {
+    $queryRaw: async <T,>() => [] as T,
     assignment: {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         const a = assignments.find((x) => x.id === where.id);

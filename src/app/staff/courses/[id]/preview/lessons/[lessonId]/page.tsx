@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Eye } from "lucide-react";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import {
   lessonService,
   loadCourseTree,
+  resolveCourseIdForLesson,
   type LessonRecord,
 } from "@/server/services/lesson-service";
 import { listLessonResources } from "@/server/services/lesson-resource-service";
@@ -35,6 +37,14 @@ export default async function LearnerLessonPreviewPage({
     // sub-loads inherit the same scope.
     if (!(await courseService.get(id))) notFound();
     lesson = (await lessonService.get(lessonId)) as unknown as LessonRecord | null;
+    // Reject a cross-course preview context — e.g.
+    // `/staff/courses/{A}/preview/lessons/{lesson-that-lives-in-B}` — BEFORE
+    // loading any lesson resources. `loadCourseTree` membership below cannot be
+    // this check: it excludes withdrawn rows, and an authorized withdrawn
+    // lesson must stay previewable. Resolve the lesson's REAL parent course
+    // instead. A missing/unknown lesson resolves to null and takes the same
+    // notFound() path as an id from another course.
+    if ((await resolveCourseIdForLesson(lessonId)) !== id) notFound();
     tree = await loadCourseTree(id);
     resources = await listLessonResources(lessonId);
   } catch (error) {
@@ -65,26 +75,29 @@ export default async function LearnerLessonPreviewPage({
   }));
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1 border-2 border-warning bg-warning/10 px-4 py-2.5">
-        <p className="text-sm font-semibold text-warning">
-          Preview — the learner view of this lesson.
-        </p>
-        <Link
-          href={`/staff/courses/${id}/preview`}
-          className="w-fit text-xs text-zinc-700 underline underline-offset-2"
-        >
-          Back to the public page preview
-        </Link>
+    <div className="flex flex-col gap-6">
+      <div className="flex w-full items-start gap-2 rounded-md border border-border bg-surface-2 px-4 py-2">
+        <Eye aria-hidden className="mt-1 size-4 shrink-0 text-muted-foreground" />
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-foreground">
+            Preview — the learner view of this lesson.
+          </p>
+          <Link
+            href={`/staff/courses/${id}/preview`}
+            className="w-fit text-sm text-accent underline underline-offset-2"
+          >
+            Back to the public page preview
+          </Link>
+        </div>
       </div>
 
       <header className="flex flex-col gap-1">
         {moduleTitle && (
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {moduleTitle}
           </p>
         )}
-        <h1 className="text-xl font-semibold tracking-tight">{lesson.title}</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight">{lesson.title}</h1>
       </header>
 
       <LessonContent
@@ -100,7 +113,7 @@ export default async function LearnerLessonPreviewPage({
         resources={previewResources}
       />
 
-      <nav className="flex items-center justify-between border-t border-zinc-200 pt-4 text-sm">
+      <nav className="flex items-center justify-between border-t border-border pt-4 text-sm">
         {prev ? (
           <Link
             href={`/staff/courses/${id}/preview/lessons/${prev.id}`}

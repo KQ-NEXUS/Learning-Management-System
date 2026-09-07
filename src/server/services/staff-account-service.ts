@@ -29,8 +29,9 @@ import { hashPassword } from "@/server/auth/password";
 import { signOutAllForUser } from "@/server/services/auth-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
-import { assertRoleManagementContinuity } from "@/server/services/continuity-service";
+import { assertRoleManagementContinuity, lockRoleManagementContinuity, type ContinuityLockTx } from "@/server/services/continuity-service";
 import { MIN_REASON_LENGTH } from "@/server/services/role-service";
+import { assignmentTargetScope } from "@/server/services/assignment-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 
@@ -91,7 +92,7 @@ export type CreatedStaffAccount = { user: StaffUserRow; temporaryPassword: strin
 type RoleForAssignment = { id: string; active: boolean; permissions: string[] };
 
 /** The narrow slice of the Prisma client this service actually uses. */
-export type StaffAccountStore = {
+export type StaffAccountStore = ContinuityLockTx & {
   user: {
     findUnique(args: Record<string, unknown>): Promise<StaffUserRow | null>;
     findMany(args?: Record<string, unknown>): Promise<StaffUserRow[]>;
@@ -163,6 +164,11 @@ export function createStaffAccountService(deps: {
     "users.manage",
     () => userScope(),
   )(async (input, ctx) => {
+    // Creating an account does not grant authority to assign its initial role.
+    await authorize<CreateStaffAccountInput>(
+      "roles.manage",
+      (target) => assignmentTargetScope(target.scopeType, target.scopeId),
+    )(async () => {})(input);
     const role = await store.role.findUnique({ where: { id: input.roleId } });
     if (!role || !role.active) {
       throw new Error("Role not found or inactive.");
@@ -257,17 +263,18 @@ export function createStaffAccountService(deps: {
       throw new StaffAccountReasonRequiredError();
     }
 
-    const current = await store.user.findUnique({ where: { id: input.userId } });
-    if (!current) {
-      throw new Error(`User ${input.userId} not found.`);
-    }
+    const { before, after, unchanged } = await store.$transaction(async (tx) => {
+      await lockRoleManagementContinuity(tx);
+      const current = await tx.user.findUnique({ where: { id: input.userId } });
+      if (!current) {
+        throw new Error(`User ${input.userId} not found.`);
+      }
 
-    // Already deactivated — same end state either way (edge IAM-04/idempotency).
-    if (current.status === "DEACTIVATED") {
-      return current;
-    }
+      // Already deactivated — same end state either way (edge IAM-04/idempotency).
+      if (current.status === "DEACTIVATED") {
+        return { before: current, after: current, unchanged: true };
+      }
 
-    const after = await store.$transaction(async (tx) => {
       // D-24d — called unconditionally on every deactivation, not only when
       // the user is known to hold roles.manage: the query is cheap and an
       // unconditional call cannot be forgotten for an edge case.
@@ -278,7 +285,7 @@ export function createStaffAccountService(deps: {
 
       // D-35 — no Assignment row is touched; deny-by-default already denies
       // a deactivated account regardless of its assignments.
-      return tx.user.update({
+      const updated = await tx.user.update({
         where: { id: input.userId },
         data: {
           status: "DEACTIVATED",
@@ -286,7 +293,9 @@ export function createStaffAccountService(deps: {
           deactivatedById: ctx.actor.userId,
         },
       });
+      return { before: current, after: updated, unchanged: false };
     });
+    if (unchanged) return after;
 
     // D-34 — access ends at deactivation, not whenever a session cookie
     // happens to expire.
@@ -299,7 +308,7 @@ export function createStaffAccountService(deps: {
       action: "user.deactivated",
       targetType: "User",
       targetId: input.userId,
-      before: current,
+      before,
       after,
       reason,
       scopeType: "GLOBAL",

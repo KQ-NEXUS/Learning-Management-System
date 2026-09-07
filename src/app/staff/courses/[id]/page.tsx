@@ -71,7 +71,7 @@ export default async function CourseDetailPage({
 
   const contentOutline =
     tree.modules.length === 0 ? (
-      <p className="text-sm text-zinc-600">
+      <p className="text-sm text-foreground">
         No modules yet.{" "}
         <Link
           href={`/staff/courses/${id}/arrange`}
@@ -84,16 +84,16 @@ export default async function CourseDetailPage({
       <div className="flex flex-col gap-4">
         <Link
           href={`/staff/courses/${id}/arrange`}
-          className="self-start text-xs text-accent underline underline-offset-2"
+          className="self-start text-sm text-accent underline underline-offset-2"
         >
           Arrange modules and lessons
         </Link>
         <ol className="flex flex-col gap-4">
           {tree.modules.map((moduleRow) => (
-            <li key={moduleRow.id} className="flex flex-col gap-1.5">
+            <li key={moduleRow.id} className="flex flex-col gap-1">
               <p className="text-sm font-semibold">{moduleRow.title}</p>
               {moduleRow.lessons.length === 0 ? (
-                <p className="pl-4 text-xs text-warning">No lessons in this module yet.</p>
+                <p className="pl-4 text-sm text-warning">No lessons in this module yet.</p>
               ) : (
                 <ul className="flex flex-col gap-1 pl-4">
                   {moduleRow.lessons.map((lesson) => (
@@ -104,11 +104,11 @@ export default async function CourseDetailPage({
                       >
                         {lesson.title}
                       </Link>
-                      <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+                      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                         {lesson.type}
                       </span>
                       {lesson.required && (
-                        <span className="text-[11px] uppercase tracking-wide text-zinc-400">
+                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                           required
                         </span>
                       )}
@@ -148,14 +148,14 @@ export default async function CourseDetailPage({
           {/* D-13 preview surfaces (plan 04-14) — staff-gated, no shareable link. */}
           <Link
             href={`/staff/courses/${id}/preview`}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
           >
             Preview public page
           </Link>
           {firstLessonId && (
             <Link
               href={`/staff/courses/${id}/preview/lessons/${firstLessonId}`}
-              className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
             >
               Preview learner view
             </Link>
@@ -206,13 +206,13 @@ export default async function CourseDetailPage({
               {changeSummary.hasChanges && (
                 <div
                   role="status"
-                  className="border border-warning/40 bg-warning/10 px-3 py-2.5"
+                  className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2 shadow-card"
                 >
-                  <p className="text-sm font-medium text-warning">
+                  <p className="text-sm font-semibold text-warning">
                     This course has obligation changes that have not been published.
                   </p>
                   {changeSummary.changes.length > 0 && (
-                    <ul className="mt-1 list-disc pl-5 text-xs text-zinc-700">
+                    <ul className="mt-1 list-disc pl-6 text-sm text-foreground">
                       {changeSummary.changes.map((change) => (
                         <li key={change}>{change}</li>
                       ))}
@@ -233,7 +233,7 @@ export default async function CourseDetailPage({
           id: "cohorts",
           label: "Cohorts",
           content: (
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-foreground">
               Cohorts delivering this course appear here.
             </p>
           ),

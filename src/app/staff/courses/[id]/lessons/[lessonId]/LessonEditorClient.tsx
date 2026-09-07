@@ -65,8 +65,8 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-zinc-500">{courseId}</p>
-        <h1 className="text-lg font-semibold tracking-tight">
+        <p className="font-mono text-[11px] text-muted-foreground">{courseId}</p>
+        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">
           {props.mode === "create" ? "New lesson" : "Edit lesson"}
         </h1>
       </div>
@@ -74,7 +74,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
       {state.ok === true && (
         <p
           role="status"
-          className="border border-success/30 bg-success/10 px-3 py-2 text-sm text-success"
+          className="border border-success/30 bg-success/10 px-4 py-2 text-sm text-success"
         >
           Saved.
         </p>
@@ -82,7 +82,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
       {state.ok === false && state.message && (
         <p
           role="alert"
-          className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger"
+          className="border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
         >
           {state.message}
         </p>
@@ -109,10 +109,10 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
           <input type="hidden" name="moduleId" value={props.moduleId} />
         )}
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <label
             htmlFor="lesson-type"
-            className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600"
+            className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
           >
             Lesson type
           </label>
@@ -120,7 +120,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
             id="lesson-type"
             value={type}
             onChange={(event) => setType(event.target.value as LessonType)}
-            className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+            className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
           >
             {TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -139,16 +139,19 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
       </ResourceForm>
 
       {props.mode === "edit" && (
-        <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-4 py-3">
-          <p className="text-sm font-medium">Withdraw this lesson</p>
-          <p className="max-w-prose text-xs text-zinc-600">
+        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-4 py-4 shadow-card">
+          <p className="text-sm font-semibold">Withdraw this lesson</p>
+          <p className="max-w-prose text-sm text-muted-foreground">
             A withdrawn lesson leaves published cohorts untouched and can be restored from the
             arrange screen. It is never deleted.
           </p>
           <button
             type="button"
-            onClick={() => setWithdrawOpen(true)}
-            className="border border-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface"
+            onClick={() => {
+              setWithdrawError(null);
+              setWithdrawOpen(true);
+            }}
+            className="rounded-md border border-danger/40 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface"
           >
             Withdraw lesson
           </button>
@@ -165,7 +168,10 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
         pending={withdrawing}
         error={withdrawError}
         onConfirm={confirmWithdraw}
-        onCancel={() => setWithdrawOpen(false)}
+        onCancel={() => {
+          setWithdrawError(null);
+          setWithdrawOpen(false);
+        }}
       />
     </div>
   );

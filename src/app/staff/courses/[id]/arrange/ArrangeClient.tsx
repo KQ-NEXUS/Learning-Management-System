@@ -7,7 +7,7 @@ import {
   GuardedLink,
   type ArrangeContainer,
 } from "@/components/catalogue";
-import { ModuleComposer } from "./ModuleComposer";
+import { ModuleComposer, type ComposerResult } from "./ModuleComposer";
 import {
   createModuleAction,
   renameModuleAction,
@@ -95,7 +95,6 @@ export function ArrangeClient({
   const [lessonError, setLessonError] = useState<string | null>(null);
   const [moduleStale, setModuleStale] = useState(false);
   const [lessonStale, setLessonStale] = useState(false);
-  const [composerError, setComposerError] = useState<string | null>(null);
 
   const moduleDirty = idKey(moduleContainers) !== savedModuleKey;
   const lessonDirty = idKey(lessonContainers) !== savedLessonKey;
@@ -104,55 +103,99 @@ export function ArrangeClient({
     setSavingModules(true);
     setModuleError(null);
     setModuleStale(false);
-    const res = await saveModuleOrderAction({
-      courseId,
-      token,
-      moduleIds: moduleContainers[0].items.map((i) => i.id),
-    });
-    if (res.ok) {
-      setToken(res.token);
-      setSavedModuleKey(idKey(moduleContainers));
-    } else {
-      setModuleError(res.message);
-      setModuleStale(res.reason === "STALE");
+    try {
+      const res = await saveModuleOrderAction({
+        courseId,
+        token,
+        moduleIds: moduleContainers[0].items.map((i) => i.id),
+      });
+      if (res.ok) {
+        setToken(res.token);
+        setSavedModuleKey(idKey(moduleContainers));
+      } else {
+        setModuleError(res.message);
+        setModuleStale(res.reason === "STALE");
+      }
+    } catch {
+      // An unexpected rejection (network drop, action runtime error) leaves the
+      // outcome unknown — surface a generic retryable message, never the caught
+      // value, and do not imply the order was applied. `moduleStale` stays false.
+      setModuleError(
+        "Something went wrong saving the module order. Nothing was changed — try again.",
+      );
+    } finally {
+      setSavingModules(false);
     }
-    setSavingModules(false);
   }
 
   async function handleSaveLessonArrangement() {
     setSavingLessons(true);
     setLessonError(null);
     setLessonStale(false);
-    const res = await saveLessonArrangementAction({
-      courseId,
-      token,
-      arrangement: lessonContainers.map((c) => ({
-        moduleId: c.id,
-        lessonIds: c.items.map((i) => i.id),
-      })),
-    });
-    if (res.ok) {
-      setToken(res.token);
-      setSavedLessonKey(idKey(lessonContainers));
-    } else {
-      setLessonError(res.message);
-      setLessonStale(res.reason === "STALE");
+    try {
+      const res = await saveLessonArrangementAction({
+        courseId,
+        token,
+        arrangement: lessonContainers.map((c) => ({
+          moduleId: c.id,
+          lessonIds: c.items.map((i) => i.id),
+        })),
+      });
+      if (res.ok) {
+        setToken(res.token);
+        setSavedLessonKey(idKey(lessonContainers));
+      } else {
+        setLessonError(res.message);
+        setLessonStale(res.reason === "STALE");
+      }
+    } catch {
+      setLessonError(
+        "Something went wrong saving the lesson arrangement. Nothing was changed — try again.",
+      );
+    } finally {
+      setSavingLessons(false);
     }
-    setSavingLessons(false);
   }
 
-  async function handleAddModule(title: string) {
-    setComposerError(null);
-    const res = await createModuleAction({ courseId, title });
-    if (res.ok) router.refresh();
-    else setComposerError(res.message);
+  // Both handlers translate the already-resolved discriminated action result
+  // for the composer and catch an unexpected rejection (network drop, action
+  // runtime error) so the composer always receives a definite result and can
+  // keep the edited text for a retry. There is no pending state to strand here
+  // — the composer owns per-control busy state and clears it in its own
+  // `finally`.
+  async function handleAddModule(title: string): Promise<ComposerResult> {
+    try {
+      const res = await createModuleAction({ courseId, title });
+      if (res.ok) {
+        router.refresh();
+        return { ok: true };
+      }
+      return { ok: false, message: res.message };
+    } catch {
+      return {
+        ok: false,
+        message: "Something went wrong adding the module. Try again.",
+      };
+    }
   }
 
-  async function handleRenameModule(moduleId: string, title: string) {
-    setComposerError(null);
-    const res = await renameModuleAction({ courseId, moduleId, title });
-    if (res.ok) router.refresh();
-    else setComposerError(res.message);
+  async function handleRenameModule(
+    moduleId: string,
+    title: string,
+  ): Promise<ComposerResult> {
+    try {
+      const res = await renameModuleAction({ courseId, moduleId, title });
+      if (res.ok) {
+        router.refresh();
+        return { ok: true };
+      }
+      return { ok: false, message: res.message };
+    } catch {
+      return {
+        ok: false,
+        message: "Something went wrong renaming the module. Try again.",
+      };
+    }
   }
 
   async function handleRestore(kind: "module" | "lesson", id: string) {
@@ -166,7 +209,6 @@ export function ArrangeClient({
         modules={modules.map((m) => ({ id: m.id, title: m.title }))}
         onAddModule={handleAddModule}
         onRenameModule={handleRenameModule}
-        error={composerError}
       />
 
       {modules.length > 0 && (
@@ -206,7 +248,7 @@ export function ArrangeClient({
             renderContainerAction={(containerId) => (
               <GuardedLink
                 href={`/staff/courses/${courseId}/lessons/new?moduleId=${containerId}`}
-                className="border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-800 hover:bg-zinc-50"
+                className="rounded-md border border-input-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-2"
               >
                 Add lesson
               </GuardedLink>
@@ -221,12 +263,12 @@ export function ArrangeClient({
 
 function ReloadRow({ onReload }: { onReload: () => void }) {
   return (
-    <div className="flex items-center gap-2 border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+    <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground shadow-xs">
       <span>Someone else changed this order while you were working.</span>
       <button
         type="button"
         onClick={onReload}
-        className="border border-zinc-300 bg-white px-2 py-1 text-xs font-medium hover:bg-zinc-50"
+        className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold hover:bg-surface-2"
       >
         Reload
       </button>

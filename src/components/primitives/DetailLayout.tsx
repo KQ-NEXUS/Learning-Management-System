@@ -59,13 +59,13 @@ export function DetailLayout({
 
   if (state.status === "denied") {
     return (
-      <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-6 py-10">
-        <span className="font-mono text-xs tracking-wide text-zinc-500">403</span>
-        <p className="text-sm font-semibold">You do not have access to this record</p>
-        <p className="max-w-prose text-sm text-zinc-600">
+      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+        <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
+        <p className="text-sm font-semibold text-foreground">You do not have access to this record</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
           Your role does not include{" "}
           {state.permission ? (
-            <code className="bg-zinc-100 px-1 font-mono text-xs">
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">
               {state.permission}
             </code>
           ) : (
@@ -79,16 +79,16 @@ export function DetailLayout({
 
   if (state.status === "error") {
     return (
-      <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-6 py-10">
-        <p className="text-sm font-semibold">Could not load this record</p>
-        <p className="max-w-prose text-sm text-zinc-600">
+      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+        <p className="text-sm font-semibold text-foreground">Could not load this record</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
           {state.message ?? "The request failed. Nothing has been changed."}
         </p>
         {state.onRetry && (
           <button
             type="button"
             onClick={state.onRetry}
-            className="border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
           >
             Retry
           </button>
@@ -99,10 +99,13 @@ export function DetailLayout({
 
   if (state.status === "loading") {
     return (
-      <div aria-busy className="flex flex-col gap-5">
-        <span className="h-5 w-64 animate-pulse bg-zinc-200" />
-        <span className="h-3 w-40 animate-pulse bg-zinc-100" />
-        <div className="h-40 w-full animate-pulse bg-zinc-100" />
+      <div
+        aria-busy
+        className="flex flex-col gap-6 rounded-xl border border-border bg-surface px-6 py-6 shadow-card"
+      >
+        <span className="h-5 w-64 animate-pulse rounded-sm bg-surface-2" />
+        <span className="h-3 w-40 animate-pulse rounded-sm bg-surface-2" />
+        <div className="h-40 w-full animate-pulse rounded-sm bg-surface-2" />
         <p aria-live="polite" className="sr-only">
           Loading record
         </p>
@@ -119,19 +122,19 @@ export function DetailLayout({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav aria-label="Breadcrumb">
-          <ol className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+          <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
             {breadcrumbs.map((crumb, i) => (
-              <li key={crumb.label} className="flex items-center gap-1.5">
+              <li key={crumb.label} className="flex items-center gap-1">
                 {i > 0 && <span aria-hidden>/</span>}
                 {crumb.href ? (
-                  <Link href={crumb.href} className="hover:text-zinc-800 hover:underline">
+                  <Link href={crumb.href} className="hover:text-foreground hover:underline">
                     {crumb.label}
                   </Link>
                 ) : (
-                  <span className="text-zinc-700">{crumb.label}</span>
+                  <span className="font-semibold text-foreground">{crumb.label}</span>
                 )}
               </li>
             ))}
@@ -139,20 +142,26 @@ export function DetailLayout({
         </nav>
       )}
 
-      <header className="flex flex-col gap-2 border-b border-zinc-200 pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <header className="flex flex-col gap-2 border-b border-border pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-900">
-              {title}
-            </h1>
-            {identifier && (
-              <p className="font-mono text-xs text-zinc-500">{identifier}</p>
-            )}
-            {subtitle && <p className="text-sm text-zinc-600">{subtitle}</p>}
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight text-foreground">
+                {title}
+              </h1>
+              {badges && (
+                <div className="flex flex-wrap items-center gap-1">{badges}</div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              {identifier && (
+                <p className="font-mono text-[11px] text-muted-foreground">{identifier}</p>
+              )}
+              {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+            </div>
           </div>
           {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
         </div>
-        {badges && <div className="flex flex-wrap items-center gap-1.5">{badges}</div>}
       </header>
 
       {mode === "tabbed" ? (
@@ -160,7 +169,7 @@ export function DetailLayout({
           <div
             role="tablist"
             aria-label="Record sections"
-            className="flex flex-wrap gap-0.5 border-b border-zinc-200"
+            className="flex flex-wrap gap-6 border-b border-border"
           >
             {sections.map((section, i) => {
               const selected = section.id === active?.id;
@@ -180,15 +189,15 @@ export function DetailLayout({
                     if (e.key === "Home") moveFocus(i, -i);
                     if (e.key === "End") moveFocus(i, sections.length - 1 - i);
                   }}
-                  className={`-mb-px border-b-2 px-3 py-2 text-xs font-medium ${
+                  className={`-mb-px flex items-center gap-1 border-b-2 px-1 py-2 text-sm ${
                     selected
-                      ? "border-accent text-zinc-900"
-                      : "border-transparent text-zinc-500 hover:text-zinc-800"
+                      ? "border-accent font-semibold text-foreground"
+                      : "border-transparent font-normal text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {section.label}
                   {section.badge !== undefined && (
-                    <span className="ml-1.5 font-mono text-[11px] text-zinc-400 tabular-nums">
+                    <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
                       {section.badge}
                     </span>
                   )}
@@ -203,6 +212,7 @@ export function DetailLayout({
               role="tabpanel"
               aria-labelledby={`tab-${active.id}`}
               tabIndex={0}
+              className="rounded-xl border border-border bg-surface p-6 shadow-card"
             >
               <SectionBody section={active} />
             </div>
@@ -211,14 +221,16 @@ export function DetailLayout({
       ) : (
         <div className="flex flex-col gap-6">
           {sections.map((section) => (
-            <section key={section.id} aria-labelledby={`heading-${section.id}`}>
+            <section key={section.id} aria-labelledby={`heading-${section.id}`} className="flex flex-col gap-2">
               <h2
                 id={`heading-${section.id}`}
-                className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500"
+                className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
               >
                 {section.label}
               </h2>
-              <SectionBody section={section} />
+              <div className="rounded-xl border border-border bg-surface p-6 shadow-card">
+                <SectionBody section={section} />
+              </div>
             </section>
           ))}
         </div>
@@ -232,16 +244,16 @@ function SectionBody({ section }: { section: DetailSection }) {
   if (!section.error) return <>{section.content}</>;
 
   return (
-    <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-zinc-50 px-4 py-6">
-      <p className="text-sm font-medium text-zinc-900">
+    <div className="flex flex-col items-start gap-2 border border-border bg-surface-2 px-4 py-6">
+      <p className="text-sm font-semibold text-foreground">
         {section.label} failed to load
       </p>
-      <p className="max-w-prose text-sm text-zinc-600">{section.error.message}</p>
+      <p className="max-w-prose text-sm text-muted-foreground">{section.error.message}</p>
       {section.error.onRetry && (
         <button
           type="button"
           onClick={section.error.onRetry}
-          className="border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-white"
+          className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
         >
           Retry
         </button>
@@ -257,14 +269,14 @@ export function DetailFacts({
   facts: { label: string; value: ReactNode; mono?: boolean }[];
 }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
       {facts.map((fact) => (
-        <div key={fact.label} className="flex flex-col gap-0.5">
-          <dt className="text-[11px] uppercase tracking-wide text-zinc-500">
+        <div key={fact.label} className="flex flex-col gap-1">
+          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
             {fact.label}
           </dt>
           <dd
-            className={`text-sm text-zinc-900 ${
+            className={`text-sm text-foreground ${
               fact.mono ? "font-mono tabular-nums" : ""
             }`}
           >

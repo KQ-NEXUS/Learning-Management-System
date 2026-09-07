@@ -42,6 +42,18 @@ export type CourseDetailActionsProps = {
 
 type Feedback = { tone: "success" | "danger"; text: string } | null;
 
+const BTN =
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_PRIMARY =
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+// Accent / danger secondaries — their own strings, not `${BTN} text-accent`, so the
+// colour isn't left to Tailwind source order against BTN's own `text-foreground`
+// / `border-input-border` (which wins, leaving the button ink-coloured).
+const BTN_ACCENT =
+  "rounded-md border border-accent bg-surface px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/5 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_DANGER =
+  "rounded-md border border-danger/40 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface disabled:cursor-not-allowed disabled:opacity-50";
+
 function cohortCodes(result: Extract<CatalogueActionResult, { reason: "COHORTS_RUNNING" }>): string {
   return result.cohorts.map((cohort) => cohort.code).join(", ");
 }
@@ -99,9 +111,20 @@ export function CourseDetailActions({
   async function runListing(listed: boolean) {
     setBusy(listed ? "list" : "unlist");
     setFeedback(null);
-    const result = await setListingAction({ courseId, listed });
-    settle(result, listed ? "Course is now publicly listed." : "Course is no longer publicly listed.");
-    setBusy(null);
+    try {
+      const result = await setListingAction({ courseId, listed });
+      settle(result, listed ? "Course is now publicly listed." : "Course is no longer publicly listed.");
+    } catch {
+      // An unexpected rejection (transport/server fault) — never a silent
+      // success, never a raw exception on screen, and the control must not
+      // stay stuck disabled. `finally` clears busy so the user can retry.
+      setFeedback({
+        tone: "danger",
+        text: "Something went wrong and the listing change was not applied. Please try again.",
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function runPublish(input: {
@@ -111,24 +134,34 @@ export function CourseDetailActions({
   }) {
     setBusy("publish");
     setPublishError(null);
-    const result = await publishCourseAction({
-      courseId,
-      expectedUpdatedAt: input.expectedUpdatedAt,
-      reason: input.reason ?? undefined,
-      migrateCohortIds: input.migrateCohortIds,
-    });
-    setBusy(null);
-    if (result.ok) {
-      setPublishOpen(false);
-      const migrated = result.migratedCohortIds.length;
-      settle(result, migrated > 0 ? `Published. ${migrated} cohort(s) migrated.` : "Course published.");
-      return;
+    try {
+      const result = await publishCourseAction({
+        courseId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+        reason: input.reason ?? undefined,
+        migrateCohortIds: input.migrateCohortIds,
+      });
+      if (result.ok) {
+        setPublishOpen(false);
+        const migrated = result.migratedCohortIds.length;
+        settle(result, migrated > 0 ? `Published. ${migrated} cohort(s) migrated.` : "Course published.");
+        return;
+      }
+      setPublishError(
+        result.reason === "COHORTS_RUNNING"
+          ? `Blocked by running cohorts: ${cohortCodes(result)}.`
+          : result.message,
+      );
+    } catch {
+      // A rejected publish is not a publish. Keep the dialog, the ticked
+      // cohorts and the typed reason so the user can retry deliberately —
+      // never auto-repeat the mutation.
+      setPublishError(
+        "Something went wrong and the course was not published. Your selections are still here — try again.",
+      );
+    } finally {
+      setBusy(null);
     }
-    setPublishError(
-      result.reason === "COHORTS_RUNNING"
-        ? `Blocked by running cohorts: ${cohortCodes(result)}.`
-        : result.message,
-    );
   }
 
   async function runReasoned(
@@ -142,8 +175,16 @@ export function CourseDetailActions({
         : kind === "archive"
           ? archiveCourseAction
           : unarchiveCourseAction;
-    const result = await action({ courseId, reason });
-    setBusy(null);
+    let result: CatalogueActionResult;
+    try {
+      result = await action({ courseId, reason });
+    } catch {
+      // Keep the modal and the typed reason so a retry is one click away.
+      setModalError("Something went wrong and the action was not applied. Please try again.");
+      return;
+    } finally {
+      setBusy(null);
+    }
     if (result.ok) {
       const warnings =
         kind === "archive" && "programmeWarnings" in result && result.programmeWarnings?.length
@@ -170,7 +211,7 @@ export function CourseDetailActions({
       {feedback && (
         <p
           role="alert"
-          className={`px-3 py-2 text-xs ${
+          className={`rounded-md px-4 py-2 text-sm ${
             feedback.tone === "success"
               ? "border border-success/30 bg-success/10 text-success"
               : "border border-danger/30 bg-danger-surface text-danger"
@@ -188,7 +229,7 @@ export function CourseDetailActions({
               setPublishError(null);
               setPublishOpen(true);
             }}
-            className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+            className={BTN_PRIMARY}
           >
             Publish content
           </button>
@@ -197,7 +238,7 @@ export function CourseDetailActions({
           <button
             type="button"
             onClick={() => openModal("unpublish")}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            className={BTN}
           >
             Unpublish
           </button>
@@ -208,7 +249,7 @@ export function CourseDetailActions({
             type="button"
             disabled={busy === "list"}
             onClick={() => runListing(true)}
-            className="border border-accent bg-white px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/5 disabled:opacity-50"
+            className={BTN_ACCENT}
           >
             List publicly
           </button>
@@ -218,7 +259,7 @@ export function CourseDetailActions({
             type="button"
             disabled={busy === "unlist"}
             onClick={() => runListing(false)}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
+            className={BTN}
           >
             Unlist
           </button>
@@ -228,7 +269,7 @@ export function CourseDetailActions({
           <button
             type="button"
             onClick={() => openModal("archive")}
-            className="border border-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface"
+            className={BTN_DANGER}
           >
             Archive
           </button>
@@ -236,7 +277,7 @@ export function CourseDetailActions({
           <button
             type="button"
             onClick={() => openModal("unarchive")}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+            className={BTN}
           >
             Un-archive
           </button>
@@ -244,7 +285,7 @@ export function CourseDetailActions({
 
         <a
           href={`/staff/courses/${courseId}/arrange`}
-          className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
+          className={BTN}
         >
           Arrange
         </a>

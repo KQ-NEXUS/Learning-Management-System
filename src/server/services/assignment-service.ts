@@ -19,7 +19,7 @@ import {
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
-import { assertRoleManagementContinuity } from "@/server/services/continuity-service";
+import { assertRoleManagementContinuity, lockRoleManagementContinuity, type ContinuityLockTx } from "@/server/services/continuity-service";
 import { MIN_REASON_LENGTH } from "@/server/services/role-service";
 
 export { MIN_REASON_LENGTH };
@@ -98,7 +98,7 @@ export type RevokeAssignmentInput = {
 export type AssignmentWithRole = AssignmentRecord & { role: { id: string; name: string; active: boolean } };
 
 /** The narrow slice of the Prisma client this service actually uses. */
-export type AssignmentStore = {
+export type AssignmentStore = ContinuityLockTx & {
   assignment: {
     findUnique(
       args: Record<string, unknown>,
@@ -187,24 +187,25 @@ export function createAssignmentService(deps: {
       throw new AssignmentReasonRequiredError();
     }
 
-    const current = await store.assignment.findUnique({
-      where: { id: input.assignmentId },
-      include: { role: { select: { id: true, active: true, permissions: true } } },
-    });
-    if (!current) {
-      throw new Error(`Assignment ${input.assignmentId} not found.`);
-    }
+    const { before, after, unchanged } = await store.$transaction(async (tx) => {
+      await lockRoleManagementContinuity(tx);
+      const current = await tx.assignment.findUnique({
+        where: { id: input.assignmentId },
+        include: { role: { select: { id: true, active: true, permissions: true } } },
+      });
+      if (!current) {
+        throw new Error(`Assignment ${input.assignmentId} not found.`);
+      }
 
-    // Already revoked — return unchanged rather than writing a second
-    // revocation.
-    if (current.revokedAt !== null) {
-      return current;
-    }
+      // Already revoked — return unchanged rather than writing a second
+      // revocation.
+      if (current.revokedAt !== null) {
+        return { before: current, after: current, unchanged: true };
+      }
 
-    const willLoseRolesManage =
-      current.scopeType === "GLOBAL" && current.role.permissions.includes("roles.manage");
+      const willLoseRolesManage =
+        current.scopeType === "GLOBAL" && current.role.permissions.includes("roles.manage");
 
-    const { before, after } = await store.$transaction(async (tx) => {
       // D-24a — revoking an assignment that grants roles.manage.
       if (willLoseRolesManage) {
         await assertRoleManagementContinuity(
@@ -225,8 +226,9 @@ export function createAssignmentService(deps: {
         },
       });
 
-      return { before: current, after: updated };
+      return { before: current, after: updated, unchanged: false };
     });
+    if (unchanged) return after;
 
     await audit({
       actorId: ctx.actor.userId,

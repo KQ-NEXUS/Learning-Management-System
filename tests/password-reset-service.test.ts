@@ -22,6 +22,7 @@ import {
 } from "@/server/services/verification-service";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { signIn } from "@/server/services/auth-service";
+import { prisma } from "@/server/db";
 
 const NOW = { value: new Date("2026-09-02T12:00:00Z") };
 
@@ -34,7 +35,7 @@ class SimulatedProviderOutage extends Error {
   }
 }
 
-function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
+function sharedHarness(options: { rejectDispatch?: boolean; rejectRevocation?: boolean } = {}) {
   const rejectDispatch = options.rejectDispatch ?? false;
   const users: (PasswordResetUserRow & { passwordHash: string | null })[] = [];
   const tokens: VerificationTokenRow[] = [];
@@ -93,7 +94,17 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
         return row;
       }),
     },
-    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(store),
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const beforeUsers = structuredClone(users);
+      const beforeTokens = structuredClone(tokens);
+      try {
+        return await fn(store);
+      } catch (error) {
+        users.splice(0, users.length, ...beforeUsers);
+        tokens.splice(0, tokens.length, ...beforeTokens);
+        throw error;
+      }
+    },
   };
 
   const verificationService = createVerificationService({
@@ -127,6 +138,7 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
       return `fake-hash(${plaintext})`;
     },
     signOutAll: async (userId: string) => {
+      if (options.rejectRevocation) throw new Error("revocation unavailable");
       signOutCalls.push(userId);
       return 1;
     },
@@ -243,6 +255,15 @@ describe("requestReset — outage-time indistinguishability (G-03-3 regression)"
 });
 
 describe("resetPassword — happy path and session revocation", () => {
+  it("rolls back password replacement and token consumption when revocation fails", async () => {
+    const h = sharedHarness({ rejectRevocation: true });
+    h.users.push({ id: "u1", email: "learner@example.com", status: "ACTIVE", passwordHash: "old-hash" });
+    await h.passwordResetService.requestReset("learner@example.com");
+    const token = extractToken(h.dispatched[0].textContent);
+    await expect(h.passwordResetService.resetPassword({ token, newPassword: "correcthorsebattery" })).rejects.toThrow("revocation unavailable");
+    expect(h.users[0].passwordHash).toBe("old-hash");
+    expect(h.tokens.find((t) => t.token === token)?.consumedAt).toBeNull();
+  });
   it("consumes the token, replaces the password hash, and revokes every session for that user", async () => {
     NOW.value = new Date("2026-09-02T12:00:00Z");
     const { passwordResetService, users, dispatched, signOutCalls } = sharedHarness();
@@ -339,11 +360,10 @@ describe("password-reset-service — module boundaries", () => {
   });
 });
 
-// --- Lockout regression (auth-service.ts, unchanged by this phase) ---
+// --- Lockout regressions for the live signIn binding ---
 //
-// auth-service.ts's signIn() calls the real `prisma` singleton directly (no
-// dependency injection) — @/server/db is mocked at the module level so this
-// stays a unit test rather than requiring a live database.
+// Keep the production password verifier and use a serialized transaction fake.
+// identity-security.integration.test.ts proves the actual PostgreSQL locking.
 const fakeAuthUsers: {
   id: string;
   email: string;
@@ -354,13 +374,15 @@ const fakeAuthUsers: {
   isStaff: boolean;
 }[] = [];
 const fakeSessions: unknown[] = [];
+let authTransactions = Promise.resolve();
 
 vi.mock("@/server/db", () => ({
   prisma: {
+    $queryRaw: async () => [],
     user: {
       findUnique: async ({ where }: { where: { id?: string; email?: string } }) => {
-        if (where.email) return fakeAuthUsers.find((u) => u.email === where.email) ?? null;
-        if (where.id) return fakeAuthUsers.find((u) => u.id === where.id) ?? null;
+        if (where.email) return structuredClone(fakeAuthUsers.find((u) => u.email === where.email) ?? null);
+        if (where.id) return structuredClone(fakeAuthUsers.find((u) => u.id === where.id) ?? null);
         return null;
       },
       update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -376,11 +398,23 @@ vi.mock("@/server/db", () => ({
         return data;
       },
     },
-    $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
+    $transaction: async (fn: (tx: typeof prisma) => Promise<unknown>) => {
+      const result = authTransactions.then(() => fn(prisma));
+      authTransactions = result.then(() => {}, () => {});
+      return result;
+    },
   },
 }));
 
 describe("signIn — lockout counter reset (regression, CONCERNS.md)", () => {
+  it("counts every concurrent wrong-password attempt toward lockout", async () => {
+    const passwordHash = await hashPassword("correcthorsebattery");
+    fakeAuthUsers.length = 0;
+    fakeAuthUsers.push({ id: "u1", email: "learner@example.com", passwordHash, status: "ACTIVE", failedLoginAttempts: 0, lockedUntil: null, isStaff: false });
+    await Promise.all(Array.from({ length: 5 }, () => signIn("learner@example.com", "wrongpassword")));
+    expect(fakeAuthUsers[0].failedLoginAttempts).toBe(5);
+    expect(fakeAuthUsers[0].lockedUntil?.getTime()).toBeGreaterThan(Date.now());
+  }, 30000);
   it("a successful sign-in resets failedLoginAttempts to 0 and clears lockedUntil", async () => {
     const passwordHash = await hashPassword("correcthorsebattery");
     fakeAuthUsers.length = 0;
@@ -401,5 +435,5 @@ describe("signIn — lockout counter reset (regression, CONCERNS.md)", () => {
 
     // Sanity: verifyPassword itself still works as expected against the real hash.
     expect(await verifyPassword("correcthorsebattery", passwordHash)).toBe(true);
-  });
+  }, 30000); // Three production-cost scrypt derivations under full-suite contention.
 });

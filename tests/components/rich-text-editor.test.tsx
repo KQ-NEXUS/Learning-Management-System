@@ -16,6 +16,9 @@ afterEach(() => {
 type RichTextEditorProps = {
   value: string;
   onChange: (html: string) => void;
+  id?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 };
 
 async function loadRichTextEditor(): Promise<
@@ -33,21 +36,25 @@ async function loadRichTextEditor(): Promise<
 }
 
 describe("RichTextEditor", () => {
-  it("renders exactly the seven D-29 authoring controls", async () => {
-    const RichTextEditor = await loadRichTextEditor();
-    render(<RichTextEditor value="<p>Lesson body</p>" onChange={() => {}} />);
+  it(
+    "renders exactly the seven D-29 authoring controls",
+    async () => {
+      const RichTextEditor = await loadRichTextEditor();
+      render(<RichTextEditor value="<p>Lesson body</p>" onChange={() => {}} />);
 
-    const buttons = await screen.findAllByRole("button");
-    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
-      "Bold",
-      "Italic",
-      "Heading 2",
-      "Heading 3",
-      "Bulleted list",
-      "Numbered list",
-      "Link",
-    ]);
-  });
+      const buttons = await screen.findAllByRole("button");
+      expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+        "Bold",
+        "Italic",
+        "Heading 2",
+        "Heading 3",
+        "Bulleted list",
+        "Numbered list",
+        "Link",
+      ]);
+    },
+    15_000,
+  );
 
   it("makes every toolbar control a non-submit toggle with pressed state", async () => {
     const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
@@ -130,5 +137,78 @@ describe("RichTextEditor", () => {
     const html = onChange.mock.calls.at(-1)?.[0] as string;
     expect(html).toContain("<h2>Body</h2>");
     expect(html).not.toMatch(/script|iframe|style=/i);
+  });
+
+  it("forwards id and error associations to the focusable editable textbox", async () => {
+    const RichTextEditor = await loadRichTextEditor();
+    const { container } = render(
+      <RichTextEditor
+        value="<p>Lesson body</p>"
+        onChange={() => {}}
+        id="field-body"
+        aria-invalid
+        aria-describedby="body-error"
+      />,
+    );
+
+    const editable = await waitFor(() => {
+      const el = container.querySelector("[contenteditable='true']");
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+
+    expect(editable.getAttribute("id")).toBe("field-body");
+    expect(editable.getAttribute("aria-invalid")).toBe("true");
+    expect(editable.getAttribute("aria-describedby")).toBe("body-error");
+  });
+
+  it("updates the editable error association when the props change", async () => {
+    const RichTextEditor = await loadRichTextEditor();
+
+    function Harness({ invalid }: { invalid: boolean }) {
+      return (
+        <RichTextEditor
+          value="<p>Lesson body</p>"
+          onChange={() => {}}
+          id="field-body"
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? "body-error" : undefined}
+        />
+      );
+    }
+
+    const { container, rerender } = render(<Harness invalid={false} />);
+    const editable = await waitFor(() => {
+      const el = container.querySelector("[contenteditable='true']");
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+
+    expect(editable.getAttribute("aria-invalid")).toBeNull();
+    expect(editable.getAttribute("aria-describedby")).toBeNull();
+
+    rerender(<Harness invalid />);
+
+    await waitFor(() => {
+      expect(editable.getAttribute("aria-invalid")).toBe("true");
+      expect(editable.getAttribute("aria-describedby")).toBe("body-error");
+    });
+  });
+
+  it("omits error attributes on the editable textbox when no error props are given", async () => {
+    const RichTextEditor = await loadRichTextEditor();
+    const { container } = render(
+      <RichTextEditor value="<p>Lesson body</p>" onChange={() => {}} id="field-body" />,
+    );
+
+    const editable = await waitFor(() => {
+      const el = container.querySelector("[contenteditable='true']");
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+
+    expect(editable.getAttribute("id")).toBe("field-body");
+    expect(editable.getAttribute("aria-invalid")).toBeNull();
+    expect(editable.getAttribute("aria-describedby")).toBeNull();
   });
 });

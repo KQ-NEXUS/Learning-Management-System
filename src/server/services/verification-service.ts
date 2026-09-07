@@ -16,6 +16,7 @@ import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
 export type VerificationTokenRow = {
+  userId?: string | null;
   identifier: string;
   token: string;
   purpose: string;
@@ -34,17 +35,19 @@ type UserForVerification = { id: string; email: string; status: string };
 
 /** The narrow slice of the Prisma client this service actually uses. */
 export type VerificationStore = {
+  session: {
+    updateMany(args: Record<string, unknown>): Promise<{ count: number }>;
+  };
   verificationToken: {
     findFirst(args: Record<string, unknown>): Promise<VerificationTokenRow | null>;
     updateMany(args: Record<string, unknown>): Promise<{ count: number }>;
     create(args: { data: Record<string, unknown> }): Promise<VerificationTokenRow>;
   };
   user: {
+    updateMany(args: Record<string, unknown>): Promise<{ count: number }>;
     findUnique(args: Record<string, unknown>): Promise<UserForVerification | null>;
-    // findFirst (not just findUnique) is needed by profile-service.ts's
-    // confirmEmailChange apply: User.pendingEmail carries no unique
-    // constraint (two accounts may legitimately hold the same pending
-    // address until one confirms), so it cannot be queried via findUnique.
+    // Email-change confirmation filters by both the bound account id and
+    // the still-pending address, which is not itself a unique identifier.
     findFirst(args: Record<string, unknown>): Promise<UserForVerification | null>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<UserForVerification>;
   };
@@ -67,6 +70,7 @@ export function createVerificationService(deps: {
   const now = deps.now ?? (() => new Date());
 
   async function issueToken(params: {
+    userId?: string;
     identifier: string;
     purpose: TokenPurpose;
     ttlMs: number;
@@ -92,6 +96,7 @@ export function createVerificationService(deps: {
       });
       await tx.verificationToken.create({
         data: {
+          userId: params.userId ?? null,
           identifier,
           purpose: params.purpose,
           token,
@@ -140,12 +145,12 @@ export function createVerificationService(deps: {
       { token, purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION },
       async (tx, row) => {
         const user = await tx.user.findUnique({ where: { email: row.identifier } });
-        if (!user) return;
-        await tx.user.update({
-          where: { id: user.id },
+        if (!user || user.status !== "PENDING_VERIFICATION") return;
+        const activated = await tx.user.updateMany({
+          where: { id: user.id, email: row.identifier, status: "PENDING_VERIFICATION" },
           data: { status: "ACTIVE", emailVerified: now() },
         });
-        verifiedUserId = user.id;
+        if (activated.count === 1) verifiedUserId = user.id;
       },
     );
 
@@ -161,7 +166,7 @@ export function createVerificationService(deps: {
       });
     }
 
-    return result.ok ? { ok: true } : { ok: false };
+    return result.ok && verifiedUserId ? { ok: true } : { ok: false };
   }
 
   /** One single result value in all cases — plans 02 and 03 both consume this entry point. */

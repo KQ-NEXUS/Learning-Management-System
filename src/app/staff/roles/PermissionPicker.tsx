@@ -5,7 +5,7 @@ import { isGlobalOnly, type Permission } from "@/server/permissions/catalogue";
 import type { ScopeType } from "@/server/permissions/scope";
 
 const BTN =
-  "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
 
 export type PermissionPickerProps = {
   selected: ReadonlySet<string>;
@@ -50,17 +50,17 @@ export function PermissionPicker({
         const selectedCount = group.permissions.filter((p) => selected.has(p)).length;
 
         return (
-          <details key={group.id} className="border border-zinc-200">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+          <details key={group.id} className="rounded-xl border border-border bg-surface">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
                 {group.label}
               </span>
-              <span className="font-mono text-xs tabular-nums text-zinc-400">
+              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                 {selectedCount}/{group.permissions.length}
               </span>
             </summary>
 
-            <div className="flex flex-col gap-2 border-t border-zinc-200 px-3 py-3">
+            <div className="flex flex-col gap-2 border-t border-border px-4 py-4">
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -74,13 +74,13 @@ export function PermissionPicker({
                 </button>
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 {group.permissions.map((permission) => {
                   const disabled = scopeType !== "GLOBAL" && isGlobalOnly(permission);
                   return (
                     <label
                       key={permission}
-                      className="flex items-center gap-2 text-sm text-zinc-800"
+                      className="flex items-center gap-2 text-sm text-foreground"
                       title={disabled ? "Global scope only" : undefined}
                     >
                       <input
@@ -88,9 +88,9 @@ export function PermissionPicker({
                         checked={selected.has(permission)}
                         disabled={disabled}
                         onChange={() => toggle(permission)}
-                        className="accent-accent"
+                        className="size-4 rounded-[4px] border-[1.5px] border-input-border accent-accent"
                       />
-                      <span className="font-mono text-xs">{permission}</span>
+                      <span className="font-mono text-sm">{permission}</span>
                     </label>
                   );
                 })}

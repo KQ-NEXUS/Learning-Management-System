@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import { ReadinessSummary } from "./ReadinessPanel";
 
@@ -72,8 +72,64 @@ function PublishDialogBody({
 }: PublishDialogProps) {
   const titleId = useId();
   const reasonId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState("");
+
+  // Move focus into the dialog on open, and return it to whatever opened it on
+  // close — the ConfirmModal precedent, so a keyboard user is never stranded on
+  // the inert background.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+    );
+    (focusable && focusable.length > 0 ? focusable[0] : dialogRef.current)?.focus();
+    return () => previouslyFocused?.focus();
+  }, []);
+
+  // Escape while idle cancels; Tab wraps inside the dialog. Escape is suppressed
+  // while a publish is in flight so a stray keypress cannot leave the user unsure
+  // whether it applied.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !pending) {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+      );
+      // While a publish is in flight every control is disabled, so this list is
+      // empty. Without the background marked inert, a bare `return` here lets the
+      // browser move focus onto the live page behind the modal — the window in
+      // which ESC is suppressed. Hold focus on the dialog container (which
+      // already carries tabIndex={-1}) instead — WCAG 2.2 AA containment, NFR-09.
+      if (!focusable || focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [pending, onCancel]);
 
   const migrateCohortIds = useMemo(
     () => affectedCohorts.filter((cohort) => ticked[cohort.id]).map((cohort) => cohort.id),
@@ -88,19 +144,33 @@ function PublishDialogBody({
   const canPublish = blockingCount === 0 && reasonValid && !pending;
 
   function toggle(id: string) {
+    // Cohort selection is frozen while a publish is in flight — the submitted
+    // payload must match exactly what the user confirmed.
+    if (pending) return;
     setTicked((current) => ({ ...current, [id]: !current[id] }));
   }
 
+  function submit() {
+    if (!canPublish) return;
+    onPublish({
+      migrateCohortIds,
+      reason: reason.trim() === "" ? null : reason.trim(),
+      expectedUpdatedAt,
+    });
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto border border-zinc-300 bg-white p-5 shadow-lg"
+        tabIndex={-1}
+        className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-card"
       >
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Publish content
           </span>
           <h2 id={titleId} className="text-base font-semibold tracking-tight">
@@ -110,31 +180,31 @@ function PublishDialogBody({
         </div>
 
         {blockingCount > 0 && (
-          <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+          <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
             {blockingCount} blocking {blockingCount === 1 ? "item" : "items"} must be cleared before this
             course can be published.
           </p>
         )}
 
         {error && (
-          <div role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-danger">
+          <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
               Not published
             </p>
-            <p className="mt-0.5 text-sm text-danger">{error}</p>
+            <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}
 
-        <section className="flex flex-col gap-1.5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
+        <section className="flex flex-col gap-1">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
             Changes this will publish
           </h3>
           {unpublishedChanges.length === 0 ? (
-            <p className="text-xs text-zinc-500">
+            <p className="text-sm text-muted-foreground">
               No obligation changes since the last publication — this re-publishes the current content.
             </p>
           ) : (
-            <ul className="list-disc pl-5 text-sm text-zinc-700">
+            <ul className="list-disc break-words pl-6 text-sm text-foreground">
               {unpublishedChanges.map((change) => (
                 <li key={change}>{change}</li>
               ))}
@@ -142,48 +212,49 @@ function PublishDialogBody({
           )}
         </section>
 
-        <section className="flex flex-col gap-1.5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
+        <section className="flex flex-col gap-1">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
             Running cohorts on this course
           </h3>
           {affectedCohorts.length === 0 ? (
-            <p className="text-xs text-zinc-500">
+            <p className="text-sm text-muted-foreground">
               No running cohorts — this publish affects new bookings only.
             </p>
           ) : (
             <>
-              <p className="text-xs text-zinc-500">
+              <p className="text-sm text-muted-foreground">
                 Tick a cohort to move its learners onto the new version. Left unticked, it keeps the
                 version it was pinned to.
               </p>
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-200 text-left text-[11px] uppercase tracking-wide text-zinc-500">
-                    <th className="py-1.5 pr-2 font-semibold">Migrate</th>
-                    <th className="py-1.5 pr-2 font-semibold">Code</th>
-                    <th className="py-1.5 pr-2 font-semibold">Learners</th>
-                    <th className="py-1.5 font-semibold">Ends</th>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-2 font-semibold">Migrate</th>
+                    <th className="py-2 pr-2 font-semibold">Code</th>
+                    <th className="py-2 pr-2 font-semibold">Learners</th>
+                    <th className="py-2 font-semibold">Ends</th>
                   </tr>
                 </thead>
                 <tbody>
                   {affectedCohorts.map((cohort) => {
                     const boxId = `${reasonId}-${cohort.id}`;
                     return (
-                      <tr key={cohort.id} className="border-b border-zinc-100">
+                      <tr key={cohort.id} className="border-b border-border">
                         <td className="py-2 pr-2">
                           <input
                             id={boxId}
                             type="checkbox"
-                            className="size-4"
+                            className="size-4 disabled:cursor-not-allowed disabled:opacity-50"
                             checked={Boolean(ticked[cohort.id])}
+                            disabled={pending}
                             onChange={() => toggle(cohort.id)}
                           />
                         </td>
                         <td className="py-2 pr-2">
-                          <label htmlFor={boxId} className="font-medium">
+                          <label htmlFor={boxId} className="font-semibold">
                             {cohort.code}
                           </label>
-                          <span className="block text-xs text-zinc-500">{cohort.title}</span>
+                          <span className="block break-words text-sm text-muted-foreground">{cohort.title}</span>
                         </td>
                         <td className="py-2 pr-2 tabular-nums">{cohort.enrolmentCount}</td>
                         <td className="py-2 tabular-nums">{formatEndDate(cohort.endsAt)}</td>
@@ -196,14 +267,14 @@ function PublishDialogBody({
           )}
         </section>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <label
             htmlFor={reasonId}
-            className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600"
+            className="text-[11px] font-semibold uppercase tracking-wide text-foreground"
           >
             Reason
             {reasonRequired && (
-              <span className="ml-1 font-normal text-zinc-400" aria-hidden>
+              <span className="ml-1 font-normal text-muted-foreground" aria-hidden>
                 required
               </span>
             )}
@@ -212,9 +283,10 @@ function PublishDialogBody({
             id={reasonId}
             rows={3}
             value={reason}
+            disabled={pending}
             onChange={(event) => setReason(event.target.value)}
             aria-invalid={reasonRequired && !reasonValid ? true : undefined}
-            className="border border-zinc-300 px-2.5 py-1.5 text-sm aria-[invalid=true]:border-danger"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:bg-surface-2"
             placeholder={
               reasonRequired
                 ? "Why are these cohorts moving to the new version?"
@@ -224,25 +296,19 @@ function PublishDialogBody({
           {reasonRequired && (
             <p
               aria-live="polite"
-              className={`font-mono text-[11px] ${reasonValid ? "text-zinc-500" : "text-danger"}`}
+              className={`font-mono text-[11px] ${reasonValid ? "text-muted-foreground" : "text-danger"}`}
             >
               {reason.trim().length} / {MIN_REASON} minimum
             </p>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
           <button
             type="button"
             disabled={!canPublish}
-            onClick={() =>
-              onPublish({
-                migrateCohortIds,
-                reason: reason.trim() === "" ? null : reason.trim(),
-                expectedUpdatedAt,
-              })
-            }
-            className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={submit}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? "Publishing…" : "Publish"}
           </button>
@@ -250,7 +316,7 @@ function PublishDialogBody({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2 disabled:opacity-50"
           >
             Cancel
           </button>

@@ -82,28 +82,45 @@ export function ProgrammeArrangeClient({
     setSaving(true);
     setOrderError(null);
     setStale(false);
-    const result = await saveProgrammeCourseOrderAction({
-      programmeId,
-      token,
-      membershipIds: containers[0].items.map((i) => i.id),
-    });
-    if (result.ok) {
-      setToken(result.token);
-      router.refresh();
-    } else {
-      setOrderError(result.message);
-      setStale(result.reason === "STALE");
+    try {
+      const result = await saveProgrammeCourseOrderAction({
+        programmeId,
+        token,
+        membershipIds: containers[0].items.map((i) => i.id),
+      });
+      if (result.ok) {
+        setToken(result.token);
+        router.refresh();
+      } else {
+        setOrderError(result.message);
+        setStale(result.reason === "STALE");
+      }
+    } catch {
+      // An unexpected rejection leaves the outcome unknown — surface a generic
+      // retryable message, never the caught value, and never imply the order
+      // was applied. `stale` stays false.
+      setOrderError(
+        "Something went wrong saving the course order. Nothing was changed — try again.",
+      );
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function handleAdd(courseId: string) {
     setBusyCourseId(courseId);
     setMembershipError(null);
-    const result = await addCourseAction({ programmeId, courseId });
-    if (result.ok) router.refresh();
-    else setMembershipError(result.message);
-    setBusyCourseId(null);
+    try {
+      const result = await addCourseAction({ programmeId, courseId });
+      if (result.ok) router.refresh();
+      else setMembershipError(result.message);
+    } catch {
+      setMembershipError(
+        "Something went wrong adding that course. Nothing was changed — try again.",
+      );
+    } finally {
+      setBusyCourseId(null);
+    }
   }
 
   async function handleRemove(membershipId: string) {
@@ -111,10 +128,17 @@ export function ProgrammeArrangeClient({
     if (!member) return;
     setBusyCourseId(member.courseId);
     setMembershipError(null);
-    const result = await removeCourseAction({ programmeId, courseId: member.courseId });
-    if (result.ok) router.refresh();
-    else setMembershipError(result.message);
-    setBusyCourseId(null);
+    try {
+      const result = await removeCourseAction({ programmeId, courseId: member.courseId });
+      if (result.ok) router.refresh();
+      else setMembershipError(result.message);
+    } catch {
+      setMembershipError(
+        "Something went wrong removing that course. Nothing was changed — try again.",
+      );
+    } finally {
+      setBusyCourseId(null);
+    }
   }
 
   const candidates = useMemo(() => {
@@ -129,7 +153,7 @@ export function ProgrammeArrangeClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="max-w-prose border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+      <p className="max-w-prose rounded-xl border border-border bg-surface-2 px-4 py-2 text-sm text-foreground shadow-xs">
         Adding a course here <strong>references</strong> it — the course is not copied, and editing it
         later changes it in every programme it belongs to. Removing it here only takes it out of this
         programme&apos;s draft order; the course itself, other programmes, and any already-published
@@ -137,13 +161,13 @@ export function ProgrammeArrangeClient({
       </p>
 
       {membershipError && (
-        <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+        <p role="alert" className="border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
           {membershipError}
         </p>
       )}
 
       {members.length === 0 ? (
-        <p className="border border-dashed border-zinc-300 px-3 py-3 text-sm text-zinc-500">
+        <p className="rounded-xl border border-dashed border-border bg-surface px-4 py-4 text-sm text-muted-foreground shadow-xs">
           No courses in this programme yet. Add one below.
         </p>
       ) : (
@@ -161,7 +185,7 @@ export function ProgrammeArrangeClient({
             renderItemAction={(item) => (
               <button
                 type="button"
-                className="border border-danger/40 bg-white px-2 py-1 text-[11px] font-medium text-danger hover:bg-danger-surface disabled:opacity-40"
+                className="rounded-md border border-danger/40 bg-surface px-2 py-1 text-[11px] font-semibold text-danger hover:bg-danger-surface disabled:opacity-40"
                 disabled={busyCourseId === memberById.get(item.id)?.courseId}
                 aria-label={`Remove ${item.label} from this programme`}
                 onClick={() => handleRemove(item.id)}
@@ -171,12 +195,12 @@ export function ProgrammeArrangeClient({
             )}
           />
           {stale && (
-            <div className="flex items-center gap-2 border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            <div className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-4 py-2 text-sm text-foreground shadow-xs">
               <span>Someone else changed this order while you were working.</span>
               <button
                 type="button"
                 onClick={() => router.refresh()}
-                className="border border-zinc-300 bg-white px-2 py-1 text-xs font-medium hover:bg-zinc-50"
+                className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold text-foreground hover:bg-surface-2"
               >
                 Reload
               </button>
@@ -185,35 +209,35 @@ export function ProgrammeArrangeClient({
         </>
       )}
 
-      <section className="flex flex-col gap-2 border border-zinc-200 bg-white p-3">
-        <h2 className="text-sm font-semibold tracking-tight">Add a course</h2>
+      <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-card">
+        <h2 className="text-base font-semibold tracking-tight">Add a course</h2>
         <input
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search courses by title or slug"
-          className="border border-zinc-300 px-2.5 py-1.5 text-sm"
+          className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
         />
         {candidates.length === 0 ? (
-          <p className="text-xs text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             {addableCourses.length === 0
               ? "Every course is already in this programme."
               : "No courses match your search."}
           </p>
         ) : (
-          <ul className="flex max-h-72 flex-col divide-y divide-zinc-100 overflow-y-auto">
+          <ul className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto">
             {candidates.map((course) => (
               <li key={course.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
                 <span className="min-w-0 flex-1">
-                  <span className="truncate font-medium">{course.title}</span>
-                  <span className="block truncate text-xs text-zinc-500">
+                  <span className="truncate font-semibold text-foreground">{course.title}</span>
+                  <span className="block truncate text-sm text-muted-foreground">
                     {course.slug}
                     {course.status !== "PUBLISHED" && ` · ${course.status}`}
                   </span>
                 </span>
                 <button
                   type="button"
-                  className="border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium hover:bg-zinc-50 disabled:opacity-40"
+                  className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:opacity-40"
                   disabled={busyCourseId === course.id}
                   onClick={() => handleAdd(course.id)}
                 >

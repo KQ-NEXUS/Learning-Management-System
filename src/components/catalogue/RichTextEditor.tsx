@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { sanitizeLessonBody } from "@/lib/sanitize";
@@ -8,6 +9,14 @@ import { sanitizeLessonBody } from "@/lib/sanitize";
 export type RichTextEditorProps = {
   value: string;
   onChange: (html: string) => void;
+  /**
+   * Applied to the actual ProseMirror editable textbox (not a wrapper), so a
+   * form error summary can link straight to the focusable control and a screen
+   * reader announces the error when the editor takes focus (WR-03, NFR-09).
+   */
+  id?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 };
 
 const EMPTY_ACTIVE_STATE = {
@@ -28,13 +37,31 @@ function isAllowedLink(value: string): boolean {
   }
 }
 
-export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
+export function RichTextEditor({
+  value,
+  onChange,
+  id,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedby,
+}: RichTextEditorProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
 
+  // Attributes land on the ProseMirror editable node itself. A stable
+  // reference means Tiptap re-applies them only when the wiring actually
+  // changes, but a change *does* propagate because the object identity flips.
+  const editorProps = useMemo(() => {
+    const attributes: Record<string, string> = { "aria-label": "Lesson body" };
+    if (id) attributes.id = id;
+    if (ariaInvalid) attributes["aria-invalid"] = "true";
+    if (ariaDescribedby) attributes["aria-describedby"] = ariaDescribedby;
+    return { attributes };
+  }, [id, ariaInvalid, ariaDescribedby]);
+
   const editor = useEditor({
     immediatelyRender: false,
+    editorProps,
     // This array IS the D-29 allow-list. Adding an extension widens what
     // staff can produce and must be reconciled with src/lib/sanitize.ts.
     extensions: [
@@ -51,6 +78,9 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
           openOnClick: false,
           protocols: ["http", "https", "mailto"],
         },
+      }),
+      Placeholder.configure({
+        placeholder: "Start writing the lesson content…",
       }),
     ],
     content: sanitizeLessonBody(value),
@@ -135,11 +165,11 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
   }
 
   return (
-    <div className="border border-zinc-300 bg-white">
+    <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
       <div
         role="toolbar"
         aria-label="Lesson formatting"
-        className="flex flex-wrap gap-1 border-b border-zinc-200 bg-zinc-50 p-2"
+        className="flex flex-wrap gap-1 border-b border-border bg-surface-2 p-2"
       >
         {controls.map((control) => (
           <button
@@ -149,7 +179,7 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
             aria-pressed={control.pressed}
             disabled={!editor}
             onClick={control.run}
-            className="border border-zinc-300 bg-white px-2 py-1 text-xs font-medium hover:bg-zinc-100 aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-accent-contrast disabled:opacity-50"
+            className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold text-foreground hover:bg-surface-2 aria-pressed:border-accent aria-pressed:bg-surface aria-pressed:text-accent aria-pressed:shadow-xs disabled:opacity-50"
           >
             {control.label}
           </button>
@@ -160,9 +190,9 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
         <div
           role="group"
           aria-label="Edit link"
-          className="flex flex-col gap-2 border-b border-zinc-200 bg-zinc-50 p-2"
+          className="flex flex-col gap-2 border-b border-border bg-surface-2 p-2"
         >
-          <label htmlFor="lesson-link-url" className="text-xs font-medium">
+          <label htmlFor="lesson-link-url" className="text-sm font-semibold text-foreground">
             Link URL
           </label>
           <div className="flex flex-wrap gap-2">
@@ -173,26 +203,26 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
               aria-invalid={linkError ? true : undefined}
               aria-describedby={linkError ? "lesson-link-error" : undefined}
               onChange={(event) => setLinkUrl(event.target.value)}
-              className="min-w-64 flex-1 border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+              className="min-w-64 flex-1 rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
               placeholder="https://example.com"
             />
             <button
               type="button"
               onClick={applyLink}
-              className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90"
             >
               Apply link
             </button>
             <button
               type="button"
               onClick={() => setLinkOpen(false)}
-              className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
             >
               Cancel link
             </button>
           </div>
           {linkError && (
-            <p id="lesson-link-error" role="alert" className="text-xs text-danger">
+            <p id="lesson-link-error" role="alert" className="text-sm text-danger">
               {linkError}
             </p>
           )}
@@ -202,7 +232,7 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
       <EditorContent
         editor={editor}
         aria-label="Lesson body"
-        className="min-h-48 px-3 py-2 text-sm [&_.ProseMirror]:min-h-40 [&_.ProseMirror]:outline-none"
+        className="min-h-48 px-4 py-2 text-sm text-foreground [&_.ProseMirror.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror.is-editor-empty:first-child::before]:float-left [&_.ProseMirror.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror]:min-h-40 [&_.ProseMirror]:outline-none"
       />
     </div>
   );

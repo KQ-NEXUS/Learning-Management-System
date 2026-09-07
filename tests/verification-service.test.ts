@@ -28,6 +28,7 @@ function harness(
   const audits: unknown[] = [];
 
   const store: VerificationStore = {
+    session: { updateMany: async () => ({ count: 0 }) },
     verificationToken: {
       findFirst: vi.fn(async ({ where, orderBy }: { where: Record<string, unknown>; orderBy?: { createdAt?: string } }) => {
         let matches = tokens.filter((t) => {
@@ -62,6 +63,11 @@ function harness(
       }),
     },
     user: {
+      updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        const matches = users.filter((u) => Object.entries(where).every(([key, value]) => u[key as keyof UserRow] === value));
+        matches.forEach((u) => Object.assign(u, data));
+        return { count: matches.length };
+      },
       // Guarded per plan 07's schema-derived contract (tests/support/prisma-contract.ts):
       // this fake can never answer a findUnique selector the real Prisma client would refuse.
       findUnique: vi.fn(
@@ -104,6 +110,13 @@ function harness(
 const harness_now = { value: new Date("2026-09-02T12:00:00Z") };
 
 describe("issueToken", () => {
+  it("does not reactivate a deactivated account with an outstanding verification token", async () => {
+    const h = harness({ users: [{ id: "blocked", email: "blocked@example.com", status: "DEACTIVATED" }] });
+    const issued = await h.service.issueToken({ identifier: "blocked@example.com", purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION, ttlMs: 3600000 });
+    if (!issued.ok) throw new Error("fixture token not issued");
+    expect(await h.service.verifyEmail(issued.token)).toEqual({ ok: false });
+    expect(h.users[0].status).toBe("DEACTIVATED");
+  });
   it("returns a token on first issue", async () => {
     harness_now.value = new Date("2026-09-02T12:00:00Z");
     const { service, tokens } = harness();

@@ -98,12 +98,15 @@ describe("evaluateCourseReadiness — four states, four blockers", () => {
     expect(cohorts?.state).toBe("WARN");
   });
 
-  it("schedule, price, capacity and instructors are always NOT_YET_CHECKED — never PASS", () => {
+  // Deliberately changed by plan 05-03 Task 1 (RESEARCH Open Question 1, RESOLVED):
+  // schedule/price/capacity/instructors were per-Course `NOT_YET_CHECKED` stubs
+  // reserved for Phase 5. They are per-Cohort properties a Course does not have,
+  // so they moved to `evaluateCohortReadiness` and are now ABSENT here. The
+  // `assessments` Phase-10 stub and the four blocking Content items are unchanged.
+  it("schedule, price, capacity and instructors are absent from the Course evaluator", () => {
     const items = evaluateCourseReadiness(makeCourse());
     for (const id of ["schedule", "price", "capacity", "instructors"]) {
-      const item = items.find((entry) => entry.id === id);
-      expect(item?.state).toBe("NOT_YET_CHECKED");
-      expect(item?.deferredTo).toBe("Phase 5");
+      expect(items.some((entry) => entry.id === id)).toBe(false);
     }
   });
 

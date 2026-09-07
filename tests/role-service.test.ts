@@ -47,6 +47,7 @@ function harness(
   const roleVersionCreates: unknown[] = [];
 
   const store: RoleStore = {
+    $queryRaw: async <T,>() => [] as T,
     role: {
       findMany: vi.fn(async () => roles),
       findUnique: vi.fn(async ({ where }) => roles.find((r) => r.id === where.id) ?? null),

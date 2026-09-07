@@ -64,7 +64,9 @@ describe("ReadinessPanel", () => {
   it("shows every PXR category heading in the fixed order, even when a category is empty", () => {
     render(<ReadinessPanel items={[item({ id: "title", label: "Title", state: "PASS" })]} />);
     const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    // Catalogue leads the checklist (plan 05-03 Task 2, UI-SPEC readiness categories).
     expect(headings).toEqual([
+      "Catalogue",
       "Content",
       "Schedule",
       "Price",
@@ -74,6 +76,26 @@ describe("ReadinessPanel", () => {
     ]);
   });
 
+  it("renders the Catalogue heading before the Schedule heading", () => {
+    render(
+      <ReadinessPanel
+        items={[
+          item({
+            id: "catalogue",
+            category: "Catalogue",
+            label: "Pinned to a published Course or Programme",
+            state: "FAIL",
+            blocking: true,
+            detail: "Not pinned to a published Course or Programme.",
+          }),
+          item({ id: "schedule", category: "Schedule", label: "Schedule set", state: "PASS" }),
+        ]}
+      />,
+    );
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings.indexOf("Catalogue")).toBeLessThan(headings.indexOf("Schedule"));
+  });
+
   it("keeps every category heading present when all items are NOT_YET_CHECKED", () => {
     const deferred: ReadinessItem[] = (
       ["Schedule", "Price", "Capacity", "Instructors"] as const
@@ -81,7 +103,27 @@ describe("ReadinessPanel", () => {
       item({ id: category.toLowerCase(), category, label: `${category} check`, state: "NOT_YET_CHECKED", deferredTo: "Phase 5" }),
     );
     render(<ReadinessPanel items={deferred} />);
-    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(6);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(7);
+  });
+
+  it("renders a NOT_YET_CHECKED item with the • glyph and neither a tick nor a cross", () => {
+    render(
+      <ReadinessPanel
+        items={[
+          item({
+            id: "later",
+            category: "Completion",
+            label: "Certificate",
+            state: "NOT_YET_CHECKED",
+            deferredTo: "Phase 10",
+          }),
+        ]}
+      />,
+    );
+    const row = screen.getByTestId("readiness-item-later");
+    expect(within(row).getByText("•")).toBeTruthy();
+    expect(within(row).queryByText("✓")).toBeNull();
+    expect(within(row).queryByText("✗")).toBeNull();
   });
 
   it("names a blocking failure as blocking in its accessible text", () => {

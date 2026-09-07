@@ -64,3 +64,6 @@ design/
 .planning/
 reference/
 .worktrees/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+.gsd

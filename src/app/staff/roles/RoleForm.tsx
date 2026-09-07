@@ -92,7 +92,7 @@ export function RoleForm({
               {...props}
               value={cloneId}
               onChange={(e) => handleCloneChange(e.target.value)}
-              className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
             >
               <option value="">Blank slate</option>
               {cloneSources.map((source) => (
@@ -115,7 +115,7 @@ export function RoleForm({
         )}
       </FormField>
 
-      <div className="flex flex-col gap-3 lg:flex-row">
+      <div className="flex flex-col gap-4 lg:flex-row">
         <div className="flex-1">
           <PermissionPicker selected={selected} onChange={setSelected} />
         </div>

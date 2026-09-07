@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { createScanLessonResourceHandler } from "../worker/handlers/scan-lesson-resource";
 import { createReconcileLessonResourcesHandler } from "../worker/handlers/reconcile-lesson-resources";
+import { createReleaseExpiredHoldsHandler } from "../worker/handlers/release-expired-holds";
 
 function scanHarness(result: { isInfected: boolean; viruses: string[] }) {
   const markResult = vi.fn(async () => undefined);
@@ -103,5 +104,35 @@ describe("lesson resource reconciliation worker handler", () => {
 
     expect(enqueue.mock.calls).toEqual([["old-1"], ["old-2"]]);
     expect(log).toHaveBeenCalledWith("[worker] re-enqueued 2 stuck lesson resources");
+  });
+});
+
+describe("hold-release worker handler", () => {
+  it("calls the injected sweep once per invocation and logs the released count", async () => {
+    const releaseExpiredHolds = vi.fn(async () => ({ released: 3, failed: 0 }));
+    const log = vi.fn();
+    const handler = createReleaseExpiredHoldsHandler({
+      releaseExpiredHolds,
+      log,
+    });
+
+    await handler();
+
+    expect(releaseExpiredHolds).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("[worker] released 3 expired seat holds");
+  });
+
+  it("propagates a thrown error so pg-boss records the failure and retries", async () => {
+    const releaseExpiredHolds = vi.fn(async () => {
+      throw new Error("database unavailable");
+    });
+    const log = vi.fn();
+    const handler = createReleaseExpiredHoldsHandler({
+      releaseExpiredHolds,
+      log,
+    });
+
+    await expect(handler()).rejects.toThrow("database unavailable");
+    expect(log).not.toHaveBeenCalled();
   });
 });

@@ -25,6 +25,12 @@ export type LessonFormFieldsProps = {
   initialResources?: LessonResourceView[];
 };
 
+// The editable textbox carries this id so the ResourceForm error summary can
+// link straight to it; the error paragraph carries a matching stable id so the
+// editor's aria-describedby resolves (WR-03, NFR-09).
+const BODY_FIELD_ID = "field-body";
+const BODY_ERROR_ID = "body-error";
+
 function BodyEditor({
   initialBody,
   error,
@@ -36,15 +42,21 @@ function BodyEditor({
 }) {
   const [body, setBody] = useState(initialBody);
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
+    <div className="flex flex-col gap-1">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         {optional ? "Optional introductory prose" : "Lesson content"}
-        {!optional && <span className="ml-1 font-normal text-zinc-400">required</span>}
+        {!optional && <span className="ml-1 font-normal text-muted-foreground">required</span>}
       </p>
       <input type="hidden" name="body" value={body} />
-      <RichTextEditor value={body} onChange={setBody} />
+      <RichTextEditor
+        value={body}
+        onChange={setBody}
+        id={BODY_FIELD_ID}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? BODY_ERROR_ID : undefined}
+      />
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p id={BODY_ERROR_ID} role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
@@ -76,29 +88,29 @@ export function LessonFormFields({
         )}
       </FormField>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex items-start gap-2 border border-zinc-200 px-3 py-2.5 text-sm">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm shadow-xs">
           <input
             type="checkbox"
             name="required"
             defaultChecked={values.required ?? true}
-            className="mt-0.5 size-4"
+            className="mt-1 size-4 rounded-md border border-input-border accent-accent"
           />
           <span>
-            <span className="block font-medium">Required</span>
-            <span className="block text-xs text-zinc-500">Learners must complete this lesson.</span>
+            <span className="block font-semibold text-foreground">Required</span>
+            <span className="block text-sm text-muted-foreground">Learners must complete this lesson.</span>
           </span>
         </label>
-        <label className="flex items-start gap-2 border border-zinc-200 px-3 py-2.5 text-sm">
+        <label className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm shadow-xs">
           <input
             type="checkbox"
             name="allowManualComplete"
             defaultChecked={values.allowManualComplete ?? true}
-            className="mt-0.5 size-4"
+            className="mt-1 size-4 rounded-md border border-input-border accent-accent"
           />
           <span>
-            <span className="block font-medium">Allow manual complete</span>
-            <span className="block text-xs text-zinc-500">Show a learner completion control.</span>
+            <span className="block font-semibold text-foreground">Allow manual complete</span>
+            <span className="block text-sm text-muted-foreground">Show a learner completion control.</span>
           </span>
         </label>
       </div>
@@ -116,7 +128,7 @@ export function LessonFormFields({
               initialResources={initialResources}
             />
           ) : (
-            <p className="border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+            <p className="rounded-xl border border-border bg-surface-2 px-4 py-2 text-sm text-muted-foreground shadow-xs">
               Save the lesson once before uploading resources.
             </p>
           )}
@@ -183,7 +195,7 @@ export function LessonFormFields({
               {...field}
               disabled
               defaultValue=""
-              className="border border-zinc-300 bg-zinc-100 px-2.5 py-1.5 text-sm text-zinc-500"
+              className="rounded-md border border-input-border bg-surface-2 px-4 py-2 text-sm text-muted-foreground"
             >
               <option value="">No assessments available</option>
             </select>

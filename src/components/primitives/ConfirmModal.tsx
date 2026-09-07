@@ -94,7 +94,16 @@ function ConfirmDialog({
       const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
       );
-      if (!focusable || focusable.length === 0) return;
+      // During the pending window every control is disabled, so the focusable
+      // list is empty. Without the background marked inert, a bare `return` here
+      // lets the browser advance focus onto the live page behind the modal —
+      // exactly the window in which ESC is suppressed. Hold focus on the dialog
+      // container instead (WCAG 2.2 AA focus containment, NFR-09).
+      if (!focusable || focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -118,44 +127,45 @@ function ConfirmDialog({
       : "bg-accent text-accent-contrast hover:opacity-90";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex w-full max-w-md flex-col gap-4 border border-zinc-300 bg-white p-5 shadow-lg"
+        tabIndex={-1}
+        className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-6 shadow-card"
       >
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {eyebrow}
           </span>
-          <h2 id={titleId} className="text-base font-semibold tracking-tight">
+          <h2 id={titleId} className="text-base font-semibold tracking-tight text-foreground">
             {title}
           </h2>
-          <div className="text-sm text-zinc-600">{description}</div>
+          <div className="text-sm text-muted-foreground">{description}</div>
         </div>
 
         {error && (
           <div
             role="alert"
-            className="border border-danger/30 bg-danger-surface px-3 py-2"
+            className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-danger">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
               Action not applied
             </p>
-            <p className="mt-0.5 text-sm text-danger">{error}</p>
+            <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}
 
         {requiresReason && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label
               htmlFor={reasonId}
-              className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600"
+              className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
             >
               {reasonLabel}
-              <span className="ml-1 font-normal text-zinc-400" aria-hidden>
+              <span className="ml-1 font-normal text-muted-foreground" aria-hidden>
                 required
               </span>
             </label>
@@ -169,13 +179,13 @@ function ConfirmDialog({
               aria-describedby={counterId}
               onChange={(e) => setReason(e.target.value)}
               onBlur={() => setTouched(true)}
-              className="border border-zinc-300 px-2.5 py-1.5 text-sm aria-[invalid=true]:border-danger disabled:bg-zinc-50"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground aria-[invalid=true]:border-danger disabled:bg-surface-2"
             />
             <p
               id={counterId}
               aria-live="polite"
               className={`font-mono text-[11px] ${
-                touched && !reasonValid ? "text-danger" : "text-zinc-500"
+                touched && !reasonValid ? "text-danger" : "text-muted-foreground"
               }`}
             >
               {reason.trim().length} / {minReasonLength} minimum
@@ -184,14 +194,14 @@ function ConfirmDialog({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
           <button
             type="button"
             ref={confirmRef}
             disabled={!canConfirm}
             aria-disabled={!canConfirm}
             onClick={() => canConfirm && onConfirm(reason.trim())}
-            className={`px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${confirmClasses}`}
+            className={`rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${confirmClasses}`}
           >
             {pending ? "Working…" : confirmLabel}
           </button>
@@ -199,11 +209,11 @@ function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
-          <span className="ml-auto font-mono text-[10px] text-zinc-400">
+          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
             {pending ? "ESC suppressed" : "ESC cancels"}
           </span>
         </div>

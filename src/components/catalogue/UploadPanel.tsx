@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FileText, Upload } from "lucide-react";
 import { StatusPill } from "@/components/primitives";
 import {
   UPLOAD_LIMITS,
@@ -34,6 +35,20 @@ const FRIENDLY_LIMIT_MESSAGES: Record<UploadableLessonType, string> = {
   FILE: "Files must be an accepted document, text, archive or Office format and under 50 MB.",
   VIDEO: "Videos must be MP4 or WebM and under 2 GB.",
 };
+
+/**
+ * A single failed status refresh is transient: the attempt is still spent from
+ * the poll budget, but the loop keeps going. Kept distinct from the
+ * exhausted-budget instruction below so a flake never looks like a dead end.
+ */
+const POLL_RETRY_MESSAGE = "Could not refresh scan status just now — trying again.";
+
+/**
+ * Shown once the finite poll budget is spent. This is an instruction, not a
+ * transient notice: nothing further will happen automatically.
+ */
+const POLL_EXHAUSTED_MESSAGE =
+  "Automatic scan-status checks have stopped for now. Reload the page to keep checking.";
 
 function statusPresentation(status: LessonResourceView["scanStatus"]) {
   switch (status) {
@@ -71,6 +86,11 @@ export function UploadPanel({
   const [uploading, setUploading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const pollCount = useRef(0);
+  // Bumped whenever a fresh upload or a manual retry queues new scanning work,
+  // so the recursive poll effect below restarts with a full budget even if
+  // other resources were already pending (a boolean `hasPending` would not
+  // change and would leave the loop stranded on its spent budget).
+  const [pollEpoch, setPollEpoch] = useState(0);
 
   const fetchResources = useCallback(
     async (signal?: AbortSignal): Promise<LessonResourceView[]> => {
@@ -88,10 +108,6 @@ export function UploadPanel({
   );
 
   useEffect(() => {
-    pollCount.current = 0;
-  }, [lessonId]);
-
-  useEffect(() => {
     if (initialResources !== undefined) return;
     const controller = new AbortController();
     void fetchResources(controller.signal)
@@ -105,28 +121,60 @@ export function UploadPanel({
   }, [fetchResources, initialResources]);
 
   const hasPending = resources.some((resource) => resource.scanStatus === "PENDING");
-  useEffect(() => {
-    if (!hasPending || maxPolls <= 0 || pollCount.current >= maxPolls) return;
 
+  // A recursive, bounded poll. It reschedules itself from `finally` — so a
+  // rejected refresh does NOT strand the scanning rows the way a
+  // dependency-triggered one-shot did (it would never re-run because a failed
+  // poll changes no state) — while a rejected attempt still counts against the
+  // finite budget so a permanently failing endpoint cannot spin forever. Only
+  // one request is ever in flight; the timer is cleared on unmount or once no
+  // resource is pending.
+  useEffect(() => {
+    if (!hasPending || maxPolls <= 0) return;
+
+    let cancelled = false;
+    let inFlight = false;
+    let timer: number | undefined;
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
+    pollCount.current = 0;
+
+    function scheduleNext() {
+      if (cancelled) return;
+      if (pollCount.current >= maxPolls) {
+        setMessage(POLL_EXHAUSTED_MESSAGE);
+        return;
+      }
+      timer = window.setTimeout(runPoll, pollIntervalMs);
+    }
+
+    function runPoll() {
+      if (cancelled || inFlight) return;
+      inFlight = true;
       pollCount.current += 1;
       void fetchResources(controller.signal)
         .then((next) => {
-          if (!controller.signal.aborted) setResources(next);
+          if (cancelled || controller.signal.aborted) return;
+          setResources(next);
+          setMessage((current) => (current === POLL_RETRY_MESSAGE ? null : current));
         })
-        .catch((error: unknown) => {
-          if (!controller.signal.aborted) {
-            setMessage(error instanceof Error ? error.message : "Could not refresh scan status.");
-          }
+        .catch(() => {
+          if (cancelled || controller.signal.aborted) return;
+          setMessage(POLL_RETRY_MESSAGE);
+        })
+        .finally(() => {
+          inFlight = false;
+          scheduleNext();
         });
-    }, pollIntervalMs);
+    }
+
+    timer = window.setTimeout(runPoll, pollIntervalMs);
 
     return () => {
-      window.clearTimeout(timer);
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
       controller.abort();
     };
-  }, [fetchResources, hasPending, maxPolls, pollIntervalMs, resources]);
+  }, [fetchResources, hasPending, maxPolls, pollIntervalMs, pollEpoch]);
 
   function chooseFile(file: File | null) {
     setMessage(null);
@@ -190,7 +238,7 @@ export function UploadPanel({
         position: resources.length,
       };
       setResources((current) => [...current, pending]);
-      pollCount.current = 0;
+      setPollEpoch((epoch) => epoch + 1);
       setSelectedFile(null);
       setTitle("");
     } catch (error) {
@@ -223,7 +271,7 @@ export function UploadPanel({
       if (!response.ok) {
         throw new Error(body?.error ?? "Could not retry this scan.");
       }
-      pollCount.current = 0;
+      setPollEpoch((epoch) => epoch + 1);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not retry this scan.");
     } finally {
@@ -237,74 +285,82 @@ export function UploadPanel({
   return (
     <fieldset
       aria-label={`${noun} resources`}
-      className="flex flex-col gap-3 border border-zinc-200 bg-zinc-50 p-3"
+      className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-xs"
     >
-      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-600">
+      <legend className="px-1 text-[11px] font-semibold uppercase tracking-wide text-foreground">
         Resources
       </legend>
 
-      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+      <label className="flex flex-col gap-1 text-sm font-semibold text-foreground">
         Resource title
         <input
           type="text"
           value={title}
           maxLength={300}
           onChange={(event) => setTitle(event.target.value)}
-          className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+          className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
         />
       </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-        {`Choose ${noun}`}
+      <label className="flex flex-col gap-2 rounded-md border border-dashed border-input-border bg-surface-2 p-4 text-sm font-semibold text-foreground">
+        <span className="flex items-center gap-2">
+          <Upload aria-hidden className="size-4 text-accent" />
+          {`Choose ${noun}`}
+        </span>
         <input
           type="file"
           accept={limit.mimeTypes.join(",")}
           onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
-          className="text-sm file:mr-3 file:border file:border-zinc-300 file:bg-white file:px-2.5 file:py-1.5 file:text-xs file:font-medium"
+          className="text-sm file:mr-4 file:rounded-md file:border file:border-input-border file:bg-surface file:px-4 file:py-2 file:text-sm file:font-semibold"
         />
       </label>
       <button
         type="button"
         disabled={!selectedFile || uploading}
         onClick={() => void upload()}
-        className="self-start bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast disabled:opacity-50"
+        className="self-start rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast disabled:opacity-50"
       >
         Upload resource
       </button>
 
       {uploading && (
-        <div aria-live="polite" className="flex items-center gap-2 text-xs text-zinc-600">
+        <div aria-live="polite" className="flex items-center gap-2 text-sm text-muted-foreground">
           <progress aria-label="Upload progress" className="h-1.5 w-32" />
           Uploading…
         </div>
       )}
       {message && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="text-sm text-danger">
           {message}
         </p>
       )}
 
       {resources.length === 0 ? (
-        <p className="text-xs text-zinc-500">No resources uploaded yet.</p>
+        <p className="text-sm text-muted-foreground">No resources uploaded yet.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-zinc-200 border-t border-zinc-200">
+        <ul className="flex flex-col divide-y divide-border border-t border-border">
           {resources.map((resource) => {
             const status = statusPresentation(resource.scanStatus);
             return (
-              <li key={resource.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{resource.title}</p>
-                  <p className="truncate text-xs text-zinc-500">{resource.filename}</p>
-                  {(resource.scanStatus === "INFECTED" || resource.scanStatus === "ERROR") &&
-                    resource.scanDetail && (
-                      <p className="mt-1 text-xs text-zinc-600">{resource.scanDetail}</p>
-                    )}
+              <li key={resource.id} className="flex flex-wrap items-start justify-between gap-2 py-4">
+                <div className="flex min-w-0 flex-1 items-start gap-2">
+                  <FileText aria-hidden className="mt-1 size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-semibold">{resource.title}</p>
+                    <p className="break-all text-sm text-muted-foreground">{resource.filename}</p>
+                    {(resource.scanStatus === "INFECTED" || resource.scanStatus === "ERROR") &&
+                      resource.scanDetail && (
+                        <p className="mt-1 break-words text-sm text-muted-foreground">
+                          {resource.scanDetail}
+                        </p>
+                      )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill label={status.label} tone={status.tone} />
                   {resource.scanStatus === "CLEAN" && (
                     <a
                       href={`/api/lesson-resources/${resource.id}/download`}
-                      className="text-xs font-medium text-accent underline underline-offset-2"
+                      className="text-sm font-semibold text-accent underline underline-offset-2"
                     >
                       Download
                     </a>
@@ -315,7 +371,7 @@ export function UploadPanel({
                       aria-label="Retry scan"
                       disabled={retryingId === resource.id}
                       onClick={() => void retry(resource.id)}
-                      className="border border-zinc-300 bg-white px-2 py-1 text-xs font-medium disabled:opacity-50"
+                      className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold disabled:opacity-50"
                     >
                       {retryingId === resource.id ? "Retrying…" : "Retry"}
                     </button>
