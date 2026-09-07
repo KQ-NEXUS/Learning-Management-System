@@ -43,9 +43,9 @@ export type CourseDetailActionsProps = {
 type Feedback = { tone: "success" | "danger"; text: string } | null;
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 
 function cohortCodes(result: Extract<CatalogueActionResult, { reason: "COHORTS_RUNNING" }>): string {
   return result.cohorts.map((cohort) => cohort.code).join(", ");
@@ -204,7 +204,7 @@ export function CourseDetailActions({
       {feedback && (
         <p
           role="alert"
-          className={`rounded-md px-3 py-2 text-xs ${
+          className={`rounded-md px-4 py-2 text-sm ${
             feedback.tone === "success"
               ? "border border-success/30 bg-success/10 text-success"
               : "border border-danger/30 bg-danger-surface text-danger"

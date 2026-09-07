@@ -158,10 +158,10 @@ function PublishDialogBody({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-card"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-card"
       >
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Publish content
           </span>
           <h2 id={titleId} className="text-base font-semibold tracking-tight">
@@ -171,31 +171,31 @@ function PublishDialogBody({
         </div>
 
         {blockingCount > 0 && (
-          <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+          <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
             {blockingCount} blocking {blockingCount === 1 ? "item" : "items"} must be cleared before this
             course can be published.
           </p>
         )}
 
         {error && (
-          <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-danger">
+          <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
               Not published
             </p>
-            <p className="mt-0.5 text-sm text-danger">{error}</p>
+            <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}
 
-        <section className="flex flex-col gap-1.5">
+        <section className="flex flex-col gap-1">
           <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
             Changes this will publish
           </h3>
           {unpublishedChanges.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               No obligation changes since the last publication — this re-publishes the current content.
             </p>
           ) : (
-            <ul className="list-disc break-words pl-5 text-sm text-foreground">
+            <ul className="list-disc break-words pl-6 text-sm text-foreground">
               {unpublishedChanges.map((change) => (
                 <li key={change}>{change}</li>
               ))}
@@ -203,27 +203,27 @@ function PublishDialogBody({
           )}
         </section>
 
-        <section className="flex flex-col gap-1.5">
+        <section className="flex flex-col gap-1">
           <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
             Running cohorts on this course
           </h3>
           {affectedCohorts.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               No running cohorts — this publish affects new bookings only.
             </p>
           ) : (
             <>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Tick a cohort to move its learners onto the new version. Left unticked, it keeps the
                 version it was pinned to.
               </p>
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <th className="py-1.5 pr-2 font-semibold">Migrate</th>
-                    <th className="py-1.5 pr-2 font-semibold">Code</th>
-                    <th className="py-1.5 pr-2 font-semibold">Learners</th>
-                    <th className="py-1.5 font-semibold">Ends</th>
+                    <th className="py-2 pr-2 font-semibold">Migrate</th>
+                    <th className="py-2 pr-2 font-semibold">Code</th>
+                    <th className="py-2 pr-2 font-semibold">Learners</th>
+                    <th className="py-2 font-semibold">Ends</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -245,7 +245,7 @@ function PublishDialogBody({
                           <label htmlFor={boxId} className="font-semibold">
                             {cohort.code}
                           </label>
-                          <span className="block break-words text-xs text-muted-foreground">{cohort.title}</span>
+                          <span className="block break-words text-sm text-muted-foreground">{cohort.title}</span>
                         </td>
                         <td className="py-2 pr-2 tabular-nums">{cohort.enrolmentCount}</td>
                         <td className="py-2 tabular-nums">{formatEndDate(cohort.endsAt)}</td>
@@ -258,7 +258,7 @@ function PublishDialogBody({
           )}
         </section>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <label
             htmlFor={reasonId}
             className="text-[11px] font-semibold uppercase tracking-wide text-foreground"
@@ -277,7 +277,7 @@ function PublishDialogBody({
             disabled={pending}
             onChange={(event) => setReason(event.target.value)}
             aria-invalid={reasonRequired && !reasonValid ? true : undefined}
-            className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:bg-surface-2"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:bg-surface-2"
             placeholder={
               reasonRequired
                 ? "Why are these cohorts moving to the new version?"
@@ -299,7 +299,7 @@ function PublishDialogBody({
             type="button"
             disabled={!canPublish}
             onClick={submit}
-            className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? "Publishing…" : "Publish"}
           </button>
@@ -307,7 +307,7 @@ function PublishDialogBody({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-surface-2 disabled:opacity-50"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2 disabled:opacity-50"
           >
             Cancel
           </button>

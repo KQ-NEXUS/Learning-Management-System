@@ -179,7 +179,7 @@ export function RichTextEditor({
             aria-pressed={control.pressed}
             disabled={!editor}
             onClick={control.run}
-            className="rounded-md border border-input-border bg-surface px-2 py-1 text-xs font-semibold text-foreground hover:bg-surface-2 aria-pressed:border-accent aria-pressed:bg-surface aria-pressed:text-accent aria-pressed:shadow-xs disabled:opacity-50"
+            className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold text-foreground hover:bg-surface-2 aria-pressed:border-accent aria-pressed:bg-surface aria-pressed:text-accent aria-pressed:shadow-xs disabled:opacity-50"
           >
             {control.label}
           </button>
@@ -192,7 +192,7 @@ export function RichTextEditor({
           aria-label="Edit link"
           className="flex flex-col gap-2 border-b border-border bg-surface-2 p-2"
         >
-          <label htmlFor="lesson-link-url" className="text-xs font-semibold text-foreground">
+          <label htmlFor="lesson-link-url" className="text-sm font-semibold text-foreground">
             Link URL
           </label>
           <div className="flex flex-wrap gap-2">
@@ -203,26 +203,26 @@ export function RichTextEditor({
               aria-invalid={linkError ? true : undefined}
               aria-describedby={linkError ? "lesson-link-error" : undefined}
               onChange={(event) => setLinkUrl(event.target.value)}
-              className="min-w-64 flex-1 rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
+              className="min-w-64 flex-1 rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
               placeholder="https://example.com"
             />
             <button
               type="button"
               onClick={applyLink}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90"
             >
               Apply link
             </button>
             <button
               type="button"
               onClick={() => setLinkOpen(false)}
-              className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
             >
               Cancel link
             </button>
           </div>
           {linkError && (
-            <p id="lesson-link-error" role="alert" className="text-xs text-danger">
+            <p id="lesson-link-error" role="alert" className="text-sm text-danger">
               {linkError}
             </p>
           )}
@@ -232,7 +232,7 @@ export function RichTextEditor({
       <EditorContent
         editor={editor}
         aria-label="Lesson body"
-        className="min-h-48 px-3 py-2 text-sm text-foreground [&_.ProseMirror.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror.is-editor-empty:first-child::before]:float-left [&_.ProseMirror.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror]:min-h-40 [&_.ProseMirror]:outline-none"
+        className="min-h-48 px-4 py-2 text-sm text-foreground [&_.ProseMirror.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror.is-editor-empty:first-child::before]:float-left [&_.ProseMirror.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror]:min-h-40 [&_.ProseMirror]:outline-none"
       />
     </div>
   );
