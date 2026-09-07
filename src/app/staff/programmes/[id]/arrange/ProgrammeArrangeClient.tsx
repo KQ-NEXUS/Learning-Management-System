@@ -129,7 +129,7 @@ export function ProgrammeArrangeClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="max-w-prose rounded-xl border border-border bg-surface-2 px-3 py-2 text-xs text-foreground shadow-xs">
+      <p className="max-w-prose rounded-xl border border-border bg-surface-2 px-4 py-2 text-sm text-foreground shadow-xs">
         Adding a course here <strong>references</strong> it — the course is not copied, and editing it
         later changes it in every programme it belongs to. Removing it here only takes it out of this
         programme&apos;s draft order; the course itself, other programmes, and any already-published
@@ -137,13 +137,13 @@ export function ProgrammeArrangeClient({
       </p>
 
       {membershipError && (
-        <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+        <p role="alert" className="border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
           {membershipError}
         </p>
       )}
 
       {members.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border bg-surface px-3 py-3 text-sm text-muted-foreground shadow-xs">
+        <p className="rounded-xl border border-dashed border-border bg-surface px-4 py-4 text-sm text-muted-foreground shadow-xs">
           No courses in this programme yet. Add one below.
         </p>
       ) : (
@@ -171,12 +171,12 @@ export function ProgrammeArrangeClient({
             )}
           />
           {stale && (
-            <div className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-foreground shadow-xs">
+            <div className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-4 py-2 text-sm text-foreground shadow-xs">
               <span>Someone else changed this order while you were working.</span>
               <button
                 type="button"
                 onClick={() => router.refresh()}
-                className="rounded-md border border-input-border bg-surface px-2 py-1 text-xs font-semibold text-foreground hover:bg-surface-2"
+                className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold text-foreground hover:bg-surface-2"
               >
                 Reload
               </button>
@@ -185,17 +185,17 @@ export function ProgrammeArrangeClient({
         </>
       )}
 
-      <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3 shadow-card">
-        <h2 className="text-sm font-semibold tracking-tight">Add a course</h2>
+      <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-card">
+        <h2 className="text-base font-semibold tracking-tight">Add a course</h2>
         <input
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search courses by title or slug"
-          className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground"
+          className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
         />
         {candidates.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {addableCourses.length === 0
               ? "Every course is already in this programme."
               : "No courses match your search."}
@@ -206,14 +206,14 @@ export function ProgrammeArrangeClient({
               <li key={course.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
                 <span className="min-w-0 flex-1">
                   <span className="truncate font-semibold text-foreground">{course.title}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
+                  <span className="block truncate text-sm text-muted-foreground">
                     {course.slug}
                     {course.status !== "PUBLISHED" && ` · ${course.status}`}
                   </span>
                 </span>
                 <button
                   type="button"
-                  className="rounded-md border border-input-border bg-surface px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:opacity-40"
+                  className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:opacity-40"
                   disabled={busyCourseId === course.id}
                   onClick={() => handleAdd(course.id)}
                 >

@@ -37,12 +37,12 @@ export function ProgrammeForm(
   return (
     <>
       {state.ok === false && state.message && (
-        <p role="alert" className="mb-3 border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+        <p role="alert" className="mb-4 border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
           {state.message}
         </p>
       )}
       {props.mode === "edit" && state.ok && (
-        <p role="status" className="mb-3 border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+        <p role="status" className="mb-4 border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
           Saved.
         </p>
       )}
@@ -104,7 +104,7 @@ export function ProgrammeForm(
               maxLength={4000}
               value={outcomes}
               onChange={(event) => setOutcomes(event.target.value)}
-              className="min-h-[92px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
+              className="min-h-[92px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
             />
           )}
         </FormField>
@@ -115,16 +115,16 @@ export function ProgrammeForm(
           )}
         </FormField>
 
-        <label className="flex items-start gap-2 rounded-md border border-input-border bg-surface px-3 py-2.5 text-sm">
+        <label className="flex items-start gap-2 rounded-md border border-input-border bg-surface px-4 py-2 text-sm">
           <input
             type="checkbox"
             name="sequential"
             defaultChecked={values.sequential ?? true}
-            className="mt-0.5 size-4 rounded-[4px] border-[1.5px] border-input-border accent-accent"
+            className="mt-1 size-4 rounded-[4px] border-[1.5px] border-input-border accent-accent"
           />
           <span>
             <span className="block font-semibold text-foreground">Sequential</span>
-            <span className="block text-xs text-muted-foreground">
+            <span className="block text-sm text-muted-foreground">
               Learners must complete the member courses in order.
             </span>
           </span>
