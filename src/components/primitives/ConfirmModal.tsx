@@ -94,7 +94,16 @@ function ConfirmDialog({
       const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
       );
-      if (!focusable || focusable.length === 0) return;
+      // During the pending window every control is disabled, so the focusable
+      // list is empty. Without the background marked inert, a bare `return` here
+      // lets the browser advance focus onto the live page behind the modal —
+      // exactly the window in which ESC is suppressed. Hold focus on the dialog
+      // container instead (WCAG 2.2 AA focus containment, NFR-09).
+      if (!focusable || focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -124,6 +133,7 @@ function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-6 shadow-card"
       >
         <div className="flex flex-col gap-1">
