@@ -69,7 +69,7 @@ function ReadinessRow({ item }: { item: ReadinessItem }) {
     <li
       data-testid={`readiness-item-${item.id}`}
       data-state={item.state}
-      className="flex flex-col gap-0.5 border-b border-border py-2 last:border-b-0"
+      className="flex flex-col gap-1 border-b border-border py-2 last:border-b-0"
     >
       <div className="flex min-w-0 items-start gap-2 text-sm">
         <span aria-hidden className={`font-mono ${presentation.className}`}>
@@ -81,11 +81,11 @@ function ReadinessRow({ item }: { item: ReadinessItem }) {
             <span className="font-normal text-danger"> — blocks public listing</span>
           )}
         </span>
-        <span className={`shrink-0 text-xs font-semibold ${presentation.className}`}>
+        <span className={`shrink-0 text-sm font-semibold ${presentation.className}`}>
           {presentation.label}
         </span>
       </div>
-      {item.detail && <p className="break-words pl-6 text-xs text-muted-foreground">{item.detail}</p>}
+      {item.detail && <p className="break-words pl-6 text-[11px] text-muted-foreground">{item.detail}</p>}
     </li>
   );
 }
@@ -114,9 +114,9 @@ export function ReadinessPanel({ items }: { items: ReadinessItem[] }) {
                 {category}
               </h3>
               {categoryItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Not yet checked — a later phase.</p>
+                <p className="text-[11px] text-muted-foreground">Not yet checked — a later phase.</p>
               ) : (
-                <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface px-3 shadow-xs">
+                <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface px-4 shadow-xs">
                   {categoryItems.map((item) => (
                     <ReadinessRow key={item.id} item={item} />
                   ))}
@@ -136,7 +136,7 @@ export function ReadinessSummary({ items }: { items: ReadinessItem[] }) {
   const notYetChecked = items.filter((item) => item.state === "NOT_YET_CHECKED").length;
 
   return (
-    <p className="text-xs text-muted-foreground">
+    <p className="text-[11px] text-muted-foreground">
       {blocking} blocking, {warnings} {warnings === 1 ? "warning" : "warnings"}, {notYetChecked} not yet
       checked
     </p>
