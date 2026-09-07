@@ -21,7 +21,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <div className="flex w-full shrink-0 flex-col justify-between gap-8 bg-sidebar-bg p-12 md:w-[44%]">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <BrandMark className="size-7" />
           <span className="text-sm font-semibold tracking-[-0.01em] text-sidebar-fg">
             KQ Nexus
@@ -43,7 +43,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </div>
 
       <main className="flex flex-1 items-center justify-center bg-background p-8">
-        <div className="flex w-full max-w-[378px] flex-col gap-4">{children}</div>
+        <div className="flex w-full max-w-[378px] flex-col gap-5">{children}</div>
       </main>
     </div>
   );
