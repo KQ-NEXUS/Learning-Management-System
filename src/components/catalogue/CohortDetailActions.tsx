@@ -44,6 +44,16 @@ export type CohortDetailActionsProps = {
   canManage: boolean;
 };
 
+const BTN =
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_PRIMARY =
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+// Danger secondary — kept as its own string, not `${BTN} text-danger`, so the
+// destructive colour isn't left to Tailwind source order against BTN's own
+// `text-foreground` / `border-input-border`.
+const BTN_DANGER =
+  "rounded-md border border-danger/40 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface disabled:cursor-not-allowed disabled:opacity-50";
+
 type Feedback = { tone: "success" | "danger"; text: string } | null;
 
 function failureText(result: Extract<PublishCohortActionResult | CancelCohortActionResult, { ok: false }>) {
@@ -122,7 +132,7 @@ export function CohortDetailActions({
       {feedback && (
         <p
           role="alert"
-          className={`px-3 py-2 text-xs ${
+          className={`rounded-md px-4 py-2 text-sm ${
             feedback.tone === "success"
               ? "border border-success/30 bg-success/10 text-success"
               : "border border-danger/30 bg-danger-surface text-danger"
@@ -134,10 +144,7 @@ export function CohortDetailActions({
 
       <div className="flex flex-wrap gap-2">
         {canManage && (
-          <a
-            href={`/staff/cohorts/${cohortId}/edit`}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
-          >
+          <a href={`/staff/cohorts/${cohortId}/edit`} className={BTN}>
             Edit
           </a>
         )}
@@ -149,7 +156,7 @@ export function CohortDetailActions({
               setPublishError(null);
               setPublishOpen(true);
             }}
-            className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+            className={BTN_PRIMARY}
           >
             Publish cohort
           </button>
@@ -162,7 +169,7 @@ export function CohortDetailActions({
               setCancelError(null);
               setCancelOpen(true);
             }}
-            className="border border-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-surface"
+            className={BTN_DANGER}
           >
             Cancel cohort
           </button>
@@ -239,21 +246,21 @@ function PublishCohortDialogBody({
   const canPublish = blocking.length === 0 && !pending;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto border border-zinc-300 bg-white p-5 shadow-lg"
+        className="flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-card"
       >
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Publish cohort
           </span>
           <h2 id={titleId} className="text-base font-semibold tracking-tight">
             Publish cohort {code}?
           </h2>
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-muted-foreground">
             {blocking.length === 0
               ? "Learners can find and enrol once it is published. All blocking readiness checks pass."
               : "Learners can find and enrol once it is published, but this cohort still has blocking readiness checks outstanding."}
@@ -262,34 +269,29 @@ function PublishCohortDialogBody({
         </div>
 
         {blocking.length > 0 && (
-          <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+          <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
             {blocking.length} blocking {blocking.length === 1 ? "item" : "items"} must be cleared first:{" "}
             {blocking.map((item) => item.label).join(", ")}.
           </p>
         )}
 
         {error && (
-          <div role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-danger">Action not applied</p>
-            <p className="mt-0.5 text-sm text-danger">{error}</p>
+          <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">Action not applied</p>
+            <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
           <button
             type="button"
             disabled={!canPublish}
             onClick={() => onPublish()}
-            className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className={BTN_PRIMARY}
           >
             {pending ? "Publishing…" : "Publish"}
           </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={pending}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
-          >
+          <button type="button" onClick={onCancel} disabled={pending} className={BTN}>
             Cancel
           </button>
         </div>

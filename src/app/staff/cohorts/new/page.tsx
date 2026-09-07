@@ -37,8 +37,8 @@ export default async function NewCohortPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-zinc-500">Staff · Cohorts</p>
-        <h1 className="text-lg font-semibold tracking-tight">New cohort</h1>
+        <p className="font-mono text-[11px] text-muted-foreground">Staff · Cohorts</p>
+        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">New cohort</h1>
       </div>
       <CohortForm mode="create" courses={courses} programmes={programmes} />
     </div>

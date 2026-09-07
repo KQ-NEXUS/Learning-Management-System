@@ -64,7 +64,7 @@ export default async function CohortsPage() {
     });
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
     }
     if (error instanceof AuthorizationError) {
       // The primitive renders the denial. Copy is identical whether or not

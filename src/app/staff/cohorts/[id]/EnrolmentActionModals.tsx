@@ -49,8 +49,8 @@ export type EnrolmentActionModalsProps = {
 
 const MIN_REASON_LENGTH = 10;
 
-const FIELD_LABEL = "text-[11px] font-semibold uppercase tracking-wide text-zinc-600";
-const FIELD_INPUT = "border border-zinc-300 bg-white px-2 py-1 text-sm";
+const FIELD_LABEL = "text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+const FIELD_INPUT = "rounded-md border border-input-border bg-surface px-2 py-1 text-sm text-foreground";
 
 export function EnrolmentActionModals({
   target,
@@ -209,7 +209,7 @@ export function EnrolmentActionModals({
                 ))}
               </select>
               {siblingCohorts.length === 0 && (
-                <span className="text-xs text-zinc-500">No other cohort shares this offer yet.</span>
+                <span className="text-[11px] text-muted-foreground">No other cohort shares this offer yet.</span>
               )}
             </label>
           </div>

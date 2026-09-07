@@ -187,47 +187,47 @@ export function AttendanceMarkClient({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-zinc-500">{sessionId}</p>
-        <h1 className="text-lg font-semibold tracking-tight">{sessionTitle}</h1>
+        <p className="font-mono text-[11px] text-muted-foreground">{sessionId}</p>
+        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight text-foreground">{sessionTitle}</h1>
         {startsAtLabel && endsAtLabel && (
-          <p className="font-mono text-xs text-zinc-600">
+          <p className="font-mono text-[11px] text-muted-foreground">
             {startsAtLabel} → {endsAtLabel}
           </p>
         )}
       </div>
 
       {!canSetLiveStates && (
-        <div role="status" className="border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-zinc-800">
+        <div role="status" className="rounded-md border border-warning/30 bg-warning/10 px-4 py-2 text-sm text-foreground">
           {PRE_START_HINT}
         </div>
       )}
 
       {windowClosed && roster.length > 0 && (
-        <div role="status" className="border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+        <div role="status" className="rounded-md border border-border bg-surface-2 px-4 py-2 text-sm text-foreground">
           The marking window for this session closed on {new Date(windowClosesAt).toISOString()}. Changes
           now need a reason and are recorded as corrections in the audit history.
         </div>
       )}
 
       {saveError && (
-        <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+        <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
           {saveError}
         </p>
       )}
 
       {roster.length === 0 ? (
-        <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-6 py-10">
-          <p className="text-sm font-semibold text-zinc-900">Nothing to mark yet</p>
-          <p className="max-w-prose text-sm text-zinc-600">
+        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-xs">
+          <p className="text-sm font-semibold text-foreground">Nothing to mark yet</p>
+          <p className="max-w-prose text-sm text-muted-foreground">
             Attendance opens when the session starts. Before then you can only mark excused or
             not-recorded.
           </p>
         </div>
       ) : (
         <>
-          <p aria-live="polite" className="text-xs text-zinc-500">
+          <p aria-live="polite" className="text-[11px] text-muted-foreground">
             {roster.length} {roster.length === 1 ? "learner" : "learners"} · {changedRows.length} changed
           </p>
 
@@ -237,13 +237,13 @@ export function AttendanceMarkClient({
               return (
                 <li
                   key={row.enrolmentId}
-                  className="flex flex-col gap-2 border border-zinc-200 bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-4 py-4 shadow-xs sm:flex-row sm:items-center sm:justify-between"
                 >
                   <fieldset className="flex flex-col gap-1">
-                    <legend className="text-sm font-medium text-zinc-900">{row.learnerName}</legend>
-                    <span className="text-[11px] text-zinc-500">{row.learnerEmail}</span>
+                    <legend className="text-sm font-semibold text-foreground">{row.learnerName}</legend>
+                    <span className="text-[11px] text-muted-foreground">{row.learnerEmail}</span>
                     {row.isCorrection && (
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         Corrected
                       </span>
                     )}
@@ -256,8 +256,8 @@ export function AttendanceMarkClient({
                       return (
                         <label
                           key={state}
-                          className={`flex items-center gap-1.5 border px-2 py-1 text-xs ${
-                            disabled ? "border-zinc-200 text-zinc-400" : "border-zinc-300 text-zinc-800"
+                          className={`flex items-center gap-2 rounded-md border px-2 py-1 text-[11px] ${
+                            disabled ? "border-border text-muted-foreground" : "border-input-border text-foreground"
                           }`}
                         >
                           <input
@@ -280,17 +280,17 @@ export function AttendanceMarkClient({
           </ul>
 
           {!windowClosed && (
-            <div className="flex items-center gap-2 border-t border-zinc-200 pt-4">
+            <div className="flex items-center gap-2 border-t border-border pt-4">
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={!dirty || saving}
-                className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save attendance"}
               </button>
               {dirty && !saving && (
-                <span className="text-xs text-zinc-500">Unsaved changes — nothing is written until you save.</span>
+                <span className="text-[11px] text-muted-foreground">Unsaved changes — nothing is written until you save.</span>
               )}
             </div>
           )}

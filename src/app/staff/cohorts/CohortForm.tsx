@@ -70,12 +70,12 @@ export function CohortForm(
   return (
     <>
       {state.ok === false && state.message && (
-        <p role="alert" className="mb-3 border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+        <p role="alert" className="mb-4 rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
           {state.message}
         </p>
       )}
       {props.mode === "edit" && state.ok && (
-        <p role="status" className="mb-3 border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+        <p role="status" className="mb-4 rounded-md border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
           Saved.
         </p>
       )}
@@ -118,7 +118,7 @@ export function CohortForm(
               required
               value={offerKind}
               onChange={(e) => setOfferKind(e.target.value as "" | "COURSE" | "PROGRAMME")}
-              className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm aria-[invalid=true]:border-danger"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground aria-[invalid=true]:border-danger"
             >
               <option value="">Choose a kind…</option>
               <option value="COURSE">Course</option>
@@ -134,7 +134,7 @@ export function CohortForm(
                 {...field}
                 required
                 defaultValue={values.courseId ?? ""}
-                className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+                className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
               >
                 <option value="">Choose a course…</option>
                 {props.courses.map((c) => (
@@ -154,7 +154,7 @@ export function CohortForm(
                 {...field}
                 required
                 defaultValue={values.programmeId ?? ""}
-                className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+                className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
               >
                 <option value="">Choose a programme…</option>
                 {props.programmes.map((p) => (
@@ -173,7 +173,7 @@ export function CohortForm(
               {...field}
               required
               defaultValue={values.deliveryMode ?? ""}
-              className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
             >
               <option value="" disabled>
                 Choose a delivery mode…
@@ -199,7 +199,7 @@ export function CohortForm(
               {...field}
               required
               defaultValue={values.timezone ?? "Africa/Lagos"}
-              className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
             >
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>

@@ -81,9 +81,9 @@ export type SessionFormFieldsProps = {
 /** A field label with the cohort's IANA zone appended in mono (D-23). */
 function ZonedLabel({ label, timezone }: { label: string; timezone: string }) {
   return (
-    <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
+    <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
       {label}
-      <span className="font-mono text-[10px] font-normal normal-case tracking-normal text-zinc-400">
+      <span className="font-mono text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
         {timezone}
       </span>
     </span>
@@ -123,7 +123,7 @@ export function SessionFormFields({
         )}
       </FormField>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <label htmlFor="session-date">
           <ZonedLabel label="Date" timezone={cohortTimezone} />
         </label>
@@ -138,14 +138,14 @@ export function SessionFormFields({
           aria-invalid={errors.date ? true : undefined}
         />
         {errors.date && (
-          <p role="alert" className="text-xs text-danger">
+          <p role="alert" className="text-sm text-danger">
             {errors.date}
           </p>
         )}
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <label htmlFor="session-start-time">
             <ZonedLabel label="Start" timezone={cohortTimezone} />
           </label>
@@ -160,13 +160,13 @@ export function SessionFormFields({
             aria-invalid={errors.startTime ? true : undefined}
           />
           {errors.startTime && (
-            <p role="alert" className="text-xs text-danger">
+            <p role="alert" className="text-sm text-danger">
               {errors.startTime}
             </p>
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <label htmlFor="session-end-time">
             <ZonedLabel label="End" timezone={cohortTimezone} />
           </label>
@@ -181,7 +181,7 @@ export function SessionFormFields({
             aria-invalid={errors.endTime ? true : undefined}
           />
           {errors.endTime && (
-            <p role="alert" className="text-xs text-danger">
+            <p role="alert" className="text-sm text-danger">
               {errors.endTime}
             </p>
           )}
@@ -259,7 +259,7 @@ export function SessionFormFields({
               {...field}
               value={value.courseId}
               onChange={(e) => set("courseId", e.target.value)}
-              className="border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
             >
               <option value="">No course tag</option>
               {courseOptions.map((c) => (
@@ -272,7 +272,7 @@ export function SessionFormFields({
         </FormField>
       )}
 
-      <label className="flex items-center gap-2 text-sm text-zinc-800">
+      <label className="flex items-center gap-2 text-sm text-foreground">
         <input
           type="checkbox"
           checked={value.attendanceExpected}

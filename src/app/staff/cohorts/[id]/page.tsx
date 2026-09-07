@@ -91,7 +91,7 @@ export default async function CohortDetailPage({
     readinessAggregate = await loadCohortReadinessAggregate(cohortId);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
     }
     if (error instanceof AuthorizationError) {
       notFound();
@@ -280,7 +280,7 @@ export default async function CohortDetailPage({
           id: "overview",
           label: "Overview",
           content: (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-4">
               <DetailFacts
                 facts={[
                   { label: "Offer", value: `${offerKind}: ${offerTitle}` },

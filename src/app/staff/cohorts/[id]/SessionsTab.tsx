@@ -58,9 +58,9 @@ export type SessionsTabProps = {
 };
 
 const BTN =
-  "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 
 function formatDuration(startsAt: string, endsAt: string): string {
   const ms = new Date(endsAt).getTime() - new Date(startsAt).getTime();
@@ -203,7 +203,7 @@ export function SessionsTab({
               setCancelTarget(s);
               setCancelError(null);
             }}
-            className="text-xs font-medium text-danger underline underline-offset-2"
+            className="text-[11px] font-semibold text-danger underline underline-offset-2"
           >
             Cancel
           </button>
@@ -247,22 +247,22 @@ export function SessionsTab({
       />
 
       {panel !== "none" && (
-        <div className="flex flex-col gap-4 border border-zinc-200 bg-white p-4">
+        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-xs">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold tracking-tight">
+            <h3 className="text-base font-semibold tracking-tight text-foreground">
               {panel === "add" ? "Add session" : "Repeat weekly"}
             </h3>
             <button
               type="button"
               onClick={closePanel}
-              className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-900"
+              className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
               Close
             </button>
           </div>
 
           {panelError && (
-            <p role="alert" className="border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+            <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
               {panelError}
             </p>
           )}
@@ -275,7 +275,7 @@ export function SessionsTab({
             courseOptions={courseOptions}
           />
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4">
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
             <button
               type="button"
               onClick={handleSubmitPanel}

@@ -89,7 +89,7 @@ const DEFERRED_LABEL: Record<9 | 10 | 11, string> = {
 
 function DeferredCell({ column }: { column: DeferredColumn }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-zinc-500">
+    <span className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
       <span aria-hidden className="font-mono">
         •
       </span>
@@ -104,14 +104,14 @@ function DeferredCell({ column }: { column: DeferredColumn }) {
 function AttendanceCell({ attendance }: { attendance: AttendanceComponent }) {
   if (attendance.kind === "computed") {
     return (
-      <span className="font-mono text-xs tabular-nums">
+      <span className="font-mono text-[11px] tabular-nums">
         {attendance.earnedPct}% / {attendance.requiredPct}%
       </span>
     );
   }
   const label = attendance.kind === "no-rule" ? "No attendance rule" : "No countable sessions yet";
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-zinc-500">
+    <span className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
       <span aria-hidden className="font-mono">
         •
       </span>
@@ -125,7 +125,7 @@ function formatAccessWindow(startsAt: string | null, endsAt: string | null): str
   return `${fmt(startsAt)} → ${fmt(endsAt)}`;
 }
 
-const ACTION_BTN = "text-xs font-medium underline underline-offset-2";
+const ACTION_BTN = "text-[11px] font-semibold underline underline-offset-2";
 
 export function RosterTab({
   cohortId,
@@ -159,7 +159,7 @@ export function RosterTab({
             <summary className="cursor-pointer text-accent underline underline-offset-2 [&::-webkit-details-marker]:hidden">
               history{r.transitionCount > 0 ? ` (${r.transitionCount})` : ""}
             </summary>
-            <div className="mt-1 flex flex-col gap-0.5 text-zinc-600">
+            <div className="mt-1 flex flex-col gap-1 text-muted-foreground">
               {r.latestTransition ? (
                 <span>
                   Latest: {r.latestTransition.action} by {r.latestTransition.actorName ?? "system"} on{" "}
@@ -308,7 +308,7 @@ export function RosterTab({
             <button
               type="button"
               onClick={() => setTarget({ action: "add", cohortId })}
-              className="bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90"
             >
               Add enrolment
             </button>

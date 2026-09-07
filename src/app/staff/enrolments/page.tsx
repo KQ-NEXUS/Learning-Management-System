@@ -32,7 +32,7 @@ export default async function EnrolmentsPage() {
     }));
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
     }
     if (error instanceof AuthorizationError) {
       // Identical copy whether or not any enrolment exists (RBAC-06).

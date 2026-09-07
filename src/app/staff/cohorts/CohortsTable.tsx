@@ -263,7 +263,7 @@ export function CohortsTable({
         // state, so there is exactly one "Create cohort" affordance at a time.
         <Link
           href="/staff/cohorts/new"
-          className="bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
         >
           Create cohort
         </Link>

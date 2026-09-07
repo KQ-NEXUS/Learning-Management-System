@@ -67,7 +67,7 @@ function formatAccessWindow(startsAt: string | null, endsAt: string | null): str
   return `${fmt(startsAt)} → ${fmt(endsAt)}`;
 }
 
-const ACTION_BTN = "text-xs font-medium underline underline-offset-2";
+const ACTION_BTN = "text-[11px] font-semibold underline underline-offset-2";
 
 export function EnrolmentsTable({
   rows,
@@ -130,7 +130,7 @@ export function EnrolmentsTable({
       render: (r) => (
         <Link
           href={`/staff/cohorts/${r.cohortId}`}
-          className="font-mono text-xs text-zinc-900 underline-offset-2 hover:underline"
+          className="font-mono text-sm text-foreground underline-offset-2 hover:underline"
         >
           {r.cohortCode}
         </Link>

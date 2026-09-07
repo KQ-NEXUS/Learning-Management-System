@@ -114,7 +114,7 @@ function sessionHref(cohortId: string, row: AttendanceExceptionView): string | n
 }
 
 const BTN =
-  "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
 
 export function ExceptionsTab({
   cohortId,
@@ -197,17 +197,17 @@ export function ExceptionsTab({
   return (
     <div className="flex flex-col gap-4">
       {!denied && (
-        <div className="flex flex-wrap items-center gap-3 border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Category
           </span>
           {EXCEPTION_CATEGORY_OPTIONS.map((option) => (
-            <label key={option.value} className="flex items-center gap-1.5 text-xs">
+            <label key={option.value} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={categories.includes(option.value)}
                 onChange={() => toggleCategory(option.value)}
-                className="accent-accent"
+                className="size-4 rounded-[4px] border border-input-border accent-accent"
               />
               {option.label}
             </label>

@@ -223,13 +223,36 @@ const GROUPS: Record<string, string[]> = {
     "src/app/staff/programmes/[id]/ProgrammeDetailClient.tsx",
     "src/app/staff/programmes/[id]/arrange/ProgrammeArrangeClient.tsx",
   ],
+  // Phase 5 staff surfaces (cohorts / scheduling / enrolment / attendance).
+  // Built after 04.1's mockup froze its route inventory, so no 04.1 plan
+  // touched them; swept onto the design system separately and graded here.
+  "staff-cohorts-scheduling": [
+    "src/app/staff/cohorts/page.tsx",
+    "src/app/staff/cohorts/CohortsTable.tsx",
+    "src/app/staff/cohorts/CohortForm.tsx",
+    "src/app/staff/cohorts/new/page.tsx",
+    "src/app/staff/cohorts/[id]/page.tsx",
+    "src/app/staff/cohorts/[id]/edit/page.tsx",
+    "src/app/staff/cohorts/[id]/SessionsTab.tsx",
+    "src/app/staff/cohorts/[id]/RosterTab.tsx",
+    "src/app/staff/cohorts/[id]/ExceptionsTab.tsx",
+    "src/app/staff/cohorts/[id]/InstructorsPanel.tsx",
+    "src/app/staff/cohorts/[id]/SessionFormFields.tsx",
+    "src/app/staff/cohorts/[id]/EnrolmentActionModals.tsx",
+    "src/app/staff/cohorts/[id]/sessions/[sessionId]/attendance/page.tsx",
+    "src/app/staff/cohorts/[id]/sessions/[sessionId]/attendance/AttendanceMarkClient.tsx",
+    "src/app/staff/enrolments/page.tsx",
+    "src/app/staff/enrolments/EnrolmentsTable.tsx",
+    "src/components/catalogue/CohortDetailActions.tsx",
+  ],
 };
 
 /** Every manifest group key — asserted deep-equal to `Object.keys(GROUPS)` by the
  * anti-vacuity fixtures so a renamed or dropped group fails loudly instead of
  * silently making a `-t <group>` run assert nothing (the G-RV-02 root cause).
- * All ten groups — the six pre-existing plus the four added across this plan's
- * two source tasks — are named here and asserted deep-equal to `GROUPS`. */
+ * The ten 04.1 groups plus `staff-cohorts-scheduling` (the Phase 5 staff
+ * surfaces swept on afterward) — all named here and asserted deep-equal to
+ * `GROUPS`. */
 const EXPECTED_GROUPS = [
   "primitives-table",
   "primitives-forms",
@@ -241,6 +264,7 @@ const EXPECTED_GROUPS = [
   "public-account-shell",
   "staff-shell-access",
   "staff-courses-programmes",
+  "staff-cohorts-scheduling",
 ];
 
 /** Primitives are strictly the 4-size app scale; catalogue/shell/marketing surfaces

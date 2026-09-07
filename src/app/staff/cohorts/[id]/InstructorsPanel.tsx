@@ -25,9 +25,9 @@ export type InstructorsPanelProps = {
 };
 
 const BTN =
-  "border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function InstructorsPanel({ cohortId, instructors, canManage }: InstructorsPanelProps) {
   const router = useRouter();
@@ -58,16 +58,16 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
   }
 
   return (
-    <section className="flex flex-col gap-2 border border-zinc-200 p-4">
-      <h2 className="text-sm font-medium text-zinc-900">Instructors</h2>
+    <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-xs">
+      <h2 className="text-sm font-semibold text-foreground">Instructors</h2>
       {instructors.length === 0 ? (
-        <p className="text-xs text-zinc-500">No instructor assigned to this cohort.</p>
+        <p className="text-sm text-muted-foreground">No instructor assigned to this cohort.</p>
       ) : (
         <ul className="flex flex-col gap-1">
           {instructors.map((row) => (
-            <li key={row.id} className="flex items-center justify-between gap-2 text-xs">
+            <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
               <span>
-                {row.userName} <span className="text-zinc-500">{row.userEmail}</span>
+                {row.userName} <span className="text-muted-foreground">{row.userEmail}</span>
               </span>
               {canManage ? (
                 <button
@@ -85,11 +85,11 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
       )}
       {canManage ? (
         <div className="flex items-end gap-2 pt-1">
-          <label className="flex flex-col gap-1 text-xs">
+          <label className="flex flex-col gap-1 text-sm">
             Add instructor (user id)
             <input
               type="text"
-              className="border border-zinc-300 px-2 py-1 text-xs"
+              className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm text-foreground"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               placeholder="cmta..."
@@ -105,7 +105,7 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
           </button>
         </div>
       ) : null}
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
     </section>
   );
 }

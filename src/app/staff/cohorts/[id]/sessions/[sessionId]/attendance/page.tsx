@@ -22,19 +22,19 @@ export default async function AttendanceMarkPage({
     ]);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
     }
     if (error instanceof AuthorizationError) {
       // Identical copy regardless of whether the session exists (RBAC-06).
       return (
-        <div className="flex flex-col items-start gap-2 border border-zinc-200 bg-white px-6 py-10">
-          <span className="font-mono text-xs tracking-wide text-zinc-500">403</span>
-          <p className="text-sm font-semibold text-zinc-900">
+        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-xs">
+          <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
+          <p className="text-sm font-semibold text-foreground">
             You do not have access to this session&apos;s attendance
           </p>
-          <p className="max-w-prose text-sm text-zinc-600">
+          <p className="max-w-prose text-sm text-muted-foreground">
             Your role does not include{" "}
-            <code className="bg-zinc-100 px-1 font-mono text-xs">attendance.view</code> at this
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">attendance.view</code> at this
             scope. Ask a workspace administrator to grant it.
           </p>
         </div>
@@ -61,7 +61,7 @@ export default async function AttendanceMarkPage({
       <div className="flex flex-col gap-4">
         <GuardedLink
           href={`/staff/cohorts/${cohortId}`}
-          className="text-xs text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+          className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
         >
           Back to cohort
         </GuardedLink>
