@@ -55,13 +55,13 @@ function humanSize(bytes: string): string {
 function ScanBlocked({ status }: { status: "PENDING" | "INFECTED" | "ERROR" }) {
   if (status === "PENDING") {
     return (
-      <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+      <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
         Scanning — this file will be available once its security scan finishes.
       </p>
     );
   }
   return (
-    <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+    <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
       This file is blocked: it did not pass a security scan and cannot be downloaded.
     </p>
   );
@@ -84,7 +84,7 @@ function BodyProse({ html }: { html: string }) {
 
 function Placeholder({ type }: { type: string }) {
   return (
-    <p className="rounded-md border border-border bg-surface-2 px-3 py-3 text-sm text-muted-foreground">
+    <p className="rounded-md border border-border bg-surface-2 px-4 py-2 text-sm text-muted-foreground">
       {type === "QUIZ" ? "Quiz" : "Assignment"} content — assessment authoring and delivery arrive in
       Phase 10. This lesson still holds its place in the order.
     </p>
@@ -119,7 +119,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
               className="aspect-video w-full max-w-2xl rounded-lg border border-border bg-surface-2"
             />
           ) : (
-            <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2 text-sm text-danger">
+            <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
               This embedded content cannot be shown — its address is not an allowed video host.
             </p>
           )}
@@ -158,10 +158,10 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
           ) : first.scanStatus === "CLEAN" ? (
             <a
               href={DOWNLOAD_ROUTE(first.id)}
-              className="inline-flex items-center gap-2 rounded-md border border-input-border bg-surface px-3 py-2 text-sm font-semibold hover:bg-surface-2"
+              className="inline-flex items-center gap-2 rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2"
             >
               <span>Download {first.filename}</span>
-              <span className="text-xs text-muted-foreground">{humanSize(first.sizeBytes)}</span>
+              <span className="text-[11px] text-muted-foreground">{humanSize(first.sizeBytes)}</span>
             </a>
           ) : (
             <ScanBlocked status={first.scanStatus} />
@@ -192,7 +192,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
                   className="h-full w-full max-w-full object-contain"
                 />
               </div>
-              <figcaption className="text-xs text-muted-foreground">{first.title || first.filename}</figcaption>
+              <figcaption className="text-[11px] text-muted-foreground">{first.title || first.filename}</figcaption>
             </figure>
           ) : (
             <ScanBlocked status={first.scanStatus} />
@@ -232,7 +232,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
   return (
     <article className="flex flex-col gap-4">
       {withdrawn && (
-        <p className="inline-flex w-fit items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-warning">
+        <p className="inline-flex w-fit items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warning">
           Withdrawn — kept visible for cohorts pinned to a version that still includes it
         </p>
       )}
