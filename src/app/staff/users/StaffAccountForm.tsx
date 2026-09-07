@@ -68,13 +68,13 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
     return (
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface px-4 py-4 shadow-card">
         <div className="flex flex-col gap-1">
-          <h2 className="text-sm font-semibold tracking-tight">Staff account created</h2>
+          <h2 className="text-base font-semibold tracking-tight">Staff account created</h2>
           <p className="text-sm text-muted-foreground">
             {state.created.name} ({state.created.email})
           </p>
         </div>
 
-        <div className="flex flex-col gap-1.5 rounded-md border border-border bg-surface-2 px-3 py-2.5">
+        <div className="flex flex-col gap-1 rounded-md border border-border bg-surface-2 px-4 py-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Temporary password
           </span>
@@ -86,12 +86,12 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
                 await navigator.clipboard.writeText(state.created!.temporaryPassword);
                 setCopied(true);
               }}
-              className="rounded-md border border-input-border bg-surface px-2 py-1 text-xs font-semibold hover:bg-surface-2"
+              className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold hover:bg-surface-2"
             >
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground">
             Shown only once — relay this to the new staff member out of band.
           </p>
         </div>
@@ -99,13 +99,13 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
         <div className="flex flex-wrap gap-2 border-t border-border pt-4">
           <Link
             href={`/staff/users/${state.created.userId}`}
-            className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
           >
             View account
           </Link>
           <Link
             href="/staff/users"
-            className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-surface-2"
+            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2"
           >
             Back to list
           </Link>
@@ -148,7 +148,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
             <button
               type="button"
               onClick={() => setTemporaryPassword(generateClientPassword())}
-              className="rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold hover:bg-surface-2"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2"
             >
               Generate
             </button>
@@ -163,7 +163,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
             required
             value={roleId}
             onChange={(e) => setRoleId(e.target.value)}
-            className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+            className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
           >
             <option value="">Choose a role</option>
             {roles.map((role) => (
@@ -186,7 +186,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
               setScopeId("");
               setScopeQuery("");
             }}
-            className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+            className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
           >
             {SCOPE_TYPES.map((option) => (
               <option key={option.value} value={option.value}>
@@ -198,14 +198,14 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
       </FormField>
 
       {scopeType !== "GLOBAL" && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <TextInput aria-label="Search scope targets" placeholder="Search…" value={scopeQuery} onChange={event => { setScopeQuery(event.target.value); setScopeId(""); setScopeRetry(value => value + 1); }} />
           {scopePending && <p role="status">Searching…</p>}
           {scopeError && <div role="alert" className="text-sm text-danger">{scopeError} <button type="button" onClick={() => { setScopeId(""); setScopeRetry(value => value + 1); }}>Retry scope search</button></div>}
         <FormField name="scopeId" label={`${SCOPE_TYPES.find((s) => s.value === scopeType)?.label} target`} required>
           {(props) =>
             scopeTargets.length === 0 && !scopeQuery && !scopePending && !scopeError ? (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <p className="text-[11px] text-muted-foreground">{EMPTY_STATE_COPY[scopeType]}</p>
                 {/* Kept visible (not hidden) so a `required` field stays a
                     focusable, submittable control — a hidden required field
@@ -216,20 +216,20 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
                   value=""
                   onChange={() => {}}
                   disabled
-                  className="h-[38px] rounded-md border border-input-border bg-surface-2 px-2.5 py-1.5 text-sm"
+                  className="h-[38px] rounded-md border border-input-border bg-surface-2 px-4 py-2 text-sm"
                 >
                   <option value="">No targets available</option>
                 </select>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <select
                   {...props}
                   required
                   disabled={scopePending || !!scopeError}
                   value={scopeId}
                   onChange={(e) => setScopeId(e.target.value)}
-                  className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+                  className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
                 >
                   <option value="">Choose a target</option>
                   {scopeTargets.map((target) => (

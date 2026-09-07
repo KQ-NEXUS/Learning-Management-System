@@ -32,10 +32,10 @@ function scopeLabel(row: AssignmentRow): string {
   return `${row.scopeType}${row.scopeLabel ? ` · ${row.scopeLabel}` : row.scopeId ? ` · ${row.scopeId}` : ""}`;
 }
 
-const BTN = "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold hover:bg-surface-2";
+const BTN = "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2";
 const BTN_DANGER =
-  "rounded-md border border-danger/30 bg-surface px-2.5 py-1.5 text-xs font-semibold text-danger hover:bg-danger-surface";
-const BTN_PRIMARY = "rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90";
+  "rounded-md border border-danger/30 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface";
+const BTN_PRIMARY = "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90";
 
 /**
  * Each row is RBAC-04's union of grants shown directly — no primary-role
@@ -99,7 +99,7 @@ export function AssignmentsPanel({
       </div>
 
       {active.length === 0 ? (
-        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-10 shadow-card">
+        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
           <p className="text-sm font-semibold text-foreground">No active role assignments</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             This account currently has no access. Assign a role to grant permissions.
@@ -113,13 +113,13 @@ export function AssignmentsPanel({
           {active.map((row) => (
             <li
               key={row.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5"
+              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface px-4 py-2"
             >
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-1">
                 <span className="text-sm font-semibold text-foreground">{row.role.name}</span>
-                <span className="text-xs text-muted-foreground">{scopeLabel(row)}</span>
+                <span className="text-[11px] text-muted-foreground">{scopeLabel(row)}</span>
               </div>
-              <div className="flex items-center gap-3 font-mono text-xs tabular-nums text-muted-foreground">
+              <div className="flex items-center gap-2 font-mono text-sm tabular-nums text-muted-foreground">
                 <span>{fmtDate(row.startsAt)}</span>
                 <span>→</span>
                 <span>{fmtDate(row.endsAt)}</span>
@@ -137,14 +137,14 @@ export function AssignmentsPanel({
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Revoked
           </span>
-          <ul className="flex flex-col gap-1.5">
+          <ul className="flex flex-col gap-1">
             {revoked.map((row) => (
-              <li key={row.id} className="rounded-xl border border-border bg-surface-2 px-3 py-2 opacity-70">
+              <li key={row.id} className="rounded-xl border border-border bg-surface-2 px-4 py-2 opacity-70">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-foreground">{row.role.name}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{fmtDate(row.revokedAt)}</span>
+                  <span className="font-mono text-[11px] text-muted-foreground">{fmtDate(row.revokedAt)}</span>
                 </div>
-                {row.reason && <p className="mt-0.5 text-xs text-muted-foreground">{row.reason}</p>}
+                {row.reason && <p className="mt-1 text-[11px] text-muted-foreground">{row.reason}</p>}
               </li>
             ))}
           </ul>
