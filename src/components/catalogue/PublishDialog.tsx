@@ -104,7 +104,16 @@ function PublishDialogBody({
       const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
       );
-      if (!focusable || focusable.length === 0) return;
+      // While a publish is in flight every control is disabled, so this list is
+      // empty. Without the background marked inert, a bare `return` here lets the
+      // browser move focus onto the live page behind the modal — the window in
+      // which ESC is suppressed. Hold focus on the dialog container (which
+      // already carries tabIndex={-1}) instead — WCAG 2.2 AA containment, NFR-09.
+      if (!focusable || focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
