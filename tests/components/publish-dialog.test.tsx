@@ -131,6 +131,25 @@ describe("PublishDialog — keyboard lifecycle", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it("holds focus on the dialog container when every control is disabled during the pending window", () => {
+    render(<PublishDialog {...baseProps({ pending: true })} />);
+    const dialog = screen.getByRole("dialog");
+
+    // Precondition: with every checkbox, the reason textarea, Publish and Cancel
+    // disabled, the dialog exposes no focusable control of its own.
+    expect(focusableIn(dialog)).toHaveLength(0);
+
+    const tabEvent = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(tabEvent);
+
+    expect(tabEvent.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(dialog);
+  });
+
   it("returns focus to the element that opened it when the dialog closes", () => {
     render(<Harness />);
     const trigger = screen.getByRole("button", { name: "Open publish" });
