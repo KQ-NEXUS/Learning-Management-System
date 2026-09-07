@@ -229,6 +229,75 @@ describe("ConfirmModal", () => {
     expect(alert.textContent).toMatch(/The payment gateway rejected the request\./);
   });
 
+  it("holds focus on the dialog container when every control is disabled during the pending window", async () => {
+    const ConfirmModal = await loadConfirmModal();
+    render(
+      <ConfirmModal
+        open
+        pending
+        title="Refund order"
+        description="This cannot be undone."
+        confirmLabel="Refund"
+        minReasonLength={10}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+    );
+    // Precondition: with the reason textarea, confirm and cancel all disabled,
+    // the dialog has no focusable control of its own.
+    expect(focusable.length).toBe(0);
+
+    const tabEvent = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(tabEvent);
+
+    expect(tabEvent.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(dialog);
+  });
+
+  it("leaves the idle Tab-wrap behaviour unchanged when controls are enabled", async () => {
+    const ConfirmModal = await loadConfirmModal();
+    render(
+      <ConfirmModal
+        open
+        title="Refund order"
+        description="This cannot be undone."
+        confirmLabel="Refund"
+        minReasonLength={5}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+    );
+    expect(focusable.length).toBeGreaterThan(1);
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    last.focus();
+
+    const tabEvent = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(tabEvent);
+
+    expect(tabEvent.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(first);
+  });
+
   it("the default eyebrow reads 'Integrity action' when none is supplied", async () => {
     const ConfirmModal = await loadConfirmModal();
     render(
