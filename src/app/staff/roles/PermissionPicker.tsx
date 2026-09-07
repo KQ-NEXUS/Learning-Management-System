@@ -5,7 +5,7 @@ import { isGlobalOnly, type Permission } from "@/server/permissions/catalogue";
 import type { ScopeType } from "@/server/permissions/scope";
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
 
 export type PermissionPickerProps = {
   selected: ReadonlySet<string>;
@@ -51,16 +51,16 @@ export function PermissionPicker({
 
         return (
           <details key={group.id} className="rounded-xl border border-border bg-surface">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
                 {group.label}
               </span>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                 {selectedCount}/{group.permissions.length}
               </span>
             </summary>
 
-            <div className="flex flex-col gap-2 border-t border-border px-3 py-3">
+            <div className="flex flex-col gap-2 border-t border-border px-4 py-4">
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -74,7 +74,7 @@ export function PermissionPicker({
                 </button>
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 {group.permissions.map((permission) => {
                   const disabled = scopeType !== "GLOBAL" && isGlobalOnly(permission);
                   return (
@@ -90,7 +90,7 @@ export function PermissionPicker({
                         onChange={() => toggle(permission)}
                         className="size-4 rounded-[4px] border-[1.5px] border-input-border accent-accent"
                       />
-                      <span className="font-mono text-xs">{permission}</span>
+                      <span className="font-mono text-sm">{permission}</span>
                     </label>
                   );
                 })}

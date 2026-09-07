@@ -167,12 +167,12 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         inert={!desktop && !mobileOpen}
         aria-hidden={!desktop && !mobileOpen ? true : undefined}
         aria-label="Workspace navigation"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[228px] shrink-0 flex-col bg-sidebar-bg pb-3 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[228px] shrink-0 flex-col bg-sidebar-bg pb-4 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand block */}
-        <div className="flex items-center gap-2.5 px-[18px] pt-[18px] pb-4">
+        <div className="flex items-center gap-2 px-4 pt-4 pb-4">
           <BrandMark />
           <div className="flex min-w-0 flex-col">
             <span className="truncate text-base font-semibold text-sidebar-fg">
@@ -187,20 +187,20 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         {/* Decorative search chip — performs no search this phase (D-24
             search wiring is out of scope). Never focusable, never announced:
             a control that does nothing is a worse failure than no control. */}
-        <div className="px-2.5 pb-3">
+        <div className="px-2 pb-4">
           <div
             aria-hidden
-            className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/10 px-2.5 py-1.5"
+            className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/10 px-2 py-2"
           >
             <Search aria-hidden className="size-3.5 shrink-0 text-sidebar-muted" />
-            <span className="flex-1 truncate text-xs text-sidebar-muted">Search</span>
-            <span className="shrink-0 rounded-sm border border-sidebar-border px-1 font-mono text-[10px] text-sidebar-muted">
+            <span className="flex-1 truncate text-sm text-sidebar-muted">Search</span>
+            <span className="shrink-0 rounded-sm border border-sidebar-border px-1 font-mono text-[11px] text-sidebar-muted">
               ⌘K
             </span>
           </div>
         </div>
 
-        <nav aria-label="Workspace" className="flex flex-1 flex-col gap-0.5 px-2.5">
+        <nav aria-label="Workspace" className="flex flex-1 flex-col gap-1 px-2">
           {nav.map((item) => {
             const active = isActiveNavItem(pathname, item.href);
             return (
@@ -210,7 +210,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
                 onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
                 title={item.label}
-                className={`flex min-w-0 items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm ${
+                className={`flex min-w-0 items-center gap-2 rounded-sm px-2 py-2 text-sm ${
                   active
                     ? "bg-sidebar-accent font-semibold text-white"
                     : "font-normal text-sidebar-muted hover:text-sidebar-fg"
@@ -229,9 +229,9 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         </nav>
 
         {/* Footer identity chip. */}
-        <div className="mt-auto px-3.5 pt-3">
+        <div className="mt-auto px-4 pt-4">
           <div
-            className="flex items-center gap-2.5 border-t border-sidebar-border pt-3"
+            className="flex items-center gap-2 border-t border-sidebar-border pt-4"
             aria-label={display ? undefined : "Signed in"}
           >
             <span
@@ -256,7 +256,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
 
       <div ref={backgroundRef} className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
               ref={menuButtonRef}
@@ -271,7 +271,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
               </span>
             </button>
 
-            <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
+            <div className="flex min-w-0 items-center gap-2 text-sm">
               <span className="shrink-0 text-muted-foreground">Admin workspace</span>
               <ChevronRight aria-hidden className="size-3 shrink-0 text-border" />
               <span

@@ -172,7 +172,7 @@ function DrawerPanel({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto rounded-l-xl border-l border-border bg-surface p-5 shadow-card"
+        className="flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto rounded-l-xl border-l border-border bg-surface p-6 shadow-card"
       >
         <div className="flex items-center justify-between">
           <h2 id={titleId} tabIndex={-1} className="text-base font-semibold tracking-tight">
@@ -184,7 +184,7 @@ function DrawerPanel({
         </div>
 
         {formErrors.length > 0 && (
-          <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-3 py-2.5">
+          <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
             <ul className="flex flex-col gap-1 text-sm text-danger">
               {formErrors.map((e) => (
                 <li key={e.name} id={`${titleId}-${e.name}-error`}>{e.message}</li>
@@ -206,16 +206,16 @@ function DrawerPanel({
         >
           <input type="hidden" name="userId" value={selectedUser?.id ?? ""} />
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-foreground">
               User
             </span>
             {selectedUser ? (
-              <div className="flex min-h-[38px] items-center justify-between rounded-md border border-input-border bg-surface-2 px-2.5 py-1.5">
+              <div className="flex min-h-[38px] items-center justify-between rounded-md border border-input-border bg-surface-2 px-4 py-2">
                 <span className="flex flex-col text-sm">
                   <span className="font-semibold text-foreground">{selectedUser.name}</span>
                   {selectedUser.email && (
-                    <span className="text-xs text-muted-foreground">{selectedUser.email}</span>
+                    <span className="text-[11px] text-muted-foreground">{selectedUser.email}</span>
                   )}
                 </span>
                 <button
@@ -226,13 +226,13 @@ function DrawerPanel({
                     setUserQuery("");
                     setUserRetry(value => value + 1);
                   }}
-                  className="text-xs text-muted-foreground underline underline-offset-2"
+                  className="text-sm text-muted-foreground underline underline-offset-2"
                 >
                   Clear
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <input
                   type="text"
                   aria-label="User"
@@ -240,18 +240,18 @@ function DrawerPanel({
                   placeholder="Start typing a name or email"
                   value={userQuery}
                   onChange={(e) => { setUserQuery(e.target.value); setUserRetry(value => value + 1); }}
-                  className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+                  className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
                 />
                 {userQuery.length > 0 && (
                   <div className="flex flex-col gap-1">
                     {userSearchPending && (
-                      <span className="text-xs text-muted-foreground">Searching…</span>
+                      <span className="text-sm text-muted-foreground">Searching…</span>
                     )}
                     {userSearchError && (
-                      <div role="alert" className="text-xs text-danger">{userSearchError} <button type="button" onClick={() => setUserRetry(value => value + 1)}>Retry user search</button></div>
+                      <div role="alert" className="text-sm text-danger">{userSearchError} <button type="button" onClick={() => setUserRetry(value => value + 1)}>Retry user search</button></div>
                     )}
                     {!userSearchError && userResults.length === 0 && !userSearchPending && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         No users match &quot;{userQuery}&quot;
                       </span>
                     )}
@@ -269,12 +269,12 @@ function DrawerPanel({
                                   status: row.status,
                                 })
                               }
-                              className="flex w-full flex-col gap-0.5 px-2.5 py-1.5 text-left hover:bg-surface-2"
+                              className="flex w-full flex-col gap-1 px-4 py-2 text-left hover:bg-surface-2"
                             >
                               <span className="truncate text-sm font-semibold text-foreground">
                                 {row.name}
                               </span>
-                              <span className="truncate text-xs text-muted-foreground">{row.email}</span>
+                              <span className="truncate text-[11px] text-muted-foreground">{row.email}</span>
                             </button>
                           </li>
                         ))}
@@ -286,7 +286,7 @@ function DrawerPanel({
             )}
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label htmlFor="drawer-role" className="text-sm font-semibold text-foreground">
               Role
             </label>
@@ -297,7 +297,7 @@ function DrawerPanel({
               required
               value={roleId}
               onChange={(e) => setRoleId(e.target.value)}
-              className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+              className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
             >
               <option value="">Choose a role</option>
               {roles.map((role) => (
@@ -308,7 +308,7 @@ function DrawerPanel({
             </select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label htmlFor="drawer-scope-type" className="text-sm font-semibold text-foreground">
               Scope
             </label>
@@ -323,7 +323,7 @@ function DrawerPanel({
                 setScopeId("");
                 setScopeQuery("");
               }}
-              className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+              className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
             >
               {SCOPE_TYPES.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -334,13 +334,13 @@ function DrawerPanel({
           </div>
 
           {scopeType !== "GLOBAL" && (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               <label htmlFor="drawer-scope-id" className="text-sm font-semibold text-foreground">
                 {SCOPE_TYPES.find((s) => s.value === scopeType)?.label} target
               </label>
               {scopePending && <p role="status">Searching…</p>}
               {scopeError && <div role="alert" className="text-sm text-danger">{scopeError} <button type="button" onClick={() => { setScopeId(""); setScopeRetry(value => value + 1); }}>Retry scope search</button></div>}
-              <input type="text" aria-label="Search scope targets" placeholder="Search…" value={scopeQuery} onChange={event => { setScopeQuery(event.target.value); setScopeId(""); setScopeRetry(value => value + 1); }} className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm" />
+              <input type="text" aria-label="Search scope targets" placeholder="Search…" value={scopeQuery} onChange={event => { setScopeQuery(event.target.value); setScopeId(""); setScopeRetry(value => value + 1); }} className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm" />
               {scopeTargets.length === 0 && !scopeQuery && !scopePending && !scopeError ? (
                 <>
                   <p className="text-[11px] text-muted-foreground">{EMPTY_STATE_COPY[scopeType]}</p>
@@ -352,7 +352,7 @@ function DrawerPanel({
                     value=""
                     onChange={() => {}}
                     disabled
-                    className="h-[38px] rounded-md border border-input-border bg-surface-2 px-2.5 py-1.5 text-sm"
+                    className="h-[38px] rounded-md border border-input-border bg-surface-2 px-4 py-2 text-sm"
                   >
                     <option value="">No targets available</option>
                   </select>
@@ -367,7 +367,7 @@ function DrawerPanel({
                     disabled={scopePending || !!scopeError}
                     value={scopeId}
                     onChange={(e) => setScopeId(e.target.value)}
-                    className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+                    className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
                   >
                     <option value="">Choose a target</option>
                     {scopeTargets.map((target) => (
@@ -381,7 +381,7 @@ function DrawerPanel({
             </div>
           )}
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label htmlFor="drawer-ends-at" className="text-sm font-semibold text-foreground">
               End date
               <span className="ml-1 text-[11px] font-normal text-muted-foreground">optional</span>
@@ -391,7 +391,7 @@ function DrawerPanel({
               name="endsAt"
               {...fieldError("endsAt")}
               type="date"
-              className="h-[38px] rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-sm"
+              className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm"
             />
           </div>
 
@@ -399,7 +399,7 @@ function DrawerPanel({
             <button
               type="submit"
               disabled={!canSave || pending}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pending ? "Saving…" : "Assign role"}
             </button>
@@ -407,7 +407,7 @@ function DrawerPanel({
               type="button"
               onClick={onClose}
               disabled={pending}
-              className="rounded-md border border-input-border bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-surface-2"
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2"
             >
               Cancel
             </button>

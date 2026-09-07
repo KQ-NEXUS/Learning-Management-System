@@ -143,9 +143,9 @@ export function RolePermissionsPanel({
 }
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
 const BTN_DANGER =
-  "rounded-md border border-danger/30 bg-surface px-2.5 py-1.5 text-xs font-semibold text-danger hover:bg-danger-surface";
+  "rounded-md border border-danger/30 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface";
 
 /** Rendered in DetailLayout's `actions` slot. */
 export function RoleActivationControl({
