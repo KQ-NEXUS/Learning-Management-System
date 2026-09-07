@@ -293,15 +293,70 @@ function extractClassStrings(source: string, fileName: string): string[] {
   );
   const out: string[] = [];
 
+  // Pass 1 — resolve every UPPER_CASE module const whose initializer is a static
+  // string (literal, `+` concat, or template of those). This lets pass 2 inline
+  // `${BTN}` inside a `className={`${BTN} text-danger`}` template, so a class
+  // list that reopens a colour already set on BTN is visible as one string
+  // (the source-order-dependent-override contract, checked in checkColorConflicts).
+  const constValues = new Map<string, string>();
+  const resolveStatic = (expr: ts.Node): string | null => {
+    if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) return expr.text;
+    if (ts.isParenthesizedExpression(expr)) return resolveStatic(expr.expression);
+    if (ts.isIdentifier(expr)) return constValues.get(expr.text) ?? null;
+    if (
+      ts.isBinaryExpression(expr) &&
+      expr.operatorToken.kind === ts.SyntaxKind.PlusToken
+    ) {
+      const l = resolveStatic(expr.left);
+      const r = resolveStatic(expr.right);
+      return l !== null && r !== null ? l + r : null;
+    }
+    if (ts.isTemplateExpression(expr)) {
+      let s = expr.head.text;
+      for (const span of expr.templateSpans) {
+        const part = resolveStatic(span.expression);
+        if (part === null) return null;
+        s += part + span.literal.text;
+      }
+      return s;
+    }
+    return null;
+  };
+  const collectConsts = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      /^[A-Z][A-Z0-9_]*$/.test(node.name.text) &&
+      node.initializer
+    ) {
+      const value = resolveStatic(node.initializer);
+      if (value !== null) constValues.set(node.name.text, value);
+    }
+    ts.forEachChild(node, collectConsts);
+  };
+  collectConsts(sf);
+
   const addFromExpression = (expr: ts.Node): void => {
     if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
       out.push(expr.text);
+    } else if (ts.isIdentifier(expr) && constValues.has(expr.text)) {
+      out.push(constValues.get(expr.text)!);
     } else if (ts.isTemplateExpression(expr)) {
+      // Per-part — each branch of an interpolated ternary is graded on its own.
       out.push(expr.head.text);
       for (const span of expr.templateSpans) {
         addFromExpression(span.expression);
         out.push(span.literal.text);
       }
+      // Joined — statically-resolvable interpolations (a `${BTN}` const ref) are
+      // inlined, everything else becomes whitespace, so a colour reopened across
+      // a `${BTN} text-danger` boundary lands in one string for the conflict
+      // check without merging the arms of a `${cond ? a : b}`.
+      let joined = expr.head.text;
+      for (const span of expr.templateSpans) {
+        joined += ` ${resolveStatic(span.expression) ?? ""} ${span.literal.text}`;
+      }
+      out.push(joined);
     } else if (ts.isConditionalExpression(expr)) {
       addFromExpression(expr.whenTrue);
       addFromExpression(expr.whenFalse);
@@ -404,12 +459,78 @@ function spacingValuePx(value: string): number | null {
   return n * 4;
 }
 
+// ---------------------------------------------------------------------------
+// Colour roles — the semantic tokens globals.css §5.3 exposes as utilities.
+// Used only to tell a colour utility (`text-danger`, `bg-surface-2`) apart from
+// a non-colour one (`text-sm`, `text-left`, `border-t`, `border`), so a class
+// list that sets the same colour property twice can be flagged.
+// ---------------------------------------------------------------------------
+
+const COLOR_ROLES = new Set([
+  "foreground", "background", "surface", "surface-2", "muted-foreground",
+  "border", "input-border",
+  "accent", "accent-deep", "accent-contrast",
+  "teal-fill", "teal-text", "teal-deep",
+  "warning", "warning-fill", "warning-surface",
+  "danger", "danger-surface", "success",
+  "white", "black", "transparent", "current", "inherit",
+  "pill-green-bg", "pill-green-ink", "pill-green-dot",
+  "pill-blue-bg", "pill-blue-ink", "pill-blue-dot",
+  "pill-amber-bg", "pill-amber-ink", "pill-amber-dot",
+  "pill-grey-bg", "pill-grey-ink", "pill-grey-dot",
+  "pill-red-bg", "pill-red-ink", "pill-red-dot",
+  "sidebar-bg", "sidebar-fg", "sidebar-accent", "sidebar-border", "sidebar-muted",
+]);
+
+/** A `text-` / `bg-` / `border-` utility bound to a known colour role, `/opacity` stripped. */
+function colorUtil(base: string): { prop: "text" | "bg" | "border"; role: string } | null {
+  const m = base.match(/^(text|bg|border)-(.+?)(?:\/\d{1,3})?$/);
+  if (!m) return null;
+  const [, prop, role] = m;
+  return COLOR_ROLES.has(role) ? { prop: prop as "text" | "bg" | "border", role } : null;
+}
+
 type Violation = {
   file: string;
   token: string;
-  kind: "font-size" | "font-weight" | "spacing";
+  kind: "font-size" | "font-weight" | "spacing" | "color-conflict";
   detail: string;
 };
+
+/**
+ * Flag a class list that sets the same colour property to two different roles
+ * with no variant between them (`text-foreground … text-danger`). Both classes
+ * always apply; which colour paints is decided by their order in Tailwind's
+ * generated stylesheet, not by the order they are written — so appending
+ * `text-danger` to a `${BTN}` that already carries `text-foreground` silently
+ * does nothing. A variant-prefixed override (`hover:text-danger`) is fine and
+ * is skipped.
+ */
+function checkColorConflicts(classStr: string, relPath: string, violations: Violation[]): void {
+  const byProp: Record<"text" | "bg" | "border", Set<string>> = {
+    text: new Set(),
+    bg: new Set(),
+    border: new Set(),
+  };
+  for (const raw of classStr.split(/\s+/)) {
+    if (!raw || raw !== stripVariants(raw)) continue; // base utilities only
+    const cu = colorUtil(raw);
+    if (cu) byProp[cu.prop].add(cu.role);
+  }
+  for (const prop of ["text", "bg", "border"] as const) {
+    const roles = byProp[prop];
+    if (roles.size > 1) {
+      violations.push({
+        file: relPath,
+        token: [...roles].map((r) => `${prop}-${r}`).join(" + "),
+        kind: "color-conflict",
+        detail:
+          `${roles.size} unconditional ${prop} colours in one class list — the winner is ` +
+          `set by Tailwind's stylesheet order, not the order written (use one class, or a variant)`,
+      });
+    }
+  }
+}
 
 function checkClassString(classStr: string, relPath: string, violations: Violation[]): void {
   for (const raw of classStr.split(/\s+/)) {
@@ -478,8 +599,19 @@ function gradeFile(relPath: string): Violation[] {
     return violations;
   }
   const src = readFileSync(abs, "utf-8");
-  for (const s of extractClassStrings(src, abs)) checkClassString(s, relPath, violations);
-  return violations;
+  for (const s of extractClassStrings(src, abs)) {
+    checkClassString(s, relPath, violations);
+    checkColorConflicts(s, relPath, violations);
+  }
+  // Inlining a const at every call site can surface the same violation more than
+  // once — collapse identical (file, kind, token, detail) rows.
+  const seen = new Set<string>();
+  return violations.filter((v) => {
+    const key = `${v.file}|${v.kind}|${v.token}|${v.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -602,6 +734,47 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
     ].join("\n");
     const strings = extractClassStrings(sample, "sample.tsx");
     expect(strings).toEqual(expect.arrayContaining(["px-4 py-2", "text-sm", "text-[11px]", "gap-4"]));
+  });
+
+  // ---- colour-conflict check --------------------------------------------------
+
+  it("flags two unconditional text colours in one class list", () => {
+    const v: Violation[] = [];
+    checkColorConflicts("rounded-md border border-input-border text-foreground text-danger", PRIMITIVE, v);
+    expect(v.map((x) => x.kind)).toEqual(["color-conflict"]);
+    expect(v[0].token).toBe("text-foreground + text-danger");
+  });
+
+  it("catches the `${BTN} text-danger` pattern once the const is inlined", () => {
+    const sample = [
+      'const BTN = "rounded-md border border-input-border text-foreground hover:bg-surface-2";',
+      "export const X = () => <button className={`${BTN} border-danger/40 text-danger`} />;",
+    ].join("\n");
+    const v: Violation[] = [];
+    for (const s of extractClassStrings(sample, "sample.tsx")) checkColorConflicts(s, "sample.tsx", v);
+    expect(v.map((x) => `${x.kind}:${x.token}`).sort()).toEqual([
+      "color-conflict:border-input-border + border-danger",
+      "color-conflict:text-foreground + text-danger",
+    ]);
+  });
+
+  it("does not flag a variant-prefixed colour override, or one colour per property", () => {
+    const v: Violation[] = [];
+    checkColorConflicts("text-foreground hover:text-danger focus-visible:text-accent", PRIMITIVE, v);
+    checkColorConflicts("text-danger border-danger/40 bg-danger-surface", PRIMITIVE, v);
+    checkColorConflicts("border border-input-border text-sm text-left", PRIMITIVE, v);
+    expect(v).toEqual([]);
+  });
+
+  it("does not treat text-sizes / alignment / border-width as colour utilities", () => {
+    expect(colorUtil("text-sm")).toBeNull();
+    expect(colorUtil("text-[11px]")).toBeNull();
+    expect(colorUtil("text-left")).toBeNull();
+    expect(colorUtil("border")).toBeNull();
+    expect(colorUtil("border-t")).toBeNull();
+    expect(colorUtil("border-2")).toBeNull();
+    expect(colorUtil("bg-danger-surface")).toEqual({ prop: "bg", role: "danger-surface" });
+    expect(colorUtil("bg-accent/5")).toEqual({ prop: "bg", role: "accent" });
   });
 
   it("excludes authored HTML strings from grading", () => {
