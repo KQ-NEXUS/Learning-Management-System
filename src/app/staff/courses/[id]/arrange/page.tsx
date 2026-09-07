@@ -44,15 +44,21 @@ export default async function ArrangePage({
   ];
 
   const withdrawnLessons: { id: string; title: string; moduleTitle: string }[] = [];
-  for (const meta of moduleMeta) {
-    const rows = await listWithdrawnLessons(meta.id);
-    for (const lesson of rows) {
-      withdrawnLessons.push({
-        id: lesson.id,
-        title: lesson.title,
-        moduleTitle: meta.title,
-      });
+  try {
+    for (const meta of moduleMeta) {
+      const rows = await listWithdrawnLessons(meta.id);
+      for (const lesson of rows) {
+        withdrawnLessons.push({
+          id: lesson.id,
+          title: lesson.title,
+          moduleTitle: meta.title,
+        });
+      }
     }
+  } catch (error) {
+    // A denial must not confirm existence — same response as "not found".
+    if (error instanceof AuthorizationError) notFound();
+    throw error;
   }
 
   const modules = tree.modules.map((m) => ({
