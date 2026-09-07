@@ -53,19 +53,19 @@ export default async function CoursePublicPreviewPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 px-4 py-3">
+      <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 px-4 py-4">
         <p className="text-sm font-semibold text-warning">
           Preview — this is how the public page will look. It is not the live page.
         </p>
         {!course.publiclyListed && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             This course is <strong>not publicly listed</strong>, so this page is not reachable by
             visitors yet — previewing an unlisted course is the ordinary case.
           </p>
         )}
         <Link
           href={`/staff/courses/${id}`}
-          className="w-fit text-xs text-accent underline underline-offset-2"
+          className="w-fit text-sm text-accent underline underline-offset-2"
         >
           Back to the course workspace
         </Link>
@@ -78,7 +78,7 @@ export default async function CoursePublicPreviewPage({
       </header>
 
       {course.outcomes && (
-        <section className="flex flex-col gap-1.5">
+        <section className="flex flex-col gap-1">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             What you&apos;ll be able to do
           </h2>
@@ -87,9 +87,9 @@ export default async function CoursePublicPreviewPage({
       )}
 
       {facts.length > 0 && (
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {facts.map(([label, value]) => (
-            <div key={label} className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs">
+            <div key={label} className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-4 shadow-xs">
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
               <dd className="break-words text-sm text-foreground">{value}</dd>
             </div>
@@ -102,11 +102,11 @@ export default async function CoursePublicPreviewPage({
         {!tree || tree.modules.length === 0 ? (
           <p className="text-sm text-muted-foreground">No content published yet.</p>
         ) : (
-          <ol className="flex flex-col gap-3">
+          <ol className="flex flex-col gap-4">
             {tree.modules.map((moduleRow) => (
               <li key={moduleRow.id} className="flex flex-col gap-1">
                 <p className="text-sm font-semibold">{moduleRow.title}</p>
-                <ul className="flex flex-col gap-0.5 pl-4">
+                <ul className="flex flex-col gap-1 pl-4">
                   {moduleRow.lessons.map((lesson) => (
                     <li key={lesson.id} className="flex items-baseline gap-2 text-sm">
                       <Link
@@ -125,7 +125,7 @@ export default async function CoursePublicPreviewPage({
             ))}
           </ol>
         )}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Lesson links open the learner view preview. Upcoming cohort dates and pricing appear on the
           live public page (built in a later plan).
         </p>

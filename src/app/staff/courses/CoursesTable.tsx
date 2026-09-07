@@ -65,7 +65,7 @@ const columns: Column<CourseRow>[] = [
 ];
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 const UNAVAILABLE = "Not available on this screen";
 
@@ -191,11 +191,11 @@ export function CoursesTable({
             type="button"
             disabled
             aria-describedby={unavailableId}
-            className="rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             New course
           </button>
-          <p id={unavailableId} className="basis-full text-xs text-muted-foreground">
+          <p id={unavailableId} className="basis-full text-sm text-muted-foreground">
             {UNAVAILABLE}
           </p>
         </>
