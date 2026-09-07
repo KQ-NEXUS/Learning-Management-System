@@ -82,28 +82,45 @@ export function ProgrammeArrangeClient({
     setSaving(true);
     setOrderError(null);
     setStale(false);
-    const result = await saveProgrammeCourseOrderAction({
-      programmeId,
-      token,
-      membershipIds: containers[0].items.map((i) => i.id),
-    });
-    if (result.ok) {
-      setToken(result.token);
-      router.refresh();
-    } else {
-      setOrderError(result.message);
-      setStale(result.reason === "STALE");
+    try {
+      const result = await saveProgrammeCourseOrderAction({
+        programmeId,
+        token,
+        membershipIds: containers[0].items.map((i) => i.id),
+      });
+      if (result.ok) {
+        setToken(result.token);
+        router.refresh();
+      } else {
+        setOrderError(result.message);
+        setStale(result.reason === "STALE");
+      }
+    } catch {
+      // An unexpected rejection leaves the outcome unknown — surface a generic
+      // retryable message, never the caught value, and never imply the order
+      // was applied. `stale` stays false.
+      setOrderError(
+        "Something went wrong saving the course order. Nothing was changed — try again.",
+      );
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function handleAdd(courseId: string) {
     setBusyCourseId(courseId);
     setMembershipError(null);
-    const result = await addCourseAction({ programmeId, courseId });
-    if (result.ok) router.refresh();
-    else setMembershipError(result.message);
-    setBusyCourseId(null);
+    try {
+      const result = await addCourseAction({ programmeId, courseId });
+      if (result.ok) router.refresh();
+      else setMembershipError(result.message);
+    } catch {
+      setMembershipError(
+        "Something went wrong adding that course. Nothing was changed — try again.",
+      );
+    } finally {
+      setBusyCourseId(null);
+    }
   }
 
   async function handleRemove(membershipId: string) {
@@ -111,10 +128,17 @@ export function ProgrammeArrangeClient({
     if (!member) return;
     setBusyCourseId(member.courseId);
     setMembershipError(null);
-    const result = await removeCourseAction({ programmeId, courseId: member.courseId });
-    if (result.ok) router.refresh();
-    else setMembershipError(result.message);
-    setBusyCourseId(null);
+    try {
+      const result = await removeCourseAction({ programmeId, courseId: member.courseId });
+      if (result.ok) router.refresh();
+      else setMembershipError(result.message);
+    } catch {
+      setMembershipError(
+        "Something went wrong removing that course. Nothing was changed — try again.",
+      );
+    } finally {
+      setBusyCourseId(null);
+    }
   }
 
   const candidates = useMemo(() => {
