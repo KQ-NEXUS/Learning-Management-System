@@ -103,41 +103,58 @@ export function ArrangeClient({
     setSavingModules(true);
     setModuleError(null);
     setModuleStale(false);
-    const res = await saveModuleOrderAction({
-      courseId,
-      token,
-      moduleIds: moduleContainers[0].items.map((i) => i.id),
-    });
-    if (res.ok) {
-      setToken(res.token);
-      setSavedModuleKey(idKey(moduleContainers));
-    } else {
-      setModuleError(res.message);
-      setModuleStale(res.reason === "STALE");
+    try {
+      const res = await saveModuleOrderAction({
+        courseId,
+        token,
+        moduleIds: moduleContainers[0].items.map((i) => i.id),
+      });
+      if (res.ok) {
+        setToken(res.token);
+        setSavedModuleKey(idKey(moduleContainers));
+      } else {
+        setModuleError(res.message);
+        setModuleStale(res.reason === "STALE");
+      }
+    } catch {
+      // An unexpected rejection (network drop, action runtime error) leaves the
+      // outcome unknown — surface a generic retryable message, never the caught
+      // value, and do not imply the order was applied. `moduleStale` stays false.
+      setModuleError(
+        "Something went wrong saving the module order. Nothing was changed — try again.",
+      );
+    } finally {
+      setSavingModules(false);
     }
-    setSavingModules(false);
   }
 
   async function handleSaveLessonArrangement() {
     setSavingLessons(true);
     setLessonError(null);
     setLessonStale(false);
-    const res = await saveLessonArrangementAction({
-      courseId,
-      token,
-      arrangement: lessonContainers.map((c) => ({
-        moduleId: c.id,
-        lessonIds: c.items.map((i) => i.id),
-      })),
-    });
-    if (res.ok) {
-      setToken(res.token);
-      setSavedLessonKey(idKey(lessonContainers));
-    } else {
-      setLessonError(res.message);
-      setLessonStale(res.reason === "STALE");
+    try {
+      const res = await saveLessonArrangementAction({
+        courseId,
+        token,
+        arrangement: lessonContainers.map((c) => ({
+          moduleId: c.id,
+          lessonIds: c.items.map((i) => i.id),
+        })),
+      });
+      if (res.ok) {
+        setToken(res.token);
+        setSavedLessonKey(idKey(lessonContainers));
+      } else {
+        setLessonError(res.message);
+        setLessonStale(res.reason === "STALE");
+      }
+    } catch {
+      setLessonError(
+        "Something went wrong saving the lesson arrangement. Nothing was changed — try again.",
+      );
+    } finally {
+      setSavingLessons(false);
     }
-    setSavingLessons(false);
   }
 
   // Both handlers translate the already-resolved discriminated action result
