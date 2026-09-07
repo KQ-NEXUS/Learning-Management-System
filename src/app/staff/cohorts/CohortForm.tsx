@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ResourceForm, FormField, TextInput } from "@/components/primitives";
 import {
@@ -17,8 +17,29 @@ const DELIVERY_OPTIONS = [
   { value: "BLENDED", label: "Blended" },
 ];
 
-const TIMEZONES: string[] =
-  typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : ["Africa/Lagos", "UTC"];
+/**
+ * `Intl.supportedValuesOf("timeZone")` returns a different list under Node than
+ * under the browser (the IANA db moves between engine versions), so building the
+ * `<option>`s from it at module load produced a hydration mismatch. The server
+ * and the hydrating client both render this small fixed set; the full list is
+ * swapped in on the client via `useSyncExternalStore` (below), which never
+ * touches the server render.
+ */
+const FALLBACK_TIMEZONES = ["Africa/Lagos", "Africa/Accra", "Africa/Nairobi", "Europe/London", "UTC"];
+
+let fullTimezonesCache: string[] | null = null;
+function fullTimezones(): string[] {
+  fullTimezonesCache ??=
+    typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : FALLBACK_TIMEZONES;
+  return fullTimezonesCache;
+}
+
+const NO_SUBSCRIBE = () => () => {};
+
+/** Keep the current value selectable even if it is not in the list yet. */
+function withValue(zones: string[], current: string): string[] {
+  return zones.includes(current) ? zones : [current, ...zones];
+}
 
 export type OfferOption = { id: string; title: string };
 
@@ -64,6 +85,12 @@ export function CohortForm(
   const [offerKind, setOfferKind] = useState<"" | "COURSE" | "PROGRAMME">(
     values.offerKind ?? (values.courseId ? "COURSE" : values.programmeId ? "PROGRAMME" : ""),
   );
+
+  // Deterministic on the server and the first client render; the full IANA list
+  // is swapped in on the client so the `<option>`s hydrate without a mismatch.
+  const selectedTimezone = values.timezone ?? "Africa/Lagos";
+  const timezoneList = useSyncExternalStore(NO_SUBSCRIBE, fullTimezones, () => FALLBACK_TIMEZONES);
+  const timezones = withValue(timezoneList, selectedTimezone);
 
   const errorFor = (name: string) => (!state.ok ? state.errors : []).find((e) => e.name === name)?.message;
 
@@ -198,10 +225,10 @@ export function CohortForm(
             <select
               {...field}
               required
-              defaultValue={values.timezone ?? "Africa/Lagos"}
+              defaultValue={selectedTimezone}
               className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
             >
-              {TIMEZONES.map((tz) => (
+              {timezones.map((tz) => (
                 <option key={tz} value={tz}>
                   {tz}
                 </option>
