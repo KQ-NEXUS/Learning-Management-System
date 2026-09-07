@@ -151,7 +151,12 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
   const display = deriveIdentityDisplay(identity);
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden bg-surface-2">
+    // No `overflow-x` clip on this row wrapper: `overflow-x: hidden` forces
+    // `overflow-y` to compute to `auto`, turning it into a scroll container, and
+    // the sidebar's `lg:sticky` would then anchor to this non-scrolling box
+    // instead of the viewport — so it scrolled away with the page on tall
+    // routes. Horizontal bleed is clipped on the content column instead.
+    <div className="flex min-h-screen bg-surface-2">
       {mobileOpen && (
         <div
           aria-hidden
@@ -167,7 +172,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         inert={!desktop && !mobileOpen}
         aria-hidden={!desktop && !mobileOpen ? true : undefined}
         aria-label="Workspace navigation"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[228px] shrink-0 flex-col bg-sidebar-bg pb-4 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[228px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg pb-4 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -254,7 +259,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         </div>
       </aside>
 
-      <div ref={backgroundRef} className="flex min-w-0 flex-1 flex-col">
+      <div ref={backgroundRef} className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
         <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6">
           <div className="flex min-w-0 items-center gap-2">
             <button

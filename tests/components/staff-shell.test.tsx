@@ -102,3 +102,38 @@ describe("StaffShell responsive navigation", () => {
     expect(background.hasAttribute("inert")).toBe(false);
   });
 });
+
+describe("StaffShell sticky sidebar layout", () => {
+  // jsdom has no layout or scroll engine, so this locks the class contract that
+  // keeps the desktop sidebar pinned. `overflow-x: hidden` forces `overflow-y`
+  // to compute to `auto`, making the element a scroll container; if the row
+  // wrapper is that container, the sidebar's `lg:sticky` anchors to it instead
+  // of the viewport and slides out of view as a tall route scrolls.
+  it("never clips overflow-x on the flex row that the sticky sidebar anchors against", () => {
+    const { container } = render(<Shell />);
+    const aside = container.querySelector("aside")!;
+    const row = aside.parentElement!;
+    expect(row.className).toContain("flex");
+    expect(row.className).toContain("min-h-screen");
+    expect(row.className).not.toMatch(/(^|\s)(lg:)?overflow-x-hidden(\s|$)/);
+    expect(row.className).not.toMatch(/(^|\s)(lg:)?overflow-hidden(\s|$)/);
+  });
+
+  it("keeps the sidebar pinned full-height on desktop and scrollable when its own content overflows", () => {
+    const { container } = render(<Shell />);
+    const aside = container.querySelector("aside")!;
+    expect(aside.className).toContain("lg:sticky");
+    expect(aside.className).toContain("lg:top-0");
+    expect(aside.className).toContain("lg:h-screen");
+    // Its own content (nav + identity chip) scrolls rather than clipping on a short viewport.
+    expect(aside.className).toContain("overflow-y-auto");
+  });
+
+  it("clips horizontal bleed on the content column instead of the sticky row", () => {
+    const { container } = render(<Shell />);
+    const contentColumn = screen.getByRole("main").parentElement!;
+    // Same element the mobile background-inert logic targets.
+    expect(contentColumn).toBe(container.querySelector("aside")!.nextElementSibling);
+    expect(contentColumn.className).toContain("overflow-x-hidden");
+  });
+});
