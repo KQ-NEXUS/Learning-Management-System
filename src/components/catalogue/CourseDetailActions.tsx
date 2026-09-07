@@ -46,6 +46,13 @@ const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
   "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+// Accent / danger secondaries — their own strings, not `${BTN} text-accent`, so the
+// colour isn't left to Tailwind source order against BTN's own `text-foreground`
+// / `border-input-border` (which wins, leaving the button ink-coloured).
+const BTN_ACCENT =
+  "rounded-md border border-accent bg-surface px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/5 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_DANGER =
+  "rounded-md border border-danger/40 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface disabled:cursor-not-allowed disabled:opacity-50";
 
 function cohortCodes(result: Extract<CatalogueActionResult, { reason: "COHORTS_RUNNING" }>): string {
   return result.cohorts.map((cohort) => cohort.code).join(", ");
@@ -242,7 +249,7 @@ export function CourseDetailActions({
             type="button"
             disabled={busy === "list"}
             onClick={() => runListing(true)}
-            className={`${BTN} border-accent text-accent hover:bg-accent/5`}
+            className={BTN_ACCENT}
           >
             List publicly
           </button>
@@ -262,7 +269,7 @@ export function CourseDetailActions({
           <button
             type="button"
             onClick={() => openModal("archive")}
-            className={`${BTN} border-danger/40 text-danger hover:bg-danger-surface`}
+            className={BTN_DANGER}
           >
             Archive
           </button>
