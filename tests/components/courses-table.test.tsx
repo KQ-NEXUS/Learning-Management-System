@@ -10,11 +10,11 @@ const rows: CourseRow[] = [
 ];
 
 describe("CoursesTable", () => {
-  it("disables all four unfinished affordances with associated visible explanations and preserves detail navigation", () => {
+  it("links to the course create screen while keeping unfinished bulk/export affordances disabled", () => {
     render(<CoursesTable rows={rows} />);
     const cards = within(screen.getByRole("list"));
     fireEvent.click(cards.getByRole("checkbox", { name: "Select diagnostics" }));
-    for (const name of ["Publish", "Archive…", "Export CSV", "New course"]) {
+    for (const name of ["Publish", "Archive…", "Export CSV"]) {
       const button = screen.getByRole("button", { name }) as HTMLButtonElement;
       expect(button.disabled).toBe(true);
       const description = document.getElementById(button.getAttribute("aria-describedby") ?? "");
@@ -22,6 +22,7 @@ describe("CoursesTable", () => {
       expect(description?.closest('[hidden], [aria-hidden="true"], .sr-only')).toBeNull();
       fireEvent.click(button);
     }
+    expect(screen.getByRole("link", { name: "New course" }).getAttribute("href")).toBe("/staff/courses/new");
     expect(cards.getByRole("link", { name: "Diagnostics" }).getAttribute("href")).toBe("/staff/courses/c1");
     expect((cards.getByRole("checkbox", { name: "Select diagnostics" }) as HTMLInputElement).checked).toBe(true);
   });

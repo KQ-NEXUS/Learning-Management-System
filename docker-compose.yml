@@ -124,7 +124,7 @@ services:
       <<: *storage-environment
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
-      AUTH_SECRET: ${AUTH_SECRET:-change-me-before-production}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
       EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-Professional Training LMS}

@@ -81,7 +81,7 @@ export async function POST(request: Request): Promise<Response> {
       const maxBytes = (UPLOAD_LIMITS as Record<string, { maxBytes: number }>)[lessonType]
         .maxBytes;
 
-      await putLessonObject({
+      const { bytesUploaded } = await putLessonObject({
         key: storageKey,
         body: toNodeStream(source),
         contentType: meta.mimeType,
@@ -94,7 +94,7 @@ export async function POST(request: Request): Promise<Response> {
         storageKey,
         filename: meta.filename,
         mimeType: meta.mimeType,
-        sizeBytes: BigInt(meta.sizeBytes),
+        sizeBytes: BigInt(bytesUploaded),
       });
 
       await enqueueScan(resource.id);

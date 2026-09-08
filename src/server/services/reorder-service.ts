@@ -54,6 +54,15 @@ import type { ResourceAuditEntry } from "@/server/services/resource-service";
 import { assertArrangementSize } from "@/lib/positions";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
+type ModuleFindManyArgs =
+  | {
+      where: { courseId: string; withdrawnAt: null };
+      orderBy: { position: "asc" };
+    }
+  | {
+      where: { id: { in: string[] }; courseId: string; withdrawnAt: null };
+      select: { id: true };
+    };
 
 export class StaleOrderError extends Error {
   constructor(message = "Someone else reordered this — reload and try again.") {
@@ -126,10 +135,7 @@ export type ReorderTx = {
     }) => Promise<{ count: number }>;
   };
   module: {
-    findMany: (args: {
-      where: { courseId: string; withdrawnAt: null };
-      orderBy: { position: "asc" };
-    }) => Promise<{ id: string }[]>;
+    findMany: (args: ModuleFindManyArgs) => Promise<{ id: string }[]>;
     update: (args: {
       where: { id: string };
       data: { position: number };
@@ -304,10 +310,19 @@ export function createReorderService(config: ReorderServiceConfig) {
   )(async (input, ctx) => {
     const allLessonIds = input.arrangement.flatMap((group) => group.lessonIds);
     assertArrangementSize(allLessonIds.length);
-    const touchedModuleIds = input.arrangement.map((group) => group.moduleId);
+    const touchedModuleIds = [...new Set(input.arrangement.map((group) => group.moduleId))];
 
     const { before, after } = await db.$transaction(async (tx) => {
       await claimCourse(tx, input.courseId, input.expectedUpdatedAt);
+
+      const touchedModules = await tx.module.findMany({
+        where: { id: { in: touchedModuleIds }, courseId: input.courseId, withdrawnAt: null },
+        select: { id: true },
+      });
+      verifyArrangement(
+        touchedModules.map((m) => m.id),
+        touchedModuleIds,
+      );
 
       // Every touched module's live lessons — source AND destination of any
       // cross-module move (D-21) — must all appear in the payload.

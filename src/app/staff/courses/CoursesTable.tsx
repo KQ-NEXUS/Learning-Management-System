@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ResourceTable,
   StatusPill,
@@ -187,14 +188,12 @@ export function CoursesTable({
           <button type="button" disabled aria-describedby={unavailableId} className={BTN}>
             Export CSV
           </button>
-          <button
-            type="button"
-            disabled
-            aria-describedby={unavailableId}
+          <Link
+            href="/staff/courses/new"
             className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             New course
-          </button>
+          </Link>
           <p id={unavailableId} className="basis-full text-sm text-muted-foreground">
             {UNAVAILABLE}
           </p>

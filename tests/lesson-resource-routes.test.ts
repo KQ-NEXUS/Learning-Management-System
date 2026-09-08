@@ -131,6 +131,14 @@ describe("POST /api/lesson-resources/upload", () => {
     await POST(uploadRequest());
     expect(h.enqueueScan).toHaveBeenCalledWith("res-1");
   });
+
+  it("stores the measured streamed byte count instead of the client-declared size", async () => {
+    h.putLessonObject.mockResolvedValueOnce({ bytesUploaded: 3210 });
+    await POST(uploadRequest({ sizeBytes: "2000" }, "measured-stream"));
+    expect(h.createLessonResource).toHaveBeenCalledWith(
+      expect.objectContaining({ sizeBytes: BigInt(3210) }),
+    );
+  });
 });
 
 describe("GET /api/lesson-resources/[id]/download", () => {
