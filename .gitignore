@@ -54,3 +54,16 @@ docs/superpowers/
 
 # Track task list — local working document
 docs/TRACK-A-TASKS.md
+
+# Playwright MCP session artifacts
+.playwright-mcp/
+
+# Local tooling and planning scratch — not part of the shipped repo
+design/
+.claude/
+.planning/
+reference/
+.worktrees/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+.gsd

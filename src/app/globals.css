@@ -1,26 +1,193 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens — three-tier chain (primitive / pill / sidebar / semantic).
+ * See .planning/phases/04.1-design-system-rollout-modern-ui-across-every-existing-surfac/04.1-UI-SPEC.md
+ * section 5.3 for the authoritative source this block is copied from.
+ *
+ * Component code MUST consume only the semantic tier (or the pill/sidebar tiers where
+ * documented) via the @theme inline block below — never a primitive token directly, and
+ * never a raw hex outside this file.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ---- Primitive tier: raw values. Never referenced directly by components. ---- */
+  --primitive-white: #ffffff;
+  --primitive-ink: #101828;
+  --primitive-muted: #667085;
+  --primitive-line: #dfe5ee;
+  --primitive-paper: #f5f7fb;
+  --primitive-surface-2: #eef3fb;
+
+  --primitive-brand: #2457d6; /* LOCKED (D-08): brand blue, brighter than today's #1c4ed8 */
+  --primitive-brand-deep: #15398f; /* gradient/glow partner */
+  --primitive-glow: rgba(36, 87, 214, 0.18);
+
+  --primitive-teal-700: #0f766e; /* LOCKED: teal text-safe (state-only, D-09) */
+  --primitive-teal-500: #12a594; /* LOCKED: teal fill (state-only, D-09) */
+  --primitive-teal-900: #123f45; /* teal-deep, avatar-chip gradient partner */
+
+  --primitive-amber-700: #b45309; /* LOCKED: amber text-safe (== today's --warning, unchanged) */
+  --primitive-amber-500: #f79009; /* AMENDED (D-12): retires the ROADMAP's prior amber-fill literal */
+  --primitive-amber-50: #fffaeb; /* pill tint */
+
+  --primitive-red-700: #b42318; /* DECIDED (D-11): unchanged from today's --danger */
+  --primitive-red-50: #fdf3f2; /* unchanged from today's --danger-surface */
+
+  --primitive-green-700: #15803d; /* DECIDED (D-10): unchanged from today's --success */
+
+  /* Pill-tone tier: StatusPill's five tinted tones. Component maps a `tone` prop to one of
+     these named triples; it never reads a hex. See UI-SPEC 5.6. */
+  --pill-green-bg: #ecfdf3;
+  --pill-green-ink: #067647;
+  --pill-green-dot: #17b26a;
+  --pill-blue-bg: #eff4ff;
+  --pill-blue-ink: #1e40af;
+  --pill-blue-dot: #3b6ef5;
+  --pill-amber-bg: #fffaeb;
+  --pill-amber-ink: #b45309;
+  --pill-amber-dot: #f79009;
+  --pill-grey-bg: #f7f7f7;
+  --pill-grey-ink: #525252;
+  --pill-grey-dot: #a3a3a3;
+  --pill-red-bg: #fdf3f2;
+  --pill-red-ink: #b42318;
+  --pill-red-dot: #d92d20;
+
+  /* Staff sidebar tier — used only inside staff/layout.tsx, never elsewhere. */
+  --sidebar-bg: #0d1b3d;
+  --sidebar-fg: #eef3fb;
+  --sidebar-accent: #15398f;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-muted: #8fa3cf;
+
+  /* ---- Semantic tier: role names. Component code consumes ONLY these (or the pill/sidebar ---- */
+  /* ---- tiers above), via the @theme block below. Utility class names for the four that     ---- */
+  /* ---- already existed (accent/danger/success/warning) are UNCHANGED, so no find-and-        ---- */
+  /* ---- replace is needed for those; new roles (teal, ink/muted/line/paper/surface-2) are new. ---- */
+  --background: var(--primitive-paper);
+  --foreground: var(--primitive-ink);
+  --surface: var(--primitive-white);
+  --surface-2: var(--primitive-surface-2);
+  --muted-foreground: var(--primitive-muted);
+  --border: var(--primitive-line); /* decorative/structural border — cards, dividers, tab strips */
+  --input-border: var(--primitive-muted); /* interactive-control border — inputs, selects, textareas (D-15) */
+
+  --accent: var(--primitive-brand); /* buttons, links, focus ring, active tab/nav — carries words */
+  --accent-deep: var(--primitive-brand-deep); /* gradient end for brand mark + primary-button gradient */
+  --accent-contrast: var(--primitive-white);
+  --accent-glow: var(--primitive-glow);
+
+  --teal-fill: var(--primitive-teal-500); /* progress bars, grade dots — non-text, state-only, NEVER interactive */
+  --teal-text: var(--primitive-teal-700); /* wherever teal carries words */
+  --teal-deep: var(--primitive-teal-900); /* avatar-chip gradient partner */
+
+  --warning: var(--primitive-amber-700); /* text-safe amber — value unchanged from today */
+  --warning-fill: var(--primitive-amber-500); /* AMENDED (D-12): course-state indicator dots ONLY */
+  --warning-surface: var(--primitive-amber-50);
+
+  --danger: var(--primitive-red-700);
+  --danger-surface: var(--primitive-red-50);
+
+  --success: var(--primitive-green-700);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input-border: var(--input-border);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-contrast: var(--accent-contrast);
+
+  --color-teal-fill: var(--teal-fill);
+  --color-teal-text: var(--teal-text);
+  --color-teal-deep: var(--teal-deep);
+
+  --color-warning: var(--warning);
+  --color-warning-fill: var(--warning-fill);
+  --color-warning-surface: var(--warning-surface);
+
+  --color-danger: var(--danger);
+  --color-danger-surface: var(--danger-surface);
+  --color-success: var(--success);
+
+  --color-pill-green-bg: var(--pill-green-bg);
+  --color-pill-green-ink: var(--pill-green-ink);
+  --color-pill-green-dot: var(--pill-green-dot);
+  --color-pill-blue-bg: var(--pill-blue-bg);
+  --color-pill-blue-ink: var(--pill-blue-ink);
+  --color-pill-blue-dot: var(--pill-blue-dot);
+  --color-pill-amber-bg: var(--pill-amber-bg);
+  --color-pill-amber-ink: var(--pill-amber-ink);
+  --color-pill-amber-dot: var(--pill-amber-dot);
+  --color-pill-grey-bg: var(--pill-grey-bg);
+  --color-pill-grey-ink: var(--pill-grey-ink);
+  --color-pill-grey-dot: var(--pill-grey-dot);
+  --color-pill-red-bg: var(--pill-red-bg);
+  --color-pill-red-ink: var(--pill-red-ink);
+  --color-pill-red-dot: var(--pill-red-dot);
+
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-muted: var(--sidebar-muted);
+
+  /* Radius overrides (UI-SPEC 3.2) — redefining Tailwind's own theme keys means
+     rounded-sm/md/lg/xl resolve to the mockup's values project-wide; no arbitrary-value
+     class needed anywhere. */
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Shadow (UI-SPEC 3.3) — shadow-xs is redefined to match exactly; shadow-card is a new
+     named key, deliberately NOT overloading Tailwind's native shadow-sm (which means
+     something else). */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-card: 0 18px 48px rgba(16, 24, 40, 0.1);
+
+  --font-sans: var(--font-plus-jakarta-sans);
+  --font-mono: var(--font-ibm-plex-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), "Segoe UI Variable", system-ui, sans-serif;
+}
+
+/* Display tracking (UI-SPEC 4.2, D-07). Applied as a base rule so ~50 files that already
+   render h1/h2/h3 without a shared component get consistent tracking automatically. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.035em;
+}
+h1 {
+  letter-spacing: -0.045em;
+}
+
+/* Focus reads as a glow in this system per the mockup's own comment, but the mechanism
+   stays an outline — do not swap to a box-shadow-only focus indicator without
+   re-verifying it survives Windows High Contrast Mode. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

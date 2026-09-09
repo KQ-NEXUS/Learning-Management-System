@@ -1,0 +1,430 @@
+"use client";
+
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Fragment, useState, useTransition } from "react";
+import type { AuditRow, AuditFilterOptions } from "@/server/services/audit-read-service";
+import { formatTimestamp } from "@/lib/format-timestamp";
+
+/**
+ * A sibling of ResourceTable, not a consumer of it — expand-in-place is the
+ * one behaviour the primitive lacks. Skeleton, empty, denied, and error panel
+ * markup are copied verbatim from ResourceTable so the visual language
+ * matches exactly.
+ */
+
+const HEAD =
+  "px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+const CELL = "px-4 py-2 align-middle";
+const BTN =
+  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-xs">
+      {children}
+    </div>
+  );
+}
+
+function shortenId(id: string | null): string {
+  if (!id) return "—";
+  return id.length > 10 ? `${id.slice(0, 8)}…` : id;
+}
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function computeDiff(
+  before: unknown,
+  after: unknown,
+): { key: string; oldValue: unknown; newValue: unknown }[] {
+  const beforeObj =
+    before && typeof before === "object" ? (before as Record<string, unknown>) : {};
+  const afterObj = after && typeof after === "object" ? (after as Record<string, unknown>) : {};
+  const keys = new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]);
+
+  const diffs: { key: string; oldValue: unknown; newValue: unknown }[] = [];
+  for (const key of keys) {
+    const oldValue = beforeObj[key];
+    const newValue = afterObj[key];
+    if (JSON.stringify(oldValue) === JSON.stringify(newValue)) continue;
+    diffs.push({ key, oldValue, newValue });
+  }
+  return diffs;
+}
+
+/**
+ * The revealed event evidence, shared byte-for-byte between the desktop
+ * expand-in-place row and the below-`sm` card so a mobile reader inspects the
+ * exact same detail. Long identifiers wrap rather than clip (D-04, NFR-09).
+ */
+function EventDetail({ row }: { row: AuditRow }) {
+  const diff = computeDiff(row.before, row.after);
+  return (
+    <div className="flex max-h-64 min-w-0 flex-col gap-4 overflow-y-auto">
+      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <span className="font-semibold uppercase tracking-wide text-muted-foreground">
+            Scope:
+          </span>{" "}
+          {row.scopeType && row.scopeId
+            ? `${row.scopeType} ${row.scopeId}`
+            : row.scopeType
+              ? row.scopeType
+              : "—"}
+        </span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <span className="font-semibold uppercase tracking-wide text-muted-foreground">
+            Outcome:
+          </span>{" "}
+          {row.outcome}
+        </span>
+      </div>
+
+      <p className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+        <span className="font-semibold uppercase tracking-wide text-[11px] text-muted-foreground">
+          Reason:
+        </span>{" "}
+        {row.reason ?? "—"}
+      </p>
+
+      {diff.length > 0 ? (
+        <ul className="flex min-w-0 flex-col gap-1 font-mono text-sm text-foreground">
+          {diff.map((d) => (
+            <li key={d.key} className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+              <span className="text-muted-foreground">{d.key}:</span>{" "}
+              {formatValue(d.oldValue)} → {formatValue(d.newValue)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">No field-level changes recorded.</p>
+      )}
+    </div>
+  );
+}
+
+export type AuditTableFilters = {
+  actorId: string;
+  action: string;
+  from: string;
+  to: string;
+};
+
+export function AuditTable({
+  rows,
+  denied,
+  error,
+  filterOptions,
+  filters,
+  validationError,
+}: {
+  rows?: AuditRow[];
+  denied?: { permission: string };
+  error?: { message?: string };
+  filterOptions?: AuditFilterOptions;
+  filters?: AuditTableFilters;
+  validationError?: { message: string } | null;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  function setParam(name: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set(name, value);
+    } else {
+      params.delete(name);
+    }
+    startTransition(() => {
+      router.push(params.toString() ? `${pathname}?${params.toString()}` : pathname);
+    });
+  }
+
+  const activeFilterCount = filters
+    ? [filters.actorId, filters.action, filters.from, filters.to].filter(Boolean).length
+    : 0;
+
+  function clearFilters() {
+    startTransition(() => router.push(pathname));
+  }
+
+  const header = (
+    <div className="flex flex-col gap-4">
+      <h2 className="text-base font-semibold tracking-tight text-foreground">Audit</h2>
+
+      {filterOptions && filters && (
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
+          <label className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Actor
+            </span>
+            <select
+              value={filters.actorId}
+              onChange={(e) => setParam("actorId", e.target.value)}
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-sm"
+            >
+              <option value="">Any</option>
+              {filterOptions.actors.map((actor) => (
+                <option key={actor.id} value={actor.id}>
+                  {actor.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Action
+            </span>
+            <select
+              value={filters.action}
+              onChange={(e) => setParam("action", e.target.value)}
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-sm"
+            >
+              <option value="">Any</option>
+              {filterOptions.actions.map((action) => (
+                <option key={action} value={action}>
+                  {action}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              From
+            </span>
+            <input
+              type="date"
+              value={filters.from}
+              onChange={(e) => setParam("from", e.target.value)}
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-sm"
+            />
+          </label>
+
+          <label className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              To
+            </span>
+            <input
+              type="date"
+              value={filters.to}
+              onChange={(e) => setParam("to", e.target.value)}
+              className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-sm"
+            />
+          </label>
+
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto text-sm text-accent underline underline-offset-2"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  if (denied) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <Panel>
+          <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
+          <p className="text-sm font-semibold text-foreground">You do not have access to audit events</p>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            Your role does not include{" "}
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">{denied.permission}</code> at this
+            scope. Ask a workspace administrator to grant it.
+          </p>
+        </Panel>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <Panel>
+          <p className="text-sm font-semibold text-foreground">Could not load audit events</p>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            {error.message ?? "The request failed. Your filters are kept, so retrying returns to exactly this view."}
+          </p>
+        </Panel>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {header}
+
+      {validationError && (
+        <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
+          {validationError.message}
+        </div>
+      )}
+
+      {!rows || rows.length === 0 ? (
+        <Panel>
+          <p className="text-sm font-semibold text-foreground">
+            {activeFilterCount > 0 ? "No audit events match these filters" : "No audit events yet"}
+          </p>
+          {activeFilterCount > 0 && (
+            <button type="button" onClick={clearFilters} className={BTN}>
+              Clear filters
+            </button>
+          )}
+        </Panel>
+      ) : (
+        <>
+          {/* Desktop — hidden below sm, where the card list takes over so
+              nothing scrolls sideways (D-04). */}
+          <div className="hidden overflow-hidden rounded-xl border border-border bg-surface shadow-xs sm:block">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-surface-2">
+                <tr>
+                  <th scope="col" className={HEAD}>Actor</th>
+                  <th scope="col" className={HEAD}>Action</th>
+                  <th scope="col" className={HEAD}>Target</th>
+                  <th scope="col" className={`${HEAD} text-right`}>Time</th>
+                </tr>
+              </thead>
+              <tbody aria-busy={isPending || undefined}>
+                {isPending
+                  ? Array.from({ length: 5 }, (_, i) => (
+                      <tr key={i} className="border-t border-border">
+                        <td colSpan={4} className={CELL}>
+                          <span className="block h-3 w-full max-w-[20rem] animate-pulse rounded-sm bg-surface-2" />
+                        </td>
+                      </tr>
+                    ))
+                  : rows.map((row) => {
+                      const expanded = expandedId === row.id;
+                      const detailId = `audit-row-detail-${row.id}`;
+                      return (
+                        <Fragment key={row.id}>
+                          <tr className="border-t border-border hover:bg-surface-2">
+                            <td colSpan={4} className="p-0">
+                              <button
+                                type="button"
+                                aria-expanded={expanded}
+                                aria-controls={detailId}
+                                onClick={() => setExpandedId(expanded ? null : row.id)}
+                                className="grid w-full grid-cols-4 gap-2 px-4 py-2 text-left"
+                              >
+                                <span className="flex min-w-0 flex-col gap-1">
+                                  <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
+                                    {row.actorName ?? "System"}
+                                  </span>
+                                  <span className="min-w-0 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                                    {row.actorEmail ?? "—"}
+                                  </span>
+                                </span>
+                                <span className="min-w-0 self-center font-mono text-sm text-foreground [overflow-wrap:anywhere]">
+                                  {row.action}
+                                </span>
+                                <span className="min-w-0 self-center text-sm text-foreground [overflow-wrap:anywhere]">
+                                  {row.targetType} <span className="font-mono">{shortenId(row.targetId)}</span>
+                                </span>
+                                <span className="self-center text-right font-mono text-sm tabular-nums text-muted-foreground">
+                                  {formatTimestamp(row.createdAt)}
+                                </span>
+                              </button>
+                            </td>
+                          </tr>
+                          {expanded && (
+                            <tr className="bg-surface-2">
+                              <td colSpan={4} className="px-4 py-4" id={detailId}>
+                                <EventDetail row={row} />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile — semantic cards below sm carry the same event and the
+              same expand-in-place evidence, with long values wrapping rather
+              than clipping (CR-12, NFR-09). */}
+          <ul
+            aria-label="Audit history"
+            aria-busy={isPending || undefined}
+            className="flex flex-col gap-2 sm:hidden"
+          >
+            {isPending
+              ? Array.from({ length: 5 }, (_, i) => (
+                  <li
+                    key={i}
+                    className="rounded-xl border border-border bg-surface px-4 py-4 shadow-xs"
+                  >
+                    <span className="block h-3 w-full max-w-[16rem] animate-pulse rounded-sm bg-surface-2" />
+                  </li>
+                ))
+              : rows.map((row) => {
+                  const expanded = expandedId === row.id;
+                  const detailId = `audit-card-detail-${row.id}`;
+                  return (
+                    <li
+                      key={row.id}
+                      className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs"
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-controls={detailId}
+                        onClick={() => setExpandedId(expanded ? null : row.id)}
+                        className="flex w-full min-w-0 flex-col gap-1 px-4 py-4 text-left"
+                      >
+                        <span className="flex min-w-0 flex-col gap-1">
+                          <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
+                            {row.actorName ?? "System"}
+                          </span>
+                          <span className="min-w-0 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                            {row.actorEmail ?? "—"}
+                          </span>
+                        </span>
+                        <span className="min-w-0 font-mono text-sm text-foreground [overflow-wrap:anywhere]">
+                          {row.action}
+                        </span>
+                        <span className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+                          {row.targetType}{" "}
+                          <span className="font-mono [overflow-wrap:anywhere]">
+                            {row.targetId ?? "—"}
+                          </span>
+                        </span>
+                        <span className="font-mono text-sm tabular-nums text-muted-foreground">
+                          {formatTimestamp(row.createdAt)}
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div
+                          id={detailId}
+                          className="border-t border-border bg-surface-2 px-4 py-4"
+                        >
+                          <EventDetail row={row} />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}

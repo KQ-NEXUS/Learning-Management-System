@@ -1,0 +1,60 @@
+FROM node:22-alpine AS deps
+
+WORKDIR /app
+
+# Prisma's Alpine engine needs OpenSSL at generation and runtime.
+RUN apk add --no-cache openssl
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Task 1 proves the image before Task 2 adds the worker sources.
+RUN mkdir -p worker
+RUN npx prisma generate
+RUN npm run build
+
+
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl \
+    && addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts \
+    && npm cache clean --force
+
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+COPY --from=builder --chown=nextjs:nodejs /app/worker ./worker
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.ts ./next.config.ts
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]

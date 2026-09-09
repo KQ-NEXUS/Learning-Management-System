@@ -19,7 +19,11 @@ export async function getActorBySessionToken(
     select: {
       expires: true,
       revokedAt: true,
-      user: { select: { id: true, status: true } },
+      // isStaff is a presentation hint only, used downstream to choose
+      // redirects/chrome (D-15, D-18) — never an authorization input.
+      // Authority still comes exclusively from Assignment rows resolved
+      // through withPermission.
+      user: { select: { id: true, status: true, isStaff: true } },
     },
   });
 
@@ -30,5 +34,5 @@ export async function getActorBySessionToken(
   // A deactivated account keeps its history but loses access (IAM-04).
   if (session.user.status !== "ACTIVE") return null;
 
-  return { userId: session.user.id };
+  return { userId: session.user.id, isStaff: session.user.isStaff };
 }
