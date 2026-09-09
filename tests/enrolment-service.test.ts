@@ -12,6 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
 import {
+  applyEnrolmentActivation,
   assertTransition,
   createEnrolmentService,
   CrossOfferTransferError,
@@ -550,6 +551,147 @@ describe("approveEnrolment (D-12)", () => {
     const audit = audits.find((a) => a.action === "enrolment.approved");
     expect(audit?.before).toEqual({ status: "PENDING_PAYMENT" });
     expect(audit?.after).toEqual({ status: "ACTIVE" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyEnrolmentActivation (PAY-02) — direct unit cases against the extracted
+// transition body, using the same fake-tx style as harness()'s makeTx above.
+// This is the surface a webhook-driven, actorless caller (plan 06-03) calls
+// directly, bypassing withPermission/approveEnrolment entirely.
+// ---------------------------------------------------------------------------
+
+function directActivationTx(
+  cohorts: Map<string, CohortRow>,
+  enrolments: Map<string, EnrolmentRow>,
+  events: Array<Record<string, unknown>>,
+) {
+  return {
+    $queryRaw: async <T = unknown>(_s: TemplateStringsArray, ...vals: unknown[]): Promise<T> => {
+      const c = cohorts.get(vals[0] as string);
+      if (!c) return [] as T;
+      return [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }] as T;
+    },
+    $executeRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
+      void vals;
+      return 1;
+    },
+    enrolment: {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        const row = enrolments.get(where.id) as EnrolmentRow;
+        Object.assign(row, data);
+        return row;
+      },
+    },
+    cohort: {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        const c = cohorts.get(where.id) as CohortRow;
+        const s = data.seatsTaken as { increment?: number } | undefined;
+        if (s?.increment) c.seatsTaken += s.increment;
+        return c;
+      },
+    },
+    domainEvent: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        events.push(data);
+        return { id: `evt-${events.length}` };
+      },
+    },
+  };
+}
+
+describe("applyEnrolmentActivation (PAY-02)", () => {
+  it("activation from a live-hold PENDING_PAYMENT claims no second seat (lockOpenCohort, not claimSeat)", async () => {
+    const hold = new Date(NOW.getTime() + 20 * 60_000);
+    const cohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 1, capacity: 5 })]]);
+    const enrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: hold })],
+    ]);
+    const events: Array<Record<string, unknown>> = [];
+    const result = await applyEnrolmentActivation(directActivationTx(cohorts, enrolments, events), {
+      enrolment: enrolments.get("enr-1")!,
+      reason: "Stripe payment confirmed",
+      actorId: null,
+      now: NOW,
+    });
+    expect(result.claimedSeat).toBe(false);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    const row = enrolments.get("enr-1")!;
+    expect(row.status).toBe("ACTIVE");
+    expect(row.holdExpiresAt).toBeNull();
+    expect(row.activatedAt).toEqual(NOW);
+  });
+
+  it("activation from a hold-less PENDING_PAYMENT claims exactly one seat", async () => {
+    const cohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 0, capacity: 5 })]]);
+    const enrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: null })],
+    ]);
+    const events: Array<Record<string, unknown>> = [];
+    const result = await applyEnrolmentActivation(directActivationTx(cohorts, enrolments, events), {
+      enrolment: enrolments.get("enr-1")!,
+      reason: "Stripe payment confirmed",
+      actorId: null,
+      now: NOW,
+    });
+    expect(result.claimedSeat).toBe(true);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+  });
+
+  it("activation from CANCELLED throws IllegalTransitionError", async () => {
+    const cohorts = new Map<string, CohortRow>([["cohort-1", coh()]]);
+    const enrolments = new Map<string, EnrolmentRow>([["enr-1", enr({ status: "CANCELLED" })]]);
+    const events: Array<Record<string, unknown>> = [];
+    await expect(
+      applyEnrolmentActivation(directActivationTx(cohorts, enrolments, events), {
+        enrolment: enrolments.get("enr-1")!,
+        reason: "Stripe payment confirmed",
+        actorId: null,
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+  });
+
+  it("actorId: null emits enrolment.activated; a string actorId emits enrolment.approved", async () => {
+    const systemCohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 0, capacity: 5 })]]);
+    const systemEnrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: null })],
+    ]);
+    const systemEvents: Array<Record<string, unknown>> = [];
+    await applyEnrolmentActivation(directActivationTx(systemCohorts, systemEnrolments, systemEvents), {
+      enrolment: systemEnrolments.get("enr-1")!,
+      reason: "Stripe payment confirmed",
+      actorId: null,
+      now: NOW,
+    });
+    expect(systemEvents[0]!.type).toBe("enrolment.activated");
+    expect((systemEvents[0]!.payload as { actorId: string | null }).actorId).toBeNull();
+
+    const staffCohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 0, capacity: 5 })]]);
+    const staffEnrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: null })],
+    ]);
+    const staffEvents: Array<Record<string, unknown>> = [];
+    await applyEnrolmentActivation(directActivationTx(staffCohorts, staffEnrolments, staffEvents), {
+      enrolment: staffEnrolments.get("enr-1")!,
+      reason: "manual payment confirmed",
+      actorId: "staff-1",
+      now: NOW,
+    });
+    expect(staffEvents[0]!.type).toBe("enrolment.approved");
+    expect((staffEvents[0]!.payload as { actorId: string | null }).actorId).toBe("staff-1");
   });
 });
 
