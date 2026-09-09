@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createPublicCatalogueService,
   PUBLIC_VISIBILITY_WHERE,
+  type PublicCohort,
 } from "@/server/services/public-catalogue-service";
 
 type Row = Record<string, unknown> & {
@@ -163,5 +164,60 @@ describe("public-catalogue-service", () => {
     );
     const one = await svc.getPublicCourseBySlug("with-cohorts");
     expect((one as { upcomingCohorts: unknown[] }).upcomingCohorts).toHaveLength(1);
+  });
+
+  const cohortRow = (over: Record<string, unknown> = {}) => ({
+    id: "cohort-1",
+    startsAt: new Date("2026-09-01T00:00:00Z"),
+    endsAt: new Date("2026-09-30T00:00:00Z"),
+    enrolmentOpensAt: new Date("2026-05-01T00:00:00Z"),
+    enrolmentClosesAt: new Date("2026-08-01T00:00:00Z"),
+    deliveryMode: "INSTRUCTOR_LED",
+    priceMinor: 45000000,
+    currency: "NGN",
+    capacity: 10,
+    seatsTaken: 3,
+    status: "PUBLISHED",
+    ...over,
+  });
+
+  it("derives seatsAvailable as capacity - seatsTaken", async () => {
+    const svc = build([course({ slug: "seats" })], [], [cohortRow({ capacity: 10, seatsTaken: 3 })]);
+    const one = await svc.getPublicCourseBySlug("seats");
+    const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+    expect(cohort.seatsAvailable).toBe(7);
+  });
+
+  it("reports seatsAvailable: 0 for a fully-subscribed cohort", async () => {
+    const svc = build([course({ slug: "full" })], [], [cohortRow({ capacity: 5, seatsTaken: 5 })]);
+    const one = await svc.getPublicCourseBySlug("full");
+    const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+    expect(cohort.seatsAvailable).toBe(0);
+  });
+
+  it("floors seatsAvailable at 0 rather than going negative when seatsTaken exceeds capacity", async () => {
+    const svc = build([course({ slug: "over" })], [], [cohortRow({ capacity: 5, seatsTaken: 7 })]);
+    const one = await svc.getPublicCourseBySlug("over");
+    const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+    expect(cohort.seatsAvailable).toBe(0);
+  });
+
+  it("the returned cohort has no seatsTaken and no capacity key — only the derived figure", async () => {
+    const svc = build([course({ slug: "no-occupancy" })], [], [cohortRow()]);
+    const one = await svc.getPublicCourseBySlug("no-occupancy");
+    const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+    expect(Object.keys(cohort).sort()).toEqual(
+      [
+        "currency",
+        "deliveryMode",
+        "endsAt",
+        "enrolmentClosesAt",
+        "enrolmentOpensAt",
+        "id",
+        "priceMinor",
+        "seatsAvailable",
+        "startsAt",
+      ].sort(),
+    );
   });
 });
