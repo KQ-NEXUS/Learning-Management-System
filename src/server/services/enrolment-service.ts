@@ -193,6 +193,40 @@ type CohortOfferRow = {
   programmeId: string | null;
 };
 
+type CohortOfferLockRow = { id: string; courseId: string | null; programmeId: string | null };
+
+function sameOfferTarget(
+  sourceCohort: { courseId: string | null; programmeId: string | null },
+  targetCohort: { courseId: string | null; programmeId: string | null },
+): boolean {
+  return (
+    (sourceCohort.courseId !== null && sourceCohort.courseId === targetCohort.courseId) ||
+    (sourceCohort.programmeId !== null && sourceCohort.programmeId === targetCohort.programmeId)
+  );
+}
+
+/**
+ * Locks a Cohort row `FOR UPDATE` and returns just its offer target
+ * (courseId/programmeId) — used by `transferEnrolment` (CR-03) to re-validate
+ * the same-offer invariant against a row it actually holds, inside the same
+ * transaction that moves the seats. Without this, the pre-transaction
+ * `sourceCohort`/`targetCohort` reads can go stale: the target's offer is
+ * still mutable while it has no enrolments, so a concurrent edit between that
+ * read and this transaction claiming the row could otherwise slip a
+ * cross-offer transfer through.
+ */
+async function lockCohortWithOffer(
+  tx: Pick<EnrolmentTxClient, "$queryRaw">,
+  cohortId: string,
+): Promise<CohortOfferLockRow> {
+  const rows = await tx.$queryRaw<CohortOfferLockRow[]>`
+    SELECT "id", "courseId", "programmeId" FROM "Cohort" WHERE "id" = ${cohortId} FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) throw new CohortNotFoundError(cohortId);
+  return row;
+}
+
 /** The transaction client the writes need — structural, no `@prisma/client`. */
 export type EnrolmentTxClient = SeatTxClient &
   DomainEventTxClient & {
@@ -569,12 +603,7 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
       if (!sourceCohort) throw new CohortNotFoundError(source.cohortId);
       if (!targetCohort) throw new CohortNotFoundError(input.targetCohortId);
 
-      const sameOffer =
-        (sourceCohort.courseId !== null &&
-          sourceCohort.courseId === targetCohort.courseId) ||
-        (sourceCohort.programmeId !== null &&
-          sourceCohort.programmeId === targetCohort.programmeId);
-      if (!sameOffer) {
+      if (!sameOfferTarget(sourceCohort, targetCohort)) {
         throw new CrossOfferTransferError(
           source.cohortId,
           input.targetCohortId,
@@ -589,6 +618,21 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
         if (!e) throw new EnrolmentNotFoundError(input.enrolmentId);
         const before = e.status;
         assertTransition(before as EnrolmentStatusValue, "TRANSFERRED", e.id);
+
+        // CR-03: re-lock both cohorts and re-validate the same-offer
+        // invariant inside the transaction that actually moves the seats.
+        // A target cohort with no enrolments yet still has a mutable offer,
+        // so the pre-transaction check above can go stale between that read
+        // and this transaction claiming the rows.
+        const lockedSourceCohort = await lockCohortWithOffer(tx, e.cohortId);
+        const lockedTargetCohort = await lockCohortWithOffer(tx, input.targetCohortId);
+        if (!sameOfferTarget(lockedSourceCohort, lockedTargetCohort)) {
+          throw new CrossOfferTransferError(
+            e.cohortId,
+            input.targetCohortId,
+            "the target cohort belongs to a different course or programme",
+          );
+        }
 
         await releaseSeat(tx, {
           cohortId: e.cohortId,

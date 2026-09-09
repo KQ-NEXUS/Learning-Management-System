@@ -86,6 +86,13 @@ function harness(opts?: {
   grants?: ReturnType<typeof grant>[];
   cohorts?: CohortRow[];
   enrolments?: EnrolmentRow[];
+  /** CR-03 regression hook: fires after the pre-transaction `cohort.findUnique`
+   *  read for the given cohort id, so a test can mutate the live `cohorts`
+   *  map to simulate a concurrent offer edit landing between that read and
+   *  the transaction opening (the transaction's staged snapshot is cloned
+   *  from `cohorts` at `$transaction` call time, so a mutation here is
+   *  visible inside the transaction but not to the pre-check that just ran). */
+  mutateAfterCohortRead?: (cohortId: string, cohorts: Map<string, CohortRow>) => void;
 }) {
   const cohorts = new Map<string, CohortRow>(
     (opts?.cohorts ?? [coh()]).map((c) => [c.id, { ...c }]),
@@ -106,9 +113,16 @@ function harness(opts?: {
     evStore: Array<Record<string, unknown>>,
   ) {
     return {
-      $queryRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
+      $queryRaw: async (s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);
-        return c ? [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }] : [];
+        if (!c) return [];
+        // CR-03: `lockCohortWithOffer` (enrolment-service.ts) issues a
+        // different `SELECT` than the seat-accounting capacity/status lock —
+        // branch on the query text so both fakes can share one `$queryRaw`.
+        if (s.join("").includes("courseId")) {
+          return [{ id: c.id, courseId: c.courseId, programmeId: c.programmeId }];
+        }
+        return [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }];
       },
       $executeRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);
@@ -201,8 +215,11 @@ function harness(opts?: {
         (enrolments.get(where.id) as never) ?? null,
     } as never,
     cohort: {
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        (cohorts.get(where.id) as never) ?? null,
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const row = cohorts.get(where.id) ?? null;
+        opts?.mutateAfterCohortRead?.(where.id, cohorts);
+        return row as never;
+      },
     } as never,
     enrolmentScope: (id: string) => {
       const e = enrolments.get(id);
@@ -736,6 +753,32 @@ describe("transferEnrolment (D-13)", () => {
         enrolmentId: "enr-1",
         targetCohortId: "cohort-2",
         reason: "cross offer",
+      }),
+    ).rejects.toBeInstanceOf(CrossOfferTransferError);
+    expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    expect(cohorts.get("cohort-2")!.seatsTaken).toBe(0);
+  });
+
+  it("CR-03: refuses a transfer whose target offer changes between the pre-check and the transaction claiming the row", async () => {
+    // Same offer at the pre-transaction read (target still has no
+    // enrolments, so its offer is technically mutable) — but a concurrent
+    // edit changes the target's courseId immediately after that read lands,
+    // before this transfer's own transaction opens.
+    const { service, cohorts, enrolments } = harness({
+      cohorts: twoCourseCohorts(),
+      enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+      mutateAfterCohortRead: (cohortId, cohorts) => {
+        if (cohortId === "cohort-2") {
+          cohorts.get("cohort-2")!.courseId = "course-2";
+        }
+      },
+    });
+    await expect(
+      service.transferEnrolment({
+        enrolmentId: "enr-1",
+        targetCohortId: "cohort-2",
+        reason: "moved to the evening cohort",
       }),
     ).rejects.toBeInstanceOf(CrossOfferTransferError);
     expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");

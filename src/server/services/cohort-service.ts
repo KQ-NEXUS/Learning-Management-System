@@ -360,6 +360,15 @@ export type CohortPublishTx = {
       where: Record<string, unknown>;
       data: Record<string, unknown>;
     }): Promise<{ count: number }>;
+    /** Re-reads the readiness aggregate from INSIDE the publish transaction
+     *  (CR-02) — the pre-transaction read used for the fail-fast checks can
+     *  go stale between that read and the transaction claiming the row, since
+     *  instructor assignment and session create/cancel do not bump the
+     *  cohort's own `updatedAt`. */
+    findUnique(args: {
+      where: { id: string };
+      select: Record<string, unknown>;
+    }): Promise<CohortAggregateRow | null>;
   };
   enrolment: {
     findMany(args: { where: Record<string, unknown> }): Promise<EnrolmentRow[]>;
@@ -686,10 +695,35 @@ export function createCohortService(deps: CohortServiceDeps) {
       }
 
       const publishedAt = now();
-      const pinColumn =
-        pin.kind === "course" ? "coursePublicationId" : "programmePublicationId";
 
-      await deps.db.$transaction(async (tx) => {
+      const publishedPublicationId = await deps.db.$transaction(async (tx) => {
+        // CR-02: re-read the aggregate and re-evaluate readiness INSIDE the
+        // transaction that claims the row. Instructor assignment/removal and
+        // session create/cancel do not bump `Cohort.updatedAt`, so the
+        // pre-transaction read above can be stale by the time this
+        // transaction opens — the fresh evaluate-and-claim must happen
+        // together or a cohort that lost its only instructor/session between
+        // the two reads would still publish.
+        const freshRow = await tx.cohort.findUnique({
+          where: { id: input.cohortId },
+          select: AGGREGATE_SELECT as unknown as Record<string, unknown>,
+        });
+        if (!freshRow) throw new CohortNotFoundError(input.cohortId);
+        assertCohortOpen(input.cohortId, freshRow.status);
+
+        const freshAggregate = toReadinessInput(freshRow);
+        const freshPin = freshAggregate.pin!;
+        if (freshPin.publicationId == null) {
+          throw new NoPublishedOfferError(input.cohortId, freshPin.kind);
+        }
+        const freshFailures = blockingFailures(evaluateCohortReadiness(freshAggregate));
+        if (freshFailures.length > 0) {
+          throw new CohortReadinessRefusedError(freshFailures);
+        }
+
+        const pinColumn =
+          freshPin.kind === "course" ? "coursePublicationId" : "programmePublicationId";
+
         const claimed = await tx.cohort.updateMany({
           where: {
             id: input.cohortId,
@@ -699,7 +733,7 @@ export function createCohortService(deps: CohortServiceDeps) {
           data: {
             status: PUBLISHED_STATUS,
             publishedAt,
-            [pinColumn]: pin.publicationId,
+            [pinColumn]: freshPin.publicationId,
           },
         });
         if (claimed.count === 0) throw new StaleOrderError();
@@ -708,10 +742,12 @@ export function createCohortService(deps: CohortServiceDeps) {
           type: "cohort.published",
           payload: {
             cohortId: input.cohortId,
-            publicationId: pin.publicationId,
+            publicationId: freshPin.publicationId,
             actorId: ctx.actor.userId,
           },
         });
+
+        return freshPin.publicationId;
       });
 
       const reason = input.reason?.trim() ? input.reason.trim() : null;
@@ -723,10 +759,10 @@ export function createCohortService(deps: CohortServiceDeps) {
         outcome: "SUCCESS",
         reason,
         before: { status: row.status },
-        after: { status: PUBLISHED_STATUS, publicationId: pin.publicationId },
+        after: { status: PUBLISHED_STATUS, publicationId: publishedPublicationId },
       });
 
-      return { publicationId: pin.publicationId, status: PUBLISHED_STATUS };
+      return { publicationId: publishedPublicationId, status: PUBLISHED_STATUS };
     },
   );
 

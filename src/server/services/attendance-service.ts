@@ -154,6 +154,21 @@ export class SessionNotFoundError extends Error {
   }
 }
 
+/**
+ * Attendance was submitted against a session that has been cancelled
+ * (`cancelledAt` set). A cancelled session never runs, so it can never have
+ * attendance marked or corrected against it.
+ */
+export class SessionCancelledError extends Error {
+  readonly sessionId: string;
+
+  constructor(sessionId: string) {
+    super(`Session ${sessionId} is cancelled and cannot take attendance.`);
+    this.name = "SessionCancelledError";
+    this.sessionId = sessionId;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Injected surface — a Prisma client satisfies it and so does a unit-test fake.
 // ---------------------------------------------------------------------------
@@ -431,13 +446,24 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
     async (input, ctx) => {
       const session = await deps.session.findUnique({ where: { id: input.sessionId } });
       if (!session) throw new SessionNotFoundError(input.sessionId);
+      if (session.cancelledAt !== null) {
+        throw new SessionCancelledError(input.sessionId);
+      }
 
       // The enrolment id is caller-supplied — validate it against the
-      // DB-resolved cohort, never trust it (D-10).
+      // DB-resolved cohort, never trust it (D-10), and refuse an enrolment
+      // that has left the roster (transferred/cancelled) even though it
+      // still technically belongs to this cohort (CR-01).
       const enrolment = await deps.enrolment.findUnique({
         where: { id: input.enrolmentId },
       });
-      if (!enrolment || enrolment.cohortId !== session.cohortId) {
+      if (
+        !enrolment ||
+        enrolment.cohortId !== session.cohortId ||
+        OFF_ROSTER_STATUSES.includes(
+          enrolment.status as (typeof OFF_ROSTER_STATUSES)[number],
+        )
+      ) {
         throw new LearnerNotOnRosterError(input.sessionId, input.enrolmentId);
       }
 
@@ -495,11 +521,16 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
     async (input, ctx) => {
       const session = await deps.session.findUnique({ where: { id: input.sessionId } });
       if (!session) throw new SessionNotFoundError(input.sessionId);
+      if (session.cancelledAt !== null) {
+        throw new SessionCancelledError(input.sessionId);
+      }
 
       // The learner set comes from the DATABASE, filtered by the session's own
-      // `cohortId` — never from the caller's list (D-10).
+      // `cohortId` — never from the caller's list (D-10) — and excludes
+      // enrolments that have left the roster (transferred/cancelled), the
+      // same filter `loadSessionRegister` reads with (CR-01).
       const roster = await deps.enrolment.findMany({
-        where: { cohortId: session.cohortId },
+        where: { cohortId: session.cohortId, status: { notIn: OFF_ROSTER_STATUSES } },
       });
       const rosterIds = new Set(roster.map((e) => e.id));
 

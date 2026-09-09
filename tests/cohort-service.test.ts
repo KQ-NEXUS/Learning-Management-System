@@ -90,15 +90,21 @@ function readyAggregateRow(over: Partial<CohortAggregateRow> = {}): CohortAggreg
 }
 
 type TxFake = {
-  cohort: { updateMany: ReturnType<typeof vi.fn> };
+  cohort: { updateMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   domainEvent: { create: ReturnType<typeof vi.fn> };
 };
 
-function makeTx(over?: Partial<TxFake>): TxFake {
+function makeTx(over?: {
+  cohort?: Partial<TxFake["cohort"]>;
+  domainEvent?: Partial<TxFake["domainEvent"]>;
+}): TxFake {
   return {
-    cohort: { updateMany: vi.fn(async () => ({ count: 1 })) },
-    domainEvent: { create: vi.fn(async () => ({ id: "evt-1" })) },
-    ...over,
+    cohort: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      findUnique: vi.fn(async () => null),
+      ...over?.cohort,
+    },
+    domainEvent: { create: vi.fn(async () => ({ id: "evt-1" })), ...over?.domainEvent },
   };
 }
 
@@ -107,6 +113,12 @@ function harness(opts?: {
   rows?: CohortRecord[];
   enrolmentCount?: number;
   aggregateRow?: CohortAggregateRow | null;
+  /** What `tx.cohort.findUnique` returns — the CR-02 re-read INSIDE the
+   *  publish transaction. Defaults to `aggregateRow` so every test that
+   *  doesn't care about the pre-tx/in-tx distinction sees one consistent
+   *  aggregate; pass this separately to prove the transaction re-evaluates
+   *  readiness against fresh data rather than trusting the pre-tx read. */
+  freshAggregateRow?: CohortAggregateRow | null;
   tx?: TxFake;
 }) {
   const rows = new Map(
@@ -133,7 +145,10 @@ function harness(opts?: {
   const aggregateRow: CohortAggregateRow | null =
     opts && "aggregateRow" in opts ? (opts.aggregateRow ?? null) : readyAggregateRow();
   const aggregate = { findUnique: vi.fn(async () => aggregateRow) };
+  const freshAggregateRow =
+    opts && "freshAggregateRow" in opts ? (opts.freshAggregateRow ?? null) : aggregateRow;
   const tx = opts?.tx ?? makeTx();
+  tx.cohort.findUnique = vi.fn(async () => freshAggregateRow);
 
   const instructorRows = new Map<string, { id: string; cohortId: string; userId: string }>();
   const users = new Map<string, { id: string; name: string; email: string }>([
@@ -577,6 +592,26 @@ describe("publishCohort — permission-, readiness- and token-gated", () => {
     expect(err.failures.map((f: { id: string }) => f.id)).toContain("instructors");
     expect(tx.cohort.updateMany).not.toHaveBeenCalled();
     expect(tx.domainEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("CR-02: re-evaluates readiness inside the transaction and refuses a cohort that went stale between the pre-check and the claim", async () => {
+    // Ready at the pre-transaction read (e.g. the request landed while an
+    // instructor assignment was still in place), but by the time the
+    // transaction opens the instructor has been removed — a write that does
+    // not bump `Cohort.updatedAt`, so the conditional `updateMany` alone
+    // would not have caught it.
+    const { service, tx, audits } = harness({
+      aggregateRow: readyAggregateRow(),
+      freshAggregateRow: readyAggregateRow({ _count: { instructors: 0 } }),
+    });
+    const err = await service
+      .publishCohort({ cohortId: "cohort-1", expectedUpdatedAt: T0 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(CohortReadinessRefusedError);
+    expect(err.failures.map((f: { id: string }) => f.id)).toContain("instructors");
+    expect(tx.cohort.updateMany).not.toHaveBeenCalled();
+    expect(tx.domainEvent.create).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(0);
   });
 
   it("on success pins the latest publication, sets status + publishedAt, emits one event and audits after commit", async () => {

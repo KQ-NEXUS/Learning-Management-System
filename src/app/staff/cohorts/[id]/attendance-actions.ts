@@ -34,6 +34,7 @@ import {
   CorrectionReasonRequiredError,
   LearnerNotOnRosterError,
   SessionNotFoundError,
+  SessionCancelledError,
 } from "@/server/services/attendance-service";
 
 const ATTENDANCE_STATES = ["PRESENT", "ABSENT", "LATE", "EXCUSED", "NOT_RECORDED"] as const;
@@ -62,6 +63,9 @@ function toFailure(error: unknown): Extract<AttendanceActionResult, { ok: false 
   }
   if (error instanceof SessionNotFoundError) {
     return { ok: false, message: "This session could not be found." };
+  }
+  if (error instanceof SessionCancelledError) {
+    return { ok: false, message: "This session was cancelled and can no longer take attendance." };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
