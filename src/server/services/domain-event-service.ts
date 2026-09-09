@@ -43,7 +43,15 @@ export type DomainEventType =
   | "cohort.cancelled"
   | "session.created"
   | "session.updated"
-  | "session.cancelled";
+  | "session.cancelled"
+  | "order.created"
+  | "order.paid"
+  | "order.exception"
+  // Distinct from "enrolment.approved": approved means a staff member
+  // exercised enrolments.manage; activated means a verified Stripe payment
+  // did it with no actor. Phase 8's reconciliation views and Phase 13's
+  // email drain need to tell those apart from the outbox alone.
+  | "enrolment.activated";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction

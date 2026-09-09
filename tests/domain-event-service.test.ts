@@ -83,6 +83,25 @@ describe("buildDomainEventRow", () => {
     });
     expect(row.payload).toEqual({ cohortId: "c1", seatsTaken: 3 });
   });
+
+  it.each([
+    "order.created",
+    "order.paid",
+    "order.exception",
+    "enrolment.activated",
+  ] satisfies DomainEventType[])(
+    "type-checks and redacts the payload for the checkout event %s",
+    (type) => {
+      const row = buildDomainEventRow({
+        type,
+        payload: { orderId: "o1", token: "super-secret" },
+      });
+      expect(row.type).toBe(type);
+      const payload = row.payload as { orderId: string; token: string };
+      expect(payload.orderId).toBe("o1");
+      expect(payload.token).toBe("[redacted]");
+    },
+  );
 });
 
 describe("writeDomainEvent", () => {
