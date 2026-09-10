@@ -4,8 +4,21 @@ import {
   validateUpload,
   DOWNLOAD_TTL_SECONDS,
   downloadTtlFor,
+  UPLOAD_URL_TTL_SECONDS,
 } from "@/lib/upload-limits";
-import { buildStorageKey } from "@/server/services/storage-service";
+import { buildStorageKey, finalStorageKeyFor } from "@/server/services/storage-service";
+
+describe("direct upload rules", () => {
+  it("uses a 15-minute upload URL and rejects generic ZIP", () => {
+    expect(UPLOAD_URL_TTL_SECONDS).toBe(900);
+    expect(UPLOAD_LIMITS.FILE.mimeTypes).not.toContain("application/zip");
+  });
+
+  it("maps only staged lesson keys to final lesson keys", () => {
+    expect(finalStorageKeyFor("lesson-uploads/l1/opaque")).toBe("lessons/l1/opaque");
+    expect(() => finalStorageKeyFor("lessons/l1/opaque")).toThrow(/staged/i);
+  });
+});
 
 describe("validateUpload — per-LessonType allow-list", () => {
   it("accepts a small PNG for an IMAGE lesson", () => {
