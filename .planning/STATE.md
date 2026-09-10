@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 current_phase: 06
 current_phase_name: Registration, Checkout & Stripe Payments
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-09-10T06:06:39.735Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-09-10T06:18:33.755Z"
 last_activity: 2026-09-10
-state_head: c7c94a3b8a874ba7e6b8db5c5978b50378ed9b89
+state_head: 0013b6cd4eb7702c9ef8f41b8c839ea3b0735635
 progress:
   total_phases: 16
   completed_phases: 1
   total_plans: 74
-  completed_plans: 54
+  completed_plans: 55
   percent: 6
 ---
 
@@ -78,6 +78,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice â€
 | Phase 06 P01 | 46min | 3 tasks | 6 files |
 | Phase 06 P03 | 110min | 3 tasks | 14 files |
 | Phase 06 P04 | ~105min | 3 tasks | 8 files |
+| Phase 06 P05 | ~15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 06]: [Phase 6 P03]: Rule 2 auto-fix -- added getOwnOrderByReference to checkout-service.ts, mirroring getOwnOrder's ownership contract, since the receipt page needs a reference-keyed lookup the plan's Task 2 text never specified
 - [Phase 06]: [Phase 6 P04]: checkoutReturnPathFor constructs the post-auth redirect from a validated cohort id (letters-and-digits allowlist), never echoes caller input -- structurally closes the T-06-20 open-redirect surface rather than merely validating against known-bad patterns
 - [Phase 06]: [Phase 6 P04]: getCohortOfferPath added to checkout-service.ts (Rule 2 auto-fix) -- cohort-to-course-slug lookup the resumption route's typed-refusal redirects needed but no earlier plan exposed
+- [Phase 06]: [Phase 6]: [Phase 6 P05]: No REG-01 field gap on the Programme side -- PublicProgramme's completion-expectation fields (memberCourseTitles, certificateEnabled) were already rendered before this plan; prerequisites/durationHours stay Course-only, confirmed by a grep gate rather than invented
 
 ### Pending Todos
 
@@ -157,6 +159,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-10T06:06:39.531Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-09-10T06:18:33.540Z
+Stopped at: Completed 06-05-PLAN.md
 Resume file: None

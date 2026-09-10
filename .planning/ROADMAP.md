@@ -255,7 +255,7 @@ Plans:
   4. Required terms, privacy notice, refund/cancellation policy, and optional marketing consent are captured with versions, separately, at order time. (REG-04)
   5. A learner can pay via Stripe; only a server-verified result (never a client redirect) marks the order paid and activates enrolment exactly once, through a shared, provider-agnostic payment state machine, and the learner receives a confirmation email and receipt/order record. (PAY-02, PAY-09, PAY-10, REG-05)
 
-**Plans**: 4/9 plans executed across 6 waves (tracer-first: plan 03 proves the full visitor-to-enrolled path end to end — cohort card, order summary, Stripe Checkout, signature-verified webhook, receipt — before any expansion)
+**Plans**: 5/9 plans executed across 6 waves (tracer-first: plan 03 proves the full visitor-to-enrolled path end to end — cohort card, order summary, Stripe Checkout, signature-verified webhook, receipt — before any expansion)
 Plans:
 **Wave 1**
 
@@ -269,7 +269,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 06-04-PLAN.md — REG-02: cohort selection survives registration, verification and sign-in via a single-use intent cookie (REG-02)
-- [ ] 06-05-PLAN.md — REG-01 completeness: cohort-card boundary states and Programme offer parity (REG-01)
+- [x] 06-05-PLAN.md — REG-01 completeness: cohort-card boundary states and Programme offer parity (REG-01)
 - [ ] 06-06-PLAN.md — Webhook hardening: replay safety, amount cross-check, terminal-state guards, the hold-expiry race, and the import-closure gate (REG-03, PAY-02, PAY-09, PAY-10)
 
 **Wave 4** *(blocked on Wave 3 completion)*
@@ -463,7 +463,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 3. Public Identity — Registration, Verification & Secure Sessions | 10/10 | Complete | 2026-09-03 |
 | 4. Catalogue Authoring — Programmes, Courses, Modules & Lessons | 15/15 | Complete | 2026-09-03 |
 | 5. Cohorts, Scheduling, Enrolment Operations & Attendance | 16/16 | Complete | 2026-09-07 |
-| 6. Registration, Checkout & Stripe Payments | 4/9 | In Progress|  |
+| 6. Registration, Checkout & Stripe Payments | 5/9 | In Progress|  |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 0/TBD | Not started | - |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 0/TBD | Not started | - |
