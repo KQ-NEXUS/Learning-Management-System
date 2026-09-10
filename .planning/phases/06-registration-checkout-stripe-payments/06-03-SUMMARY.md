@@ -266,6 +266,10 @@ None beyond what 06-01 already documented (`STRIPE_WEBHOOK_SECRET`, obtainable n
 
 Ready for Wave 3 (06-04, 06-05, 06-06 — all depend on 06-03). The server spine (seat hold, Stripe Checkout Session, signature-verified settlement) and all four tracer screens exist and are committed. Two caveats carry forward: (1) the real-Postgres webhook integration test needs to actually run once Docker is available (this sandbox could only prove it loads and dispatches correctly, not that the full settlement transaction behaves correctly against a real database), and (2) the human browser walkthrough (this SUMMARY's Human Verification Needed section) is still outstanding and should be run before this phase's end-of-phase UAT closes.
 
+## Self-Check: PASSED
+- All 13 created source/test files verified present on disk, plus this SUMMARY.md.
+- All 9 task commits (`b855182`, `b511116`, `9ce9b57`, `4d6a45b`, `49bfdd4`, `ad4eda5`, `a461783`, `b65b0ef`, `ad54388`) and the metadata commit (`ce073ea`) verified present in `git log`.
+
 ---
 *Phase: 06-registration-checkout-stripe-payments*
 *Completed: 2026-09-10*
