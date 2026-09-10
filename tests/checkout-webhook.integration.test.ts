@@ -84,6 +84,51 @@ function buildCheckoutCompletedEventBody(args: {
   });
 }
 
+function buildCheckoutExpiredEventBody(args: {
+  eventId: string;
+  sessionId: string;
+  orderId: string;
+}): string {
+  return JSON.stringify({
+    id: args.eventId,
+    object: "event",
+    type: "checkout.session.expired",
+    api_version: STRIPE_API_VERSION,
+    created: Math.floor(Date.now() / 1000),
+    data: {
+      object: {
+        id: args.sessionId,
+        object: "checkout.session",
+        client_reference_id: args.orderId,
+        status: "expired",
+      },
+    },
+  });
+}
+
+function buildPaymentIntentFailedEventBody(args: {
+  eventId: string;
+  intentId: string;
+  orderId: string;
+  message: string;
+}): string {
+  return JSON.stringify({
+    id: args.eventId,
+    object: "event",
+    type: "payment_intent.payment_failed",
+    api_version: STRIPE_API_VERSION,
+    created: Math.floor(Date.now() / 1000),
+    data: {
+      object: {
+        id: args.intentId,
+        object: "payment_intent",
+        metadata: { orderId: args.orderId },
+        last_payment_error: { message: args.message },
+      },
+    },
+  });
+}
+
 function signedWebhookRequest(rawBody: string, opts?: { tamper?: boolean }): Request {
   const header = signingStripe.webhooks.generateTestHeaderString({
     payload: rawBody,
@@ -96,6 +141,14 @@ function signedWebhookRequest(rawBody: string, opts?: { tamper?: boolean }): Req
     method: "POST",
     body: rawBody,
     headers: { "stripe-signature": signatureHeader },
+  });
+}
+
+function unsignedWebhookRequest(rawBody: string): Request {
+  return new Request("http://localhost/api/webhooks/stripe", {
+    method: "POST",
+    body: rawBody,
+    // Deliberately no `stripe-signature` header at all.
   });
 }
 
@@ -332,9 +385,15 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
 
     const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     expect(order.status).toBe("EXCEPTION");
+    expect(order.amountMinor).toBe(45_000_000); // byte-identical to its value before the event
 
     const enrolment = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
     expect(enrolment.status).toBe("PENDING_PAYMENT"); // never activated on a mismatch
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(attemptAfter.status).toBe("PROCESSING"); // never moved to SUCCEEDED on an untrusted mismatch
+    expect(attemptAfter.exceptionNote).not.toBeNull();
+    expect(attemptAfter.exceptionNote).toContain("45000000");
   });
 
   it("a hold already expired by the time the webhook lands (Pitfall 4 race) routes to EXCEPTION, keeps the PaymentAttempt SUCCEEDED with an exceptionNote, and touches no seat count", async () => {
@@ -379,5 +438,221 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
 
     const cohort = await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
     expect(cohort.seatsTaken).toBe(0); // untouched by settlement
+  });
+
+  it("a redelivered event.id after successful settlement leaves the WebhookEvent row PROCESSED, not overwritten to DUPLICATE", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    await checkoutService.initiateStripePayment({ userId }, orderId);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_dup_processed_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: 45_000_000,
+      currency: "NGN",
+    });
+
+    await POST(signedWebhookRequest(body));
+    await POST(signedWebhookRequest(body));
+
+    const webhookRow = await testDb.prisma.webhookEvent.findFirstOrThrow({
+      where: { providerEventId: eventId },
+    });
+    expect(webhookRow.status).toBe("PROCESSED");
+  });
+
+  it("a payment_intent.payment_failed event moves the PaymentAttempt to FAILED with failedAt and failureReason (PAY-02)", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    await checkoutService.initiateStripePayment({ userId }, orderId);
+
+    const eventId = `evt_failed_${orderId}`;
+    const body = buildPaymentIntentFailedEventBody({
+      eventId,
+      intentId: `pi_test_${orderId}`,
+      orderId,
+      message: "Your card was declined.",
+    });
+
+    const response = await POST(signedWebhookRequest(body));
+    expect(response.status).toBe(200);
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+    expect(attemptAfter.status).toBe("FAILED");
+    expect(attemptAfter.failedAt).not.toBeNull();
+    expect(attemptAfter.failureReason).toBe("Your card was declined.");
+    expect(attemptAfter.confirmedAt).toBeNull();
+
+    const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.status).toBe("PENDING"); // failure is PaymentAttempt-level bookkeeping only
+  });
+
+  it("a checkout.session.expired event moves the PaymentAttempt to CANCELLED with neither confirmedAt nor failedAt set (PAY-02)", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    await checkoutService.initiateStripePayment({ userId }, orderId);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_expired_${orderId}`;
+    const body = buildCheckoutExpiredEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+    });
+
+    const response = await POST(signedWebhookRequest(body));
+    expect(response.status).toBe(200);
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(attemptAfter.status).toBe("CANCELLED");
+    expect(attemptAfter.confirmedAt).toBeNull();
+    expect(attemptAfter.failedAt).toBeNull();
+  });
+
+  it("a failure event against an already-SUCCEEDED PaymentAttempt is a no-op — the attempt is left exactly as it is (terminal-state guard)", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+      capacity: 2,
+      seatsTaken: 0,
+      priceMinor: 45_000_000,
+      currency: "NGN",
+    });
+    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    await checkoutService.initiateStripePayment({ userId }, orderId);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const completedEventId = `evt_ok_before_late_failure_${orderId}`;
+    const completedBody = buildCheckoutCompletedEventBody({
+      eventId: completedEventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: 45_000_000,
+      currency: "NGN",
+    });
+    const completedResponse = await POST(signedWebhookRequest(completedBody));
+    expect(completedResponse.status).toBe(200);
+
+    const succeededAttempt = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(succeededAttempt.status).toBe("SUCCEEDED");
+    const confirmedAtBefore = succeededAttempt.confirmedAt;
+
+    // A late/out-of-order payment_intent.payment_failed arrives for the same
+    // Order after settlement already succeeded.
+    const failedEventId = `evt_late_failure_${orderId}`;
+    const failedBody = buildPaymentIntentFailedEventBody({
+      eventId: failedEventId,
+      intentId: `pi_late_${orderId}`,
+      orderId,
+      message: "Late decline notification.",
+    });
+    const failedResponse = await POST(signedWebhookRequest(failedBody));
+    expect(failedResponse.status).toBe(200); // acknowledged — retrying changes nothing
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(attemptAfter.status).toBe("SUCCEEDED"); // never moved to FAILED
+    expect(attemptAfter.confirmedAt?.getTime()).toBe(confirmedAtBefore?.getTime());
+
+    const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.status).toBe("PAID"); // the already-correct settlement is not disturbed
+  });
+
+  it("a request with no signature header returns 400 with zero WebhookEvent/Order/PaymentAttempt writes", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    await checkoutService.initiateStripePayment({ userId }, orderId);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_no_sig_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: 45_000_000,
+      currency: "NGN",
+    });
+
+    const response = await POST(unsignedWebhookRequest(body));
+    expect(response.status).toBe(400);
+
+    const events = await testDb.prisma.webhookEvent.findMany({ where: { providerEventId: eventId } });
+    expect(events).toHaveLength(0);
+
+    const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.status).toBe("PENDING");
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(attemptAfter.status).toBe("PROCESSING");
+  });
+
+  it("a signature computed over a different body returns 400 with zero WebhookEvent/Order/PaymentAttempt writes", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    await checkoutService.initiateStripePayment({ userId }, orderId);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_bad_sig_body_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: 45_000_000,
+      currency: "NGN",
+    });
+
+    const response = await POST(signedWebhookRequest(body, { tamper: true }));
+    expect(response.status).toBe(400);
+
+    const events = await testDb.prisma.webhookEvent.findMany({ where: { providerEventId: eventId } });
+    expect(events).toHaveLength(0);
+
+    const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.status).toBe("PENDING");
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(attemptAfter.status).toBe("PROCESSING");
+  });
+
+  it("a request arriving when the signing secret is unset returns 500, distinguishable from a signature failure, with zero writes", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    await checkoutService.initiateStripePayment({ userId }, orderId);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_no_secret_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: 45_000_000,
+      currency: "NGN",
+    });
+
+    const savedSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    let response: Response;
+    try {
+      response = await POST(signedWebhookRequest(body));
+    } finally {
+      process.env.STRIPE_WEBHOOK_SECRET = savedSecret;
+    }
+    expect(response.status).toBe(500);
+
+    const events = await testDb.prisma.webhookEvent.findMany({ where: { providerEventId: eventId } });
+    expect(events).toHaveLength(0);
+
+    const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.status).toBe("PENDING");
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(attemptAfter.status).toBe("PROCESSING");
   });
 });

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { ESLint } from "eslint";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
@@ -35,7 +35,16 @@ function resolveProjectImport(fromFile: string, specifier: string): string | nul
     ...SOURCE_EXTENSIONS.map((extension) => `${base}${extension}`),
     ...SOURCE_EXTENSIONS.map((extension) => path.join(base, `index${extension}`)),
   ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+  // A bare specifier resolving to a DIRECTORY (e.g. `@/server/permissions`,
+  // which has its own `index.ts`) must not be returned as-is — `existsSync`
+  // is true for directories too, and `base` is always the first candidate,
+  // so without the `isFile()` check the walk below would try to
+  // `readFileSync` a directory and crash with EISDIR before ever trying the
+  // `index.ts` candidate later in this same list (06-06 — first surfaced by
+  // `webhookRuntimeClosure()` walking into exactly this shape).
+  return (
+    candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile()) ?? null
+  );
 }
 
 function runtimeImports(filePath: string): Array<{
@@ -87,15 +96,15 @@ function runtimeImports(filePath: string): Array<{
   return imports;
 }
 
-function workerRuntimeClosure(): string[] {
-  const workerRoot = path.resolve(process.cwd(), "worker");
-  const handlersRoot = path.join(workerRoot, "handlers");
-  const entrypoints = [
-    path.join(workerRoot, "index.ts"),
-    ...readdirSync(handlersRoot)
-      .filter((name) => name.endsWith(".ts"))
-      .map((name) => path.join(handlersRoot, name)),
-  ];
+/**
+ * Walks the runtime import closure from `entrypoints`, following every
+ * project-local (`@/...` or relative) import transitively. Shared by
+ * `workerRuntimeClosure()` and `webhookRuntimeClosure()` below — the walk
+ * itself is written once so the two entrypoint sets can never drift apart
+ * (Pitfall 3's own warning: "two copies of an import-graph traversal is
+ * exactly the drift the boundary test exists to prevent").
+ */
+function runtimeClosureFrom(entrypoints: string[]): string[] {
   const visited = new Set<string>();
   const pending = [...entrypoints];
 
@@ -111,6 +120,55 @@ function workerRuntimeClosure(): string[] {
   }
 
   return [...visited];
+}
+
+function workerRuntimeClosure(): string[] {
+  const workerRoot = path.resolve(process.cwd(), "worker");
+  const handlersRoot = path.join(workerRoot, "handlers");
+  const entrypoints = [
+    path.join(workerRoot, "index.ts"),
+    ...readdirSync(handlersRoot)
+      .filter((name) => name.endsWith(".ts"))
+      .map((name) => path.join(handlersRoot, name)),
+  ];
+  return runtimeClosureFrom(entrypoints);
+}
+
+/**
+ * The Stripe webhook route's own runtime import closure — the second
+ * instance of this walk, proving the same "no request-only API" guarantee
+ * `workerRuntimeClosure()` already proves for the hold-release worker
+ * (T-06-33). Its one entrypoint is the route file itself; from there the
+ * walk follows `checkout-webhook-system-service.ts` and everything it
+ * imports transitively.
+ */
+function webhookRuntimeClosure(): string[] {
+  const entrypoints = [
+    path.resolve(process.cwd(), "src", "app", "api", "webhooks", "stripe", "route.ts"),
+  ];
+  return runtimeClosureFrom(entrypoints);
+}
+
+/**
+ * The specifier set both closure assertions flag — a request-only API that
+ * must never reach an actorless worker/webhook module. Shared so the two
+ * assertions can never flag a different set by accident.
+ */
+function findRequestOnlyOffenders(closure: string[]): Array<{ file: string; specifier: string }> {
+  return closure.flatMap((filePath) =>
+    runtimeImports(filePath)
+      .filter(
+        ({ specifier, importsCurrentActor }) =>
+          specifier === "next/headers" ||
+          specifier === "@/server/permissions" ||
+          specifier.startsWith("@/server/permissions/") ||
+          importsCurrentActor,
+      )
+      .map(({ specifier }) => ({
+        file: path.relative(process.cwd(), filePath),
+        specifier,
+      })),
+  );
 }
 
 // The first lint pays for loading eslint-config-next, its plugins, and the
@@ -153,21 +211,18 @@ describe("service-layer boundary", () => {
   });
 
   it("keeps the worker runtime import closure away from request-only APIs", () => {
-    const offenders = workerRuntimeClosure().flatMap((filePath) =>
-      runtimeImports(filePath)
-        .filter(
-          ({ specifier, importsCurrentActor }) =>
-            specifier === "next/headers" ||
-            specifier === "@/server/permissions" ||
-            specifier.startsWith("@/server/permissions/") ||
-            importsCurrentActor,
-        )
-        .map(({ specifier }) => ({
-          file: path.relative(process.cwd(), filePath),
-          specifier,
-        })),
-    );
+    expect(findRequestOnlyOffenders(workerRuntimeClosure())).toEqual([]);
+  });
 
-    expect(offenders).toEqual([]);
+  it("keeps the Stripe webhook route's runtime import closure away from request-only APIs", () => {
+    expect(findRequestOnlyOffenders(webhookRuntimeClosure())).toEqual([]);
+  });
+
+  it("the webhook closure actually reaches the settlement service (the assertion above is not vacuous)", () => {
+    const closure = webhookRuntimeClosure();
+    const touchesSettlementService = closure.some((filePath) =>
+      filePath.replace(/\\/g, "/").endsWith("src/server/services/checkout-webhook-system-service.ts"),
+    );
+    expect(touchesSettlementService).toBe(true);
   });
 });

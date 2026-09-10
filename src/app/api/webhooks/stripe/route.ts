@@ -19,6 +19,8 @@ import { verifyStripeWebhook, StripeSignatureError } from "@/server/payments/pro
 import {
   recordWebhookEventOrSkip,
   activateOrderAsSystem,
+  recordPaymentFailureAsSystem,
+  recordSessionExpiredAsSystem,
 } from "@/server/services/checkout-webhook-system-service";
 
 export async function POST(req: Request): Promise<Response> {
@@ -64,9 +66,38 @@ export async function POST(req: Request): Promise<Response> {
         eventId: event.id,
       });
     }
+  } else if (event.type === "checkout.session.expired") {
+    // PAY-02 bookkeeping only — D-04's inline retry is handled entirely on
+    // Stripe's own hosted page; this event fires only once the Session
+    // itself is truly gone (Stripe's own timeout, not a decline).
+    const session = event.data.object as Stripe.Checkout.Session;
+    const orderId = session.client_reference_id;
+    if (orderId) {
+      await recordSessionExpiredAsSystem({
+        orderId,
+        providerIntentId: session.id,
+        eventId: event.id,
+      });
+    }
+  } else if (event.type === "payment_intent.payment_failed") {
+    // PAY-02 bookkeeping only. A PaymentIntent carries no
+    // `client_reference_id` of its own (that is a Checkout-Session-only
+    // field) — correlation relies on the `orderId` mirrored into
+    // `payment_intent_data.metadata` at Session-creation time
+    // (`checkout-session.ts`), not on `providerIntentId` matching.
+    const intent = event.data.object as Stripe.PaymentIntent;
+    const orderId = intent.metadata?.orderId;
+    if (orderId) {
+      await recordPaymentFailureAsSystem({
+        orderId,
+        eventId: event.id,
+        failureReason: intent.last_payment_error?.message ?? "Stripe reported a payment failure.",
+      });
+    }
   }
-  // Other event types (e.g. checkout.session.expired) fall through to 200 in
-  // this plan; plan 06-06 adds their handlers.
+  // Every other event type falls through to 200 below without processing —
+  // its WebhookEvent row (already written by recordWebhookEventOrSkip above)
+  // is what makes an unexpected delivery visible rather than invisible.
 
   // Every processed, duplicate and exception outcome returns 200 — retrying
   // will not change any of them, and leaving an event unacknowledged just
