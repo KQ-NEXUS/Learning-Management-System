@@ -91,7 +91,7 @@ describe("inspectLessonObject", () => {
     const headResult = await inspectLessonObject("lesson-uploads/l1/opaque");
 
     expect(mockSend.mock.calls[0][0]).toBeInstanceOf(HeadObjectCommand);
-    expect(headResult).toEqual({ sizeBytes: 2000n, contentType: "application/pdf" });
+    expect(headResult).toEqual({ sizeBytes: BigInt(2000), contentType: "application/pdf" });
   });
 
   it("throws when the stored object has no byte length", async () => {

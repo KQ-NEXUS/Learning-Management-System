@@ -20,7 +20,7 @@ function makeDelegate(initial: Partial<LessonResourceRecord>[] = []) {
     storageKey: r.storageKey ?? "lesson-uploads/lesson1/opaque",
     filename: r.filename ?? "handout.pdf",
     mimeType: r.mimeType ?? "application/pdf",
-    sizeBytes: r.sizeBytes ?? 2000n,
+    sizeBytes: r.sizeBytes ?? BigInt(2000),
     uploadStatus: r.uploadStatus ?? "UPLOADING",
     uploadedById: r.uploadedById ?? null,
     uploadedAt: r.uploadedAt ?? null,
@@ -83,7 +83,7 @@ function buildService(initial: Partial<LessonResourceRecord>[], grants: RawGrant
   const { withPermission } = createTestWithPermission(grants, { userId: "staff-1" });
   const audits: Array<Record<string, unknown>> = [];
   const storage = {
-    inspect: vi.fn(async () => ({ sizeBytes: 2000n, contentType: "application/pdf" as string | null })),
+    inspect: vi.fn(async () => ({ sizeBytes: BigInt(2000), contentType: "application/pdf" as string | null })),
     promote: vi.fn(async () => {}),
     delete: vi.fn(async () => {}),
     finalKey: (key: string) => key.replace(/^lesson-uploads\//, "lessons/"),
@@ -122,7 +122,7 @@ describe("beginLessonResourceUpload", () => {
       storageKey: "lesson-uploads/lesson1/opaque",
       filename: "slides.pdf",
       mimeType: "application/pdf",
-      sizeBytes: 2000n,
+      sizeBytes: BigInt(2000),
     });
     expect(rows[0]).toMatchObject({
       uploadStatus: "UPLOADING",
@@ -141,7 +141,7 @@ describe("beginLessonResourceUpload", () => {
         storageKey: "lesson-uploads/lesson1/opaque",
         filename: "slides.pdf",
         mimeType: "application/pdf",
-        sizeBytes: 2000n,
+        sizeBytes: BigInt(2000),
       }),
     ).rejects.toThrow();
   });
@@ -153,7 +153,7 @@ describe("completeLessonResourceUpload", () => {
     uploadStatus: "UPLOADING" as const,
     storageKey: "lesson-uploads/lesson1/opaque",
     mimeType: "application/pdf",
-    sizeBytes: 2000n,
+    sizeBytes: BigInt(2000),
   };
 
   it("promotes matching stored metadata and marks the row READY", async () => {
@@ -186,8 +186,8 @@ describe("completeLessonResourceUpload", () => {
   });
 
   it.each([
-    ["byte-count", { sizeBytes: 1999n, contentType: "application/pdf" as string | null }],
-    ["content-type", { sizeBytes: 2000n, contentType: "text/plain" as string | null }],
+    ["byte-count", { sizeBytes: BigInt(1999), contentType: "application/pdf" as string | null }],
+    ["content-type", { sizeBytes: BigInt(2000), contentType: "text/plain" as string | null }],
   ] as const)("marks ERROR on a %s metadata mismatch", async (_kind, stored) => {
     const { service, rows, storage } = buildService([staged], [grant("courses.edit")]);
     storage.inspect.mockResolvedValueOnce(stored);
