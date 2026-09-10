@@ -235,6 +235,12 @@ directly against `Cohort.currency`/`Cohort.amountMinor` per D-07 with no currenc
 needed. `STRIPE_WEBHOOK_SECRET` remains outstanding but is explicitly non-blocking until 06-03's
 webhook route exists (see 06-USER-SETUP.md).
 
+## Self-Check: PASSED
+- Created files verified present: `src/server/payments/providers/stripe/client.ts`,
+  `tests/stripe-client.test.ts`, `06-01-SUMMARY.md`, `06-USER-SETUP.md`, `deferred-items.md`.
+- Commits verified present in `git log`: `e8e6217` (feat, Task 3), `6f75c84` (docs, SUMMARY),
+  `b5af0c3` (docs, STATE/ROADMAP), `872bbae` (docs, state.json).
+
 ---
 *Phase: 06-registration-checkout-stripe-payments*
 *Completed: 2026-09-10*
