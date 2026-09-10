@@ -34,7 +34,7 @@ export function CohortCards({ cohorts }: { cohorts: PublicCohort[] }) {
           key={cohort.id}
           className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex min-w-0 flex-col gap-1 break-words text-sm sm:flex-row sm:items-center sm:gap-4">
             <span className="text-foreground">{formatDateRange(cohort.startsAt, cohort.endsAt)}</span>
             <span className="text-muted-foreground">
               {DELIVERY_MODE_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode}
