@@ -1,33 +1,34 @@
 /**
- * Object storage — environment-driven S3 client, key generation, streaming
- * put, and presigned GET.
+ * Object storage — environment-driven S3 client, key generation, staged
+ * direct-upload operations, and presigned GET.
  *
  * D-35: Cloudflare R2 in production, MinIO in dev and CI. Both speak the S3
  * API, so every line here is identical across environments — only the
  * `S3_*` environment variables differ. Nothing in this file may hardcode
  * either backend, and application code reads `S3_*` only (never `MINIO_*`).
  *
- * WORKER REACH (plan 04-10): the scan worker's handlers import this module.
- * It MUST NOT import the request-scoped permission module (`src/server/`
- * `permissions/*`) or anything that reads the request session cookie — doing
- * so would drag request-only APIs into a process that has no request. There is
- * no reason for this module to reach the permission layer; keep it that way.
+ * D-36: the browser uploads the bytes directly to a private staged key with a
+ * short-lived presigned `PUT`; the server authorizes the request, signs the
+ * URL, then verifies and promotes the object. No file body ever traverses the
+ * app, so nothing here streams request bodies.
+ *
+ * This module MUST NOT import the request-scoped permission module
+ * (`src/server/permissions/*`) or anything that reads the request session
+ * cookie. The scheduled cleanup function reaches this module from a context
+ * that has no request; keep it that way.
  */
 
-import { Readable, Transform } from "node:stream";
 import { randomUUID } from "node:crypto";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { Upload } from "@aws-sdk/lib-storage";
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  HeadObjectCommand,
+  CopyObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { downloadTtlFor } from "@/lib/upload-limits";
-
-/** Thrown when an upload stream exceeds the byte cap for its lesson type. */
-export class UploadTooLargeError extends Error {
-  constructor(maxBytes: number) {
-    super(`Upload exceeds the ${maxBytes}-byte limit for this lesson type.`);
-    this.name = "UploadTooLargeError";
-  }
-}
+import { downloadTtlFor, UPLOAD_URL_TTL_SECONDS } from "@/lib/upload-limits";
 
 function makeClient(endpoint: string | undefined): S3Client {
   return new S3Client({
@@ -47,9 +48,9 @@ function makeClient(endpoint: string | undefined): S3Client {
 const s3 = makeClient(process.env.S3_ENDPOINT);
 
 /**
- * The client used to presign GET URLs. A presigned URL is only valid for the
- * host it was computed against, and that host must be the one the BROWSER
- * resolves — not the internal one the server uses to reach storage. When
+ * The client used to presign URLs. A presigned URL is only valid for the host
+ * it was computed against, and that host must be the one the BROWSER resolves —
+ * not the internal one the server uses to reach storage. When
  * `S3_PUBLIC_ENDPOINT` is set, presign against a client bound to it.
  */
 const presignClient = process.env.S3_PUBLIC_ENDPOINT
@@ -72,64 +73,92 @@ export function buildStorageKey({ lessonId }: { lessonId: string }): string {
   return `lessons/${lessonId}/${randomUUID()}`;
 }
 
-export type PutLessonObjectInput = {
-  key: string;
-  body: Readable;
-  contentType: string;
-  /** Per-type byte cap; the stream is destroyed the moment it is exceeded. */
-  maxBytes?: number;
-};
-
 /**
- * Streams `body` to object storage with multipart upload — uploads traverse
- * the app because that is where authorization and the scan enqueue happen
- * (D-36). The body is a stream and is never buffered whole into memory.
+ * `lesson-uploads/<lessonId>/<randomUUID()>` — the key the browser is allowed
+ * to `PUT` to. It is never the final `lessons/` key, so a leaked upload URL
+ * can only overwrite an unpromoted staging object.
  */
-export async function putLessonObject(
-  input: PutLessonObjectInput,
-): Promise<{ bytesUploaded: number }> {
-  let bytesUploaded = 0;
-  const meter = new Transform({
-    transform(chunk: Buffer, _enc, callback) {
-      bytesUploaded += chunk.length;
-      if (input.maxBytes !== undefined && bytesUploaded > input.maxBytes) {
-        callback(new UploadTooLargeError(input.maxBytes));
-        return;
-      }
-      callback(null, chunk);
-    },
-  });
-
-  const upload = new Upload({
-    client: s3,
-    params: {
-      Bucket: bucketName(),
-      Key: input.key,
-      Body: input.body.pipe(meter),
-      ContentType: input.contentType,
-    },
-  });
-
-  await upload.done();
-  return { bytesUploaded };
+export function buildStagedStorageKey({ lessonId }: { lessonId: string }): string {
+  return `lesson-uploads/${lessonId}/${randomUUID()}`;
 }
 
 /**
- * Opens an object as a Node stream for the out-of-process malware worker.
- * The bytes remain in storage regardless of the verdict; infected resources
- * are marked in the database and are never deleted here.
+ * The deterministic final key for a staged upload. Deterministic so completion
+ * is retry-safe if the database update fails after the copy. Only a staged key
+ * can be promoted — passing anything else is a programming error.
  */
-export async function getLessonObject(key: string): Promise<Readable> {
-  const response = await s3.send(
-    new GetObjectCommand({
+export function finalStorageKeyFor(stagedKey: string): string {
+  if (!stagedKey.startsWith("lesson-uploads/")) {
+    throw new Error("A final key can only be derived from a staged lesson upload.");
+  }
+  return stagedKey.replace(/^lesson-uploads\//, "lessons/");
+}
+
+/**
+ * A presigned `PUT` URL bound to one staged key and one `Content-Type`, valid
+ * for `UPLOAD_URL_TTL_SECONDS`. The browser sends the file straight to private
+ * storage with this URL, bypassing the platform request-body limit.
+ */
+export async function presignLessonUploadUrl(input: {
+  key: string;
+  contentType: string;
+}): Promise<string> {
+  return getSignedUrl(
+    presignClient,
+    new PutObjectCommand({
       Bucket: bucketName(),
-      Key: key,
+      Key: input.key,
+      ContentType: input.contentType,
+    }),
+    { expiresIn: UPLOAD_URL_TTL_SECONDS },
+  );
+}
+
+/**
+ * Reads the stored object's byte count and content type so completion can
+ * require them to equal the metadata the browser declared at intent time.
+ */
+export async function inspectLessonObject(
+  key: string,
+): Promise<{ sizeBytes: bigint; contentType: string | null }> {
+  const result = await s3.send(
+    new HeadObjectCommand({ Bucket: bucketName(), Key: key }),
+  );
+  if (result.ContentLength === undefined) {
+    throw new Error("Stored object has no byte length.");
+  }
+  return {
+    sizeBytes: BigInt(result.ContentLength),
+    contentType: result.ContentType?.split(";", 1)[0]?.trim().toLowerCase() ?? null,
+  };
+}
+
+function encodedCopySource(bucket: string, key: string): string {
+  return `${bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/**
+ * Copies a verified staged object to its deterministic final key. The staged
+ * object is deleted separately so a failure between copy and delete leaves a
+ * harmless orphan the lifecycle rule reaps, never a missing final object.
+ */
+export async function promoteLessonObject(input: {
+  stagedKey: string;
+  finalKey: string;
+}): Promise<void> {
+  const bucket = bucketName();
+  await s3.send(
+    new CopyObjectCommand({
+      Bucket: bucket,
+      CopySource: encodedCopySource(bucket, input.stagedKey),
+      Key: input.finalKey,
     }),
   );
-  if (!(response.Body instanceof Readable)) {
-    throw new Error(`Object storage returned no readable body for ${key}.`);
-  }
-  return response.Body;
+}
+
+/** Deletes one object. Callers treat a missing object as already deleted. */
+export async function deleteLessonObject(key: string): Promise<void> {
+  await s3.send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));
 }
 
 export type PresignLessonObjectInput = {
@@ -160,9 +189,4 @@ export async function presignLessonObjectUrl(
   return getSignedUrl(presignClient, command, {
     expiresIn: downloadTtlFor(input.lessonType),
   });
-}
-
-/** Converts a web `ReadableStream` (as on `Request.body`) to a Node stream. */
-export function toNodeStream(body: ReadableStream<Uint8Array>): Readable {
-  return Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0]);
 }

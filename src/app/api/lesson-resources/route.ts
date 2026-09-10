@@ -1,27 +1,12 @@
-/** Authenticated browser-safe list used by UploadPanel status polling. */
+/** Authenticated browser-safe list of a lesson's resources for the authoring panel. */
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import * as permissions from "@/server/permissions";
-import {
-  listLessonResources,
-  type LessonResourceRecord,
-} from "@/server/services/lesson-resource-service";
+import { listLessonResources } from "@/server/services/lesson-resource-service";
+import { toLessonResourceView } from "@/server/presenters/lesson-resource-view";
 
 const querySchema = z.object({ lessonId: z.string().min(1) });
-
-function toView(resource: LessonResourceRecord) {
-  return {
-    id: resource.id,
-    title: resource.title,
-    filename: resource.filename,
-    mimeType: resource.mimeType,
-    sizeBytes: resource.sizeBytes.toString(),
-    scanStatus: resource.scanStatus,
-    scanDetail: resource.scanDetail,
-    position: resource.position,
-  };
-}
 
 export async function GET(request: Request): Promise<Response> {
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
@@ -32,7 +17,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const resources = await listLessonResources(parsed.data.lessonId);
     return NextResponse.json(
-      { resources: resources.map(toView) },
+      { resources: resources.map(toLessonResourceView) },
       { headers: { "cache-control": "private, no-store" } },
     );
   } catch (error) {

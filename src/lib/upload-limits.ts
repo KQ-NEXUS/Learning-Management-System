@@ -51,9 +51,9 @@ export const UPLOAD_LIMITS: Readonly<Record<UploadableLessonType, UploadLimit>> 
   }),
   FILE: Object.freeze({
     maxBytes: 50 * MB,
-    // Documents and archives. text/html, image/svg+xml and any application/x-*
-    // are NOT here — HTML served from the app origin is an XSS vector even
-    // behind Content-Disposition.
+    // Documents and text. text/html, image/svg+xml, generic application/zip and
+    // any application/x-* are NOT here — HTML served from the app origin is an
+    // XSS vector even behind Content-Disposition, and a bare ZIP hides anything.
     mimeTypes: Object.freeze([
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -62,7 +62,6 @@ export const UPLOAD_LIMITS: Readonly<Record<UploadableLessonType, UploadLimit>> 
       "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
       "text/plain",
       "text/csv",
-      "application/zip",
     ]),
   }),
   VIDEO: Object.freeze({
@@ -70,6 +69,14 @@ export const UPLOAD_LIMITS: Readonly<Record<UploadableLessonType, UploadLimit>> 
     mimeTypes: Object.freeze(["video/mp4", "video/webm"]),
   }),
 });
+
+/**
+ * Presigned-PUT lifetime, in seconds, for a direct browser upload to a staged
+ * key (D-36). Fifteen minutes covers a 2 GB video on a slow connection while
+ * keeping the window short enough that a leaked URL expires quickly. The URL is
+ * additionally bound to one staged key and one `Content-Type`.
+ */
+export const UPLOAD_URL_TTL_SECONDS = 900;
 
 export type ValidateUploadInput = {
   lessonType: string;

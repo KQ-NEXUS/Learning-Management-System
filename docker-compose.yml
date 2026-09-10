@@ -83,25 +83,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
 
-  # D-28: every uploaded lesson resource is scanned before it can be downloaded.
-  # clamd needs approximately 1.2 GB just to load signatures, so keep an explicit
-  # ceiling and persist the database to avoid a full freshclam download on restart.
-  clamav:
-    image: clamav/clamav:stable
-    restart: unless-stopped
-    volumes:
-      - clamav-db:/var/lib/clamav
-    mem_limit: 4g
-    healthcheck:
-      test: ["CMD", "clamdscan", "--ping", "1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 300s
-
-  # Reverse proxies must raise their request-body limit for video uploads (nginx
-  # client_max_body_size defaults to 1 MB). Adding Next.js proxy.ts would impose
-  # a 10 MB default that silently truncates oversized requests instead of failing.
+  # D-36: browsers upload lesson resources straight to private object storage
+  # with short-lived presigned PUT URLs and download through short-lived
+  # presigned GET URLs, so no file body traverses the app and there is no
+  # request-body limit to raise on a reverse proxy.
   app:
     build: .
     restart: unless-stopped
@@ -122,8 +107,6 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
       <<: *storage-environment
-      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
-      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
@@ -131,31 +114,6 @@ services:
       EMAIL_SENDER_ADDRESS: ${EMAIL_SENDER_ADDRESS:-no-reply@example.com}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
 
-  worker:
-    build: .
-    restart: unless-stopped
-    command: ["npx", "tsx", "worker/index.ts"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
-      clamav:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-lms}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-lms}?schema=public
-      POSTGRES_USER: ${POSTGRES_USER:-lms}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      POSTGRES_DB: ${POSTGRES_DB:-lms}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
-      <<: *storage-environment
-      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
-      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
-
 volumes:
   postgres-data:
   minio-data:
-  clamav-db:

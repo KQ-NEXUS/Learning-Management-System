@@ -34,7 +34,7 @@ const eslintConfig = defineConfig([
   //
   // See docs/superpowers/specs/2026-09-01-track-a-foundation-design.md (D2).
   {
-    files: ["src/**/*.{ts,tsx}", "worker/**/*.ts"],
+    files: ["src/**/*.{ts,tsx}", "netlify/functions/**/*.{ts,mts}"],
     rules: {
       "no-restricted-imports": [
         "error",
