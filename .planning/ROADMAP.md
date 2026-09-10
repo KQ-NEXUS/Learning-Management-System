@@ -255,11 +255,11 @@ Plans:
   4. Required terms, privacy notice, refund/cancellation policy, and optional marketing consent are captured with versions, separately, at order time. (REG-04)
   5. A learner can pay via Stripe; only a server-verified result (never a client redirect) marks the order paid and activates enrolment exactly once, through a shared, provider-agnostic payment state machine, and the learner receives a confirmation email and receipt/order record. (PAY-02, PAY-09, PAY-10, REG-05)
 
-**Plans**: 1/9 plans executed across 6 waves (tracer-first: plan 03 proves the full visitor-to-enrolled path end to end — cohort card, order summary, Stripe Checkout, signature-verified webhook, receipt — before any expansion)
+**Plans**: 2/9 plans executed across 6 waves (tracer-first: plan 03 proves the full visitor-to-enrolled path end to end — cohort card, order summary, Stripe Checkout, signature-verified webhook, receipt — before any expansion)
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Stripe SDK behind its package-legitimacy gate, the single client module, and the NGN currency probe (PAY-09, PAY-10)
+- [x] 06-01-PLAN.md — Stripe SDK behind its package-legitimacy gate, the single client module, and the NGN currency probe (PAY-09, PAY-10)
 - [x] 06-02-PLAN.md — Shared-module extensions: domain-event union, refund/cancellation policy type, `applyEnrolmentActivation` extraction, `PublicCohort` commerce fields (REG-01, REG-04, PAY-02, PAY-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -463,7 +463,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 3. Public Identity — Registration, Verification & Secure Sessions | 10/10 | Complete | 2026-09-03 |
 | 4. Catalogue Authoring — Programmes, Courses, Modules & Lessons | 15/15 | Complete | 2026-09-03 |
 | 5. Cohorts, Scheduling, Enrolment Operations & Attendance | 16/16 | Complete | 2026-09-07 |
-| 6. Registration, Checkout & Stripe Payments | 1/9 | In Progress|  |
+| 6. Registration, Checkout & Stripe Payments | 2/9 | In Progress|  |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 0/TBD | Not started | - |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 0/TBD | Not started | - |

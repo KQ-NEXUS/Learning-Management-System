@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 current_phase: 06
 current_phase_name: Registration, Checkout & Stripe Payments
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-09T12:45:11.295Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-10T02:24:25.749Z"
 last_activity: 2026-09-09
-state_head: d34412d7a7f455bed28d3de1393d3def3dc24d31
+state_head: 6f75c84a02acc4342b6956e21a6ebd9453f8867c
 progress:
   total_phases: 16
   completed_phases: 1
   total_plans: 74
-  completed_plans: 51
+  completed_plans: 52
   percent: 6
 ---
 
@@ -75,6 +75,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice â€
 | Phase 04.1 P14 | 14min | 3 tasks | 4 files |
 | Phase 04.1 P15 | 25min | 2 tasks | 4 files |
 | Phase 06 P02 | 70min | 3 tasks | 8 files |
+| Phase 06 P01 | 46min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 04.1]: UI-SPEC section 8 states 14 backstops but contains 21 individual resolved-backstop rows; Plan 14 records all 21 for conservative UAT coverage.
 - [Phase 06]: [Phase 6 P02]: Created tests/identity.test.ts as a new file for POLICY_TYPE/POLICY_VERSIONS unit coverage rather than extending the real-Postgres identity-security.integration.test.ts
 - [Phase 06]: [Phase 6 P02]: applyEnrolmentActivation extracted from approveEnrolment (PENDING_PAYMENT -> ACTIVE), callable by both the staff withPermission path and a future actorless Stripe webhook; enrolment.activated vs enrolment.approved distinguishes the two in the outbox
+- [Phase 06]: [Phase 6 P01]: stripe pinned exact at 22.6.1 after human npmjs.com legitimacy approval; NGN test-mode Checkout Session probe succeeded against this account (country USA), clearing D-07/Pitfall-5's currency gate for 06-03
+- [Phase 06]: [Phase 6 P01]: STRIPE_WEBHOOK_SECRET intentionally left unset in .env.local -- no webhook route exists until 06-03; plan-sanctioned deferral, not a blocker
 
 ### Pending Todos
 
@@ -145,6 +148,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-09T12:45:10.313Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-09-10T02:24:24.718Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
