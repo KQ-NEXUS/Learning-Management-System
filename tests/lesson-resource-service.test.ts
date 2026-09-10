@@ -1,30 +1,31 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { grant, createTestWithPermission } from "./support/harness";
+import type { RawGrant } from "@/server/permissions/with-permission";
 import {
   createLessonResourceService,
-  ResourceInfectedError,
-  ResourceNotScannedError,
+  ResourceUploadPendingError,
+  ResourceUploadUnavailableError,
+  ResourceUploadValidationError,
   type LessonResourceDelegate,
   type LessonResourceRecord,
 } from "@/server/services/lesson-resource-service";
-import { createScanSystemService } from "@/server/services/scan-system-service";
 
 function makeDelegate(initial: Partial<LessonResourceRecord>[] = []) {
   const rows: LessonResourceRecord[] = initial.map((r, i) => ({
     id: r.id ?? `res${i + 1}`,
     lessonId: r.lessonId ?? "lesson1",
     title: r.title ?? "Handout",
-    storageKey: r.storageKey ?? `lessons/lesson1/key-${i}`,
+    storageKey: r.storageKey ?? "lesson-uploads/lesson1/opaque",
     filename: r.filename ?? "handout.pdf",
     mimeType: r.mimeType ?? "application/pdf",
-    sizeBytes: r.sizeBytes ?? BigInt(1024),
-    scanStatus: r.scanStatus ?? "PENDING",
+    sizeBytes: r.sizeBytes ?? 2000n,
+    uploadStatus: r.uploadStatus ?? "UPLOADING",
     uploadedById: r.uploadedById ?? null,
-    scannedAt: r.scannedAt ?? null,
-    scanDetail: r.scanDetail ?? null,
-    position: r.position ?? 0,
+    uploadedAt: r.uploadedAt ?? null,
+    uploadDetail: r.uploadDetail ?? null,
+    position: r.position ?? i,
     createdAt: r.createdAt ?? new Date(),
   }));
   let next = rows.length + 1;
@@ -32,11 +33,13 @@ function makeDelegate(initial: Partial<LessonResourceRecord>[] = []) {
   const delegate: LessonResourceDelegate = {
     findMany: vi.fn(async ({ where }) => {
       const w = (where ?? {}) as {
-        scanStatus?: string;
+        lessonId?: string;
+        uploadStatus?: string;
         createdAt?: { lt?: Date };
       };
       return rows.filter((r) => {
-        if (w.scanStatus && r.scanStatus !== w.scanStatus) return false;
+        if (w.lessonId && r.lessonId !== w.lessonId) return false;
+        if (w.uploadStatus && r.uploadStatus !== w.uploadStatus) return false;
         if (w.createdAt?.lt && !(r.createdAt < w.createdAt.lt)) return false;
         return true;
       });
@@ -45,11 +48,11 @@ function makeDelegate(initial: Partial<LessonResourceRecord>[] = []) {
     create: vi.fn(async ({ data }) => {
       const row = {
         id: `res${next++}`,
-        scannedAt: null,
-        scanDetail: null,
-        position: 0,
-        createdAt: new Date(),
         uploadedById: null,
+        uploadedAt: null,
+        uploadDetail: null,
+        position: rows.length,
+        createdAt: new Date(),
         ...(data as Partial<LessonResourceRecord>),
       } as LessonResourceRecord;
       rows.push(row);
@@ -61,259 +64,239 @@ function makeDelegate(initial: Partial<LessonResourceRecord>[] = []) {
       Object.assign(row, data);
       return row;
     }),
+    delete: vi.fn(async ({ where }) => {
+      const idx = rows.findIndex((r) => r.id === where.id);
+      if (idx === -1) throw new Error("not found");
+      const [removed] = rows.splice(idx, 1);
+      return removed;
+    }),
   };
 
-  return { delegate, rows: () => rows };
+  return { delegate, rows };
 }
 
 const lessonCtx = async (lessonId: string) =>
   lessonId === "lesson1" ? { courseId: "c1", type: "VIDEO" } : null;
 
+function buildService(initial: Partial<LessonResourceRecord>[], grants: RawGrant[]) {
+  const { delegate, rows } = makeDelegate(initial);
+  const { withPermission } = createTestWithPermission(grants, { userId: "staff-1" });
+  const audits: Array<Record<string, unknown>> = [];
+  const storage = {
+    inspect: vi.fn(async () => ({ sizeBytes: 2000n, contentType: "application/pdf" as string | null })),
+    promote: vi.fn(async () => {}),
+    delete: vi.fn(async () => {}),
+    finalKey: (key: string) => key.replace(/^lesson-uploads\//, "lessons/"),
+  };
+  const service = createLessonResourceService({
+    delegate,
+    resolveLessonContext: lessonCtx,
+    withPermission,
+    audit: async (entry) => {
+      audits.push(entry as Record<string, unknown>);
+    },
+    storage,
+    now: () => new Date("2026-09-10T12:00:00Z"),
+  });
+  return { service, rows, storage, audits };
+}
+
 describe("lessonResourceScope", () => {
   it("resolves resource -> lesson -> course by query", async () => {
-    const { delegate } = makeDelegate([{ id: "res1", lessonId: "lesson1" }]);
-    const { withPermission } = createTestWithPermission([]);
-    const { lessonResourceScope } = createLessonResourceService({
-      delegate,
-      resolveLessonContext: lessonCtx,
-      withPermission,
-      audit: async () => {},
-    });
-    await expect(lessonResourceScope("res1")).resolves.toEqual({ courseIds: ["c1"] });
+    const { service } = buildService([{ id: "res1", lessonId: "lesson1" }], []);
+    await expect(service.lessonResourceScope("res1")).resolves.toEqual({ courseIds: ["c1"] });
   });
 
   it("yields { courseIds: [] } for an unknown id", async () => {
-    const { delegate } = makeDelegate([]);
-    const { withPermission } = createTestWithPermission([]);
-    const { lessonResourceScope } = createLessonResourceService({
-      delegate,
-      resolveLessonContext: lessonCtx,
-      withPermission,
-      audit: async () => {},
-    });
-    await expect(lessonResourceScope("missing")).resolves.toEqual({ courseIds: [] });
+    const { service } = buildService([], []);
+    await expect(service.lessonResourceScope("missing")).resolves.toEqual({ courseIds: [] });
   });
 });
 
-describe("createLessonResource", () => {
-  it("is denied without courses.edit on the parent course", async () => {
-    const { delegate } = makeDelegate([]);
-    const { withPermission } = createTestWithPermission([grant("courses.view")]);
-    const { createLessonResource } = createLessonResourceService({
-      delegate,
-      resolveLessonContext: lessonCtx,
-      withPermission,
-      audit: async () => {},
+describe("beginLessonResourceUpload", () => {
+  it("creates an UPLOADING row owned by the authorized actor", async () => {
+    const { service, rows, audits } = buildService([], [grant("courses.edit")]);
+    await service.beginLessonResourceUpload({
+      lessonId: "lesson1",
+      title: "Slides",
+      storageKey: "lesson-uploads/lesson1/opaque",
+      filename: "slides.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 2000n,
     });
+    expect(rows[0]).toMatchObject({
+      uploadStatus: "UPLOADING",
+      storageKey: "lesson-uploads/lesson1/opaque",
+      uploadedById: "staff-1",
+    });
+    expect(audits[0]).toMatchObject({ action: "lessonresource.upload_started" });
+  });
+
+  it("denies begin without courses.edit on the parent course", async () => {
+    const { service } = buildService([], [grant("courses.view")]);
     await expect(
-      createLessonResource({
+      service.beginLessonResourceUpload({
         lessonId: "lesson1",
         title: "Slides",
-        storageKey: "lessons/lesson1/abc",
-        filename: "s.pdf",
+        storageKey: "lesson-uploads/lesson1/opaque",
+        filename: "slides.pdf",
         mimeType: "application/pdf",
-        sizeBytes: BigInt(10),
+        sizeBytes: 2000n,
       }),
     ).rejects.toThrow();
   });
+});
 
-  it("writes scanStatus PENDING, uploadedById from the actor, and the storageKey", async () => {
-    const { delegate, rows } = makeDelegate([]);
-    const { withPermission } = createTestWithPermission([grant("courses.edit")], {
-      userId: "staff-9",
-    });
-    const audits: unknown[] = [];
-    const { createLessonResource } = createLessonResourceService({
-      delegate,
-      resolveLessonContext: lessonCtx,
-      withPermission,
-      audit: async (e) => {
-        audits.push(e);
-      },
-    });
+describe("completeLessonResourceUpload", () => {
+  const staged = {
+    id: "res1",
+    uploadStatus: "UPLOADING" as const,
+    storageKey: "lesson-uploads/lesson1/opaque",
+    mimeType: "application/pdf",
+    sizeBytes: 2000n,
+  };
 
-    const created = await createLessonResource({
-      lessonId: "lesson1",
-      title: "Slides",
-      storageKey: "lessons/lesson1/xyz",
-      filename: "s.pdf",
-      mimeType: "application/pdf",
-      sizeBytes: BigInt(20),
+  it("promotes matching stored metadata and marks the row READY", async () => {
+    const { service, rows, storage } = buildService([staged], [grant("courses.edit")]);
+    const completed = await service.completeLessonResourceUpload("res1");
+    expect(storage.inspect).toHaveBeenCalledWith("lesson-uploads/lesson1/opaque");
+    expect(storage.promote).toHaveBeenCalledWith({
+      stagedKey: "lesson-uploads/lesson1/opaque",
+      finalKey: "lessons/lesson1/opaque",
     });
+    expect(completed).toMatchObject({
+      storageKey: "lessons/lesson1/opaque",
+      uploadStatus: "READY",
+      uploadDetail: null,
+    });
+    expect(rows[0].uploadedAt).toBeInstanceOf(Date);
+    expect(storage.delete).toHaveBeenCalledWith("lesson-uploads/lesson1/opaque");
+  });
 
-    expect(created).toMatchObject({
-      scanStatus: "PENDING",
-      uploadedById: "staff-9",
-      storageKey: "lessons/lesson1/xyz",
+  it("treats completing an already READY row as idempotent", async () => {
+    const { service, storage } = buildService(
+      [{ id: "res1", uploadStatus: "READY" }],
+      [grant("courses.edit")],
+    );
+    await expect(service.completeLessonResourceUpload("res1")).resolves.toMatchObject({
+      uploadStatus: "READY",
     });
-    expect(rows()[0].scanStatus).toBe("PENDING");
-    expect(audits[0]).toMatchObject({ action: "lessonresource.created" });
+    expect(storage.inspect).not.toHaveBeenCalled();
+    expect(storage.promote).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["byte-count", { sizeBytes: 1999n, contentType: "application/pdf" as string | null }],
+    ["content-type", { sizeBytes: 2000n, contentType: "text/plain" as string | null }],
+  ] as const)("marks ERROR on a %s metadata mismatch", async (_kind, stored) => {
+    const { service, rows, storage } = buildService([staged], [grant("courses.edit")]);
+    storage.inspect.mockResolvedValueOnce(stored);
+    await expect(service.completeLessonResourceUpload("res1")).rejects.toBeInstanceOf(
+      ResourceUploadValidationError,
+    );
+    expect(storage.delete).toHaveBeenCalledWith("lesson-uploads/lesson1/opaque");
+    expect(rows[0]).toMatchObject({ uploadStatus: "ERROR", uploadedAt: null });
+  });
+
+  it("marks ERROR when the object cannot be inspected at all", async () => {
+    const { service, rows, storage } = buildService([staged], [grant("courses.edit")]);
+    storage.inspect.mockRejectedValueOnce(new Error("no such key"));
+    const error = await service.completeLessonResourceUpload("res1").catch((e) => e);
+    expect(error).toBeInstanceOf(ResourceUploadValidationError);
+    expect(error.resource).toMatchObject({ uploadStatus: "ERROR" });
+    expect(rows[0].uploadStatus).toBe("ERROR");
+    expect(storage.delete).toHaveBeenCalledWith("lesson-uploads/lesson1/opaque");
+  });
+
+  it("denies completion through the resource-to-course scope", async () => {
+    const { service, storage } = buildService([{ id: "res1", uploadStatus: "UPLOADING" }], []);
+    await expect(service.completeLessonResourceUpload("res1")).rejects.toThrow();
+    expect(storage.inspect).not.toHaveBeenCalled();
   });
 });
 
 describe("getDownloadableResource", () => {
-  const build = (scanStatus: LessonResourceRecord["scanStatus"], grants = [grant("courses.view")]) => {
-    const { delegate } = makeDelegate([{ id: "res1", lessonId: "lesson1", scanStatus }]);
-    const { withPermission } = createTestWithPermission(grants);
-    return createLessonResourceService({
-      delegate,
-      resolveLessonContext: lessonCtx,
-      withPermission,
-      audit: async () => {},
-    });
-  };
-
   it("is denied without courses.view", async () => {
-    const svc = build("CLEAN", []);
-    await expect(svc.getDownloadableResource("res1")).rejects.toThrow();
+    const { service } = buildService([{ id: "res1", uploadStatus: "READY" }], []);
+    await expect(service.getDownloadableResource("res1")).rejects.toThrow();
   });
 
-  it("throws ResourceNotScannedError while PENDING", async () => {
-    const svc = build("PENDING");
-    await expect(svc.getDownloadableResource("res1")).rejects.toBeInstanceOf(
-      ResourceNotScannedError,
+  it.each(["UPLOADING", "ERROR"] as const)("does not download a %s resource", async (uploadStatus) => {
+    const { service } = buildService([{ id: "res1", uploadStatus }], [grant("courses.view")]);
+    await expect(service.getDownloadableResource("res1")).rejects.toThrow();
+  });
+
+  it("throws ResourceUploadPendingError while UPLOADING and Unavailable when ERROR", async () => {
+    const pending = buildService([{ id: "res1", uploadStatus: "UPLOADING" }], [grant("courses.view")]);
+    const errored = buildService([{ id: "res1", uploadStatus: "ERROR" }], [grant("courses.view")]);
+    await expect(pending.service.getDownloadableResource("res1")).rejects.toBeInstanceOf(
+      ResourceUploadPendingError,
+    );
+    await expect(errored.service.getDownloadableResource("res1")).rejects.toBeInstanceOf(
+      ResourceUploadUnavailableError,
     );
   });
 
-  it("throws ResourceInfectedError when INFECTED", async () => {
-    const svc = build("INFECTED");
-    await expect(svc.getDownloadableResource("res1")).rejects.toBeInstanceOf(
-      ResourceInfectedError,
-    );
-  });
-
-  it("throws ResourceInfectedError when ERROR", async () => {
-    const svc = build("ERROR");
-    await expect(svc.getDownloadableResource("res1")).rejects.toBeInstanceOf(
-      ResourceInfectedError,
-    );
-  });
-
-  it("returns the row plus the parent lesson type only when CLEAN", async () => {
-    const svc = build("CLEAN");
-    const row = await svc.getDownloadableResource("res1");
-    expect(row).toMatchObject({ id: "res1", scanStatus: "CLEAN", lesson: { type: "VIDEO" } });
-  });
-
-  it("distinguishes PENDING and INFECTED with two different error types", async () => {
-    const pending = build("PENDING");
-    const infected = build("INFECTED");
-    const a = await pending.getDownloadableResource("res1").catch((e) => e);
-    const b = await infected.getDownloadableResource("res1").catch((e) => e);
-    expect(a.name).not.toBe(b.name);
+  it("downloads a READY resource with its parent lesson type", async () => {
+    const { service } = buildService([{ id: "res1", uploadStatus: "READY" }], [grant("courses.view")]);
+    await expect(service.getDownloadableResource("res1")).resolves.toMatchObject({
+      id: "res1",
+      uploadStatus: "READY",
+      lesson: { type: "VIDEO" },
+    });
   });
 });
 
-describe("scan-system-service — the worker-only, unauthorized path", () => {
-  const makeScanDelegate = (initial: Partial<LessonResourceRecord>[] = []) =>
-    makeDelegate(initial);
-
-  it("markScanResult writes scanStatus, scannedAt and scanDetail", async () => {
-    const { delegate, rows } = makeScanDelegate([{ id: "res1", scanStatus: "PENDING" }]);
-    const events: unknown[] = [];
-    const svc = createScanSystemService({
-      delegate,
-      audit: async (e) => {
-        events.push(e);
-      },
-      now: () => new Date("2026-02-01T00:00:00Z"),
-    });
-
-    await svc.markScanResult({ id: "res1", status: "CLEAN" });
-
-    const row = rows()[0];
-    expect(row.scanStatus).toBe("CLEAN");
-    expect(row.scannedAt).toEqual(new Date("2026-02-01T00:00:00Z"));
-    expect(row).toHaveProperty("scanDetail");
-  });
-
-  it("markScanResult with INFECTED performs an update, not a delete", async () => {
-    const { delegate, rows } = makeScanDelegate([{ id: "res1", scanStatus: "PENDING" }]);
-    const svc = createScanSystemService({ delegate, audit: async () => {} });
-
-    await svc.markScanResult({ id: "res1", status: "INFECTED", detail: "Eicar-Test-Signature" });
-
-    expect(rows()).toHaveLength(1);
-    expect(rows()[0].scanStatus).toBe("INFECTED");
-  });
-
-  it("markScanResult writes an audit row with actorId null and actorType SYSTEM, with no actor available", async () => {
-    const { delegate } = makeScanDelegate([{ id: "res1", scanStatus: "PENDING" }]);
-    const events: Array<Record<string, unknown>> = [];
-    const svc = createScanSystemService({
-      delegate,
-      audit: async (e) => {
-        events.push(e as Record<string, unknown>);
-      },
-    });
-
-    await svc.markScanResult({ id: "res1", status: "CLEAN" });
-
-    expect(events[0]).toMatchObject({ actorId: null, actorType: "SYSTEM" });
-  });
-
-  it("findScanTarget returns only the storage key needed by the worker", async () => {
-    const { delegate } = makeScanDelegate([
-      { id: "res1", storageKey: "lessons/lesson1/object-1" },
+describe("listLessonResources", () => {
+  it("lists only one lesson's resources in position order behind courses.view", async () => {
+    const { service } = buildService(
+      [
+        { id: "second", lessonId: "lesson1", position: 2 },
+        { id: "other", lessonId: "lesson2", position: 0 },
+        { id: "first", lessonId: "lesson1", position: 1 },
+      ],
+      [grant("courses.view")],
+    );
+    await expect(service.listLessonResources("lesson1")).resolves.toMatchObject([
+      { id: "first" },
+      { id: "second" },
     ]);
-    const svc = createScanSystemService({ delegate, audit: async () => {} });
-
-    await expect(svc.findScanTarget("res1")).resolves.toEqual({
-      storageKey: "lessons/lesson1/object-1",
-    });
-    await expect(svc.findScanTarget("missing")).resolves.toBeNull();
   });
 
-  it("findStuckPending returns PENDING rows older than the cutoff and excludes recent ones", async () => {
-    const old = new Date(Date.now() - 60 * 60_000);
-    const recent = new Date();
-    const { delegate } = makeScanDelegate([
-      { id: "old", scanStatus: "PENDING", createdAt: old },
-      { id: "recent", scanStatus: "PENDING", createdAt: recent },
-      { id: "clean", scanStatus: "CLEAN", createdAt: old },
-    ]);
-    const svc = createScanSystemService({ delegate, audit: async () => {} });
+  it("denies listing without courses.view on the parent course", async () => {
+    const { service } = buildService([{ id: "res1", lessonId: "lesson1" }], []);
+    await expect(service.listLessonResources("lesson1")).rejects.toThrow();
+  });
+});
 
-    const stuck = await svc.findStuckPending(10);
-    expect(stuck.map((r) => r.id)).toEqual(["old"]);
+describe("removeLessonResource", () => {
+  it("removes an authorized resource from storage and the database", async () => {
+    const { service, rows, storage, audits } = buildService(
+      [{ id: "res1", uploadStatus: "ERROR" }],
+      [grant("courses.edit")],
+    );
+    await service.removeLessonResource("res1");
+    expect(storage.delete).toHaveBeenCalledOnce();
+    expect(rows).toHaveLength(0);
+    expect(audits[0]).toMatchObject({ action: "lessonresource.removed" });
+  });
+
+  it("is denied without courses.edit on the parent course", async () => {
+    const { service, rows } = buildService(
+      [{ id: "res1", uploadStatus: "ERROR" }],
+      [grant("courses.view")],
+    );
+    await expect(service.removeLessonResource("res1")).rejects.toThrow();
+    expect(rows).toHaveLength(1);
   });
 });
 
 describe("import boundaries (T-04-27d)", () => {
   const read = (p: string) => readFileSync(path.resolve(process.cwd(), p), "utf8");
 
-  function* walk(dir: string): Generator<string> {
-    for (const entry of readdirSync(dir)) {
-      const full = path.join(dir, entry);
-      if (statSync(full).isDirectory()) yield* walk(full);
-      else if (/\.(ts|tsx)$/.test(entry)) yield full;
-    }
-  }
-
-  it("no file under src/app/** imports scan-system-service", () => {
-    const offenders = [...walk(path.resolve(process.cwd(), "src/app"))].filter((f) =>
-      readFileSync(f, "utf8").includes("scan-system-service"),
-    );
-    expect(offenders).toEqual([]);
-  });
-
-  it("scan-system-service names neither next/headers, getCurrentActor, nor withPermission anywhere", () => {
-    const src = read("src/server/services/scan-system-service.ts");
-    expect(src).not.toMatch(/next\/headers/);
-    expect(src).not.toMatch(/getCurrentActor/);
+  it("storage-service never names @/server/permissions or withPermission", () => {
+    const src = read("src/server/services/storage-service.ts");
+    expect(src).not.toMatch(/@\/server\/permissions/);
     expect(src).not.toMatch(/withPermission/);
-    expect(src.match(/AsSystem/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
-  });
-
-  it("storage-service and queue never name @/server/permissions or withPermission", () => {
-    for (const p of [
-      "src/server/services/storage-service.ts",
-      "src/server/jobs/queue.ts",
-    ]) {
-      const src = read(p);
-      expect(src).not.toMatch(/@\/server\/permissions/);
-      expect(src).not.toMatch(/withPermission/);
-      expect(src.toLowerCase()).toContain("worker");
-    }
   });
 });
