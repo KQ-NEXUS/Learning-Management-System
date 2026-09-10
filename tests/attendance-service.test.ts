@@ -19,6 +19,7 @@ import {
   createAttendanceService,
   LearnerNotOnRosterError,
   PreMarkingStateError,
+  SessionCancelledError,
 } from "@/server/services/attendance-service";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 
@@ -360,6 +361,39 @@ describe("markAttendance — authorization and roster scoping", () => {
       }),
     ).rejects.toBeInstanceOf(LearnerNotOnRosterError);
   });
+
+  it("CR-01: refuses a cancelled session and writes nothing", async () => {
+    const { service, records, events } = harness({
+      sessions: [ses({ cancelledAt: new Date("2026-02-01T09:00:00.000Z") })],
+    });
+    await expect(
+      service.markAttendance({
+        sessionId: "ses-1",
+        enrolmentId: "enr-1",
+        state: "PRESENT",
+      }),
+    ).rejects.toBeInstanceOf(SessionCancelledError);
+    expect(records.size).toBe(0);
+    expect(events).toHaveLength(0);
+  });
+
+  it.each(["TRANSFERRED", "CANCELLED"])(
+    "CR-01: refuses a %s enrolment even though it still belongs to the session's cohort",
+    async (status) => {
+      const { service, records, events } = harness({
+        enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status })],
+      });
+      await expect(
+        service.markAttendance({
+          sessionId: "ses-1",
+          enrolmentId: "enr-1",
+          state: "PRESENT",
+        }),
+      ).rejects.toBeInstanceOf(LearnerNotOnRosterError);
+      expect(records.size).toBe(0);
+      expect(events).toHaveLength(0);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -695,6 +729,38 @@ describe("saveSessionAttendance — roster scoping (D-10)", () => {
     ).rejects.toBeInstanceOf(LearnerNotOnRosterError);
     expect(records.size).toBe(0);
   });
+
+  it("CR-01: refuses a cancelled session and writes nothing", async () => {
+    const { service, records, events } = harness({
+      sessions: [ses({ cancelledAt: new Date("2026-02-01T09:00:00.000Z") })],
+      enrolments: roster(),
+    });
+    await expect(
+      service.saveSessionAttendance({
+        sessionId: "ses-1",
+        entries: [{ enrolmentId: "enr-1", state: "PRESENT" }],
+      }),
+    ).rejects.toBeInstanceOf(SessionCancelledError);
+    expect(records.size).toBe(0);
+    expect(events).toHaveLength(0);
+  });
+
+  it.each(["TRANSFERRED", "CANCELLED"])(
+    "CR-01: a %s enrolment is off the roster even if the caller submits its id directly",
+    async (status) => {
+      const { service, records } = harness({
+        now: DURING,
+        enrolments: [...roster(), enr({ id: "enr-gone", cohortId: "cohort-1", status })],
+      });
+      await expect(
+        service.saveSessionAttendance({
+          sessionId: "ses-1",
+          entries: [{ enrolmentId: "enr-gone", state: "PRESENT" }],
+        }),
+      ).rejects.toBeInstanceOf(LearnerNotOnRosterError);
+      expect(records.size).toBe(0);
+    },
+  );
 
   it("a duplicate enrolmentId in the submitted list is refused with zero writes", async () => {
     const { service, records } = harness({ now: DURING, enrolments: roster() });

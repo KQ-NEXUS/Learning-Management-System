@@ -57,6 +57,7 @@ type PubRow = {
 function makeHarness(opts?: {
   running?: BlockingCohort[];
   courseOverrides?: Partial<CourseRow>;
+  programmeOverrides?: Partial<ProgrammeRow>;
 }) {
   const running = opts?.running ?? [];
 
@@ -99,6 +100,7 @@ function makeHarness(opts?: {
     title: "Widget Mastery",
     summary: "All things widget.",
     sequential: true,
+    ...opts?.programmeOverrides,
   });
 
   cohorts.set("cohort-standalone", {
@@ -505,6 +507,22 @@ describe("unpublishContent (D-12)", () => {
     const svc = h.buildService([grant("courses.publish")]);
     await svc.unpublishContent({ kind: "Course", id: "course-1", reason: "withdrawn" });
     expect(h.state.courses.get("course-1")!.status).toBe("DRAFT");
+  });
+
+  it("uses programmes.publish for Programme unpublish, not courses.publish", async () => {
+    const h = makeHarness({ programmeOverrides: { status: "PUBLISHED" } });
+    const svc = h.buildService([grant("programmes.publish")]);
+    await svc.unpublishContent({ kind: "Programme", id: "programme-1", reason: "withdrawn" });
+    expect(h.state.programmes.get("programme-1")!.status).toBe("DRAFT");
+  });
+
+  it("denies Programme unpublish when the caller only has courses.publish", async () => {
+    const h = makeHarness({ programmeOverrides: { status: "PUBLISHED" } });
+    const svc = h.buildService([grant("courses.publish")]);
+    await expect(
+      svc.unpublishContent({ kind: "Programme", id: "programme-1", reason: "withdrawn" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    expect(h.state.programmes.get("programme-1")!.status).toBe("PUBLISHED");
   });
 
   it("refuses a blank reason", async () => {

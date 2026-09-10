@@ -193,6 +193,40 @@ type CohortOfferRow = {
   programmeId: string | null;
 };
 
+type CohortOfferLockRow = { id: string; courseId: string | null; programmeId: string | null };
+
+function sameOfferTarget(
+  sourceCohort: { courseId: string | null; programmeId: string | null },
+  targetCohort: { courseId: string | null; programmeId: string | null },
+): boolean {
+  return (
+    (sourceCohort.courseId !== null && sourceCohort.courseId === targetCohort.courseId) ||
+    (sourceCohort.programmeId !== null && sourceCohort.programmeId === targetCohort.programmeId)
+  );
+}
+
+/**
+ * Locks a Cohort row `FOR UPDATE` and returns just its offer target
+ * (courseId/programmeId) — used by `transferEnrolment` (CR-03) to re-validate
+ * the same-offer invariant against a row it actually holds, inside the same
+ * transaction that moves the seats. Without this, the pre-transaction
+ * `sourceCohort`/`targetCohort` reads can go stale: the target's offer is
+ * still mutable while it has no enrolments, so a concurrent edit between that
+ * read and this transaction claiming the row could otherwise slip a
+ * cross-offer transfer through.
+ */
+async function lockCohortWithOffer(
+  tx: Pick<EnrolmentTxClient, "$queryRaw">,
+  cohortId: string,
+): Promise<CohortOfferLockRow> {
+  const rows = await tx.$queryRaw<CohortOfferLockRow[]>`
+    SELECT "id", "courseId", "programmeId" FROM "Cohort" WHERE "id" = ${cohortId} FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) throw new CohortNotFoundError(cohortId);
+  return row;
+}
+
 /** The transaction client the writes need — structural, no `@prisma/client`. */
 export type EnrolmentTxClient = SeatTxClient &
   DomainEventTxClient & {
@@ -287,6 +321,109 @@ export async function applyEnrolmentExit(
   });
 
   return { id: e.id, before, toStatus };
+}
+
+/**
+ * The minimal transaction surface `applyEnrolmentActivation` needs — the same
+ * "STRICT SUBSET, structural, cast via unknown" shape as `EnrolmentExitTxClient`
+ * above, narrowed to exactly what the PENDING_PAYMENT -> ACTIVE transition body
+ * touches: `claimSeat`/`lockOpenCohort` (`$queryRaw`), `updateCurrentEnrolment`
+ * (`enrolment.update`), and `writeDomainEvent` (`domainEvent.create`). No
+ * `enrolment.create` and no `enrolment.findUnique` — this lets a webhook's own
+ * transaction client (Phase 6 checkout, plan 06-03) satisfy it without
+ * widening to the single-enrolment surface `EnrolmentTxClient` carries.
+ */
+export type EnrolmentActivationTxClient = {
+  $queryRaw<T = unknown>(
+    query: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<T>;
+  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
+  enrolment: {
+    update(args: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
+  };
+  cohort: {
+    update(args: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
+  };
+  domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
+};
+
+/**
+ * The shared PENDING_PAYMENT -> ACTIVE transition body (D-12), extracted from
+ * `approveEnrolment` so a webhook-driven, actorless caller (Phase 6's Stripe
+ * webhook, plan 06-03) can perform the exact same transition a staff member
+ * triggers through `approveEnrolment`. Mirrors `applyEnrolmentExit` exactly:
+ * takes an ALREADY-FETCHED `enrolment` row and an ALREADY-OPEN `tx` — the
+ * caller owns both the read and the transaction boundary.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THIS FUNCTION PERFORMS NO AUTHORIZATION. READ THIS BEFORE "FIXING" THAT.
+ * ─────────────────────────────────────────────────────────────────────────
+ * Authorization is the caller's job. `approveEnrolment` keeps its
+ * `withPermission("enrolments.manage", ...)` wrapper and calls this as its
+ * transaction body — that wrapper is what gates the staff entry point. A
+ * webhook POST has no session cookie and therefore no actor to authorize
+ * against (the same reasoning `seat-accounting.ts`'s own header gives for its
+ * primitives), so `actorId` is typed `string | null` and an actorless caller
+ * is an INTENDED consumer of this export, not a bypass of it.
+ *
+ * Emits `"enrolment.approved"` when `actorId` is a string (a staff member
+ * exercised `enrolments.manage`) and `"enrolment.activated"` when it is
+ * `null` (a verified Stripe payment did it with no actor) — so the outbox,
+ * Phase 8's reconciliation views and Phase 13's email drain can always tell a
+ * webhook-triggered activation apart from a staff override.
+ */
+export async function applyEnrolmentActivation(
+  tx: EnrolmentActivationTxClient,
+  args: { enrolment: EnrolmentRow; reason: string; actorId: string | null; now: Date },
+): Promise<{ id: string; before: EnrolmentStatusValue; claimedSeat: boolean }> {
+  const { enrolment: e, reason, actorId, now } = args;
+  const before = e.status as EnrolmentStatusValue;
+  assertTransition(before, "ACTIVE", e.id);
+
+  // `claimSeat`/`lockOpenCohort`/`updateCurrentEnrolment` are typed against
+  // `SeatTxClient`, which also declares `enrolment.create` (needed by
+  // `takeSeat`, never by this path). The cast is the same "structural, cast
+  // via unknown" idiom `applyEnrolmentExit` uses above for `releaseSeat`.
+  const seatTx = tx as unknown as SeatTxClient;
+
+  // RESEARCH Pitfall 3: consult the single seat-occupancy predicate. A
+  // hold-holding enrolment already counts — claim a seat ONLY when none is
+  // currently held, so activation never double-counts.
+  const heldSeat = holdsSeat(e);
+  if (!heldSeat) {
+    await claimSeat(seatTx, { cohortId: e.cohortId });
+  } else {
+    await lockOpenCohort(seatTx, e.cohortId);
+  }
+
+  await updateCurrentEnrolment(seatTx, {
+    where: { id: e.id, status: e.status, holdExpiresAt: e.holdExpiresAt },
+    data: {
+      status: "ACTIVE",
+      holdExpiresAt: null,
+      activatedAt: now,
+      reason,
+    },
+  });
+
+  await writeDomainEvent(tx, {
+    type: actorId === null ? "enrolment.activated" : "enrolment.approved",
+    payload: {
+      enrolmentId: e.id,
+      cohortId: e.cohortId,
+      claimedSeat: !heldSeat,
+      actorId,
+    },
+  });
+
+  return { id: e.id, before, claimedSeat: !heldSeat };
 }
 
 export type EnrolmentServiceDeps = {
@@ -417,40 +554,13 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
           where: { id: input.enrolmentId },
         });
         if (!e) throw new EnrolmentNotFoundError(input.enrolmentId);
-        const before = e.status;
-        assertTransition(before as EnrolmentStatusValue, "ACTIVE", e.id);
 
-        // RESEARCH Pitfall 3: consult the single seat-occupancy predicate.
-        // A hold-holding enrolment already counts — claim a seat ONLY when
-        // none is currently held, so approve never double-counts.
-        const heldSeat = holdsSeat(e);
-        if (!heldSeat) {
-          await claimSeat(tx, { cohortId: e.cohortId });
-        } else {
-          await lockOpenCohort(tx, e.cohortId);
-        }
-
-        await updateCurrentEnrolment(tx, {
-          where: { id: e.id, status: e.status, holdExpiresAt: e.holdExpiresAt },
-          data: {
-            status: "ACTIVE",
-            holdExpiresAt: null,
-            activatedAt: now(),
-            reason,
-          },
+        return applyEnrolmentActivation(tx, {
+          enrolment: e,
+          reason,
+          actorId: ctx.actor.userId,
+          now: now(),
         });
-
-        await writeDomainEvent(tx, {
-          type: "enrolment.approved",
-          payload: {
-            enrolmentId: e.id,
-            cohortId: e.cohortId,
-            claimedSeat: !heldSeat,
-            actorId: ctx.actor.userId,
-          },
-        });
-
-        return { id: e.id, before, claimedSeat: !heldSeat };
       });
 
       await deps.audit({
@@ -569,12 +679,7 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
       if (!sourceCohort) throw new CohortNotFoundError(source.cohortId);
       if (!targetCohort) throw new CohortNotFoundError(input.targetCohortId);
 
-      const sameOffer =
-        (sourceCohort.courseId !== null &&
-          sourceCohort.courseId === targetCohort.courseId) ||
-        (sourceCohort.programmeId !== null &&
-          sourceCohort.programmeId === targetCohort.programmeId);
-      if (!sameOffer) {
+      if (!sameOfferTarget(sourceCohort, targetCohort)) {
         throw new CrossOfferTransferError(
           source.cohortId,
           input.targetCohortId,
@@ -589,6 +694,21 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
         if (!e) throw new EnrolmentNotFoundError(input.enrolmentId);
         const before = e.status;
         assertTransition(before as EnrolmentStatusValue, "TRANSFERRED", e.id);
+
+        // CR-03: re-lock both cohorts and re-validate the same-offer
+        // invariant inside the transaction that actually moves the seats.
+        // A target cohort with no enrolments yet still has a mutable offer,
+        // so the pre-transaction check above can go stale between that read
+        // and this transaction claiming the rows.
+        const lockedSourceCohort = await lockCohortWithOffer(tx, e.cohortId);
+        const lockedTargetCohort = await lockCohortWithOffer(tx, input.targetCohortId);
+        if (!sameOfferTarget(lockedSourceCohort, lockedTargetCohort)) {
+          throw new CrossOfferTransferError(
+            e.cohortId,
+            input.targetCohortId,
+            "the target cohort belongs to a different course or programme",
+          );
+        }
 
         await releaseSeat(tx, {
           cohortId: e.cohortId,

@@ -563,13 +563,17 @@ export function createPublishService(deps: PublishServiceDeps) {
     });
 
   // -------------------------------------------------------------------------
-  // Unpublish — content only, gated courses.publish, refused mid-cohort (D-12)
+  // Unpublish — content only, refused mid-cohort (D-12). Course and Programme
+  // use their own publish permissions; `withPermission` takes a static
+  // permission, so the wrapper splits before authorization.
   // -------------------------------------------------------------------------
 
-  const unpublishContent = withPermission<{ kind: PublishKind; id: string; reason: string }>(
-    "courses.publish",
-    (input) => (input.kind === "Course" ? courseScope(input.id) : programmeScope(input.id)),
-  )(async (input, ctx) => {
+  async function performUnpublish(input: {
+    kind: PublishKind;
+    id: string;
+    reason: string;
+    actorId: string;
+  }) {
     const reason = requireReason(input.reason);
 
     const agg =
@@ -590,13 +594,43 @@ export function createPublishService(deps: PublishServiceDeps) {
       action: `${input.kind.toLowerCase()}.unpublished`,
       targetType: input.kind,
       targetId: input.id,
-      actorId: ctx.actor.userId,
+      actorId: input.actorId,
       outcome: "SUCCESS",
       reason,
       before: { status: agg.status },
       after: { status: "DRAFT" },
     });
+  }
+
+  const unpublishCourseContent = withPermission<{ id: string; reason: string }>(
+    "courses.publish",
+    (input) => courseScope(input.id),
+  )(async (input, ctx) => {
+    await performUnpublish({
+      kind: "Course",
+      id: input.id,
+      reason: input.reason,
+      actorId: ctx.actor.userId,
+    });
   });
+
+  const unpublishProgrammeContent = withPermission<{ id: string; reason: string }>(
+    "programmes.publish",
+    (input) => programmeScope(input.id),
+  )(async (input, ctx) => {
+    await performUnpublish({
+      kind: "Programme",
+      id: input.id,
+      reason: input.reason,
+      actorId: ctx.actor.userId,
+    });
+  });
+
+  function unpublishContent(input: { kind: PublishKind; id: string; reason: string }) {
+    return input.kind === "Course"
+      ? unpublishCourseContent({ id: input.id, reason: input.reason })
+      : unpublishProgrammeContent({ id: input.id, reason: input.reason });
+  }
 
   // -------------------------------------------------------------------------
   // D-05 warning-banner / publish-dialog helpers (consumed by plan 04-12)

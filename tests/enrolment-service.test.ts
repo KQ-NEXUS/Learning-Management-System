@@ -12,6 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
 import {
+  applyEnrolmentActivation,
   assertTransition,
   createEnrolmentService,
   CrossOfferTransferError,
@@ -86,6 +87,13 @@ function harness(opts?: {
   grants?: ReturnType<typeof grant>[];
   cohorts?: CohortRow[];
   enrolments?: EnrolmentRow[];
+  /** CR-03 regression hook: fires after the pre-transaction `cohort.findUnique`
+   *  read for the given cohort id, so a test can mutate the live `cohorts`
+   *  map to simulate a concurrent offer edit landing between that read and
+   *  the transaction opening (the transaction's staged snapshot is cloned
+   *  from `cohorts` at `$transaction` call time, so a mutation here is
+   *  visible inside the transaction but not to the pre-check that just ran). */
+  mutateAfterCohortRead?: (cohortId: string, cohorts: Map<string, CohortRow>) => void;
 }) {
   const cohorts = new Map<string, CohortRow>(
     (opts?.cohorts ?? [coh()]).map((c) => [c.id, { ...c }]),
@@ -106,9 +114,16 @@ function harness(opts?: {
     evStore: Array<Record<string, unknown>>,
   ) {
     return {
-      $queryRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
+      $queryRaw: async (s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);
-        return c ? [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }] : [];
+        if (!c) return [];
+        // CR-03: `lockCohortWithOffer` (enrolment-service.ts) issues a
+        // different `SELECT` than the seat-accounting capacity/status lock —
+        // branch on the query text so both fakes can share one `$queryRaw`.
+        if (s.join("").includes("courseId")) {
+          return [{ id: c.id, courseId: c.courseId, programmeId: c.programmeId }];
+        }
+        return [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }];
       },
       $executeRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
         const c = cStore.get(vals[0] as string);
@@ -201,8 +216,11 @@ function harness(opts?: {
         (enrolments.get(where.id) as never) ?? null,
     } as never,
     cohort: {
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        (cohorts.get(where.id) as never) ?? null,
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const row = cohorts.get(where.id) ?? null;
+        opts?.mutateAfterCohortRead?.(where.id, cohorts);
+        return row as never;
+      },
     } as never,
     enrolmentScope: (id: string) => {
       const e = enrolments.get(id);
@@ -537,6 +555,147 @@ describe("approveEnrolment (D-12)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// applyEnrolmentActivation (PAY-02) — direct unit cases against the extracted
+// transition body, using the same fake-tx style as harness()'s makeTx above.
+// This is the surface a webhook-driven, actorless caller (plan 06-03) calls
+// directly, bypassing withPermission/approveEnrolment entirely.
+// ---------------------------------------------------------------------------
+
+function directActivationTx(
+  cohorts: Map<string, CohortRow>,
+  enrolments: Map<string, EnrolmentRow>,
+  events: Array<Record<string, unknown>>,
+) {
+  return {
+    $queryRaw: async <T = unknown>(_s: TemplateStringsArray, ...vals: unknown[]): Promise<T> => {
+      const c = cohorts.get(vals[0] as string);
+      if (!c) return [] as T;
+      return [{ status: c.status, seatsTaken: c.seatsTaken, capacity: c.capacity }] as T;
+    },
+    $executeRaw: async (_s: TemplateStringsArray, ...vals: unknown[]) => {
+      void vals;
+      return 1;
+    },
+    enrolment: {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        const row = enrolments.get(where.id) as EnrolmentRow;
+        Object.assign(row, data);
+        return row;
+      },
+    },
+    cohort: {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        const c = cohorts.get(where.id) as CohortRow;
+        const s = data.seatsTaken as { increment?: number } | undefined;
+        if (s?.increment) c.seatsTaken += s.increment;
+        return c;
+      },
+    },
+    domainEvent: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        events.push(data);
+        return { id: `evt-${events.length}` };
+      },
+    },
+  };
+}
+
+describe("applyEnrolmentActivation (PAY-02)", () => {
+  it("activation from a live-hold PENDING_PAYMENT claims no second seat (lockOpenCohort, not claimSeat)", async () => {
+    const hold = new Date(NOW.getTime() + 20 * 60_000);
+    const cohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 1, capacity: 5 })]]);
+    const enrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: hold })],
+    ]);
+    const events: Array<Record<string, unknown>> = [];
+    const result = await applyEnrolmentActivation(directActivationTx(cohorts, enrolments, events), {
+      enrolment: enrolments.get("enr-1")!,
+      reason: "Stripe payment confirmed",
+      actorId: null,
+      now: NOW,
+    });
+    expect(result.claimedSeat).toBe(false);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    const row = enrolments.get("enr-1")!;
+    expect(row.status).toBe("ACTIVE");
+    expect(row.holdExpiresAt).toBeNull();
+    expect(row.activatedAt).toEqual(NOW);
+  });
+
+  it("activation from a hold-less PENDING_PAYMENT claims exactly one seat", async () => {
+    const cohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 0, capacity: 5 })]]);
+    const enrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: null })],
+    ]);
+    const events: Array<Record<string, unknown>> = [];
+    const result = await applyEnrolmentActivation(directActivationTx(cohorts, enrolments, events), {
+      enrolment: enrolments.get("enr-1")!,
+      reason: "Stripe payment confirmed",
+      actorId: null,
+      now: NOW,
+    });
+    expect(result.claimedSeat).toBe(true);
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+  });
+
+  it("activation from CANCELLED throws IllegalTransitionError", async () => {
+    const cohorts = new Map<string, CohortRow>([["cohort-1", coh()]]);
+    const enrolments = new Map<string, EnrolmentRow>([["enr-1", enr({ status: "CANCELLED" })]]);
+    const events: Array<Record<string, unknown>> = [];
+    await expect(
+      applyEnrolmentActivation(directActivationTx(cohorts, enrolments, events), {
+        enrolment: enrolments.get("enr-1")!,
+        reason: "Stripe payment confirmed",
+        actorId: null,
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+  });
+
+  it("actorId: null emits enrolment.activated; a string actorId emits enrolment.approved", async () => {
+    const systemCohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 0, capacity: 5 })]]);
+    const systemEnrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: null })],
+    ]);
+    const systemEvents: Array<Record<string, unknown>> = [];
+    await applyEnrolmentActivation(directActivationTx(systemCohorts, systemEnrolments, systemEvents), {
+      enrolment: systemEnrolments.get("enr-1")!,
+      reason: "Stripe payment confirmed",
+      actorId: null,
+      now: NOW,
+    });
+    expect(systemEvents[0]!.type).toBe("enrolment.activated");
+    expect((systemEvents[0]!.payload as { actorId: string | null }).actorId).toBeNull();
+
+    const staffCohorts = new Map<string, CohortRow>([["cohort-1", coh({ seatsTaken: 0, capacity: 5 })]]);
+    const staffEnrolments = new Map<string, EnrolmentRow>([
+      ["enr-1", enr({ status: "PENDING_PAYMENT", holdExpiresAt: null })],
+    ]);
+    const staffEvents: Array<Record<string, unknown>> = [];
+    await applyEnrolmentActivation(directActivationTx(staffCohorts, staffEnrolments, staffEvents), {
+      enrolment: staffEnrolments.get("enr-1")!,
+      reason: "manual payment confirmed",
+      actorId: "staff-1",
+      now: NOW,
+    });
+    expect(staffEvents[0]!.type).toBe("enrolment.approved");
+    expect((staffEvents[0]!.payload as { actorId: string | null }).actorId).toBe("staff-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // withdrawEnrolment / cancelEnrolment (D-14)
 // ---------------------------------------------------------------------------
 
@@ -736,6 +895,32 @@ describe("transferEnrolment (D-13)", () => {
         enrolmentId: "enr-1",
         targetCohortId: "cohort-2",
         reason: "cross offer",
+      }),
+    ).rejects.toBeInstanceOf(CrossOfferTransferError);
+    expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");
+    expect(cohorts.get("cohort-1")!.seatsTaken).toBe(1);
+    expect(cohorts.get("cohort-2")!.seatsTaken).toBe(0);
+  });
+
+  it("CR-03: refuses a transfer whose target offer changes between the pre-check and the transaction claiming the row", async () => {
+    // Same offer at the pre-transaction read (target still has no
+    // enrolments, so its offer is technically mutable) — but a concurrent
+    // edit changes the target's courseId immediately after that read lands,
+    // before this transfer's own transaction opens.
+    const { service, cohorts, enrolments } = harness({
+      cohorts: twoCourseCohorts(),
+      enrolments: [enr({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" })],
+      mutateAfterCohortRead: (cohortId, cohorts) => {
+        if (cohortId === "cohort-2") {
+          cohorts.get("cohort-2")!.courseId = "course-2";
+        }
+      },
+    });
+    await expect(
+      service.transferEnrolment({
+        enrolmentId: "enr-1",
+        targetCohortId: "cohort-2",
+        reason: "moved to the evening cohort",
       }),
     ).rejects.toBeInstanceOf(CrossOfferTransferError);
     expect(enrolments.get("enr-1")!.status).toBe("ACTIVE");

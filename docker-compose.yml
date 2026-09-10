@@ -107,7 +107,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
       <<: *storage-environment
-      AUTH_SECRET: ${AUTH_SECRET:-change-me-before-production}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
       EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-Professional Training LMS}

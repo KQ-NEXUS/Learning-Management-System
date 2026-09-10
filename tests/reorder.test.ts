@@ -78,7 +78,16 @@ function buildFakeDb(state: FakeState) {
         module: {
           findMany: async ({ where }) =>
             state.modules
-              .filter((m) => m.courseId === where.courseId && m.withdrawnAt === null)
+              .filter((m) => {
+                if ("id" in where) {
+                  return (
+                    where.id.in.includes(m.id) &&
+                    m.courseId === where.courseId &&
+                    m.withdrawnAt === null
+                  );
+                }
+                return m.courseId === where.courseId && m.withdrawnAt === null;
+              })
               .sort((a, b) => a.position - b.position)
               .map((m) => ({ id: m.id })),
           update: async ({ where, data }) => {
@@ -365,6 +374,30 @@ describe("commitLessonOrder", () => {
         courseId: "course-1",
         expectedUpdatedAt: state.courses[0].updatedAt,
         arrangement: [{ moduleId: "m1", lessonIds: ["l1", "l2", "l-withdrawn"] }],
+      }),
+    ).rejects.toBeInstanceOf(ArrangementMismatchError);
+  });
+
+  it("throws ArrangementMismatchError when the payload names only modules from another course", async () => {
+    const state = baseState();
+    state.modules.push(
+      { id: "foreign-m1", courseId: "course-2", position: 0, withdrawnAt: null },
+      { id: "foreign-m2", courseId: "course-2", position: 1, withdrawnAt: null },
+    );
+    state.lessons.push(
+      { id: "foreign-l1", moduleId: "foreign-m1", position: 0, withdrawnAt: null },
+      { id: "foreign-l2", moduleId: "foreign-m2", position: 0, withdrawnAt: null },
+    );
+    const { service } = harness([grant("courses.edit", "COURSE", "course-1")], state);
+
+    await expect(
+      service.commitLessonOrder({
+        courseId: "course-1",
+        expectedUpdatedAt: state.courses[0].updatedAt,
+        arrangement: [
+          { moduleId: "foreign-m1", lessonIds: ["foreign-l1"] },
+          { moduleId: "foreign-m2", lessonIds: ["foreign-l2"] },
+        ],
       }),
     ).rejects.toBeInstanceOf(ArrangementMismatchError);
   });

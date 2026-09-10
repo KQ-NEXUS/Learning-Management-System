@@ -50,9 +50,18 @@ const PROGRAMME_PUBLIC_SELECT = {
 } as const;
 
 export type PublicCohort = {
+  id: string;
   startsAt: Date;
+  endsAt: Date;
   enrolmentOpensAt: Date;
   enrolmentClosesAt: Date;
+  deliveryMode: "SELF_PACED" | "INSTRUCTOR_LED" | "BLENDED";
+  priceMinor: number;
+  currency: string;
+  // Derived (capacity - seatsTaken, floored at 0) — the raw seatsTaken/capacity
+  // counters are internal operational data and are never present on this
+  // anonymous payload (REG-01, 06-RESEARCH.md Pitfall 6).
+  seatsAvailable: number;
 };
 
 export type PublicCourse = {
@@ -98,9 +107,26 @@ export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
     const at = now();
     const rows = (await deps.cohortDelegate.findMany({
       where: { ...link, status: "PUBLISHED", startsAt: { gt: at } },
-      select: { startsAt: true, enrolmentOpensAt: true, enrolmentClosesAt: true },
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        enrolmentOpensAt: true,
+        enrolmentClosesAt: true,
+        deliveryMode: true,
+        priceMinor: true,
+        currency: true,
+        capacity: true,
+        seatsTaken: true,
+      },
       orderBy: { startsAt: "asc" },
-    })) as Array<PublicCohort & { status?: string }>;
+    })) as Array<
+      Omit<PublicCohort, "seatsAvailable"> & {
+        status?: string;
+        capacity: number;
+        seatsTaken: number;
+      }
+    >;
 
     // A booking window is "open or future" — it has not already closed.
     return rows
@@ -110,9 +136,15 @@ export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
           new Date(row.enrolmentClosesAt) >= at,
       )
       .map((row) => ({
+        id: row.id,
         startsAt: new Date(row.startsAt),
+        endsAt: new Date(row.endsAt),
         enrolmentOpensAt: new Date(row.enrolmentOpensAt),
         enrolmentClosesAt: new Date(row.enrolmentClosesAt),
+        deliveryMode: row.deliveryMode,
+        priceMinor: row.priceMinor,
+        currency: row.currency,
+        seatsAvailable: Math.max(0, row.capacity - row.seatsTaken),
       }));
   }
 

@@ -28,6 +28,7 @@ export const POLICY_TYPE = Object.freeze({
   TERMS: "terms",
   PRIVACY: "privacy",
   MARKETING: "marketing",
+  REFUND_CANCELLATION: "refund_cancellation",
 } as const);
 
 // D-07 — bumped by hand when policy text changes; there is no CMS this phase.
@@ -35,4 +36,5 @@ export const POLICY_VERSIONS: Readonly<Record<string, string>> = Object.freeze({
   [POLICY_TYPE.TERMS]: "2026-09-02",
   [POLICY_TYPE.PRIVACY]: "2026-09-02",
   [POLICY_TYPE.MARKETING]: "2026-09-02",
+  [POLICY_TYPE.REFUND_CANCELLATION]: "2026-09-09",
 });
