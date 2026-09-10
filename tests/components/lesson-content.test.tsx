@@ -17,7 +17,7 @@ const lesson = (over: Partial<LessonInput> & Pick<LessonInput, "type">): LessonI
   ...over,
 });
 
-const resource = (over: Partial<ResourceInput> & Pick<ResourceInput, "scanStatus">): ResourceInput => ({
+const resource = (over: Partial<ResourceInput> & Pick<ResourceInput, "uploadStatus">): ResourceInput => ({
   id: "res-1",
   title: "Handout",
   filename: "handout.pdf",
@@ -65,11 +65,11 @@ describe("LessonContent", () => {
     expect(screen.getByText(/cannot be shown|not an allowed|unavailable/i)).toBeTruthy();
   });
 
-  it("renders a working download link for a FILE lesson with a CLEAN resource", () => {
+  it("renders a working download link for a FILE lesson with a READY resource", () => {
     render(
       <LessonContent
         lesson={lesson({ type: "FILE" })}
-        resources={[resource({ scanStatus: "CLEAN", filename: "notes.pdf", sizeBytes: "2097152" })]}
+        resources={[resource({ uploadStatus: "READY", filename: "notes.pdf", sizeBytes: "2097152" })]}
       />,
     );
     const link = screen.getByRole("link", { name: /download|notes\.pdf/i });
@@ -77,19 +77,19 @@ describe("LessonContent", () => {
     expect(screen.getByText(/2(\.0)? MB/i)).toBeTruthy();
   });
 
-  it("renders Scanning and NO download link for a PENDING resource", () => {
+  it("renders an uploading notice and NO download link for an UPLOADING resource", () => {
     const { container } = render(
-      <LessonContent lesson={lesson({ type: "FILE" })} resources={[resource({ scanStatus: "PENDING" })]} />,
+      <LessonContent lesson={lesson({ type: "FILE" })} resources={[resource({ uploadStatus: "UPLOADING" })]} />,
     );
-    expect(screen.getByText(/scanning/i)).toBeTruthy();
+    expect(screen.getByText(/still uploading/i)).toBeTruthy();
     expect(container.querySelector('a[href*="/api/lesson-resources/"]')).toBeNull();
   });
 
-  it.each(["INFECTED", "ERROR"] as const)("renders a blocked notice and NO download for a %s resource", (scanStatus) => {
+  it("renders an unavailable notice and NO download for an ERROR resource", () => {
     const { container } = render(
-      <LessonContent lesson={lesson({ type: "FILE" })} resources={[resource({ scanStatus })]} />,
+      <LessonContent lesson={lesson({ type: "FILE" })} resources={[resource({ uploadStatus: "ERROR" })]} />,
     );
-    expect(screen.getByText(/blocked|did not pass|security scan/i)).toBeTruthy();
+    expect(screen.getByText(/unavailable/i)).toBeTruthy();
     expect(container.querySelector('a[href*="/api/lesson-resources/"]')).toBeNull();
   });
 
@@ -97,7 +97,7 @@ describe("LessonContent", () => {
     const { container } = render(
       <LessonContent
         lesson={lesson({ type: "IMAGE" })}
-        resources={[resource({ scanStatus: "CLEAN", title: "Site plan", filename: "plan-final-v3.png", mimeType: "image/png" })]}
+        resources={[resource({ uploadStatus: "READY", title: "Site plan", filename: "plan-final-v3.png", mimeType: "image/png" })]}
       />,
     );
     const img = container.querySelector("img");
@@ -110,7 +110,7 @@ describe("LessonContent", () => {
     const { container } = render(
       <LessonContent
         lesson={lesson({ type: "VIDEO" })}
-        resources={[resource({ scanStatus: "CLEAN", filename: "intro.mp4", mimeType: "video/mp4" })]}
+        resources={[resource({ uploadStatus: "READY", filename: "intro.mp4", mimeType: "video/mp4" })]}
       />,
     );
     const video = container.querySelector("video");
@@ -130,11 +130,11 @@ describe("LessonContent", () => {
     expect(container.querySelector("track:not([src])")).toBeNull();
   });
 
-  it("keeps a CLEAN video playable — the track removal does not remove the video", () => {
+  it("keeps a READY video playable — the track removal does not remove the video", () => {
     const { container } = render(
       <LessonContent
         lesson={lesson({ type: "VIDEO" })}
-        resources={[resource({ scanStatus: "CLEAN", filename: "intro.webm", mimeType: "video/webm" })]}
+        resources={[resource({ uploadStatus: "READY", filename: "intro.webm", mimeType: "video/webm" })]}
       />,
     );
     const video = container.querySelector("video");
@@ -144,15 +144,15 @@ describe("LessonContent", () => {
     expect(fallback?.getAttribute("href")).toBe("/api/lesson-resources/res-1/download");
   });
 
-  it("blocks a non-CLEAN video and renders no <video> element", () => {
+  it("blocks a non-READY video and renders no <video> element", () => {
     const { container } = render(
       <LessonContent
         lesson={lesson({ type: "VIDEO" })}
-        resources={[resource({ scanStatus: "INFECTED", filename: "intro.mp4", mimeType: "video/mp4" })]}
+        resources={[resource({ uploadStatus: "ERROR", filename: "intro.mp4", mimeType: "video/mp4" })]}
       />,
     );
     expect(container.querySelector("video")).toBeNull();
-    expect(screen.getByText(/blocked|did not pass|security scan/i)).toBeTruthy();
+    expect(screen.getByText(/unavailable/i)).toBeTruthy();
   });
 
   it("renders a LINK as an anchor with rel noopener noreferrer nofollow", () => {
