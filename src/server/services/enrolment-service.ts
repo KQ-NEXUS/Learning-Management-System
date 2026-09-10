@@ -42,9 +42,7 @@ import type { createWithPermission } from "@/server/permissions/with-permission"
 import { recordAudit } from "@/server/services/audit-service";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
 import {
-  claimSeat,
   lockOpenCohort,
-  updateCurrentEnrolment,
   CohortNotFoundError,
   holdExpiryFrom,
   holdsSeat,
@@ -60,57 +58,39 @@ import {
   cohortResourceScope,
   enrolmentCohortScope,
 } from "@/server/services/cohort-scope";
+// The transition table and the PENDING_PAYMENT -> ACTIVE transition body
+// live in enrolment-transitions.ts (06-06) — split out so a webhook-driven,
+// actorless caller can import `applyEnrolmentActivation` WITHOUT pulling in
+// this file's own `withPermission`/`cohort-scope` imports onto its static
+// import graph. Re-exported below unchanged for every existing caller.
+import {
+  applyEnrolmentActivation,
+  assertTransition,
+  IllegalTransitionError,
+  VALID_TRANSITIONS,
+  type EnrolmentActivationTxClient,
+  type EnrolmentRow,
+  type EnrolmentStatusValue,
+} from "@/server/services/enrolment-transitions";
+
+export {
+  applyEnrolmentActivation,
+  assertTransition,
+  IllegalTransitionError,
+  VALID_TRANSITIONS,
+  type EnrolmentActivationTxClient,
+  type EnrolmentRow,
+  type EnrolmentStatusValue,
+};
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 type Audit = (entry: ResourceAuditEntry) => Promise<void>;
 
 // ---------------------------------------------------------------------------
-// The transition table (D-16) — hand-written app logic, no rules engine.
-// ---------------------------------------------------------------------------
-
-export type EnrolmentStatusValue =
-  | "PENDING_PAYMENT"
-  | "ACTIVE"
-  | "COMPLETED"
-  | "WITHDRAWN"
-  | "TRANSFERRED"
-  | "CANCELLED";
-
-/**
- * The only legal status moves. `COMPLETED` is reachable solely from the
- * Phase 9/11 completion engine and is NOT exposed as a Phase-5 action; every
- * terminal status has an empty allow-list.
- */
-export const VALID_TRANSITIONS: Record<
-  EnrolmentStatusValue,
-  EnrolmentStatusValue[]
-> = {
-  PENDING_PAYMENT: ["ACTIVE", "CANCELLED"],
-  ACTIVE: ["WITHDRAWN", "TRANSFERRED", "COMPLETED", "CANCELLED"],
-  WITHDRAWN: [],
-  TRANSFERRED: [],
-  CANCELLED: [],
-  COMPLETED: [],
-};
-
-// ---------------------------------------------------------------------------
 // Typed refusals — each one a Server Action turns into a specific message.
+// `IllegalTransitionError` itself lives in enrolment-transitions.ts (06-06,
+// imported/re-exported above) alongside the transition table it belongs to.
 // ---------------------------------------------------------------------------
-
-/** A status move that is not in `VALID_TRANSITIONS`. */
-export class IllegalTransitionError extends Error {
-  readonly from: string;
-  readonly to: string;
-  readonly enrolmentId: string | null;
-
-  constructor(from: string, to: string, enrolmentId: string | null = null) {
-    super(`An enrolment cannot move from ${from} to ${to}.`);
-    this.name = "IllegalTransitionError";
-    this.from = from;
-    this.to = to;
-    this.enrolmentId = enrolmentId;
-  }
-}
 
 /**
  * A transfer target that is not another cohort of the same offer (D-13), or a
@@ -147,21 +127,6 @@ export class ReasonRequiredError extends Error {
   }
 }
 
-/**
- * Throws `IllegalTransitionError` when `to` is not an allowed next status for
- * `from`. Every write path calls this before touching the row.
- */
-export function assertTransition(
-  from: EnrolmentStatusValue,
-  to: EnrolmentStatusValue,
-  enrolmentId: string | null = null,
-): void {
-  const allowed = VALID_TRANSITIONS[from] ?? [];
-  if (!allowed.includes(to)) {
-    throw new IllegalTransitionError(from, to, enrolmentId);
-  }
-}
-
 /** Copy of the `publish-service.ts` shape — reused by all five actions. */
 function requireReason(reason: string | null | undefined): string {
   const trimmed = reason?.trim();
@@ -171,20 +136,9 @@ function requireReason(reason: string | null | undefined): string {
 
 // ---------------------------------------------------------------------------
 // Injected surface — a Prisma client satisfies it and so does a unit-test fake.
+// `EnrolmentRow` itself lives in enrolment-transitions.ts (06-06,
+// imported/re-exported above).
 // ---------------------------------------------------------------------------
-
-export type EnrolmentRow = {
-  id: string;
-  userId: string;
-  cohortId: string;
-  status: string;
-  holdExpiresAt: Date | null;
-  activatedAt: Date | null;
-  withdrawnAt: Date | null;
-  reason: string | null;
-  orderId: string | null;
-  transferredFromId: string | null;
-};
 
 type CohortOfferRow = {
   id: string;
@@ -321,109 +275,6 @@ export async function applyEnrolmentExit(
   });
 
   return { id: e.id, before, toStatus };
-}
-
-/**
- * The minimal transaction surface `applyEnrolmentActivation` needs — the same
- * "STRICT SUBSET, structural, cast via unknown" shape as `EnrolmentExitTxClient`
- * above, narrowed to exactly what the PENDING_PAYMENT -> ACTIVE transition body
- * touches: `claimSeat`/`lockOpenCohort` (`$queryRaw`), `updateCurrentEnrolment`
- * (`enrolment.update`), and `writeDomainEvent` (`domainEvent.create`). No
- * `enrolment.create` and no `enrolment.findUnique` — this lets a webhook's own
- * transaction client (Phase 6 checkout, plan 06-03) satisfy it without
- * widening to the single-enrolment surface `EnrolmentTxClient` carries.
- */
-export type EnrolmentActivationTxClient = {
-  $queryRaw<T = unknown>(
-    query: TemplateStringsArray,
-    ...values: unknown[]
-  ): Promise<T>;
-  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
-  enrolment: {
-    update(args: {
-      where: Record<string, unknown>;
-      data: Record<string, unknown>;
-    }): Promise<unknown>;
-  };
-  cohort: {
-    update(args: {
-      where: { id: string };
-      data: Record<string, unknown>;
-    }): Promise<unknown>;
-  };
-  domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
-};
-
-/**
- * The shared PENDING_PAYMENT -> ACTIVE transition body (D-12), extracted from
- * `approveEnrolment` so a webhook-driven, actorless caller (Phase 6's Stripe
- * webhook, plan 06-03) can perform the exact same transition a staff member
- * triggers through `approveEnrolment`. Mirrors `applyEnrolmentExit` exactly:
- * takes an ALREADY-FETCHED `enrolment` row and an ALREADY-OPEN `tx` — the
- * caller owns both the read and the transaction boundary.
- *
- * ─────────────────────────────────────────────────────────────────────────
- * THIS FUNCTION PERFORMS NO AUTHORIZATION. READ THIS BEFORE "FIXING" THAT.
- * ─────────────────────────────────────────────────────────────────────────
- * Authorization is the caller's job. `approveEnrolment` keeps its
- * `withPermission("enrolments.manage", ...)` wrapper and calls this as its
- * transaction body — that wrapper is what gates the staff entry point. A
- * webhook POST has no session cookie and therefore no actor to authorize
- * against (the same reasoning `seat-accounting.ts`'s own header gives for its
- * primitives), so `actorId` is typed `string | null` and an actorless caller
- * is an INTENDED consumer of this export, not a bypass of it.
- *
- * Emits `"enrolment.approved"` when `actorId` is a string (a staff member
- * exercised `enrolments.manage`) and `"enrolment.activated"` when it is
- * `null` (a verified Stripe payment did it with no actor) — so the outbox,
- * Phase 8's reconciliation views and Phase 13's email drain can always tell a
- * webhook-triggered activation apart from a staff override.
- */
-export async function applyEnrolmentActivation(
-  tx: EnrolmentActivationTxClient,
-  args: { enrolment: EnrolmentRow; reason: string; actorId: string | null; now: Date },
-): Promise<{ id: string; before: EnrolmentStatusValue; claimedSeat: boolean }> {
-  const { enrolment: e, reason, actorId, now } = args;
-  const before = e.status as EnrolmentStatusValue;
-  assertTransition(before, "ACTIVE", e.id);
-
-  // `claimSeat`/`lockOpenCohort`/`updateCurrentEnrolment` are typed against
-  // `SeatTxClient`, which also declares `enrolment.create` (needed by
-  // `takeSeat`, never by this path). The cast is the same "structural, cast
-  // via unknown" idiom `applyEnrolmentExit` uses above for `releaseSeat`.
-  const seatTx = tx as unknown as SeatTxClient;
-
-  // RESEARCH Pitfall 3: consult the single seat-occupancy predicate. A
-  // hold-holding enrolment already counts — claim a seat ONLY when none is
-  // currently held, so activation never double-counts.
-  const heldSeat = holdsSeat(e);
-  if (!heldSeat) {
-    await claimSeat(seatTx, { cohortId: e.cohortId });
-  } else {
-    await lockOpenCohort(seatTx, e.cohortId);
-  }
-
-  await updateCurrentEnrolment(seatTx, {
-    where: { id: e.id, status: e.status, holdExpiresAt: e.holdExpiresAt },
-    data: {
-      status: "ACTIVE",
-      holdExpiresAt: null,
-      activatedAt: now,
-      reason,
-    },
-  });
-
-  await writeDomainEvent(tx, {
-    type: actorId === null ? "enrolment.activated" : "enrolment.approved",
-    payload: {
-      enrolmentId: e.id,
-      cohortId: e.cohortId,
-      claimedSeat: !heldSeat,
-      actorId,
-    },
-  });
-
-  return { id: e.id, before, claimedSeat: !heldSeat };
 }
 
 export type EnrolmentServiceDeps = {

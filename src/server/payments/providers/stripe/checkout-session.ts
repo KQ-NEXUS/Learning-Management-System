@@ -32,6 +32,13 @@ export function buildCheckoutSessionParams(args: {
     payment_method_types: ["card"], // D-03 — card only for v1, no wallet buttons
     client_reference_id: args.orderId, // the webhook's primary lookup key
     metadata: { orderId: args.orderId, enrolmentId: args.enrolmentId }, // belt-and-suspenders
+    // `payment_intent.payment_failed` events carry the underlying
+    // PaymentIntent, not the Checkout Session — that event has no
+    // `client_reference_id` of its own. Mirroring the Session-level
+    // metadata onto the PaymentIntent (06-06) is what lets the webhook
+    // correlate a failed intent back to this Order without a second,
+    // OPT-OUT-scoped `checkout.sessions.list` lookup (COVERAGE.md).
+    payment_intent_data: { metadata: { orderId: args.orderId, enrolmentId: args.enrolmentId } },
     line_items: [
       {
         quantity: 1,
