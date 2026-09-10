@@ -2,18 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { getPublicProgrammeBySlug } from "@/server/services/public-catalogue-service";
+import { CohortCards } from "@/app/(public)/CohortCards";
 
 // Rendered per request, never prerendered — the Docker builder has no
 // DATABASE_URL (04-15 planner fallback; 04-10 `docker build` requirement).
 export const dynamic = "force-dynamic";
-
-function formatDate(value: Date): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -106,11 +99,7 @@ export default async function PublicProgrammeDetailPage({
         {programme.upcomingCohorts.length === 0 ? (
           <p className="text-sm text-muted-foreground">No dates are scheduled yet.</p>
         ) : (
-          <ul className="flex flex-col gap-1 text-sm text-foreground">
-            {programme.upcomingCohorts.map((cohort, index) => (
-              <li key={index}>Starts {formatDate(cohort.startsAt)}</li>
-            ))}
-          </ul>
+          <CohortCards cohorts={programme.upcomingCohorts} />
         )}
       </section>
 
