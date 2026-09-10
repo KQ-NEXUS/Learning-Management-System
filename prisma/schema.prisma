@@ -78,13 +78,11 @@ enum LessonType {
   ASSIGNMENT
 }
 
-// CAT-04 / D-28 — one scan vocabulary shared by LessonResource, Submission
-// and TicketAttachment, so Phases 10 and 12 inherit the pipeline instead of
-// inventing a second bare-String vocabulary.
-enum ScanStatus {
-  PENDING
-  CLEAN
-  INFECTED
+// One neutral lifecycle shared by LessonResource, Submission and
+// TicketAttachment so later phases reuse the same private-file vocabulary.
+enum UploadStatus {
+  UPLOADING
+  READY
   ERROR
 }
 
@@ -704,13 +702,13 @@ model LessonResource {
   // a string or a BigInt, never as a JSON number.
   sizeBytes BigInt
 
-  scanStatus ScanStatus @default(PENDING)
+  uploadStatus UploadStatus @default(UPLOADING)
 
-  // D-28 — reconciliation over stuck PENDING rows (@@index([scanStatus])
-  // below) and audit completeness (RBAC-08: actor, target, before/after).
+  // Upload ownership and completion metadata support audit completeness
+  // (RBAC-08: actor, target, before/after).
   uploadedById String?
-  scannedAt    DateTime?
-  scanDetail   String?
+  uploadedAt   DateTime?
+  uploadDetail String?
 
   // CAT-04 — resources render in order on the lesson.
   position Int @default(0)
@@ -721,7 +719,7 @@ model LessonResource {
   uploadedBy User?  @relation(fields: [uploadedById], references: [id])
 
   @@index([lessonId])
-  @@index([scanStatus])
+  @@index([uploadStatus])
 }
 
 // ---------------------------------------------------------------------------
@@ -1117,8 +1115,8 @@ model Submission {
   filename   String
   mimeType   String
   sizeBytes  Int
-  // CAT-04 / D-28 — shared vocabulary with LessonResource and TicketAttachment.
-  scanStatus ScanStatus @default(PENDING)
+  // Shared private-file lifecycle with LessonResource and TicketAttachment.
+  uploadStatus UploadStatus @default(UPLOADING)
 
   assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   enrolment  Enrolment  @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
@@ -1423,8 +1421,8 @@ model TicketAttachment {
   filename   String
   mimeType   String
   sizeBytes  Int
-  // CAT-04 / D-28 — shared vocabulary with LessonResource and Submission.
-  scanStatus ScanStatus @default(PENDING)
+  // Shared private-file lifecycle with LessonResource and Submission.
+  uploadStatus UploadStatus @default(UPLOADING)
   createdAt  DateTime   @default(now())
 
   ticket  Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
