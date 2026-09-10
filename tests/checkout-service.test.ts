@@ -218,28 +218,35 @@ function harness(opts?: {
     },
   };
 
+  function mapOrder(o: OrderRow) {
+    const c = cohorts.get(o.cohortId);
+    const enrolment = [...enrolments.values()].find((e) => e.orderId === o.id) ?? null;
+    return {
+      id: o.id,
+      userId: o.userId,
+      reference: o.reference,
+      status: o.status,
+      amountMinor: o.amountMinor,
+      currency: o.currency,
+      cohort: c
+        ? { id: c.id, title: c.title, startsAt: c.startsAt, endsAt: c.endsAt, deliveryMode: c.deliveryMode }
+        : { id: o.cohortId, title: "", startsAt: NOW, endsAt: NOW, deliveryMode: "" },
+      enrolment: enrolment
+        ? { id: enrolment.id, status: enrolment.status, holdExpiresAt: enrolment.holdExpiresAt }
+        : null,
+    };
+  }
+
   const service = createCheckoutService({
     db: db as never,
     order: {
       findUnique: async ({ where }: { where: { id: string } }) => {
         const o = orders.get(where.id);
-        if (!o) return null;
-        const c = cohorts.get(o.cohortId);
-        const enrolment = [...enrolments.values()].find((e) => e.orderId === o.id) ?? null;
-        return {
-          id: o.id,
-          userId: o.userId,
-          reference: o.reference,
-          status: o.status,
-          amountMinor: o.amountMinor,
-          currency: o.currency,
-          cohort: c
-            ? { id: c.id, title: c.title, startsAt: c.startsAt, endsAt: c.endsAt, deliveryMode: c.deliveryMode }
-            : { id: o.cohortId, title: "", startsAt: NOW, endsAt: NOW, deliveryMode: "" },
-          enrolment: enrolment
-            ? { id: enrolment.id, status: enrolment.status, holdExpiresAt: enrolment.holdExpiresAt }
-            : null,
-        };
+        return o ? mapOrder(o) : null;
+      },
+      findByReference: async ({ reference }: { reference: string }) => {
+        const o = [...orders.values()].find((row) => row.reference === reference);
+        return o ? mapOrder(o) : null;
       },
       update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
         const row = orders.get(where.id) as OrderRow;
@@ -419,6 +426,25 @@ describe("getOwnOrder", () => {
   it("returns null for a non-existent order id — indistinguishable from 'not mine'", async () => {
     const { service } = harness();
     expect(await service.getOwnOrder({ userId: "user-1" }, "does-not-exist")).toBeNull();
+  });
+});
+
+describe("getOwnOrderByReference", () => {
+  it("returns the order only when it belongs to the actor, looked up by reference", async () => {
+    const { service, orders } = harness();
+    const { orderId } = await service.startCheckout({ userId: "user-1" }, "cohort-1");
+    const reference = orders.get(orderId)!.reference;
+
+    const mine = await service.getOwnOrderByReference({ userId: "user-1" }, reference);
+    expect(mine?.id).toBe(orderId);
+
+    const notMine = await service.getOwnOrderByReference({ userId: "user-2" }, reference);
+    expect(notMine).toBeNull();
+  });
+
+  it("returns null for a non-existent reference", async () => {
+    const { service } = harness();
+    expect(await service.getOwnOrderByReference({ userId: "user-1" }, "ORD-DOES-NOT-EXIST")).toBeNull();
   });
 });
 

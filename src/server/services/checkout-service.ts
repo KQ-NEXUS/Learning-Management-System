@@ -142,6 +142,7 @@ export type CheckoutServiceDeps = {
   db: { $transaction: <R>(fn: (tx: CheckoutTxClient) => Promise<R>) => Promise<R> };
   order: {
     findUnique(args: { where: { id: string } }): Promise<OrderWithRelationsRow | null>;
+    findByReference(args: { reference: string }): Promise<OrderWithRelationsRow | null>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
   paymentAttempt: {
@@ -286,6 +287,19 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
   }
 
   /**
+   * Same ownership-comparison contract as `getOwnOrder`, keyed on the
+   * permanent, publicly-shown `Order.reference` instead of the internal id —
+   * the receipt page's lookup key (D-16/D-17). "Not mine" and "does not
+   * exist" are still the same answer.
+   */
+  async function getOwnOrderByReference(actor: Actor, reference: string): Promise<OrderSnapshot | null> {
+    const order = await deps.order.findByReference({ reference });
+    if (!order || order.userId !== actor.userId) return null;
+    const { userId: _userId, ...snapshot } = order;
+    return snapshot;
+  }
+
+  /**
    * Creates one `PaymentAttempt` and a real Stripe Checkout Session for it.
    * The hold check here is server-side and authoritative — the client
    * countdown (plan 06-07) is a UI clock and proves nothing.
@@ -351,7 +365,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     return { url: session.url };
   }
 
-  return { startCheckout, getOwnOrder, initiateStripePayment };
+  return { startCheckout, getOwnOrder, getOwnOrderByReference, initiateStripePayment };
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +405,13 @@ export function createPrismaBackedCheckoutService(client: AnyPrisma) {
         const row = await client.order.findUnique({ where: args.where, select: ORDER_SELECT });
         return row ? mapOrderRow(row) : null;
       },
+      findByReference: async (args) => {
+        const row = await client.order.findUnique({
+          where: { reference: args.reference },
+          select: ORDER_SELECT,
+        });
+        return row ? mapOrderRow(row) : null;
+      },
       update: (args) => client.order.update({ where: args.where, data: args.data }),
     },
     paymentAttempt: {
@@ -412,4 +433,5 @@ const built = createPrismaBackedCheckoutService(prisma);
 
 export const startCheckout = built.startCheckout;
 export const getOwnOrder = built.getOwnOrder;
+export const getOwnOrderByReference = built.getOwnOrderByReference;
 export const initiateStripePayment = built.initiateStripePayment;
