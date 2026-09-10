@@ -17,13 +17,6 @@
  * `src/server/db.ts`). This file lives under `tests/`, so that glob does not
  * match it and importing `@prisma/client` directly here is intentional, not
  * an oversight — do not "fix" it by routing this through a service.
- *
- * pg-boss note (relevant to plan 04-10, not to this harness): pg-boss
- * installs its own `pgboss` schema into whatever database it is pointed at,
- * at job-queue start time, not via a Prisma migration. `prisma migrate
- * reset` does not know about it and will not recreate it — a pg-boss worker
- * test against a container built by this harness needs to start pg-boss
- * itself before relying on that schema existing.
  */
 
 import { execFileSync } from "node:child_process";

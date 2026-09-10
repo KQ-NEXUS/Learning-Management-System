@@ -16,6 +16,14 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## File storage and scheduled maintenance
+
+- Production files live in a private Cloudflare R2 bucket (MinIO in local Docker).
+- Authorized browsers upload with short-lived presigned `PUT` URLs straight to storage; downloads use short-lived presigned `GET` URLs.
+- The application verifies and finalizes each upload before it becomes available — nothing is scanned.
+- Netlify Scheduled Functions release expired seat holds (`release-expired-holds`, every 5 minutes) and clean abandoned uploads (`cleanup-stale-uploads`, hourly).
+- Configure R2 CORS for the production site and `http://localhost:3000`; no ClamAV variables or worker process are required.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

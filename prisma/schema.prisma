@@ -955,8 +955,8 @@ model Enrolment {
 
 // Append-only transactional outbox. A domain event is INSERTed in the same
 // $transaction as the mutation that caused it (D-14, D-20) so the event and
-// the state change commit or roll back together — a bare pg-boss enqueue is
-// not transactional on Prisma 6.x. Phase 13 adds the drain job that turns
+// the state change commit or roll back together — an enqueue after COMMIT can
+// be lost to a crash in the gap. Phase 13 adds the drain job that turns
 // unprocessed rows into emails/notifications; Phase 9/11 read the attendance
 // component out of the payload without recomputing. This is NOT an audit
 // table and never replaces AuditEvent.

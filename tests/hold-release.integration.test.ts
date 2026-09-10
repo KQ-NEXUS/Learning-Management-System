@@ -8,11 +8,11 @@
  * `enrolment_hold_expiry_only_when_pending`, which is what makes "a
  * non-pending row with a past holdExpiresAt" impossible to seed at all.
  *
- * Per 05-RESEARCH Open Question 4: this test does NOT start pg-boss. The
- * thin `worker/index.ts` scheduling is covered by `tests/boundary.test.ts`
- * and `tests/worker-handlers.test.ts`; this file proves `releaseExpiredHolds`
- * itself is correct, selective, idempotent, seat-exact, audited as SYSTEM,
- * and resilient to a poison row.
+ * The Netlify Scheduled Function that invokes the sweep every five minutes is
+ * covered by `tests/netlify-release-expired-holds.test.ts` and
+ * `tests/release-expired-holds-task.test.ts`; this file proves
+ * `releaseExpiredHolds` itself is correct, selective, idempotent, seat-exact,
+ * audited as SYSTEM, and resilient to a poison row.
  *
  * PREREQUISITE: Docker must be running. If it is not, `beforeAll` fails with
  * a container-start error and every case reports BLOCKED — the expected

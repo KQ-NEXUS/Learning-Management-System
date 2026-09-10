@@ -8,15 +8,12 @@
  * straight out of a payload without recomputing it.
  *
  * Why the row is written inside the caller's own database transaction, next
- * to the mutation that produced it: a pg-boss enqueue is not transactional on
- * Prisma 6.19.3 (`src/server/jobs/queue.ts` lines 11-18 — the `fromPrisma`
- * adapter needs Prisma v7 plus `@prisma/adapter-pg`). A bare `boss.send(...)`
- * after commit means a crash between COMMIT and the enqueue loses the event:
- * the state change is durable but the obligation it creates — send the mail,
- * recompute completion — is gone. Writing an outbox row in the same
- * transaction as the mutation makes the two atomic; they commit or roll back
- * together, and the Phase 13 drain turns the row into its side effect exactly
- * once.
+ * to the mutation that produced it: an external enqueue after COMMIT can be
+ * lost to a crash in the gap, leaving the state change durable but the
+ * obligation it creates — send the mail, recompute completion — gone. Writing
+ * an outbox row in the same transaction as the mutation makes the two atomic;
+ * they commit or roll back together, and the Phase 13 drain turns the row into
+ * its side effect exactly once.
  *
  * Redaction happens here, at the sink, through the same `redactForAudit`
  * rules the audit trail uses. A per-call-site rule would have to be

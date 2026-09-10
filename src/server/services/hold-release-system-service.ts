@@ -14,8 +14,8 @@
  * seat it occupies (D-01) is held forever, the cohort falsely reads full, and
  * nothing recovers it.
  *
- * Decision: a separate, explicitly unauthorized, worker-only module — the
- * same shape as `scan-system-service.ts` (plan 04-10). The alternative — a
+ * Decision: a separate, explicitly unauthorized, system-only module — the
+ * same shape as `upload-cleanup-system-service.ts`. The alternative — a
  * synthetic system actor holding a GLOBAL grant — means minting an identity
  * that can perform ANY permission-gated write, in a process nobody watches
  * interactively. A narrow, named, filter-less surface is the smaller blast
@@ -27,8 +27,7 @@
  *   2. It takes NO caller-supplied filter — no cohort id, no enrolment id, no
  *      status. It resolves its own work set from `status = 'PENDING_PAYMENT'`
  *      AND `holdExpiresAt` in the past, and defensively re-filters what it
- *      reads back, exactly like `scan-system-service.ts`'s
- *      `findStuckPending`. It cannot read or write anything else.
+ *      reads back. It cannot read or write anything else.
  *   3. It still audits — `actorId: null, actorType: "SYSTEM"` — under a
  *      distinct action name (`enrolment.hold_expired`), so a system release
  *      is never indistinguishable from a staff cancellation in the trail.
