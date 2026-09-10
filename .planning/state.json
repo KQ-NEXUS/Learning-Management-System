@@ -1,0 +1,88 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "Foundation, Authorization Core & Course Reference Slice",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Roles, Permissions & Staff Accounts",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Public Identity — Registration, Verification & Secure Sessions",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Catalogue Authoring — Programmes, Courses, Modules & Lessons",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Cohorts, Scheduling, Enrolment Operations & Attendance",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Registration, Checkout & Stripe Payments",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Multi-Gateway Payments — Paystack, Manual & Refunds",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Finance Reconciliation, Dashboards & Reporting Exports",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "Learning Delivery & Progress Tracking",
+      "status": "pending"
+    },
+    {
+      "number": "10",
+      "name": "Assessment — Quizzes, Assignments & Grading",
+      "status": "pending"
+    },
+    {
+      "number": "11",
+      "name": "Certificates & Completion Lifecycle",
+      "status": "pending"
+    },
+    {
+      "number": "12",
+      "name": "Support Tickets",
+      "status": "pending"
+    },
+    {
+      "number": "13",
+      "name": "Transactional Communications & Notifications",
+      "status": "pending"
+    },
+    {
+      "number": "14",
+      "name": "Software Licence & Deployment Control",
+      "status": "pending"
+    },
+    {
+      "number": "15",
+      "name": "Launch Readiness — NFR Verification & Operational Cutover",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 6 of 16 · 6% · executing"
+  },
+  "updated_at": "2026-09-09T11:34:57.810Z"
+}
