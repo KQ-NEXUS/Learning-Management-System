@@ -162,6 +162,18 @@ export type CheckoutServiceDeps = {
   audit: (event: BusinessAuditEvent) => Promise<void>;
   baseUrl?: () => string;
   now?: () => Date;
+  /**
+   * A standalone (non-transactional) cohort -> course-slug lookup for the
+   * `/enrol/[cohortId]` resumption route's typed-refusal redirects — a
+   * `CapacityExceededError`/`CohortClosedError` sends the visitor back to
+   * the cohort's own public course page rather than a generic error, and
+   * that page is addressed by the course's slug, not the cohort's id.
+   */
+  cohortOffer?: {
+    findUnique(args: {
+      where: { id: string };
+    }): Promise<{ courseSlug: string | null } | null>;
+  };
 };
 
 /**
@@ -365,7 +377,26 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     return { url: session.url };
   }
 
-  return { startCheckout, getOwnOrder, getOwnOrderByReference, initiateStripePayment };
+  /**
+   * Resolves the public path the `/enrol/[cohortId]` resumption route should
+   * send a visitor to when their held cohort has since filled up or closed —
+   * that cohort's own course page when one can be found, the public
+   * catalogue index otherwise (a programme-linked cohort, or a cohort whose
+   * course is no longer publicly listed). Never throws; this is a
+   * fallback-redirect helper, not a source of truth about existence.
+   */
+  async function getCohortOfferPath(cohortId: string): Promise<string> {
+    const cohort = await deps.cohortOffer?.findUnique({ where: { id: cohortId } });
+    return cohort?.courseSlug ? `/courses/${cohort.courseSlug}` : "/courses";
+  }
+
+  return {
+    startCheckout,
+    getOwnOrder,
+    getOwnOrderByReference,
+    initiateStripePayment,
+    getCohortOfferPath,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +457,15 @@ export function createPrismaBackedCheckoutService(client: AnyPrisma) {
       },
     },
     audit: recordAudit,
+    cohortOffer: {
+      findUnique: async ({ where }) => {
+        const row = await client.cohort.findUnique({
+          where,
+          select: { course: { select: { slug: true } } },
+        });
+        return row ? { courseSlug: row.course?.slug ?? null } : null;
+      },
+    },
   });
 }
 
@@ -435,3 +475,4 @@ export const startCheckout = built.startCheckout;
 export const getOwnOrder = built.getOwnOrder;
 export const getOwnOrderByReference = built.getOwnOrderByReference;
 export const initiateStripePayment = built.initiateStripePayment;
+export const getCohortOfferPath = built.getCohortOfferPath;
