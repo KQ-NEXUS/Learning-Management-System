@@ -23,7 +23,7 @@ function sliceEnum(name: string): string {
 
 const coursePublicationModel = sliceModel("CoursePublication");
 const programmePublicationModel = sliceModel("ProgrammePublication");
-const scanStatusEnum = sliceEnum("ScanStatus");
+const uploadStatusEnum = sliceEnum("UploadStatus");
 const courseModel = sliceModel("Course");
 const programmeModel = sliceModel("Programme");
 const moduleModel = sliceModel("Module");
@@ -69,26 +69,22 @@ describe("CoursePublication and ProgrammePublication are immutable publish recor
   });
 });
 
-describe("ScanStatus is one shared enum vocabulary", () => {
-  it("enum ScanStatus lists exactly PENDING, CLEAN, INFECTED, ERROR", () => {
-    expect(scanStatusEnum).toMatch(/PENDING/);
-    expect(scanStatusEnum).toMatch(/CLEAN/);
-    expect(scanStatusEnum).toMatch(/INFECTED/);
-    expect(scanStatusEnum).toMatch(/ERROR/);
-    const values = scanStatusEnum
-      .replace(/enum ScanStatus \{/, "")
+describe("UploadStatus is one shared neutral vocabulary", () => {
+  it("enum UploadStatus lists exactly UPLOADING, READY, ERROR", () => {
+    const values = uploadStatusEnum
+      .replace(/enum UploadStatus \{/, "")
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
-    expect(values.sort()).toEqual(["CLEAN", "ERROR", "INFECTED", "PENDING"]);
+    expect(values).toEqual(["UPLOADING", "READY", "ERROR"]);
   });
 
-  it("no model declares scanStatus as a bare String (regression guard)", () => {
-    expect(schema).not.toMatch(/scanStatus\s+String\b/);
+  it("contains no scan-specific schema vocabulary", () => {
+    expect(schema).not.toMatch(/scanStatus|scannedAt|scanDetail|ScanStatus/);
   });
 
-  it("LessonResource, Submission and TicketAttachment all declare scanStatus ScanStatus", () => {
-    const matches = schema.match(/scanStatus\s+ScanStatus\b/g) ?? [];
+  it("LessonResource, Submission and TicketAttachment share UploadStatus", () => {
+    const matches = schema.match(/uploadStatus\s+UploadStatus\b/g) ?? [];
     expect(matches.length).toBe(3);
   });
 });
@@ -140,10 +136,10 @@ describe("Publication pins exist on Cohort (both kinds) and CohortCourse (OQ-1)"
 });
 
 describe("LessonResource carries upload audit fields and a 2GB-safe sizeBytes", () => {
-  it("declares uploadedById, scannedAt, scanDetail", () => {
+  it("declares uploadedById, uploadedAt, uploadDetail", () => {
     expect(lessonResourceModel).toMatch(/uploadedById\s+String\?/);
-    expect(lessonResourceModel).toMatch(/scannedAt\s+DateTime\?/);
-    expect(lessonResourceModel).toMatch(/scanDetail\s+String\?/);
+    expect(lessonResourceModel).toMatch(/uploadedAt\s+DateTime\?/);
+    expect(lessonResourceModel).toMatch(/uploadDetail\s+String\?/);
   });
 
   it("declares sizeBytes as BigInt, not Int (regression guard for the 2GB video cap overflow)", () => {

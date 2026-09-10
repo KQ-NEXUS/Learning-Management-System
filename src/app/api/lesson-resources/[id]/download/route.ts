@@ -8,18 +8,17 @@
  * process, which is what protects availability for a 2 GB video (NFR-01/02).
  *
  * Status mapping:
- *   - PENDING  -> 409 (caller is authorized; the condition is temporary)
- *   - INFECTED / ERROR / any authorization failure -> 404 with an empty body
- *     (anything other than 404 on an infected file would confirm both that it
- *     exists and that it is infected — telling an uploader their payload landed)
+ *   - UPLOADING -> 409 (caller is authorized; the upload just is not finished)
+ *   - ERROR / any authorization failure -> 404 with an empty body (anything
+ *     other than 404 would confirm the resource exists)
  */
 
 import { NextResponse } from "next/server";
 import * as permissions from "@/server/permissions";
 import {
   getDownloadableResource,
-  ResourceInfectedError,
-  ResourceNotScannedError,
+  ResourceUploadPendingError,
+  ResourceUploadUnavailableError,
 } from "@/server/services/lesson-resource-service";
 import * as storage from "@/server/services/storage-service";
 
@@ -47,14 +46,11 @@ export async function GET(
       headers: { Location: url, "Cache-Control": "private, no-store" },
     });
   } catch (err) {
-    if (err instanceof ResourceNotScannedError) {
-      return NextResponse.json(
-        { error: "This file is still being scanned. Try again shortly." },
-        { status: 409 },
-      );
+    if (err instanceof ResourceUploadPendingError) {
+      return NextResponse.json({ error: "This upload is not ready yet." }, { status: 409 });
     }
     if (
-      err instanceof ResourceInfectedError ||
+      err instanceof ResourceUploadUnavailableError ||
       err instanceof permissions.AuthenticationError ||
       err instanceof permissions.AuthorizationError
     ) {

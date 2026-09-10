@@ -88,14 +88,13 @@ function runtimeImports(filePath: string): Array<{
 }
 
 function workerRuntimeClosure(): string[] {
-  const workerRoot = path.resolve(process.cwd(), "worker");
-  const handlersRoot = path.join(workerRoot, "handlers");
-  const entrypoints = [
-    path.join(workerRoot, "index.ts"),
-    ...readdirSync(handlersRoot)
-      .filter((name) => name.endsWith(".ts"))
-      .map((name) => path.join(handlersRoot, name)),
-  ];
+  // The Netlify Scheduled Functions are the only always-off-request runtime
+  // now — the pg-boss worker is gone. Their transitive import closure must
+  // stay clear of request-only APIs for the same reason the worker's did.
+  const functionsRoot = path.resolve(process.cwd(), "netlify/functions");
+  const entrypoints = readdirSync(functionsRoot)
+    .filter((name) => name.endsWith(".ts") || name.endsWith(".mts"))
+    .map((name) => path.join(functionsRoot, name));
   const visited = new Set<string>();
   const pending = [...entrypoints];
 
@@ -144,15 +143,11 @@ describe("service-layer boundary", () => {
     expect(await lintAs("src/server/db.ts")).toHaveLength(0);
   });
 
-  it("rejects a Prisma import from the worker entrypoint", async () => {
-    expect(await lintAs("worker/index.ts")).toHaveLength(1);
+  it("rejects a Prisma import from a Netlify scheduled function", async () => {
+    expect(await lintAs("netlify/functions/release-expired-holds.ts")).toHaveLength(1);
   });
 
-  it("rejects a Prisma import from a worker handler", async () => {
-    expect(await lintAs("worker/handlers/scan-lesson-resource.ts")).toHaveLength(1);
-  });
-
-  it("keeps the worker runtime import closure away from request-only APIs", () => {
+  it("keeps the scheduled-function runtime import closure away from request-only APIs", () => {
     const offenders = workerRuntimeClosure().flatMap((filePath) =>
       runtimeImports(filePath)
         .filter(

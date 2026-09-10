@@ -29,7 +29,7 @@ export type LessonContentResource = {
   mimeType: string;
   /** Decimal string — the column is a BigInt (never a JSON number). */
   sizeBytes: string;
-  scanStatus: "PENDING" | "CLEAN" | "INFECTED" | "ERROR";
+  uploadStatus: "UPLOADING" | "READY" | "ERROR";
 };
 
 export type LessonContentProps = {
@@ -52,17 +52,17 @@ function humanSize(bytes: string): string {
   return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
 }
 
-function ScanBlocked({ status }: { status: "PENDING" | "INFECTED" | "ERROR" }) {
-  if (status === "PENDING") {
+function UploadUnavailable({ status }: { status: "UPLOADING" | "ERROR" }) {
+  if (status === "UPLOADING") {
     return (
-      <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
-        Scanning — this file will be available once its security scan finishes.
+      <p role="status" className="rounded-md border border-border bg-surface-2 px-4 py-2 text-sm text-muted-foreground">
+        This file is still uploading.
       </p>
     );
   }
   return (
     <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
-      This file is blocked: it did not pass a security scan and cannot be downloaded.
+      This file is unavailable.
     </p>
   );
 }
@@ -155,7 +155,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
           <BodyProse html={lesson.body ?? ""} />
           {!first ? (
             <p className="text-sm text-muted-foreground">No file has been uploaded for this lesson yet.</p>
-          ) : first.scanStatus === "CLEAN" ? (
+          ) : first.uploadStatus === "READY" ? (
             <a
               href={DOWNLOAD_ROUTE(first.id)}
               className="inline-flex items-center gap-2 rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2"
@@ -164,7 +164,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
               <span className="text-[11px] text-muted-foreground">{humanSize(first.sizeBytes)}</span>
             </a>
           ) : (
-            <ScanBlocked status={first.scanStatus} />
+            <UploadUnavailable status={first.uploadStatus} />
           )}
         </>
       );
@@ -177,7 +177,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
           <BodyProse html={lesson.body ?? ""} />
           {!first ? (
             <p className="text-sm text-muted-foreground">No image has been uploaded for this lesson yet.</p>
-          ) : first.scanStatus === "CLEAN" ? (
+          ) : first.uploadStatus === "READY" ? (
             <figure className="flex flex-col gap-1">
               {/* No alt text was authored, so `alt` is the empty string and the
                   authored resource title carries the meaning as a visible
@@ -195,7 +195,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
               <figcaption className="text-[11px] text-muted-foreground">{first.title || first.filename}</figcaption>
             </figure>
           ) : (
-            <ScanBlocked status={first.scanStatus} />
+            <UploadUnavailable status={first.uploadStatus} />
           )}
         </>
       );
@@ -208,10 +208,10 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
           <BodyProse html={lesson.body ?? ""} />
           {!first ? (
             <p className="text-sm text-muted-foreground">No video has been uploaded for this lesson yet.</p>
-          ) : first.scanStatus === "CLEAN" ? (
+          ) : first.uploadStatus === "READY" ? (
             <LessonMediaPlayer src={DOWNLOAD_ROUTE(first.id)} title={lesson.title} />
           ) : (
-            <ScanBlocked status={first.scanStatus} />
+            <UploadUnavailable status={first.uploadStatus} />
           )}
         </>
       );

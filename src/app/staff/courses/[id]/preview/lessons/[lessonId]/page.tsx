@@ -71,7 +71,7 @@ export default async function LearnerLessonPreviewPage({
     filename: resource.filename,
     mimeType: resource.mimeType,
     sizeBytes: resource.sizeBytes.toString(),
-    scanStatus: resource.scanStatus,
+    uploadStatus: resource.uploadStatus,
   }));
 
   return (

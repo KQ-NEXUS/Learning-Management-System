@@ -1,27 +1,12 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { UploadPanel, type LessonResourceView } from "@/components/catalogue";
+import { UploadPanel } from "@/components/catalogue";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
-});
-
-const resource = (
-  scanStatus: LessonResourceView["scanStatus"],
-  overrides: Partial<LessonResourceView> = {},
-): LessonResourceView => ({
-  id: `resource-${scanStatus.toLowerCase()}`,
-  title: `${scanStatus} resource`,
-  filename: `${scanStatus.toLowerCase()}.pdf`,
-  mimeType: "application/pdf",
-  sizeBytes: "1024",
-  scanStatus,
-  scanDetail: null,
-  position: 0,
-  ...overrides,
 });
 
 function jsonResponse(body: unknown, status = 200) {
@@ -33,15 +18,153 @@ function jsonResponse(body: unknown, status = 200) {
   );
 }
 
+const uploadingResource = {
+  id: "res-1",
+  title: "Slides",
+  filename: "slides.pdf",
+  mimeType: "application/pdf",
+  sizeBytes: "3",
+  uploadStatus: "UPLOADING" as const,
+  uploadDetail: null,
+  position: 0,
+};
+const readyResource = { ...uploadingResource, uploadStatus: "READY" as const };
+const errorResource = {
+  ...uploadingResource,
+  id: "res-error",
+  filename: "failed.pdf",
+  uploadStatus: "ERROR" as const,
+  uploadDetail: "The uploaded object could not be verified.",
+};
+const intentBody = {
+  resource: uploadingResource,
+  upload: {
+    url: "https://storage.example/presigned-put",
+    method: "PUT" as const,
+    headers: { "Content-Type": "application/pdf" },
+    expiresIn: 900,
+  },
+};
+
+async function selectPdfAndUpload() {
+  const file = new File(["pdf"], "slides.pdf", { type: "application/pdf" });
+  fireEvent.change(screen.getByLabelText(/choose file/i), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText(/resource title/i), { target: { value: "Slides" } });
+  fireEvent.click(screen.getByRole("button", { name: /upload resource/i }));
+  await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3));
+  return file;
+}
+
 describe("UploadPanel", () => {
-  it("rejects an invalid image before fetch and explains the accepted formats and cap", () => {
+  it("runs intent, direct PUT and completion in order and shows Ready", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(intentBody, 201))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(jsonResponse({ resource: readyResource }, 200));
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[]} />);
+
+    const file = await selectPdfAndUpload();
+
+    expect(fetchSpy.mock.calls[0][0]).toBe("/api/lesson-resources/upload-intent");
+    expect(fetchSpy.mock.calls[1]).toEqual([
+      "https://storage.example/presigned-put",
+      expect.objectContaining({
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": "application/pdf" },
+      }),
+    ]);
+    expect(fetchSpy.mock.calls[2][0]).toBe("/api/lesson-resources/res-1/complete");
+    expect(await screen.findByText("Ready")).toBeTruthy();
+  });
+
+  it("calls completion after an ambiguous R2 network failure", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(intentBody, 201))
+      .mockRejectedValueOnce(new Error("connection reset"))
+      .mockResolvedValueOnce(jsonResponse({ resource: readyResource }, 200));
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[]} />);
+
+    await selectPdfAndUpload();
+
+    expect(fetchSpy.mock.calls[2][0]).toBe("/api/lesson-resources/res-1/complete");
+    expect(await screen.findByText("Ready")).toBeTruthy();
+  });
+
+  it("surfaces the ERROR row and its detail when completion rejects the object", async () => {
+    const failed = { ...errorResource, id: "res-1", filename: "slides.pdf" };
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(intentBody, 201))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ error: failed.uploadDetail, resource: failed }, 422),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[]} />);
+
+    await selectPdfAndUpload();
+
+    expect(await screen.findByText("Upload failed")).toBeTruthy();
+    expect(
+      screen.getAllByText("The uploaded object could not be verified.").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows Upload failed and removes the row after confirmation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchSpy = vi.fn().mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[errorResource]} />);
+
+    expect(screen.getByText("Upload failed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith("/api/lesson-resources/res-error", { method: "DELETE" }),
+    );
+    await waitFor(() => expect(screen.queryByText(errorResource.filename)).toBeNull());
+  });
+
+  it("does not poll after upload completion", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse(intentBody, 201))
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+        .mockResolvedValueOnce(jsonResponse({ resource: readyResource }, 200)),
+    );
+    render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[]} />);
+
+    await selectPdfAndUpload();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects ZIP before making a request", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    render(
-      <UploadPanel lessonId="lesson-1" lessonType="IMAGE" initialResources={[]} maxPolls={0} />,
-    );
+    render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[]} />);
 
-    fireEvent.change(screen.getByLabelText("Choose image"), {
+    fireEvent.change(screen.getByLabelText(/choose file/i), {
+      target: { files: [new File(["zip"], "archive.zip", { type: "application/zip" })] },
+    });
+
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid image before fetch and explains the accepted formats", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<UploadPanel lessonId="lesson-1" lessonType="IMAGE" initialResources={[]} />);
+
+    fireEvent.change(screen.getByLabelText(/choose image/i), {
       target: { files: [new File(["<svg/>"], "diagram.svg", { type: "image/svg+xml" })] },
     });
 
@@ -51,275 +174,25 @@ describe("UploadPanel", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("uploads the raw File to the Route Handler with metadata in the query string", async () => {
-    const fetchSpy = vi.fn(() => jsonResponse({ id: "resource-new", scanStatus: "PENDING" }, 201));
-    vi.stubGlobal("fetch", fetchSpy);
-    render(
-      <UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[]} maxPolls={0} />,
-    );
-
-    const file = new File(["slides"], "slides.pdf", { type: "application/pdf" });
-    fireEvent.change(screen.getByLabelText("Choose file"), { target: { files: [file] } });
-    fireEvent.change(screen.getByLabelText("Resource title"), {
-      target: { value: "Week one slides" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Upload resource" }));
-
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
-    const parsed = new URL(url, "http://localhost");
-    expect(parsed.pathname).toBe("/api/lesson-resources/upload");
-    expect(Object.fromEntries(parsed.searchParams)).toMatchObject({
-      lessonId: "lesson-1",
-      title: "Week one slides",
-      filename: "slides.pdf",
-      mimeType: "application/pdf",
-      sizeBytes: String(file.size),
-    });
-    expect(init).toMatchObject({ method: "POST", body: file });
-    expect(screen.getByText("Scanning")).toBeTruthy();
-  });
-
-  it("renders each scan state and never offers an infected file for download", () => {
+  it("renders each upload state and only offers a READY resource for download", () => {
     vi.stubGlobal("fetch", vi.fn());
     render(
       <UploadPanel
         lessonId="lesson-1"
         lessonType="FILE"
-        maxPolls={0}
         initialResources={[
-          resource("PENDING"),
-          resource("CLEAN"),
-          resource("INFECTED", { scanDetail: "Eicar-Test-Signature" }),
-          resource("ERROR", { scanDetail: "Scanner unavailable" }),
+          { ...uploadingResource, id: "u" },
+          { ...readyResource, id: "r" },
+          { ...errorResource, id: "e" },
         ]}
       />,
     );
 
-    expect(screen.getByText("Scanning")).toBeTruthy();
-    expect(screen.getByText("Clean")).toBeTruthy();
-    expect(screen.getByText("Infected")).toBeTruthy();
-    expect(screen.getByText("Scan error")).toBeTruthy();
-    expect(screen.getByText("Eicar-Test-Signature")).toBeTruthy();
+    expect(screen.getByText("Uploading")).toBeTruthy();
+    expect(screen.getByText("Ready")).toBeTruthy();
+    expect(screen.getByText("Upload failed")).toBeTruthy();
     const links = screen.getAllByRole("link", { name: "Download" });
     expect(links).toHaveLength(1);
-    expect(links[0].getAttribute("href")).toBe("/api/lesson-resources/resource-clean/download");
-  });
-
-  it("retries an ERROR resource through the retry endpoint and returns it to Scanning", async () => {
-    const pending = resource("PENDING", { id: "resource-error", title: "Errored resource" });
-    const fetchSpy = vi.fn(() => jsonResponse({ resource: pending }));
-    vi.stubGlobal("fetch", fetchSpy);
-    render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        maxPolls={0}
-        initialResources={[resource("ERROR", { id: "resource-error" })]}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Retry scan" }));
-
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/lesson-resources/resource-error/retry");
-    expect(init).toMatchObject({ method: "POST" });
-    expect(screen.getByText("Scanning")).toBeTruthy();
-  });
-
-  it("keeps an ERROR resource visible and surfaces the reason when the retry cannot be queued", async () => {
-    const rolledBack = resource("ERROR", {
-      id: "resource-error",
-      scanDetail: "The scan could not be queued. Try again in a moment.",
-    });
-    const fetchSpy = vi.fn(() =>
-      jsonResponse(
-        { error: "The scan could not be queued. Try again in a moment.", resource: rolledBack },
-        503,
-      ),
-    );
-    vi.stubGlobal("fetch", fetchSpy);
-    render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        maxPolls={0}
-        initialResources={[resource("ERROR", { id: "resource-error" })]}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Retry scan" }));
-
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toBe(
-        "The scan could not be queued. Try again in a moment.",
-      ),
-    );
-    expect(screen.getByText("Scan error")).toBeTruthy();
-    expect(screen.queryByText("Scanning")).toBeNull();
-    expect(screen.getByRole("button", { name: "Retry scan" })).toBeTruthy();
-  });
-
-  it("recovers scanning resources after a transient poll rejection", async () => {
-    vi.useFakeTimers();
-    const fetchSpy = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("network blip"))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ resources: [resource("CLEAN", { id: "r1" })] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-    vi.stubGlobal("fetch", fetchSpy);
-    render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        initialResources={[resource("PENDING", { id: "r1" })]}
-        pollIntervalMs={25}
-        maxPolls={5}
-      />,
-    );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-    expect(screen.getByRole("alert").textContent).toContain("trying again");
-    expect(screen.getByText("Scanning")).toBeTruthy();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("Clean")).toBeTruthy();
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("stops polling once the budget is spent and instructs a reload", async () => {
-    vi.useFakeTimers();
-    const fetchSpy = vi.fn(() => Promise.reject(new Error("still down")));
-    vi.stubGlobal("fetch", fetchSpy);
-    render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        initialResources={[resource("PENDING", { id: "r1" })]}
-        pollIntervalMs={10}
-        maxPolls={3}
-      />,
-    );
-
-    for (let i = 0; i < 6; i += 1) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10);
-      });
-    }
-
-    expect(fetchSpy).toHaveBeenCalledTimes(3);
-    expect(screen.getByRole("alert").textContent).toContain("Reload the page");
-    expect(screen.getByText("Scanning")).toBeTruthy();
-  });
-
-  it("never has two status polls in flight at once", async () => {
-    vi.useFakeTimers();
-    let resolveFirst: ((value: Response) => void) | undefined;
-    const fetchSpy = vi.fn(() => {
-      if (fetchSpy.mock.calls.length === 1) {
-        return new Promise<Response>((resolve) => {
-          resolveFirst = resolve;
-        });
-      }
-      return jsonResponse({ resources: [resource("PENDING", { id: "r1" })] });
-    });
-    vi.stubGlobal("fetch", fetchSpy);
-    render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        initialResources={[resource("PENDING", { id: "r1" })]}
-        pollIntervalMs={10}
-        maxPolls={5}
-      />,
-    );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(50);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveFirst?.(
-        new Response(JSON.stringify({ resources: [resource("PENDING", { id: "r1" })] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-  });
-
-  it("cancels a scheduled poll retry after unmount", async () => {
-    vi.useFakeTimers();
-    const fetchSpy = vi.fn(() => Promise.reject(new Error("down")));
-    vi.stubGlobal("fetch", fetchSpy);
-    const view = render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        initialResources={[resource("PENDING", { id: "r1" })]}
-        pollIntervalMs={10}
-        maxPolls={5}
-      />,
-    );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-
-    view.unmount();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it("bounds status polling and stops scheduling work after unmount", async () => {
-    vi.useFakeTimers();
-    const fetchSpy = vi.fn(() =>
-      jsonResponse({ resources: [resource("PENDING", { id: "resource-pending" })] }),
-    );
-    vi.stubGlobal("fetch", fetchSpy);
-    const view = render(
-      <UploadPanel
-        lessonId="lesson-1"
-        lessonType="FILE"
-        initialResources={[resource("PENDING", { id: "resource-pending" })]}
-        pollIntervalMs={25}
-        maxPolls={2}
-      />,
-    );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-
-    view.unmount();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(links[0].getAttribute("href")).toBe("/api/lesson-resources/r/download");
   });
 });

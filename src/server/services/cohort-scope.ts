@@ -12,9 +12,9 @@
  * This file is authorization *input*, not an authorization *check*. It must
  * not take a value import from the permissions layer or anything under it —
  * only the `ResourceScope` type, written as `import type`. Keeping that
- * layer out of here is what stops it reaching a worker import closure
- * (`tests/boundary.test.ts`), the same constraint
- * `src/server/jobs/queue.ts` documents in its header.
+ * layer out of here is what stops it reaching the scheduled-function import
+ * closure (`tests/boundary.test.ts`), the same constraint the
+ * `*-system-service.ts` modules document in their headers.
  *
  * Every resolver takes ONLY an id and reads the row from the database. No
  * resolver signature accepts a caller-supplied cohortId / programmeId /
