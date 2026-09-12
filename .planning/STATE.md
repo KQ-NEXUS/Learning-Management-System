@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 current_phase: 06
 current_phase_name: Registration, Checkout & Stripe Payments
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-09T12:45:11.295Z"
-last_activity: 2026-09-09
-state_head: d34412d7a7f455bed28d3de1393d3def3dc24d31
+stopped_at: Completed 06-09-PLAN.md -- Phase 6 execution complete across all nine plans (uncommitted -- user commits personally)
+last_updated: "2026-09-10T12:16:17.722Z"
+last_activity: 2026-09-10
+state_head: 21fc1d9315622f2d3d25bf58c54690a6034b8915
 progress:
   total_phases: 16
   completed_phases: 1
   total_plans: 74
-  completed_plans: 51
+  completed_plans: 59
   percent: 6
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 
 Phase: 06 (Registration, Checkout & Stripe Payments) — EXECUTING
 Status: Executing Phase 06
-Last activity: 2026-09-09
+Last activity: 2026-09-10
 
 Progress: [█░░░░░░░░░] 6% (6/16 phases complete: 1, 2, 3, 4, 04.1, 5)
 
@@ -75,6 +75,14 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 04.1 P14 | 14min | 3 tasks | 4 files |
 | Phase 04.1 P15 | 25min | 2 tasks | 4 files |
 | Phase 06 P02 | 70min | 3 tasks | 8 files |
+| Phase 06 P01 | 46min | 3 tasks | 6 files |
+| Phase 06 P03 | 110min | 3 tasks | 14 files |
+| Phase 06 P04 | ~105min | 3 tasks | 8 files |
+| Phase 06 P05 | ~15min | 2 tasks | 3 files |
+| Phase 06 P06 | ~75min | 3 tasks | 8 files |
+| Phase 06 P07 | ~95min | 3 tasks | 9 files |
+| Phase 06 P08 | ~50min | 3 tasks | 7 files |
+| Phase 06 P09 | ~45min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -115,6 +123,22 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 04.1]: UI-SPEC section 8 states 14 backstops but contains 21 individual resolved-backstop rows; Plan 14 records all 21 for conservative UAT coverage.
 - [Phase 06]: [Phase 6 P02]: Created tests/identity.test.ts as a new file for POLICY_TYPE/POLICY_VERSIONS unit coverage rather than extending the real-Postgres identity-security.integration.test.ts
 - [Phase 06]: [Phase 6 P02]: applyEnrolmentActivation extracted from approveEnrolment (PENDING_PAYMENT -> ACTIVE), callable by both the staff withPermission path and a future actorless Stripe webhook; enrolment.activated vs enrolment.approved distinguishes the two in the outbox
+- [Phase 06]: [Phase 6 P01]: stripe pinned exact at 22.6.1 after human npmjs.com legitimacy approval; NGN test-mode Checkout Session probe succeeded against this account (country USA), clearing D-07/Pitfall-5's currency gate for 06-03
+- [Phase 06]: [Phase 6 P01]: STRIPE_WEBHOOK_SECRET intentionally left unset in .env.local -- no webhook route exists until 06-03; plan-sanctioned deferral, not a blocker
+- [Phase 06]: [Phase 6 P03]: Webhook authorization model resolved as-system-module (checkout-webhook-system-service.ts) -- third *AsSystem module after hold-release-system-service.ts and scan-system-service.ts; deliberately unauthorized, audits as actorId: null, actorType: SYSTEM
+- [Phase 06]: [Phase 6 P03]: Rule 2 auto-fix -- added REG-03 amount/currency mismatch guard to activateOrderAsSystem (plan frontmatter prohibited it with verification:test but no task action step described it); a mismatch routes to EXCEPTION and never activates
+- [Phase 06]: [Phase 6 P03]: Rule 2 auto-fix -- added getOwnOrderByReference to checkout-service.ts, mirroring getOwnOrder's ownership contract, since the receipt page needs a reference-keyed lookup the plan's Task 2 text never specified
+- [Phase 06]: [Phase 6 P04]: checkoutReturnPathFor constructs the post-auth redirect from a validated cohort id (letters-and-digits allowlist), never echoes caller input -- structurally closes the T-06-20 open-redirect surface rather than merely validating against known-bad patterns
+- [Phase 06]: [Phase 6 P04]: getCohortOfferPath added to checkout-service.ts (Rule 2 auto-fix) -- cohort-to-course-slug lookup the resumption route's typed-refusal redirects needed but no earlier plan exposed
+- [Phase 06]: [Phase 6]: [Phase 6 P05]: No REG-01 field gap on the Programme side -- PublicProgramme's completion-expectation fields (memberCourseTitles, certificateEnabled) were already rendered before this plan; prerequisites/durationHours stay Course-only, confirmed by a grep gate rather than invented
+- [Phase 06]: 06-06: extracted applyEnrolmentActivation + the enrolment transition table into enrolment-transitions.ts so the webhook's import closure never touches the permission choke point (caught by the new webhookRuntimeClosure boundary test) — enrolment-service.ts imports withPermission/cohort-scope at module scope for its staff-authorized exports; importing applyEnrolmentActivation from that file still pulled those onto checkout-webhook-system-service.ts's closure (T-06-33) even though nothing there calls them
+- [Phase 06]: [Phase 6 P07]: initiateStripePayment's cancelUrl carries a declined=1 marker (Rule 2) -- Stripe gives the app no other signal distinguishing a genuine decline from an ordinary back-out at cancel_url; read for UX only, never trusted as a security/payment-state fact
+- [Phase 06]: [Phase 6 P07]: getOwnVerificationStatus added to checkout-service.ts (Rule 2) -- the order-summary page needs the same User.emailVerified fact the D-13 pay-gate reads, and Actor carries no emailVerified field
+- [Phase 06]: [Phase 6 P07]: extending initiateStripePayment's signature required fixing tests/checkout-hold-race.integration.test.ts and tests/checkout-webhook.integration.test.ts (Rule 3) to keep the repo compiling -- both remain Docker-BLOCKED in this sandbox, not run
+- [Phase 06]: [Phase 6 P08]: Resumed after an interrupted prior run (API rate-limit, not a code failure) -- verified Task 1 (webhook confirmation email) and Task 2 (confirming interstitial) on-disk work was already correct and complete before implementing Task 3 fresh
+- [Phase 06]: [Phase 6 P08]: SUPPORT_CONTACT_EMAIL sourced as a documented .env.example placeholder (support@example.com, must-override-before-launch) since no real support contact value exists anywhere in the codebase or docs and no deployment config is reachable from this sandbox -- mirrors EMAIL_SENDER_ADDRESS's existing dev-fallback convention
+- [Phase 06]: [Phase 6]: [Phase 6 P09]: checkout-phase-invariants.test.ts (TypeScript-compiler-API, directory-prefix exemption) immediately caught two real pre-existing PAY-09 violations -- checkout-service.ts and the Stripe webhook route both named Stripe SDK types outside providers/stripe/ -- fixed as Rule 1 auto-fixes before the test's first real-tree run
+- [Phase 06]: [Phase 6]: [Phase 6 P09]: Task 2's environment prep and twelve-step Stripe walkthrough were not attempted (Docker unavailable, and per this plan's objective no browser is available either) -- recorded as outstanding human verification rather than fabricated, consolidated with 06-03/06-05/06-07/06-08's own outstanding walkthroughs in 06-09-SUMMARY.md
 
 ### Pending Todos
 
@@ -134,6 +158,10 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 5]: `05-REVIEW.md` (2026-09-08) found 3 CRITICAL correctness bugs — CR-01 (attendance markable on cancelled sessions/off-roster enrolments), CR-02 (cohort publish can use stale readiness under a race), CR-03 (enrolment transfer can race past the same-offer invariant). Candidate fixes + regression tests exist uncommitted in the working tree as of 2026-09-09 (attendance-service.ts, cohort-service.ts, enrolment-service.ts + tests) — all pass, tsc clean, no regressions — but await explicit user go-ahead to commit (never auto-commit for this project).
 - [Phase 04.1]: Real video captions/WebVTT support (NFR-09 accessible media alternative) remains unresolved — no schema/upload contract for it exists. `04.1-GAP-COVERAGE.md` documents this as an explicitly open scope decision, not silently closeable by a styling pass. Accepted as a deferred gap by user decision on 2026-09-09 rather than blocking Phase 6; revisit before NFR-09 launch-gate verification (Phase 15).
 - [Tooling] STATE.md's Current Position section has no 'Current Plan'/'Total Plans in Phase' labeled lines, so 'gsd_run query state.advance-plan' errors with a parse failure (pre-existing gap, not caused by Phase 6 Plan 2's changes; state.sync does not add these fields either) — phase-level position tracking still works via progress.completed_plans in frontmatter.
+- [Phase 6/06-03]: tests/checkout-webhook.integration.test.ts (6 cases, real-Postgres settlement proof) could not run in this execution sandbox -- Docker unavailable, same gate 06-01/06-02 hit. Needs a Docker-enabled environment to actually execute before REG-03/REG-05/PAY-10's real-Postgres proof is complete.
+- [Phase 6/06-04]: tests/checkout-intent.integration.test.ts (4 cases, real-Postgres register->verify->sign-in->order round trip) could not run in this execution sandbox -- Docker unavailable, same gate 06-01/06-02/06-03 hit. Needs a Docker-enabled environment to actually execute before REG-02's real-Postgres proof is complete.
+- [Phase 6/06-07]: tests/checkout-hold-race.integration.test.ts and tests/checkout-webhook.integration.test.ts were updated to compile against 06-07's extended initiateStripePayment(actor, orderId, consent) signature and new user dep -- both remain Docker-BLOCKED in this sandbox (same gate as above), so the D-13-aware fixture change and the transactional PolicyAcceptance write were proven only at the unit level (tests/checkout-service.test.ts), not against a real Postgres transaction. Needs a Docker-enabled environment to confirm.
+- [Phase 6/06-09]: Phase 6 code is complete across all nine plans but three real-Postgres integration test files (checkout-webhook.integration.test.ts, checkout-hold-race.integration.test.ts, checkout-intent.integration.test.ts) have never run to completion in any sandboxed execution of this phase (Docker unavailable throughout), and the consolidated five-part human UAT walkthrough (06-03/06-05/06-07/06-08/06-09) is still outstanding -- both needed before Phase 6's UAT can close. See 06-09-SUMMARY.md.
 
 ## Deferred Items
 
@@ -145,6 +173,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-09T12:45:10.313Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-09-10T12:15:51.657Z
+Stopped at: Completed 06-09-PLAN.md -- Phase 6 execution complete across all nine plans (uncommitted -- user commits personally)
 Resume file: None

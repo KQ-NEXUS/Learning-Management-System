@@ -1,0 +1,32 @@
+# Ingest manifest for /gsd-ingest-docs
+# Authoritative: overrides heuristic classification and directory conventions.
+# precedence: lower = higher authority on conflict.
+docs:
+  # Product authority. The PRD states it is the implementation baseline for Rev 3.
+  - path: docs/reference/Professional-Training-LMS-PRD-Revision-3-Multi-Gateway-Payments.md
+    type: PRD
+    precedence: 0
+
+  # Product Experience Review — implementation-ready UI/workflow spec.
+  # Self-declared subordinate to the PRD, so it sits below it despite being a SPEC.
+  - path: docs/reference/Professional-Training-LMS-PXR-Revision-3-Multi-Gateway-Payments.md
+    type: SPEC
+    precedence: 1
+
+  # Local design spec for the current codebase foundation.
+  - path: docs/superpowers/specs/2026-09-01-track-a-foundation-design.md
+    type: SPEC
+    precedence: 2
+
+  # Execution plans — sequencing signal, not requirement sources.
+  - path: docs/superpowers/plans/2026-09-01-auth-and-courses-slice.md
+    type: DOC
+    precedence: 3
+  - path: docs/superpowers/plans/2026-09-01-track-a-first-three-hours.md
+    type: DOC
+    precedence: 4
+
+  # Task checklist derived from PRD Rev 3 + PXR Rev 3.
+  - path: docs/TRACK-A-TASKS.md
+    type: DOC
+    precedence: 5

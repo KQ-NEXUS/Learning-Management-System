@@ -1,0 +1,12 @@
+{
+  "source_path": "C:/Users/USER/Documents/KQ NEXUS/Learning-Management-System/docs/superpowers/plans/2026-09-01-track-a-first-three-hours.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Track A Foundation Implementation Plan",
+  "summary": "Scaffolding plan for LMS repository with module boundaries, permission catalogue, and enforcement rules.",
+  "scope": ["Next.js 15", "module boundaries", "service layer", "permission catalogue", "ESLint", "Vitest", "TypeScript", "Prisma"],
+  "cross_refs": ["docs/superpowers/specs/2026-09-01-track-a-foundation-design.md"],
+  "locked": false,
+  "precedence": 4
+}
