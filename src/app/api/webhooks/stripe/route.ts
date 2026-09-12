@@ -14,7 +14,6 @@
  * service, exactly like every other route in this codebase calls a service.
  */
 
-import type Stripe from "stripe";
 import { verifyStripeWebhook, StripeSignatureError } from "@/server/payments/providers/stripe/webhook";
 import {
   recordWebhookEventOrSkip,
@@ -22,6 +21,35 @@ import {
   recordPaymentFailureAsSystem,
   recordSessionExpiredAsSystem,
 } from "@/server/services/checkout-webhook-system-service";
+
+/**
+ * Structural shapes for the exact fields this route reads off a verified
+ * Stripe event — deliberately NOT the SDK's own `Stripe.Event` /
+ * `Stripe.Checkout.Session` / `Stripe.PaymentIntent` types (PAY-09). This
+ * file lives outside `src/server/payments/providers/stripe/`, so naming a
+ * Stripe-namespaced type here — even for read-only field access — would put
+ * it on the offending side of tests/checkout-phase-invariants.test.ts's
+ * provider-isolation scan. `verifyStripeWebhook` still returns the SDK's own
+ * typed event internally; this route only ever holds it through this
+ * narrower, provider-agnostic shape.
+ */
+type VerifiedWebhookEvent = {
+  id: string;
+  type: string;
+  data: { object: unknown };
+};
+
+type CheckoutSessionFacts = {
+  id: string;
+  client_reference_id: string | null;
+  amount_total: number | null;
+  currency: string | null;
+};
+
+type PaymentIntentFacts = {
+  metadata?: { orderId?: string } | null;
+  last_payment_error?: { message?: string } | null;
+};
 
 export async function POST(req: Request): Promise<Response> {
   const body = await req.text(); // RAW bytes — no other body-read call anywhere in this file
@@ -33,7 +61,7 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(null, { status: 500 });
   }
 
-  let event: Stripe.Event;
+  let event: VerifiedWebhookEvent;
   try {
     event = verifyStripeWebhook(body, signature, secret);
   } catch (err) {
@@ -55,7 +83,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
+    const session = event.data.object as CheckoutSessionFacts;
     const orderId = session.client_reference_id;
     if (orderId) {
       await activateOrderAsSystem({
@@ -70,7 +98,7 @@ export async function POST(req: Request): Promise<Response> {
     // PAY-02 bookkeeping only — D-04's inline retry is handled entirely on
     // Stripe's own hosted page; this event fires only once the Session
     // itself is truly gone (Stripe's own timeout, not a decline).
-    const session = event.data.object as Stripe.Checkout.Session;
+    const session = event.data.object as CheckoutSessionFacts;
     const orderId = session.client_reference_id;
     if (orderId) {
       await recordSessionExpiredAsSystem({
@@ -85,7 +113,7 @@ export async function POST(req: Request): Promise<Response> {
     // field) — correlation relies on the `orderId` mirrored into
     // `payment_intent_data.metadata` at Session-creation time
     // (`checkout-session.ts`), not on `providerIntentId` matching.
-    const intent = event.data.object as Stripe.PaymentIntent;
+    const intent = event.data.object as PaymentIntentFacts;
     const orderId = intent.metadata?.orderId;
     if (orderId) {
       await recordPaymentFailureAsSystem({

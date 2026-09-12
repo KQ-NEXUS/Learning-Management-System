@@ -43,6 +43,13 @@ let checkoutService: ReturnType<CheckoutServiceModule["createCheckoutService"]>;
 let POST: RouteModule["POST"];
 let releaseExpiredHoldsAsSystem: HoldReleaseModule["releaseExpiredHoldsAsSystem"];
 
+/** Every required-consent field affirmative — plan 06-07's REG-04 gate. */
+const FULL_CONSENT = {
+  acceptedTerms: true,
+  acceptedRefundCancellation: true,
+  acceptedMarketing: false,
+};
+
 const TEST_WEBHOOK_SECRET = "whsec_test_secret_for_hold_race_integration_only";
 
 // A Stripe client constructed ONLY to compute the same HMAC signature
@@ -138,10 +145,15 @@ beforeAll(async () => {
         testDb.prisma.order.update({ where: args.where, data: args.data }),
     } as never,
     paymentAttempt: {
-      create: (args: { data: Record<string, unknown>; select: { id: true } }) =>
-        testDb.prisma.paymentAttempt.create({ data: args.data as never, select: args.select }),
       update: (args: { where: { id: string }; data: Record<string, unknown> }) =>
         testDb.prisma.paymentAttempt.update({ where: args.where, data: args.data as never }),
+    } as never,
+    user: {
+      findUnique: (args: { where: { id: string } }) =>
+        testDb.prisma.user.findUnique({
+          where: args.where,
+          select: { email: true, emailVerified: true },
+        }),
     } as never,
     stripe: {
       checkout: {
@@ -184,13 +196,13 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
       currency: "NGN",
       holdMinutes: 30,
     });
-    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
 
     const cohortBefore = await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
     const seatsTakenBeforeCheckout = cohortBefore.seatsTaken;
 
     const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
-    await checkoutService.initiateStripePayment({ userId }, orderId);
+    await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
     const enrolmentBefore = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
 
@@ -260,11 +272,11 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
       currency: "NGN",
       holdMinutes: 30,
     });
-    const { userId: userA } = await seedLearnerFixture(testDb.prisma);
-    const { userId: userB } = await seedLearnerFixture(testDb.prisma);
+    const { userId: userA } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
+    const { userId: userB } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
 
     const { orderId: orderIdA } = await checkoutService.startCheckout({ userId: userA }, cohortId);
-    await checkoutService.initiateStripePayment({ userId: userA }, orderIdA);
+    await checkoutService.initiateStripePayment({ userId: userA }, orderIdA, FULL_CONSENT);
     const attemptA = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: orderIdA } });
     const enrolmentA = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId: orderIdA } });
 
@@ -318,10 +330,10 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
       currency: "NGN",
       holdMinutes: 30,
     });
-    const { userId } = await seedLearnerFixture(testDb.prisma);
+    const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
 
     const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
-    await checkoutService.initiateStripePayment({ userId }, orderId);
+    await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
     const eventId = `evt_race_control_${orderId}`;

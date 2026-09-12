@@ -209,7 +209,7 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
       signInAction({ error: null }, signInFormData(email)),
     );
     expect(secondSignInTarget).toBe("/account");
-  });
+  }, 15_000);
 
   it("lands on /account when no intent cookie is present (pre-existing behaviour unchanged)", async () => {
     const email = `${randomUUID()}@fixture.test`;

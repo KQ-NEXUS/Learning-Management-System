@@ -1,0 +1,12 @@
+{
+  "source_path": "C:/Users/USER/Documents/KQ NEXUS/Learning-Management-System/docs/reference/Professional-Training-LMS-PXR-Revision-3-Multi-Gateway-Payments.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Professional Training Learning Management System — Product Experience Review",
+  "summary": "Technical specification for LMS UI workflows, role-based permissions, payment gateways, delivery, assessment, and operations.",
+  "scope": ["UI workflows", "role-based permissions", "payment processing", "certificate management", "course delivery", "assessment", "finance operations"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 1
+}

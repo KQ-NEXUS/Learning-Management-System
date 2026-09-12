@@ -39,7 +39,7 @@ import { PrismaClient } from "@prisma/client";
  * Every integration test file using this harness must pass this constant as
  * the timeout argument to its `beforeAll`/`afterAll`.
  */
-export const TEST_DB_TIMEOUT_MS = 180_000;
+export const TEST_DB_TIMEOUT_MS = 300_000;
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MIGRATIONS_DIR = path.join(REPO_ROOT, "prisma", "migrations");

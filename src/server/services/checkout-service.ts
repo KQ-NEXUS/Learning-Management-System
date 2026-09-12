@@ -22,9 +22,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type Stripe from "stripe";
 import { prisma } from "@/server/db";
 import type { Actor } from "@/server/permissions/with-permission";
+import { POLICY_TYPE, POLICY_VERSIONS } from "@/lib/identity";
 import {
   takeSeat,
   releaseSeat,
@@ -65,6 +65,41 @@ export class HoldExpiredError extends Error {
   constructor(orderId: string) {
     super(`The seat hold for order ${orderId} has expired.`);
     this.name = "HoldExpiredError";
+    this.orderId = orderId;
+  }
+}
+
+/**
+ * D-13's guard, kept as defence in depth. Read against the actual auth
+ * implementation, a `PENDING_VERIFICATION` learner cannot hold a session at
+ * all: `signIn` refuses any non-ACTIVE user (auth-service.ts), a non-ACTIVE
+ * user's session resolves to no actor (session-service.ts), and
+ * `verifyEmail` sets ACTIVE and the verified timestamp in the same write
+ * (verification-service.ts). This branch is therefore not reachable through
+ * the normal flow today — it exists so a future relaxation of the sign-in
+ * status rule cannot silently open a payment path for an unproven identity.
+ * Do not delete it as dead code, and do not weaken the sign-in check to
+ * exercise it.
+ */
+export class EmailNotVerifiedError extends Error {
+  readonly orderId: string;
+  constructor(orderId: string) {
+    super(`The learner for order ${orderId} has not verified their email.`);
+    this.name = "EmailNotVerifiedError";
+    this.orderId = orderId;
+  }
+}
+
+/**
+ * REG-04's server-side enforcement — the same RBAC-06 shape applied to
+ * consent. A disabled Pay button is a courtesy to an honest learner; this is
+ * what actually stops a direct POST that never rendered the form.
+ */
+export class PolicyConsentRequiredError extends Error {
+  readonly orderId: string;
+  constructor(orderId: string) {
+    super(`Order ${orderId} is missing a required policy acceptance.`);
+    this.name = "PolicyConsentRequiredError";
     this.orderId = orderId;
   }
 }
@@ -136,6 +171,19 @@ export type CheckoutTxClient = SeatTxClient &
       create(args: { data: Record<string, unknown>; select: { id: true } }): Promise<{ id: string }>;
       update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
     };
+    paymentAttempt: {
+      create(args: { data: Record<string, unknown>; select: { id: true } }): Promise<{ id: string }>;
+    };
+    /**
+     * Order-bound acceptances are create-only, never find-then-update — the
+     * `setMarketingPreference` upsert shape is right for a standing profile
+     * preference and wrong here, because a row here records what was agreed
+     * for one order at one moment and must not be mutated by a later order.
+     */
+    policyAcceptance: {
+      findMany(args: { where: { orderId: string } }): Promise<Array<{ id: string; policyType: string }>>;
+      create(args: { data: Record<string, unknown> }): Promise<unknown>;
+    };
   };
 
 export type CheckoutServiceDeps = {
@@ -146,14 +194,29 @@ export type CheckoutServiceDeps = {
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
   paymentAttempt: {
-    create(args: { data: Record<string, unknown>; select: { id: true } }): Promise<{ id: string }>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
+  /**
+   * The one-off, non-transactional `User.emailVerified` read the D-13 guard
+   * needs — `Actor` carries only `userId`/`isStaff`, so verification status
+   * is never already in hand.
+   */
+  user: {
+    findUnique(args: {
+      where: { id: string };
+    }): Promise<{ email: string; emailVerified: Date | null } | null>;
+  };
+  // PAY-09 — deliberately NOT `Stripe.Checkout.SessionCreateParams`. This
+  // file lives outside `src/server/payments/providers/stripe/`, so it must
+  // not name any Stripe-namespaced type (tests/checkout-phase-invariants.test.ts's
+  // provider-isolation scan). `buildCheckoutSessionParams`'s own return type
+  // already describes exactly the shape this deps surface accepts, sourced
+  // through the provider wrapper rather than a direct SDK type import.
   stripe: {
     checkout: {
       sessions: {
         create(
-          params: Stripe.Checkout.SessionCreateParams,
+          params: ReturnType<typeof buildCheckoutSessionParams>,
           options: { idempotencyKey: string },
         ): Promise<{ id: string; url: string | null }>;
       };
@@ -312,14 +375,39 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
   }
 
   /**
+   * `Actor` carries no `emailVerified` — a fresh `User` read is the only way
+   * to answer it. Exposed so the order-summary page can decide whether to
+   * render the D-13 verification banner without duplicating this read.
+   */
+  async function getOwnVerificationStatus(actor: Actor): Promise<{ verified: boolean; email: string }> {
+    const user = await deps.user.findUnique({ where: { id: actor.userId } });
+    return { verified: !!user?.emailVerified, email: user?.email ?? "" };
+  }
+
+  /**
    * Creates one `PaymentAttempt` and a real Stripe Checkout Session for it.
    * The hold check here is server-side and authoritative — the client
    * countdown (plan 06-07) is a UI clock and proves nothing.
+   *
+   * Gates fail cheapest-first: ownership (via `getOwnOrder`), then
+   * verification, then the hold, then consent — matching the plan's own
+   * ordering. Nothing is written until every gate has passed.
    */
-  async function initiateStripePayment(actor: Actor, orderId: string): Promise<{ url: string }> {
+  async function initiateStripePayment(
+    actor: Actor,
+    orderId: string,
+    consent: { acceptedTerms: boolean; acceptedRefundCancellation: boolean; acceptedMarketing: boolean },
+  ): Promise<{ url: string }> {
     const order = await getOwnOrder(actor, orderId);
     if (!order) throw new OrderNotFoundError(orderId);
     if (order.status !== "PENDING") throw new OrderNotPayableError(orderId);
+
+    // D-13 defence in depth — see EmailNotVerifiedError's own doc comment for
+    // why this is not reachable through the normal sign-in flow today.
+    const user = await deps.user.findUnique({ where: { id: actor.userId } });
+    if (!user || !user.emailVerified) {
+      throw new EmailNotVerifiedError(orderId);
+    }
 
     const enrolment = order.enrolment;
     const at = now();
@@ -332,18 +420,76 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
       throw new HoldExpiredError(orderId);
     }
 
+    // REG-04's server-side gate — a direct POST that never rendered the form
+    // must not be able to produce a paid order, exactly as RBAC-06 requires
+    // of every protected operation in this codebase. Marketing is optional
+    // and never part of this check.
+    if (!consent.acceptedTerms || !consent.acceptedRefundCancellation) {
+      throw new PolicyConsentRequiredError(orderId);
+    }
+
     const idempotencyKey = randomUUID();
-    const attempt = await deps.paymentAttempt.create({
-      data: {
-        orderId: order.id,
-        provider: "STRIPE",
-        amountMinor: order.amountMinor,
-        currency: order.currency,
-        status: "PENDING",
-        idempotencyKey,
-        correlationId: randomUUID(),
-      },
-      select: { id: true },
+
+    // The acceptance rows and the PaymentAttempt are created in the SAME
+    // transaction, so a Stripe failure afterwards cannot leave consent
+    // recorded for a payment that never started, and consent can never be
+    // missing for an attempt that did.
+    const attempt = await deps.db.$transaction(async (tx) => {
+      const created = await tx.paymentAttempt.create({
+        data: {
+          orderId: order.id,
+          provider: "STRIPE",
+          amountMinor: order.amountMinor,
+          currency: order.currency,
+          status: "PENDING",
+          idempotencyKey,
+          correlationId: randomUUID(),
+        },
+        select: { id: true },
+      });
+
+      // Idempotent per order — D-04's retry path re-enters this function
+      // against the same Order, and three rows per declined card would turn
+      // the consent record into noise. Create-only, never find-then-update:
+      // an order-bound acceptance records what was agreed for one order at
+      // one moment and must not be mutated by a later attempt.
+      const existing = await tx.policyAcceptance.findMany({ where: { orderId: order.id } });
+      if (existing.length === 0) {
+        await tx.policyAcceptance.create({
+          data: {
+            userId: actor.userId,
+            policyType: POLICY_TYPE.TERMS,
+            version: POLICY_VERSIONS[POLICY_TYPE.TERMS],
+            accepted: true,
+            orderId: order.id,
+          },
+        });
+        await tx.policyAcceptance.create({
+          data: {
+            userId: actor.userId,
+            policyType: POLICY_TYPE.REFUND_CANCELLATION,
+            version: POLICY_VERSIONS[POLICY_TYPE.REFUND_CANCELLATION],
+            accepted: true,
+            orderId: order.id,
+          },
+        });
+        // A `false` row and no row at all are different facts — one is a
+        // stated refusal, the other is an unanswered question. Uses the same
+        // policyType the profile toggle writes (`setMarketingPreference`),
+        // so a learner ends up with one marketing-consent history rather
+        // than a checkout-only parallel key.
+        await tx.policyAcceptance.create({
+          data: {
+            userId: actor.userId,
+            policyType: POLICY_TYPE.MARKETING,
+            version: POLICY_VERSIONS[POLICY_TYPE.MARKETING],
+            accepted: consent.acceptedMarketing === true,
+            orderId: order.id,
+          },
+        });
+      }
+
+      return created;
     });
 
     await deps.order.update({ where: { id: order.id }, data: { selectedProvider: "STRIPE" } });
@@ -352,6 +498,12 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     // The idempotency key is a Stripe request OPTION (second argument), not a
     // field inside the session params object — a retried submission returns
     // the same Session rather than creating a second one (T-06-14).
+    //
+    // cancelUrl carries a `declined=1` marker: Stripe's own hosted page does
+    // not tell the app WHY a customer left (cancelled vs. gave up after a
+    // decline) — this is the only signal the app-side D-04 retry banner has
+    // to work with, and it is read by the order-summary page, never trusted
+    // as a security fact.
     const session = await deps.stripe.checkout.sessions.create(
       buildCheckoutSessionParams({
         orderId: order.id,
@@ -360,7 +512,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
         amountMinor: order.amountMinor,
         currency: order.currency,
         successUrl: `${root}/checkout/${order.id}/confirming`,
-        cancelUrl: `${root}/checkout/${order.id}`,
+        cancelUrl: `${root}/checkout/${order.id}?declined=1`,
       }),
       { idempotencyKey },
     );
@@ -394,6 +546,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     startCheckout,
     getOwnOrder,
     getOwnOrderByReference,
+    getOwnVerificationStatus,
     initiateStripePayment,
     getCohortOfferPath,
   };
@@ -446,8 +599,11 @@ export function createPrismaBackedCheckoutService(client: AnyPrisma) {
       update: (args) => client.order.update({ where: args.where, data: args.data }),
     },
     paymentAttempt: {
-      create: (args) => client.paymentAttempt.create({ data: args.data, select: args.select }),
       update: (args) => client.paymentAttempt.update({ where: args.where, data: args.data }),
+    },
+    user: {
+      findUnique: async ({ where }) =>
+        client.user.findUnique({ where, select: { email: true, emailVerified: true } }),
     },
     stripe: {
       checkout: {
@@ -474,5 +630,6 @@ const built = createPrismaBackedCheckoutService(prisma);
 export const startCheckout = built.startCheckout;
 export const getOwnOrder = built.getOwnOrder;
 export const getOwnOrderByReference = built.getOwnOrderByReference;
+export const getOwnVerificationStatus = built.getOwnVerificationStatus;
 export const initiateStripePayment = built.initiateStripePayment;
 export const getCohortOfferPath = built.getCohortOfferPath;

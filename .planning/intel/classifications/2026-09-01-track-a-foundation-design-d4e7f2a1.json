@@ -1,0 +1,25 @@
+{
+  "source_path": "C:/Users/USER/Documents/KQ NEXUS/Learning-Management-System/docs/superpowers/specs/2026-09-01-track-a-foundation-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Track A Foundation — Design",
+  "summary": "Defines repository structure, module boundaries, and permission vocabulary for the LMS foundational architecture.",
+  "scope": [
+    "Next.js application",
+    "repository structure",
+    "module boundaries",
+    "permission vocabulary",
+    "Prisma schema",
+    "services layer",
+    "authorization",
+    "lint enforcement",
+    "permission catalogue",
+    "scope resolver",
+    "server actions",
+    "App Router"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2
+}
