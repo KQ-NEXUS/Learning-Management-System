@@ -58,7 +58,7 @@ docs/TRACK-A-TASKS.md
 # Playwright MCP session artifacts
 .playwright-mcp/
 
-# Local tooling and planning scratch — not part of the shipped repo
+# Local tooling scratch — not part of the shipped repo
 design/
 .claude/
 
@@ -67,3 +67,13 @@ reference/
 # Playwright CLI output (may contain credentials)
 .playwright-cli/
 .gsd
+
+# .planning/ is git-tracked (shared source of truth across the two dev tracks) —
+# but these sub-paths are per-machine/ephemeral and would just cause pointless
+# merge noise between devs, not real planning content:
+.planning/research/.cache/
+.planning/milestone.lock
+.planning/agent-history.json
+.planning/current-agent-id.txt
+.planning/async-jobs/
+.planning/**/.review-fix-recovery-pending.json
