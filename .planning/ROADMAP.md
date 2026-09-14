@@ -410,8 +410,8 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 09-04-PLAN.md — completion-service.ts, three new domain events, attendance-change recalculation trigger
-- [ ] 09-05-PLAN.md — Learner download predicate + dual-predicate lesson-resource route
+- [x] 09-04-PLAN.md — completion-service.ts, three new domain events, attendance-change recalculation trigger
+- [x] 09-05-PLAN.md — Learner download predicate + dual-predicate lesson-resource route
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -562,7 +562,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
-| 9. Learning Delivery & Progress Tracking | 3/14 | In Progress|  |
+| 9. Learning Delivery & Progress Tracking | 5/14 | In Progress|  |
 | 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
