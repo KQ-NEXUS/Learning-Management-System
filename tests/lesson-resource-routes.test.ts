@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
   removeLessonResource: vi.fn(async () => {}),
   listLessonResources: vi.fn(),
   getDownloadableResource: vi.fn(),
+  getDownloadableResourceForLearner: vi.fn(),
+  getCurrentActor: vi.fn(async (): Promise<{ userId: string } | null> => null),
   getLessonTypeById: vi.fn(async (): Promise<string | null> => "FILE"),
 }));
 
@@ -67,9 +69,14 @@ vi.mock("@/server/services/lesson-resource-service", () => ({
   removeLessonResource: h.removeLessonResource,
   listLessonResources: h.listLessonResources,
   getDownloadableResource: h.getDownloadableResource,
+  getDownloadableResourceForLearner: h.getDownloadableResourceForLearner,
   ResourceUploadValidationError,
   ResourceUploadPendingError,
   ResourceUploadUnavailableError,
+}));
+
+vi.mock("@/server/auth/current-actor", () => ({
+  getCurrentActor: h.getCurrentActor,
 }));
 
 const { POST: POST_INTENT } = await import("@/app/api/lesson-resources/upload-intent/route");
@@ -331,9 +338,90 @@ describe("GET /api/lesson-resources/[id]/download", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("returns 404 for a caller lacking courses.view — never 403", async () => {
+  it("returns 404 for a caller lacking courses.view — never 403 — when unauthenticated (no fallback learner lookup)", async () => {
     h.getDownloadableResource.mockRejectedValueOnce(new AuthorizationError("courses.view"));
+    h.getCurrentActor.mockResolvedValueOnce(null);
     const response = await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
     expect(response.status).toBe(404);
+    expect(h.getDownloadableResourceForLearner).not.toHaveBeenCalled();
+  });
+
+  it("staff success is unchanged — the learner path is never consulted", async () => {
+    h.getDownloadableResource.mockResolvedValueOnce({
+      id: "res-1",
+      storageKey: "lessons/l1/k",
+      filename: "f.pdf",
+      mimeType: "application/pdf",
+      lesson: { type: "FILE" },
+    });
+    const response = await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
+    expect(response.status).toBe(302);
+    expect(h.getCurrentActor).not.toHaveBeenCalled();
+    expect(h.getDownloadableResourceForLearner).not.toHaveBeenCalled();
+  });
+
+  it("falls through to the learner path when the staff predicate denies, and 302s to a presigned URL", async () => {
+    h.getDownloadableResource.mockRejectedValueOnce(new AuthorizationError("courses.view"));
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getDownloadableResourceForLearner.mockResolvedValueOnce({
+      id: "res-1",
+      storageKey: "lessons/l1/k",
+      filename: "f.pdf",
+      mimeType: "application/pdf",
+      lesson: { type: "FILE" },
+    });
+    const response = await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("X-Amz-Expires=60");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(h.getDownloadableResourceForLearner).toHaveBeenCalledWith({ userId: "learner-1" }, "res-1");
+  });
+
+  it("returns empty 404 for an unauthenticated request (no session at all)", async () => {
+    h.getDownloadableResource.mockRejectedValueOnce(new AuthenticationError());
+    h.getCurrentActor.mockResolvedValueOnce(null);
+    const response = await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("");
+    expect(h.getDownloadableResourceForLearner).not.toHaveBeenCalled();
+  });
+
+  it("returns empty 404 with a null body for a signed-in caller who is not enrolled", async () => {
+    h.getDownloadableResource.mockResolvedValueOnce(null);
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getDownloadableResourceForLearner.mockResolvedValueOnce(null);
+    const response = await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("");
+  });
+
+  it("returns 409 when the learner path resolves an UPLOADING resource", async () => {
+    h.getDownloadableResource.mockResolvedValueOnce(null);
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getDownloadableResourceForLearner.mockRejectedValueOnce(new ResourceUploadPendingError());
+    const response = await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
+    expect(response.status).toBe(409);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("staff and learner paths call presignLessonObjectUrl with identical arguments for the same resource", async () => {
+    const shaped = {
+      id: "res-1",
+      storageKey: "lessons/l1/k",
+      filename: "f.pdf",
+      mimeType: "application/pdf",
+      lesson: { type: "FILE" },
+    };
+    h.getDownloadableResource.mockResolvedValueOnce(shaped);
+    await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
+    const staffArgs = h.presignLessonObjectUrl.mock.calls[0][0];
+
+    h.getDownloadableResource.mockRejectedValueOnce(new AuthorizationError("courses.view"));
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getDownloadableResourceForLearner.mockResolvedValueOnce(shaped);
+    await GET_DOWNLOAD(new Request("http://localhost/d"), routeCtx("res-1"));
+    const learnerArgs = h.presignLessonObjectUrl.mock.calls[1][0];
+
+    expect(learnerArgs).toEqual(staffArgs);
   });
 });

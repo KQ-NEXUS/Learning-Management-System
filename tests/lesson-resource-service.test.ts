@@ -78,7 +78,11 @@ function makeDelegate(initial: Partial<LessonResourceRecord>[] = []) {
 const lessonCtx = async (lessonId: string) =>
   lessonId === "lesson1" ? { courseId: "c1", type: "VIDEO" } : null;
 
-function buildService(initial: Partial<LessonResourceRecord>[], grants: RawGrant[]) {
+function buildService(
+  initial: Partial<LessonResourceRecord>[],
+  grants: RawGrant[],
+  opts: { enrolledCourseIds?: string[] } = {},
+) {
   const { delegate, rows } = makeDelegate(initial);
   const { withPermission } = createTestWithPermission(grants, { userId: "staff-1" });
   const audits: Array<Record<string, unknown>> = [];
@@ -88,6 +92,10 @@ function buildService(initial: Partial<LessonResourceRecord>[], grants: RawGrant
     delete: vi.fn(async () => {}),
     finalKey: (key: string) => key.replace(/^lesson-uploads\//, "lessons/"),
   };
+  const enrolledCourseIds = new Set(opts.enrolledCourseIds ?? []);
+  const hasActiveEnrolmentCoveringCourse = vi.fn(async (_userId: string, courseId: string) =>
+    enrolledCourseIds.has(courseId),
+  );
   const service = createLessonResourceService({
     delegate,
     resolveLessonContext: lessonCtx,
@@ -96,9 +104,10 @@ function buildService(initial: Partial<LessonResourceRecord>[], grants: RawGrant
       audits.push(entry as Record<string, unknown>);
     },
     storage,
+    hasActiveEnrolmentCoveringCourse,
     now: () => new Date("2026-09-10T12:00:00Z"),
   });
-  return { service, rows, storage, audits };
+  return { service, rows, storage, audits, hasActiveEnrolmentCoveringCourse };
 }
 
 describe("lessonResourceScope", () => {
@@ -244,6 +253,61 @@ describe("getDownloadableResource", () => {
       uploadStatus: "READY",
       lesson: { type: "VIDEO" },
     });
+  });
+});
+
+describe("getDownloadableResourceForLearner", () => {
+  const learner = { userId: "learner-1" };
+
+  it("returns null (not a thrown error) for a non-enrolled actor", async () => {
+    const { service, hasActiveEnrolmentCoveringCourse } = buildService(
+      [{ id: "res1", uploadStatus: "READY" }],
+      [],
+      { enrolledCourseIds: [] },
+    );
+    await expect(service.getDownloadableResourceForLearner(learner, "res1")).resolves.toBeNull();
+    expect(hasActiveEnrolmentCoveringCourse).toHaveBeenCalledWith("learner-1", "c1");
+  });
+
+  it("returns null for an unknown resource id, indistinguishable from not-enrolled", async () => {
+    const { service } = buildService([], [], { enrolledCourseIds: ["c1"] });
+    await expect(service.getDownloadableResourceForLearner(learner, "missing")).resolves.toBeNull();
+  });
+
+  it("returns a shaped DownloadableResource for an enrolled learner", async () => {
+    const { service } = buildService([{ id: "res1", uploadStatus: "READY" }], [], {
+      enrolledCourseIds: ["c1"],
+    });
+    await expect(service.getDownloadableResourceForLearner(learner, "res1")).resolves.toMatchObject({
+      id: "res1",
+      uploadStatus: "READY",
+      lesson: { type: "VIDEO" },
+    });
+  });
+
+  it("throws the same ResourceUploadPendingError as the staff path for an UPLOADING row", async () => {
+    const { service } = buildService([{ id: "res1", uploadStatus: "UPLOADING" }], [], {
+      enrolledCourseIds: ["c1"],
+    });
+    await expect(service.getDownloadableResourceForLearner(learner, "res1")).rejects.toBeInstanceOf(
+      ResourceUploadPendingError,
+    );
+  });
+
+  it("throws ResourceUploadUnavailableError for an enrolled learner and an ERROR row", async () => {
+    const { service } = buildService([{ id: "res1", uploadStatus: "ERROR" }], [], {
+      enrolledCourseIds: ["c1"],
+    });
+    await expect(service.getDownloadableResourceForLearner(learner, "res1")).rejects.toBeInstanceOf(
+      ResourceUploadUnavailableError,
+    );
+  });
+
+  it("never consults a grant — an actor with zero grants still succeeds when enrolled", async () => {
+    const { service } = buildService([{ id: "res1", uploadStatus: "READY" }], [], {
+      enrolledCourseIds: ["c1"],
+    });
+    await expect(service.getDownloadableResourceForLearner(learner, "res1")).resolves.not.toBeNull();
   });
 });
 
