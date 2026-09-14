@@ -19,6 +19,7 @@ import {
   type PublicationStoreRow,
   type ModuleStoreRow,
   type LessonStoreRow,
+  type LessonProgressStoreRow,
 } from "@/server/services/learner-access";
 import type { Actor } from "@/server/permissions/with-permission";
 import type { CourseObligationPayload, ProgrammeObligationPayload } from "@/server/services/publication";
@@ -127,6 +128,7 @@ function makeStore(opts: {
   programmePublications?: Record<string, PublicationStoreRow>;
   modules?: ModuleStoreRow[];
   lessons?: LessonStoreRow[];
+  lessonProgress?: LessonProgressStoreRow[];
 }): LearnerAccessStore {
   const enrolments = opts.enrolments ?? [];
   const cohorts = opts.cohorts ?? [];
@@ -136,6 +138,7 @@ function makeStore(opts: {
   const programmePublications = opts.programmePublications ?? {};
   const modules = opts.modules ?? [];
   const lessons = opts.lessons ?? [];
+  const lessonProgress = opts.lessonProgress ?? [];
 
   return {
     enrolment: {
@@ -169,8 +172,18 @@ function makeStore(opts: {
       findMany: async ({ where }) => lessons.filter((l) => where.moduleId.in.includes(l.moduleId)),
     },
     lessonProgress: {
-      findMany: async () => [],
+      findMany: async ({ where }) => lessonProgress.filter((p) => p.enrolmentId === where.enrolmentId),
     },
+  };
+}
+
+function progressRow(overrides: Partial<LessonProgressStoreRow> = {}): LessonProgressStoreRow {
+  return {
+    enrolmentId: "enrolment-1",
+    lessonId: "lesson-1",
+    completedAt: new Date("2026-01-05T00:00:00.000Z"),
+    source: "MANUAL",
+    ...overrides,
   };
 }
 
@@ -537,5 +550,160 @@ describe("loadPinnedCompletionRuleSource", () => {
     const source = await service.loadPinnedCompletionRuleSource(own!, "course-1");
 
     expect(source).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 — sequencing-applied learner path and the open gate
+// ---------------------------------------------------------------------------
+
+/** A single-module, two-required-lesson course-cohort fixture. */
+function twoLessonCourseStore(
+  overrides: {
+    cohort?: Partial<CohortStoreRow>;
+    enrolment?: Partial<EnrolmentStoreRow>;
+    lessonProgress?: LessonProgressStoreRow[];
+  } = {},
+) {
+  return makeStore({
+    enrolments: [enrolment(overrides.enrolment)],
+    cohorts: [cohort({ coursePublicationId: "pub-1", ...overrides.cohort })],
+    courses: [course()],
+    coursePublications: {
+      "pub-1": {
+        payload: coursePayload({
+          modules: [
+            {
+              id: "module-1",
+              position: 0,
+              lessons: [
+                { id: "lesson-1", position: 0, required: true, type: "TEXT", assessmentId: null },
+                { id: "lesson-2", position: 1, required: true, type: "TEXT", assessmentId: null },
+              ],
+            },
+          ],
+        }),
+      },
+    },
+    modules: [moduleRow()],
+    lessons: [lessonRow({ title: "Lesson One" }), lessonRow({ id: "lesson-2", position: 1, title: "Lesson Two" })],
+    lessonProgress: overrides.lessonProgress ?? [],
+  });
+}
+
+describe("loadLearnerPath", () => {
+  it("returns null for every denial cause getOwnActiveEnrolment returns null for", async () => {
+    const store = makeStore({});
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    expect(await service.loadLearnerPath(actorFor("user-1"), "missing")).toBeNull();
+  });
+
+  it("names the specific blocking lesson for a locked lesson", async () => {
+    const store = twoLessonCourseStore();
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+
+    const lesson2 = path!.courses[0].modules[0].lessons[1];
+    expect(lesson2.locked).toBe(true);
+    expect(lesson2.blockingLessonTitle).toBe("Lesson One");
+  });
+
+  it("unlocks a lesson once its blocker is completed", async () => {
+    const store = twoLessonCourseStore({ lessonProgress: [progressRow({ lessonId: "lesson-1" })] });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+
+    const lesson1 = path!.courses[0].modules[0].lessons[0];
+    const lesson2 = path!.courses[0].modules[0].lessons[1];
+    expect(lesson1.completed).toBe(true);
+    expect(lesson2.locked).toBe(false);
+    expect(lesson2.blockingLessonTitle).toBeNull();
+  });
+
+  it("a programme cohort locks course 2's first lesson on course 1's last required lesson", async () => {
+    const store = makeStore({
+      enrolments: [enrolment({ cohortId: "cohort-prog" })],
+      cohorts: [
+        cohort({
+          id: "cohort-prog",
+          courseId: null,
+          programmeId: "programme-1",
+          programmePublicationId: "prog-pub-1",
+        }),
+      ],
+      cohortCourses: [
+        { id: "cc-1", cohortId: "cohort-prog", courseId: "course-1", position: 0, coursePublicationId: "pub-1" },
+        { id: "cc-2", cohortId: "cohort-prog", courseId: "course-2", position: 1, coursePublicationId: "pub-2" },
+      ],
+      courses: [course({ id: "course-1", title: "Course One" }), course({ id: "course-2", title: "Course Two" })],
+      coursePublications: {
+        "pub-1": { payload: coursePayload() }, // course-1: module-1/lesson-1, required
+        "pub-2": {
+          payload: coursePayload({
+            modules: [
+              {
+                id: "module-2",
+                position: 0,
+                lessons: [{ id: "lesson-2", position: 0, required: true, type: "TEXT", assessmentId: null }],
+              },
+            ],
+          }),
+        },
+      },
+      modules: [moduleRow(), moduleRow({ id: "module-2", courseId: "course-2" })],
+      lessons: [
+        lessonRow({ title: "Course 1 Last Lesson" }),
+        lessonRow({ id: "lesson-2", moduleId: "module-2", title: "Course 2 First Lesson" }),
+      ],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+
+    const course2Lesson1 = path!.courses[1].modules[0].lessons[0];
+    expect(course2Lesson1.locked).toBe(true);
+    expect(course2Lesson1.blockingLessonTitle).toBe("Course 1 Last Lesson");
+  });
+});
+
+describe("assertLessonOpenable", () => {
+  it("refuses a locked lesson with reason 'locked'", async () => {
+    const store = twoLessonCourseStore();
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+    const result = service.assertLessonOpenable(path!, "lesson-2");
+
+    expect(result).toEqual({ ok: false, reason: "locked" });
+  });
+
+  it("opens an unlocked lesson", async () => {
+    const store = twoLessonCourseStore();
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+    const result = service.assertLessonOpenable(path!, "lesson-1");
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses with 'access-window-closed' for a readOnly window, even for an unlocked lesson", async () => {
+    // Enrolment activated far enough in the past that the 30-day SELF_PACED window has closed by NOW.
+    const store = twoLessonCourseStore({
+      cohort: { deliveryMode: "SELF_PACED", accessDurationDays: 30 },
+      enrolment: { activatedAt: new Date("2025-01-01T00:00:00.000Z"), accessEndsAt: null },
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+
+    expect(path!.enrolment.accessWindow.readOnly).toBe(true);
+    const result = service.assertLessonOpenable(path!, "lesson-1");
+    expect(result).toEqual({ ok: false, reason: "access-window-closed" });
+  });
+
+  it("refuses a cross-course lesson id with 'not-found', not 'locked'", async () => {
+    const store = twoLessonCourseStore();
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+    const result = service.assertLessonOpenable(path!, "lesson-from-another-course");
+
+    expect(result).toEqual({ ok: false, reason: "not-found" });
   });
 });
