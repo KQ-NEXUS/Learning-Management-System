@@ -36,7 +36,7 @@ key-decisions:
 patterns-established:
   - "AccessWindow discriminated union (cohort-dates | unlimited | not-started | windowed) is the single source of truth every later call site (dashboard, lesson-resource gate, sequencing) must import rather than re-deriving"
 
-requirements-completed: [LRN-04, LRN-05]
+requirements-completed: []  # LRN-04/LRN-05 listed in this plan's frontmatter are only PARTIALLY addressed here (storage + pure access-window evaluator foundation). The full acceptance criteria (idempotent/attributable/recalculable progress tracking, manual-completion policy) are built across 09-06/09-11/09-12/09-13/09-14 — see "Decisions Made" for the correction.
 
 # Metrics
 duration: ~35min
@@ -89,6 +89,7 @@ _TDD Gate Compliance: RED commit (`ae0a018`) precedes GREEN commit (`71418e6`) i
 
 - Guard-clause order in `computeAccessWindow` follows the plan's behavior bullets literally: delivery-mode check first (ignores `accessDurationDays` entirely for INSTRUCTOR_LED/BLENDED), then the `accessDurationDays === null` unlimited check, then the `activatedAt === null` not-started check, then the windowed computation with `accessEndsAt ?? computedEndsAt`.
 - `readOnly` is computed as `now.getTime() > endsAt.getTime()` (strictly greater) so the exact boundary (`now === endsAt`) reads as still-open, per D-03's explicit boundary rule.
+- **Correction — did NOT mark LRN-04/LRN-05 complete in REQUIREMENTS.md.** The standard state-update step instructs marking every requirement ID in a plan's frontmatter complete; I ran `requirements mark-complete LRN-04 LRN-05`, then checked the phase's other plan frontmatters and found LRN-04 is also declared by 09-06, 09-11, 09-12, 09-13, 09-14, and LRN-05 by 09-06, 09-11, 09-13. LRN-04's actual acceptance text ("idempotent, attributable, timestamped, recalculable" progress) and LRN-05's ("reversible only per policy") describe capabilities this plan does not build (no `lesson-progress-service.ts`, no completion engine yet — this plan is schema + one pure evaluator). Marking them complete here would have been a false signal to every downstream plan/verifier. I reverted the commit (`git revert`) rather than leave an incorrect traceability row; REQUIREMENTS.md still shows both as Pending. The correct plan to flip them complete is whichever later plan (likely 09-13 or 09-14, the last ones touching each ID) actually satisfies the full acceptance criteria.
 
 ## Deviations from Plan
 
