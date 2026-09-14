@@ -140,3 +140,11 @@ None - no external service configuration required. The `.env` DATABASE_URL used 
 ---
 *Phase: 09-learning-delivery-progress-tracking*
 *Completed: 2026-09-14*
+
+## Self-Check: PASSED
+
+All created files verified present on disk: `prisma/schema.prisma`,
+`src/server/services/access-window.ts`, `tests/access-window.test.ts`,
+`prisma/migrations/20260914190348_learner_access_window_and_watch_progress/migration.sql`,
+this SUMMARY.md. All 6 commits verified present in `git log`: `2999c55`,
+`f024c76`, `ae0a018`, `71418e6`, `b1cf435`, `a3bf371`.
