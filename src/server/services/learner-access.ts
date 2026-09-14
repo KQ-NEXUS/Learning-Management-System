@@ -32,6 +32,12 @@
 import { prisma } from "@/server/db";
 import type { Actor } from "@/server/permissions/with-permission";
 import { computeAccessWindow, type AccessWindow } from "@/server/services/access-window";
+import type {
+  CourseObligationPayload,
+  CourseObligationModule,
+  CourseObligationLesson,
+  ProgrammeObligationPayload,
+} from "@/server/services/publication";
 
 // ---------------------------------------------------------------------------
 // Store rows — the narrow structural slice this module needs.
@@ -70,6 +76,35 @@ export type CohortCourseStoreRow = {
   coursePublicationId: string | null;
 };
 
+export type CourseStoreRow = { id: string; title: string };
+
+export type PublicationStoreRow = { payload: unknown };
+
+export type ModuleStoreRow = {
+  id: string;
+  courseId: string;
+  title: string;
+  position: number;
+  withdrawnAt: Date | string | null;
+};
+
+export type LessonStoreRow = {
+  id: string;
+  moduleId: string;
+  title: string;
+  type: string;
+  position: number;
+  required: boolean;
+  allowManualComplete: boolean;
+  withdrawnAt: Date | string | null;
+};
+
+export type LessonProgressStoreRow = {
+  lessonId: string;
+  completedAt: Date;
+  source: string;
+};
+
 export type LearnerAccessStore = {
   enrolment: {
     findUnique(args: { where: { id: string } }): Promise<EnrolmentStoreRow | null>;
@@ -83,6 +118,24 @@ export type LearnerAccessStore = {
     findFirst(args: {
       where: { cohortId: string; courseId: string };
     }): Promise<CohortCourseStoreRow | null>;
+  };
+  course: {
+    findUnique(args: { where: { id: string } }): Promise<CourseStoreRow | null>;
+  };
+  coursePublication: {
+    findUnique(args: { where: { id: string } }): Promise<PublicationStoreRow | null>;
+  };
+  programmePublication: {
+    findUnique(args: { where: { id: string } }): Promise<PublicationStoreRow | null>;
+  };
+  module: {
+    findMany(args: { where: { courseId: string } }): Promise<ModuleStoreRow[]>;
+  };
+  lesson: {
+    findMany(args: { where: { moduleId: { in: string[] } } }): Promise<LessonStoreRow[]>;
+  };
+  lessonProgress: {
+    findMany(args: { where: { enrolmentId: string } }): Promise<LessonProgressStoreRow[]>;
   };
 };
 
@@ -116,6 +169,105 @@ export type OwnEnrolmentSnapshot = {
   };
   accessWindow: AccessWindow;
 };
+
+// ---------------------------------------------------------------------------
+// Pinned course structure (DD-11) — the shape a learner actually sees.
+// ---------------------------------------------------------------------------
+
+export type LearnerCourseLesson = {
+  id: string;
+  title: string;
+  type: string;
+  position: number;
+  required: boolean;
+  allowManualComplete: boolean;
+  withdrawnAt: Date | string | null;
+};
+
+export type LearnerCourseModule = {
+  id: string;
+  title: string;
+  position: number;
+  lessons: LearnerCourseLesson[];
+};
+
+export type LearnerCourseEntry = {
+  courseId: string;
+  courseTitle: string;
+  modules: LearnerCourseModule[];
+};
+
+/**
+ * `{ kind: "unpinned" }` is a NAMED gap, not a live-tree fallback (D-06/OQ-1
+ * as documented on `Cohort.coursePublicationId`) — an unpinned cohort is an
+ * authoring anomaly a learner should never silently see the live tree for.
+ */
+export type LearnerCourseStructure =
+  | { kind: "structure"; courses: LearnerCourseEntry[] }
+  | { kind: "unpinned" };
+
+export type PinnedCompletionRuleSource = { json: unknown; ruleVersion: number };
+
+// ---------------------------------------------------------------------------
+// Runtime guards over `payload: Json` — never cast, always validated. A
+// payload failing the guard is treated exactly like an absent pin.
+// ---------------------------------------------------------------------------
+
+function isObligationLessonShape(value: unknown): value is CourseObligationLesson {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === "string" &&
+    typeof v.position === "number" &&
+    typeof v.required === "boolean" &&
+    typeof v.type === "string" &&
+    (v.assessmentId === null || typeof v.assessmentId === "string")
+  );
+}
+
+function isObligationModuleShape(value: unknown): value is CourseObligationModule {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === "string" &&
+    typeof v.position === "number" &&
+    Array.isArray(v.lessons) &&
+    v.lessons.every(isObligationLessonShape)
+  );
+}
+
+export function isCourseObligationPayload(value: unknown): value is CourseObligationPayload {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.schema === "number" &&
+    typeof v.completionRuleVersion === "number" &&
+    Array.isArray(v.modules) &&
+    v.modules.every(isObligationModuleShape)
+  );
+}
+
+export function isProgrammeObligationPayload(value: unknown): value is ProgrammeObligationPayload {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.schema === "number" &&
+    typeof v.sequential === "boolean" &&
+    typeof v.completionRuleVersion === "number" &&
+    Array.isArray(v.courses) &&
+    v.courses.every((c) => {
+      if (!c || typeof c !== "object") return false;
+      const cc = c as Record<string, unknown>;
+      return typeof cc.courseId === "string" && typeof cc.position === "number";
+    })
+  );
+}
+
+/** Sorts by the PINNED payload's `position` then `id` — mirrors `publication.ts`'s own `byPositionThenId`, since position IS an obligation (DD-11) and must never be reordered by a live edit. */
+function byPayloadPositionThenId<T extends { position: number; id: string }>(a: T, b: T): number {
+  if (a.position !== b.position) return a.position - b.position;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
 
 // ---------------------------------------------------------------------------
 // The service
@@ -230,7 +382,159 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     return false;
   }
 
-  return { getOwnActiveEnrolment, listOwnActiveEnrolments, hasActiveEnrolmentCoveringCourse };
+  /**
+   * Loads one `LearnerCourseEntry` per course the pin resolves — a
+   * standalone course-cohort resolves exactly one; a programme-cohort
+   * resolves its `CohortCourse` rows in `position` order. Pin precedence
+   * (documented once, here, since both this function and
+   * `loadPinnedCompletionRuleSource` rely on it): for a member course
+   * inside a programme cohort, `CohortCourse.coursePublicationId` wins;
+   * otherwise `Cohort.coursePublicationId`. Any unresolved pin — the
+   * cohort itself, or any one member course — makes the WHOLE result
+   * `{ kind: "unpinned" }`; an authoring anomaly is never partially masked.
+   */
+  async function loadLearnerCourseStructure(
+    enrolment: OwnEnrolmentSnapshot,
+  ): Promise<LearnerCourseStructure> {
+    const cohort = await store.cohort.findUnique({ where: { id: enrolment.cohortId } });
+    if (!cohort) return { kind: "unpinned" };
+
+    if (cohort.courseId) {
+      const entry = await loadCourseEntryFromPin(cohort.courseId, cohort.coursePublicationId);
+      if (!entry) return { kind: "unpinned" };
+      return { kind: "structure", courses: [entry] };
+    }
+
+    if (cohort.programmeId) {
+      const members = (await store.cohortCourse.findMany({ where: { cohortId: cohort.id } }))
+        .slice()
+        .sort((a, b) => a.position - b.position);
+      if (members.length === 0) return { kind: "unpinned" };
+
+      const entries: LearnerCourseEntry[] = [];
+      for (const member of members) {
+        const pinId = member.coursePublicationId ?? cohort.coursePublicationId;
+        const entry = await loadCourseEntryFromPin(member.courseId, pinId);
+        if (!entry) return { kind: "unpinned" };
+        entries.push(entry);
+      }
+      return { kind: "structure", courses: entries };
+    }
+
+    return { kind: "unpinned" };
+  }
+
+  /**
+   * Loads the frozen obligation tree for exactly one course, from exactly
+   * one pin, driving the walk from the PINNED payload (not the live tree)
+   * so a live lesson absent from the pin is excluded by construction, and
+   * `required`/`position` always win from the pin (DD-11). Titles, `type`,
+   * `allowManualComplete` and `withdrawnAt` come from the live rows — a
+   * pinned lesson since withdrawn still renders, matching
+   * `LessonContent`'s existing withdrawn-lesson banner behaviour.
+   */
+  async function loadCourseEntryFromPin(
+    courseId: string,
+    publicationId: string | null,
+  ): Promise<LearnerCourseEntry | null> {
+    if (!publicationId) return null;
+
+    const publicationRow = await store.coursePublication.findUnique({
+      where: { id: publicationId },
+    });
+    if (!publicationRow || !isCourseObligationPayload(publicationRow.payload)) return null;
+    const payload = publicationRow.payload;
+
+    const course = await store.course.findUnique({ where: { id: courseId } });
+    if (!course) return null;
+
+    const liveModules = await store.module.findMany({ where: { courseId } });
+    const liveModuleById = new Map(liveModules.map((m) => [m.id, m]));
+
+    const moduleIds = liveModules.map((m) => m.id);
+    const liveLessons = moduleIds.length
+      ? await store.lesson.findMany({ where: { moduleId: { in: moduleIds } } })
+      : [];
+    const liveLessonById = new Map(liveLessons.map((l) => [l.id, l]));
+
+    const modules: LearnerCourseModule[] = payload.modules
+      .slice()
+      .sort(byPayloadPositionThenId)
+      .map((pinnedModule) => {
+        const liveModule = liveModuleById.get(pinnedModule.id);
+        const lessons: LearnerCourseLesson[] = pinnedModule.lessons
+          .slice()
+          .sort(byPayloadPositionThenId)
+          .map((pinnedLesson) => {
+            const liveLesson = liveLessonById.get(pinnedLesson.id);
+            return {
+              id: pinnedLesson.id,
+              title: liveLesson?.title ?? "",
+              type: liveLesson?.type ?? pinnedLesson.type,
+              position: pinnedLesson.position,
+              required: pinnedLesson.required,
+              allowManualComplete: liveLesson?.allowManualComplete ?? false,
+              withdrawnAt: liveLesson?.withdrawnAt ?? null,
+            };
+          });
+        return {
+          id: pinnedModule.id,
+          title: liveModule?.title ?? "",
+          position: pinnedModule.position,
+          lessons,
+        };
+      });
+
+    return { courseId, courseTitle: course.title, modules };
+  }
+
+  /**
+   * Resolves the completion-rule source for one scope evaluation.
+   * `Cohort.courseId` set (a standalone course-cohort) => COURSE scope,
+   * from that course's own pin. `Cohort.programmeId` set (a
+   * programme-cohort) => PROGRAMME scope, from `Cohort.programmePublicationId`
+   * — D-10's rule governs the WHOLE programme, never one member course, so
+   * `courseId` there is used only as an ownership guard (the caller must be
+   * asking about a course that is actually a member of this programme),
+   * never to pick a per-course pin. `null` when no pin exists.
+   */
+  async function loadPinnedCompletionRuleSource(
+    enrolment: OwnEnrolmentSnapshot,
+    courseId: string,
+  ): Promise<PinnedCompletionRuleSource | null> {
+    const cohort = await store.cohort.findUnique({ where: { id: enrolment.cohortId } });
+    if (!cohort) return null;
+
+    if (cohort.courseId) {
+      if (cohort.courseId !== courseId || !cohort.coursePublicationId) return null;
+      const pub = await store.coursePublication.findUnique({
+        where: { id: cohort.coursePublicationId },
+      });
+      if (!pub || !isCourseObligationPayload(pub.payload)) return null;
+      return { json: pub.payload, ruleVersion: pub.payload.completionRuleVersion };
+    }
+
+    if (cohort.programmeId) {
+      const members = await store.cohortCourse.findMany({ where: { cohortId: cohort.id } });
+      const isMember = members.some((m) => m.courseId === courseId);
+      if (!isMember || !cohort.programmePublicationId) return null;
+      const pub = await store.programmePublication.findUnique({
+        where: { id: cohort.programmePublicationId },
+      });
+      if (!pub || !isProgrammeObligationPayload(pub.payload)) return null;
+      return { json: pub.payload, ruleVersion: pub.payload.completionRuleVersion };
+    }
+
+    return null;
+  }
+
+  return {
+    getOwnActiveEnrolment,
+    listOwnActiveEnrolments,
+    hasActiveEnrolmentCoveringCourse,
+    loadLearnerCourseStructure,
+    loadPinnedCompletionRuleSource,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -253,3 +557,5 @@ const built = createLearnerAccessService({ store: liveStore });
 export const getOwnActiveEnrolment = built.getOwnActiveEnrolment;
 export const listOwnActiveEnrolments = built.listOwnActiveEnrolments;
 export const hasActiveEnrolmentCoveringCourse = built.hasActiveEnrolmentCoveringCourse;
+export const loadLearnerCourseStructure = built.loadLearnerCourseStructure;
+export const loadPinnedCompletionRuleSource = built.loadPinnedCompletionRuleSource;
