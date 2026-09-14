@@ -25,6 +25,7 @@ const NAV: StaffNavItem[] = [
   { label: "Roles", href: "/staff/roles" },
   { label: "Audit", href: "/staff/audit" },
   { label: "Enrolments", href: "/staff/enrolments" },
+  { label: "Payments", href: "/staff/payments" },
 ];
 
 export default async function StaffLayout({

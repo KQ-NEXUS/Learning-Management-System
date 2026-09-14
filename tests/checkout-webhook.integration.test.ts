@@ -36,9 +36,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import Stripe from "stripe";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedLearnerFixture } from "./support/cohort-fixtures";
+import { seedCohortFixture, seedLearnerFixture, seedStripeUsdFeeScheduleFixture } from "./support/cohort-fixtures";
 import { STRIPE_API_VERSION } from "@/server/payments/providers/stripe/client";
 import type { CheckoutTxClient } from "@/server/services/checkout-service";
+import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
 
 type CheckoutServiceModule = typeof import("@/server/services/checkout-service");
 type RouteModule = typeof import("@/app/api/webhooks/stripe/route");
@@ -46,6 +47,42 @@ type RouteModule = typeof import("@/app/api/webhooks/stripe/route");
 let testDb: TestDatabase;
 let checkoutService: ReturnType<CheckoutServiceModule["createCheckoutService"]>;
 let POST: RouteModule["POST"];
+
+/**
+ * 07-06 — `initiateStripePayment` now refuses a non-USD Order (D-07) since
+ * the Stripe rail is a Connect DESTINATION CHARGE against a real connected
+ * account (T-07-29). This file's cohorts moved from the pre-Phase-7 NGN/
+ * Stripe pairing (never architecturally valid post-D-07, just never
+ * enforced until this plan) to USD/Stripe — mirrors
+ * `seedStripeUsdFeeScheduleFixture`'s own values exactly, the same fix
+ * 07-04 already applied to `tests/checkout-hold-race.integration.test.ts`.
+ *
+ * 07-04's original comment about `startCheckout`'s D-13 snapshot (every
+ * literal `amount_total` this file's webhook bodies report must be the
+ * ACTUAL total a real Order created against this schedule would carry, not
+ * the bare base price) still applies verbatim — only the schedule and
+ * currency changed.
+ */
+const STRIPE_USD_SCHEDULE: GatewayFeeScheduleValues = {
+  provider: "STRIPE",
+  currency: "USD",
+  version: 1,
+  percentageBps: 290,
+  fixedMinor: 30,
+  waiverThresholdMinor: null,
+  capMinor: null,
+  taxBps: 0,
+  roundingRule: "HALF_UP",
+};
+const BASE_AMOUNT_MINOR = 45_000_000;
+const EXPECTED_TOTAL_MINOR = calculateCheckoutBreakdown({
+  baseAmountMinor: BASE_AMOUNT_MINOR,
+  schedule: STRIPE_USD_SCHEDULE,
+}).totalAmountMinor;
+
+/** 07-06 — a fixed test-mode connected account id; `initiateStripePayment`
+ *  fails closed (`MissingSettlementAccountError`) without one (D-05). */
+const TEST_STRIPE_CONNECTED_ACCOUNT_ID = "acct_test_connected_webhook_integration";
 
 /** Every required-consent field affirmative — plan 06-07's REG-04 gate. */
 const FULL_CONSENT = {
@@ -70,6 +107,15 @@ function buildCheckoutCompletedEventBody(args: {
   orderId: string;
   amountTotal: number;
   currency: string;
+  /**
+   * 07-06 — optional expanded `payment_intent` shape, simulating a
+   * deployment whose webhook endpoint is configured to expand
+   * `data.object.payment_intent`/`.latest_charge`. Omitted by every
+   * pre-existing case (a bare id string is the un-expanded default Stripe
+   * shape and is what most of this file's cases still exercise implicitly
+   * by never overriding this field).
+   */
+  paymentIntent?: string | { id?: string; latest_charge?: unknown };
 }): string {
   return JSON.stringify({
     id: args.eventId,
@@ -86,6 +132,7 @@ function buildCheckoutCompletedEventBody(args: {
         currency: args.currency.toLowerCase(),
         payment_status: "paid",
         status: "complete",
+        ...(args.paymentIntent !== undefined ? { payment_intent: args.paymentIntent } : {}),
       },
     },
   });
@@ -168,6 +215,14 @@ beforeAll(async () => {
   // getStripe() needs a non-empty key to CONSTRUCT the client at all; the
   // key itself is never used by webhooks.constructEvent's signature math.
   process.env.STRIPE_SECRET_KEY = "sk_test_fake_key_for_getstripe_construction_only";
+  // 07-06 — `initiateStripePayment` fails closed without this (D-05).
+  process.env.STRIPE_CONNECTED_ACCOUNT_ID = TEST_STRIPE_CONNECTED_ACCOUNT_ID;
+
+  // 07-04 — `startTestDatabase()` applies migrations only, never
+  // `prisma/seed.ts`; `startCheckout` now needs an active STRIPE/USD
+  // `GatewayFeeSchedule` row to compute the D-13 snapshot (this file's
+  // cohorts are USD — see the module header comment above).
+  await seedStripeUsdFeeScheduleFixture(testDb.prisma);
 
   const checkoutServiceModule = await import("@/server/services/checkout-service");
   const routeModule = await import("@/app/api/webhooks/stripe/route");
@@ -224,6 +279,15 @@ beforeAll(async () => {
         },
       },
     },
+    // 07-04 compile-level consequence of `CheckoutServiceDeps` gaining a
+    // `paystack` field — this file exercises the Stripe settlement path
+    // only; a real Paystack Testcontainers proof lives in
+    // tests/paystack-webhook.integration.test.ts (07-04 Task 3).
+    paystack: {
+      initiate: async () => {
+        throw new Error("paystack.initiate is not exercised by this Stripe-only integration suite.");
+      },
+    },
     audit: (event) =>
       testDb.prisma.auditEvent
         .create({
@@ -251,12 +315,12 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
       holdMinutes: 30,
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
 
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     const orderBefore = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     const { url } = await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
@@ -303,10 +367,204 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
     expect(webhookEventRow.status).toBe("PROCESSED");
   });
 
-  it("a tampered signature returns 400 and leaves Order PENDING with zero WebhookEvent rows", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+  it("returns 200 and records a reconciliation exception when payment arrives after another ACTIVE enrolment wins", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+      capacity: 3,
+      seatsTaken: 0,
+      priceMinor: BASE_AMOUNT_MINOR,
+      currency: "USD",
+      holdMinutes: 30,
+    });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
+    const orderBefore = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const activeEnrolment = await testDb.prisma.enrolment.create({
+      data: {
+        userId,
+        cohortId,
+        status: "ACTIVE",
+        activatedAt: new Date(),
+        reason: "Concurrent activation fixture",
+      },
+    });
+    await testDb.prisma.cohort.update({
+      where: { id: cohortId },
+      data: { seatsTaken: 2 },
+    });
+
+    const eventId = `evt_test_duplicate_active_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: orderBefore.amountMinor,
+      currency: orderBefore.currency,
+    });
+
+    const response = await POST(signedWebhookRequest(body));
+    expect(response.status).toBe(200);
+
+    const orderAfter = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(orderAfter.status).toBe("EXCEPTION");
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(attemptAfter.status).toBe("SUCCEEDED");
+    expect(attemptAfter.exceptionNote).toContain("already has an active enrolment");
+
+    const pendingEnrolment = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
+    expect(pendingEnrolment.status).toBe("PENDING_PAYMENT");
+    expect(await testDb.prisma.enrolment.count({ where: { userId, cohortId, status: "ACTIVE" } })).toBe(1);
+    expect(
+      await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: activeEnrolment.id } }),
+    ).toMatchObject({ status: "ACTIVE" });
+    expect((await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } })).seatsTaken).toBe(2);
+
+    const webhookEvent = await testDb.prisma.webhookEvent.findFirstOrThrow({
+      where: { providerEventId: eventId },
+    });
+    // The delivery itself was handled successfully. The business exception
+    // lives on Order/PaymentAttempt so Stripe does not retry a settled event.
+    expect(webhookEvent.status).toBe("PROCESSED");
+  });
+
+  it("07-06: a USD destination charge's snapshotted base price and learner total are two distinct values that both survive settlement unchanged (D-04)", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+      capacity: 2,
+      seatsTaken: 0,
+      priceMinor: BASE_AMOUNT_MINOR,
+      currency: "USD",
+      holdMinutes: 30,
+    });
+    const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
+
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
+    const orderBefore = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(orderBefore.baseAmountMinor).toBe(BASE_AMOUNT_MINOR);
+    expect(orderBefore.amountMinor).toBe(EXPECTED_TOTAL_MINOR);
+    // Two different intentional values, asserted separately — the whole
+    // point of a destination charge (D-04).
+    expect(orderBefore.baseAmountMinor).not.toBe(orderBefore.amountMinor);
+
+    await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_destination_roundtrip_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
+    });
+    const response = await POST(signedWebhookRequest(body));
+    expect(response.status).toBe(200);
+
+    const orderAfter = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(orderAfter.status).toBe("PAID");
+    // The school's settlement snapshot and the learner's charged total are
+    // both untouched by settlement — this route never recomputes either.
+    expect(orderAfter.baseAmountMinor).toBe(orderBefore.baseAmountMinor);
+    expect(orderAfter.amountMinor).toBe(orderBefore.amountMinor);
+  });
+
+  it("07-06: stores Stripe settlement correlation evidence (PaymentIntent id, charge id, transfer id, transfer destination) with no secret-bearing key, and leaves all four actual-settlement columns NULL (D-14, D-21)", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+      capacity: 2,
+      seatsTaken: 0,
+      priceMinor: BASE_AMOUNT_MINOR,
+      currency: "USD",
+      holdMinutes: 30,
+    });
+    const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
+    const orderBefore = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_evidence_${orderId}`;
+    const paymentIntentId = `pi_test_${orderId}`;
+    const chargeId = `ch_test_${orderId}`;
+    const transferId = `tr_test_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: orderBefore.amountMinor,
+      currency: orderBefore.currency,
+      paymentIntent: { id: paymentIntentId, latest_charge: { id: chargeId, transfer: { id: transferId } } },
+    });
+
+    const response = await POST(signedWebhookRequest(body));
+    expect(response.status).toBe(200);
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    const evidence = attemptAfter.evidence as Record<string, unknown>;
+    expect(evidence.paymentIntentId).toBe(paymentIntentId);
+    expect(evidence.chargeId).toBe(chargeId);
+    expect(evidence.transferId).toBe(transferId);
+    expect(evidence.transferDestination).toBe(TEST_STRIPE_CONNECTED_ACCOUNT_ID);
+
+    for (const [key, value] of Object.entries(evidence)) {
+      expect(key.toLowerCase()).not.toContain("secret");
+      if (typeof value === "string") {
+        expect(value.toLowerCase()).not.toContain("secret");
+      }
+    }
+
+    // D-14 — never conflate expected with actual: these four columns stay
+    // NULL at webhook time; only 07-07's reconciliation sweep may populate
+    // them, from independently verified provider evidence.
+    expect(attemptAfter.gatewayFeeActualMinor).toBeNull();
+    expect(attemptAfter.schoolSettlementActualMinor).toBeNull();
+    expect(attemptAfter.platformGrossActualMinor).toBeNull();
+    expect(attemptAfter.platformNetActualMinor).toBeNull();
+    expect(attemptAfter.reconciledAt).toBeNull();
+  });
+
+  it("07-06: an unexpanded payment_intent (a bare id string, the un-expanded default) still records the PaymentIntent id and destination, with charge/transfer left null rather than fabricated", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+      capacity: 2,
+      seatsTaken: 0,
+      priceMinor: BASE_AMOUNT_MINOR,
+      currency: "USD",
+      holdMinutes: 30,
+    });
+    const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
+    const orderBefore = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
+    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
+
+    const eventId = `evt_evidence_unexpanded_${orderId}`;
+    const paymentIntentId = `pi_test_unexpanded_${orderId}`;
+    const body = buildCheckoutCompletedEventBody({
+      eventId,
+      sessionId: attempt.providerIntentId!,
+      orderId,
+      amountTotal: orderBefore.amountMinor,
+      currency: orderBefore.currency,
+      paymentIntent: paymentIntentId,
+    });
+
+    const response = await POST(signedWebhookRequest(body));
+    expect(response.status).toBe(200);
+
+    const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    const evidence = attemptAfter.evidence as Record<string, unknown>;
+    expect(evidence.paymentIntentId).toBe(paymentIntentId);
+    expect(evidence.transferDestination).toBe(TEST_STRIPE_CONNECTED_ACCOUNT_ID);
+    expect(evidence.chargeId).toBeNull();
+    expect(evidence.transferId).toBeNull();
+  });
+
+  it("a tampered signature returns 400 and leaves Order PENDING with zero WebhookEvent rows", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
+    const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -315,8 +573,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const response = await POST(signedWebhookRequest(body, { tamper: true }));
@@ -330,9 +588,9 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
   });
 
   it("reading the order after the redirect with no webhook delivered leaves it PENDING — the redirect itself performs no writes", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
 
     const order = await checkoutService.getOwnOrder({ userId }, orderId);
@@ -344,10 +602,10 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -356,8 +614,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const first = await POST(signedWebhookRequest(body));
@@ -381,10 +639,10 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -394,7 +652,7 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       sessionId: attempt.providerIntentId!,
       orderId,
       amountTotal: 1_000, // does not match the Order's recorded amountMinor
-      currency: "NGN",
+      currency: "USD",
     });
 
     const response = await POST(signedWebhookRequest(body));
@@ -402,7 +660,7 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
 
     const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     expect(order.status).toBe("EXCEPTION");
-    expect(order.amountMinor).toBe(45_000_000); // byte-identical to its value before the event
+    expect(order.amountMinor).toBe(EXPECTED_TOTAL_MINOR); // byte-identical to its value before the event
 
     const enrolment = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
     expect(enrolment.status).toBe("PENDING_PAYMENT"); // never activated on a mismatch
@@ -410,7 +668,7 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
     const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
     expect(attemptAfter.status).toBe("PROCESSING"); // never moved to SUCCEEDED on an untrusted mismatch
     expect(attemptAfter.exceptionNote).not.toBeNull();
-    expect(attemptAfter.exceptionNote).toContain("45000000");
+    expect(attemptAfter.exceptionNote).toContain(String(EXPECTED_TOTAL_MINOR));
   });
 
   it("a hold already expired by the time the webhook lands (Pitfall 4 race) routes to EXCEPTION, keeps the PaymentAttempt SUCCEEDED with an exceptionNote, and touches no seat count", async () => {
@@ -418,10 +676,10 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
     const enrolmentBefore = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
@@ -439,8 +697,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const response = await POST(signedWebhookRequest(body));
@@ -458,9 +716,9 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
   });
 
   it("a redelivered event.id after successful settlement leaves the WebhookEvent row PROCESSED, not overwritten to DUPLICATE", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -469,8 +727,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     await POST(signedWebhookRequest(body));
@@ -483,9 +741,9 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
   });
 
   it("a payment_intent.payment_failed event moves the PaymentAttempt to FAILED with failedAt and failureReason (PAY-02)", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
 
     const eventId = `evt_failed_${orderId}`;
@@ -510,9 +768,9 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
   });
 
   it("a checkout.session.expired event moves the PaymentAttempt to CANCELLED with neither confirmedAt nor failedAt set (PAY-02)", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -537,10 +795,10 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -549,8 +807,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId: completedEventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
     const completedResponse = await POST(signedWebhookRequest(completedBody));
     expect(completedResponse.status).toBe(200);
@@ -584,11 +842,11 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
     const learner = await testDb.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     const orderBefore = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
@@ -616,10 +874,10 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -628,8 +886,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const first = await POST(signedWebhookRequest(body));
@@ -646,10 +904,10 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -658,8 +916,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     // Force the send to fail deterministically regardless of this
@@ -688,10 +946,10 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
     const enrolmentBefore = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
@@ -709,8 +967,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const response = await POST(signedWebhookRequest(body));
@@ -722,9 +980,9 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
   });
 
   it("a request with no signature header returns 400 with zero WebhookEvent/Order/PaymentAttempt writes", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -733,8 +991,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const response = await POST(unsignedWebhookRequest(body));
@@ -751,9 +1009,9 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
   });
 
   it("a signature computed over a different body returns 400 with zero WebhookEvent/Order/PaymentAttempt writes", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -762,8 +1020,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const response = await POST(signedWebhookRequest(body, { tamper: true }));
@@ -780,9 +1038,9 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
   });
 
   it("a request arriving when the signing secret is unset returns 500, distinguishable from a signature failure, with zero writes", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0 });
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 0, currency: "USD" });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -791,8 +1049,8 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
 
     const savedSecret = process.env.STRIPE_WEBHOOK_SECRET;

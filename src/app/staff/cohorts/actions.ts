@@ -13,6 +13,16 @@
  * `z.coerce.number().int()` — never a float-parsing or fixed-decimal
  * formatting call (T-05-77).
  *
+ * `priceNgnMinor`/`priceUsdMinor` (D-06/D-08/D-24, 07-05) are each optional
+ * and independently nullable — a Cohort may sell on one rail only. Each is
+ * validated by a regex-gated decimal-string parse (`minorUnitPriceField`
+ * below): the raw FormData string must match `/^\d+$/` before any numeric
+ * coercion happens, so `Number(value) * 100` — or any other floating-point
+ * path — never runs anywhere in this module (D-24, T-07-25). The legacy
+ * `priceMinor`/`currency` NOT-NULL columns are still written on every
+ * create/update, mirrored from whichever rail is set (07-11 removes this
+ * shim once every reader has migrated to the dual-price fields).
+ *
  * The XOR "exactly one of courseId/programmeId" rule is a cross-field zod
  * `superRefine` surfaced with no `path`, so `zodErrors` below routes it to the
  * `offerKind` field and it renders in the `ResourceForm` summary rather than
@@ -41,6 +51,56 @@ function dateField(label: string) {
   return z.date({ error: `Enter a valid ${label} in the selected timezone.` });
 }
 
+/**
+ * Decimal-string parsing for one dual-price rail (D-06/D-08/D-24). Optional
+ * and nullable: an absent/blank submission means "this Cohort does not sell
+ * on this rail" (D-08), never `0`. The raw string is regex-gated to plain
+ * digits BEFORE any numeric coercion — `Number(value) * 100` never appears
+ * anywhere in this module (T-07-25).
+ */
+function minorUnitPriceField(fieldLabel: string) {
+  return z
+    .string()
+    .optional()
+    .transform((raw, ctx): number | null => {
+      if (raw === undefined) return null;
+      if (!/^\d+$/.test(raw)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: raw.trim().startsWith("-")
+            ? `${fieldLabel} cannot be negative.`
+            : `${fieldLabel} must be a whole number of minor units.`,
+        });
+        return z.NEVER;
+      }
+      const value = Number(raw);
+      if (!Number.isSafeInteger(value)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${fieldLabel} is too large.` });
+        return z.NEVER;
+      }
+      return value;
+    });
+}
+
+/**
+ * The legacy `priceMinor`/`currency` NOT-NULL columns (07-11 removes them).
+ * Mirrors whichever dual-price rail is set so the Phase 6 surfaces still
+ * reading the legacy pair keep compiling — NGN wins when both rails are
+ * set (arbitrary but harmless: nothing derives commercial behaviour from
+ * this pair once `startCheckout` reads `priceNgnMinor`/`priceUsdMinor`
+ * directly, 07-04). A Cohort with neither rail priced yet (a fresh DRAFT)
+ * writes `0`/`NGN` — legal because `priceMinor` carries no CHECK against
+ * zero and nothing reads it as a signal until 07-11.
+ */
+function legacyPriceFields(
+  priceNgnMinor: number | null,
+  priceUsdMinor: number | null,
+): { priceMinor: number; currency: string } {
+  if (priceNgnMinor != null) return { priceMinor: priceNgnMinor, currency: "NGN" };
+  if (priceUsdMinor != null) return { priceMinor: priceUsdMinor, currency: "USD" };
+  return { priceMinor: 0, currency: "NGN" };
+}
+
 const baseSchema = z
   .object({
     code: z.string().trim().min(1, "Enter a cohort code.").max(40),
@@ -59,15 +119,11 @@ const baseSchema = z
     enrolmentClosesAt: dateField("when enrolment closes"),
     // Money is integer minor units — never a float, never a formatted string.
     capacity: z.coerce.number().int("Capacity must be a whole number.").min(1, "Capacity must be at least 1."),
-    priceMinor: z.coerce
-      .number()
-      .int("Price must be a whole number of minor units.")
-      .min(0, "Price cannot be negative."),
-    currency: z
-      .string()
-      .trim()
-      .length(3, "Use a 3-letter currency code, e.g. NGN.")
-      .transform((value) => value.toUpperCase()),
+    // D-06/D-08 — two independent, optional, nullable dual-price rails.
+    // Neither is required (D-08 permits a one-rail Cohort); the publication
+    // gate lives in readiness, not here.
+    priceNgnMinor: minorUnitPriceField("NGN price"),
+    priceUsdMinor: minorUnitPriceField("USD price"),
     attendanceThresholdPct: z.coerce
       .number()
       .int("Enter a whole percentage.")
@@ -125,8 +181,8 @@ function fields(form: FormData) {
     enrolmentOpensAt: date("enrolmentOpensAt"),
     enrolmentClosesAt: date("enrolmentClosesAt"),
     capacity: value("capacity"),
-    priceMinor: value("priceMinor"),
-    currency: value("currency"),
+    priceNgnMinor: value("priceNgnMinor"),
+    priceUsdMinor: value("priceUsdMinor"),
     attendanceThresholdPct: value("attendanceThresholdPct"),
     holdMinutes: value("holdMinutes"),
   };
@@ -190,8 +246,9 @@ function toCreatePayload(parsed: z.infer<typeof baseSchema>): Record<string, unk
     enrolmentOpensAt: parsed.enrolmentOpensAt,
     enrolmentClosesAt: parsed.enrolmentClosesAt,
     capacity: parsed.capacity,
-    priceMinor: parsed.priceMinor,
-    currency: parsed.currency,
+    priceNgnMinor: parsed.priceNgnMinor,
+    priceUsdMinor: parsed.priceUsdMinor,
+    ...legacyPriceFields(parsed.priceNgnMinor, parsed.priceUsdMinor),
     attendanceThresholdPct: parsed.attendanceThresholdPct ?? null,
     // null/0 both mean "no hold" (D-02) — store the caller's value verbatim.
     holdMinutes: parsed.holdMinutes ?? null,

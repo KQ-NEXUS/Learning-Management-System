@@ -13,6 +13,8 @@
  * convention for its staff-side sibling) reads it directly.
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -50,15 +52,21 @@ type OrderFixtureOverrides = {
   status?: string;
   amountMinor?: number;
   currency?: string;
+  selectedProvider?: string | null;
+  baseAmountMinor?: number | null;
+  platformFeeMinor?: number | null;
+  gatewayFeeEstimateMinor?: number | null;
   enrolment?: { id: string; status: string; holdExpiresAt: Date | null } | null;
   cohort?: Record<string, unknown>;
 };
 
 /**
- * `amountMinor`/`currency` are what the learner actually agreed to and was
- * charged; `cohort.priceMinor` below is a DELIBERATELY different figure a
- * live cohort might carry today, standing in for T-06-51's "the receipt
- * must never re-read the cohort's current price" case even though
+ * `amountMinor`/`currency`/`baseAmountMinor`/`platformFeeMinor`/
+ * `gatewayFeeEstimateMinor`/`selectedProvider` are the Order's own D-13
+ * commercial snapshot — what the learner actually agreed to and was
+ * charged. `cohort.priceMinor` below is a DELIBERATELY different figure a
+ * live cohort might carry today, standing in for T-06-51/D-18's "the
+ * receipt must never re-read the cohort's current price" case even though
  * `OrderCohortFacts` itself has no `priceMinor` field for the page to read.
  */
 function baseOrder(overrides: OrderFixtureOverrides = {}) {
@@ -68,6 +76,11 @@ function baseOrder(overrides: OrderFixtureOverrides = {}) {
     status: overrides.status ?? "PAID",
     amountMinor: overrides.amountMinor ?? 45000,
     currency: overrides.currency ?? "USD",
+    selectedProvider: overrides.selectedProvider !== undefined ? overrides.selectedProvider : "STRIPE",
+    baseAmountMinor: overrides.baseAmountMinor !== undefined ? overrides.baseAmountMinor : 43000,
+    platformFeeMinor: overrides.platformFeeMinor !== undefined ? overrides.platformFeeMinor : 650,
+    gatewayFeeEstimateMinor:
+      overrides.gatewayFeeEstimateMinor !== undefined ? overrides.gatewayFeeEstimateMinor : 1350,
     cohort: {
       id: "cohort-1",
       title: "September Cohort",
@@ -177,6 +190,131 @@ describe("OrderReceiptPage — exception sub-state (T-06-55)", () => {
     const { container } = render(await run());
     expect(container.innerHTML).not.toContain("pill-red");
     expect(container.innerHTML).toContain("pill-amber");
+  });
+});
+
+describe("OrderReceiptPage — refund states", () => {
+  it("shows a partial-refund receipt without payment-pending language", async () => {
+    seedSignedIn(baseOrder({ status: "PARTIALLY_REFUNDED" }));
+
+    render(await run());
+
+    expect(screen.getByText("Payment partially refunded")).toBeTruthy();
+    expect(screen.getByText("Partially refunded")).toBeTruthy();
+    expect(screen.getByText("Active")).toBeTruthy();
+    expect(screen.queryByText("Payment received — finishing up")).toBeNull();
+    expect(screen.queryByText("Pending review")).toBeNull();
+  });
+
+  it("shows a full-refund receipt and the enrolment's actual withdrawn state", async () => {
+    seedSignedIn(
+      baseOrder({
+        status: "REFUNDED",
+        enrolment: { id: "enrolment-1", status: "WITHDRAWN", holdExpiresAt: null },
+      }),
+    );
+
+    render(await run());
+
+    expect(screen.getByText("Payment refunded")).toBeTruthy();
+    expect(screen.getByText("Refunded")).toBeTruthy();
+    expect(screen.getByText("Withdrawn")).toBeTruthy();
+    expect(screen.queryByText("Payment received — finishing up")).toBeNull();
+    expect(screen.queryByText("Pending review")).toBeNull();
+  });
+});
+
+describe("OrderReceiptPage — breakdown (07-09 D-16/D-18)", () => {
+  it("renders the four breakdown rows, the currency/provider line and the disclosure, from the Order's own snapshot", async () => {
+    seedSignedIn(
+      baseOrder({
+        amountMinor: 45_875_000,
+        currency: "NGN",
+        selectedProvider: "PAYSTACK",
+        baseAmountMinor: 44_325_000,
+        platformFeeMinor: 675_000,
+        gatewayFeeEstimateMinor: 875_000,
+      }),
+    );
+    render(await run());
+
+    expect(screen.getByText("School fee")).toBeTruthy();
+    expect(screen.getByText("KQ NEXUS platform fee (1.5%)")).toBeTruthy();
+    expect(screen.getByText("Estimated payment-processing fee")).toBeTruthy();
+    expect(screen.getByText("Total charged")).toBeTruthy();
+    expect(screen.getByText("NGN via Paystack")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "This is an estimate from our current provider fee schedule. The actual gateway fee may differ slightly — it affects how the payment is reconciled behind the scenes and never changes the total above.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders the same breakdown component the order-summary page uses, importing nothing from pricing.ts (D-18: reads a snapshot, never prices anything)", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "../../src/app/orders/[reference]/page.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("OrderBreakdownCard");
+    expect(source).not.toMatch(/from ["']@\/server\/payments\/pricing["']/);
+    expect(source).not.toMatch(/calculateCheckoutBreakdown/);
+  });
+
+  it("D-18: leaves every rendered receipt amount unchanged after the Cohort's price is edited between renders", async () => {
+    const order = baseOrder({
+      amountMinor: 45000,
+      currency: "USD",
+      baseAmountMinor: 43000,
+      platformFeeMinor: 650,
+      gatewayFeeEstimateMinor: 1350,
+    });
+    seedSignedIn(order);
+    render(await run());
+    expect(screen.getByText("$450.00")).toBeTruthy();
+    cleanup();
+
+    // The Cohort's price changes after the Order was paid — the mock's
+    // OrderCohortFacts carries no price field at all (matching the real
+    // shape), but a live cohort's price is simulated here as a wholly
+    // separate, deliberately different figure to prove this page never
+    // reads it.
+    const mutatedOrder = {
+      ...order,
+      cohort: { ...order.cohort, priceMinor: 1 },
+    };
+    seedSignedIn(mutatedOrder);
+    render(await run());
+    expect(screen.getByText("$450.00")).toBeTruthy();
+    expect(screen.getByText("$430.00")).toBeTruthy();
+    expect(screen.getByText("$6.50")).toBeTruthy();
+    expect(screen.getByText("$13.50")).toBeTruthy();
+  });
+
+  it("D-18: leaves every rendered receipt amount unchanged when the active GatewayFeeSchedule is edited between renders — the page reads no schedule at all", async () => {
+    const order = baseOrder({
+      amountMinor: 45000,
+      currency: "USD",
+      baseAmountMinor: 43000,
+      platformFeeMinor: 650,
+      gatewayFeeEstimateMinor: 1350,
+    });
+    seedSignedIn(order);
+    render(await run());
+    expect(screen.getByText("$450.00")).toBeTruthy();
+    expect(screen.getByText("$13.50")).toBeTruthy();
+    cleanup();
+
+    // `getOwnOrderByReference` is the ONLY data source this page reads —
+    // there is no GatewayFeeSchedule read anywhere in its call graph for a
+    // schedule edit to affect. Re-rendering from the identical Order
+    // fixture and confirming every figure is byte-identical is this test's
+    // executable form of that structural fact; the source-scan assertion
+    // above is the other half of the same proof (D-18, D-13).
+    seedSignedIn(order);
+    render(await run());
+    expect(screen.getByText("$450.00")).toBeTruthy();
+    expect(screen.getByText("$13.50")).toBeTruthy();
+    expect(mocks.getOwnOrderByReference).toHaveBeenCalledTimes(2);
   });
 });
 

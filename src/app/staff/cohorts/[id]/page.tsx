@@ -299,7 +299,22 @@ export default async function CohortDetailPage({
                     value: `${cohort.seatsTaken} / ${cohort.capacity}`,
                     mono: true,
                   },
-                  { label: "Price", value: formatPrice(cohort.priceMinor, cohort.currency), mono: true },
+                  {
+                    label: "NGN price",
+                    value:
+                      cohort.priceNgnMinor != null
+                        ? formatPrice(cohort.priceNgnMinor, "NGN")
+                        : "Not set",
+                    mono: true,
+                  },
+                  {
+                    label: "USD price",
+                    value:
+                      cohort.priceUsdMinor != null
+                        ? formatPrice(cohort.priceUsdMinor, "USD")
+                        : "Not set",
+                    mono: true,
+                  },
                   { label: "Delivery mode", value: DELIVERY_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode },
                   {
                     label: "Seat-hold minutes",

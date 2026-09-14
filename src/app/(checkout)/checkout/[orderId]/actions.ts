@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import {
   initiateStripePayment,
+  initiatePaystackPayment,
   getOwnOrder,
   HoldExpiredError,
   OrderNotFoundError,
@@ -14,11 +15,17 @@ import {
 
 /**
  * The Pay button's Server Action. On success this redirects the browser to
- * Stripe's own hosted Checkout page (D-01) — never to any app-owned
- * in-app card field.
+ * the selected provider's own hosted payment page (D-01) — never to any
+ * app-owned in-app card field.
  *
- * Each typed refusal from `initiateStripePayment` translates to the state
- * plan 06-07 renders, rather than to a generic error:
+ * Dispatches on `order.selectedProvider` — snapshotted server-side at Order
+ * creation (D-13) — rather than choosing a provider itself; PAY-08 requires
+ * the provider to be server-derived at every call site, and this is the one
+ * place a learner-visible action ever reaches a provider adapter.
+ *
+ * Each typed refusal from `initiateStripePayment`/`initiatePaystackPayment`
+ * translates to the state plan 06-07 renders, rather than to a generic
+ * error:
  *  - `HoldExpiredError` -> back to the order-summary page, which decides
  *    the expired panel itself from server data on every render (D-10) —
  *    this action's job is only to land the learner back there.
@@ -40,14 +47,17 @@ export async function payAction(formData: FormData): Promise<void> {
   const acceptedTerms = formData.get("acceptedTerms") === "true";
   const acceptedRefundCancellation = formData.get("acceptedRefundCancellation") === "true";
   const acceptedMarketing = formData.get("acceptedMarketing") === "true";
+  const consent = { acceptedTerms, acceptedRefundCancellation, acceptedMarketing };
 
   let url: string;
   try {
-    ({ url } = await initiateStripePayment(actor, orderId, {
-      acceptedTerms,
-      acceptedRefundCancellation,
-      acceptedMarketing,
-    }));
+    const order = await getOwnOrder(actor, orderId);
+    if (!order) throw new OrderNotFoundError(orderId);
+
+    ({ url } =
+      order.selectedProvider === "PAYSTACK"
+        ? await initiatePaystackPayment(actor, orderId, consent)
+        : await initiateStripePayment(actor, orderId, consent));
   } catch (err) {
     if (
       err instanceof HoldExpiredError ||

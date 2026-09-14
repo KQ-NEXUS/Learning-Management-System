@@ -47,21 +47,43 @@ export const CHECKOUT_INTENT_MAX_AGE_SECONDS =
 const PLAUSIBLE_RECORD_ID = /^[a-zA-Z0-9]{1,64}$/;
 
 /**
+ * The two literal currency values `checkoutReturnPathFor` may ever
+ * interpolate into its output — owned by THIS module, not imported from
+ * `routing.ts` (07-03/`src/server/payments/`). Keeping the allowlist local
+ * means this auth-domain module has no dependency on the payments domain,
+ * and the "construct from an allowlist, never echo" property (below) is
+ * self-contained rather than reaching into a sibling module for it.
+ */
+const SUPPORTED_INTENT_CURRENCIES = ["NGN", "USD"] as const;
+type IntentCurrency = (typeof SUPPORTED_INTENT_CURRENCIES)[number];
+
+function isSupportedIntentCurrency(value: string): value is IntentCurrency {
+  return (SUPPORTED_INTENT_CURRENCIES as readonly string[]).includes(value);
+}
+
+/**
  * Resolves where a learner lands right after authentication completes,
  * folding the D-14 checkout-intent detour into the same single decision
  * point `landingPathFor` already was.
  *
  * The single most important property of this function is that it
- * CONSTRUCTS its output rather than echoing input. `cohortIntent` is a bare
- * record id, never a path or a URL, and it is interpolated into a fixed
- * template this module owns after passing a conservative allowlist check.
- * A value that fails the check — containing a slash, a colon, a backslash,
- * a dot, a percent sign, whitespace, a scheme separator, or simply too long
- * to be a real id — is never interpolated; the function falls back to
- * `landingPathFor(user)` instead. Because the destination is never
- * caller-supplied, this code path cannot become an open redirect (T-06-20),
- * which matters here more than almost anywhere else in the app: this is the
- * function a freshly-authenticated learner's browser is redirected through.
+ * CONSTRUCTS its output rather than echoing input. `cohortIntent` carries a
+ * bare `${cohortId}.${currency}` pair (07-04, D-07) — never a path or a
+ * URL — and each half is interpolated into a fixed template this module
+ * owns only after passing its own allowlist check: the id half against
+ * `PLAUSIBLE_RECORD_ID`, the currency half against
+ * `SUPPORTED_INTENT_CURRENCIES`. A value that fails either check — a
+ * missing separator, an id containing a slash/colon/backslash/dot/percent
+ * sign/whitespace/scheme-separator or simply too long to be a real id, or a
+ * currency outside the two-value allowlist — is never interpolated; the
+ * function falls back to `landingPathFor(user)` instead. Because the
+ * destination is never caller-supplied, this code path cannot become an
+ * open redirect (T-06-20), which matters here more than almost anywhere
+ * else in the app: this is the function a freshly-authenticated learner's
+ * browser is redirected through. The currency is re-derived from this
+ * allowlist rather than interpolated from the cookie text for exactly the
+ * same reason — an order must never be created from a guessed currency
+ * (D-07).
  */
 export function checkoutReturnPathFor(
   user: { isStaff?: boolean | null },
@@ -70,9 +92,17 @@ export function checkoutReturnPathFor(
   // A staff account is not a checkout actor, whatever the intent says.
   if (user.isStaff === true) return STAFF_LANDING_PATH;
 
-  if (!cohortIntent || !PLAUSIBLE_RECORD_ID.test(cohortIntent)) {
+  if (!cohortIntent) return landingPathFor(user);
+
+  const separatorIndex = cohortIntent.indexOf(".");
+  if (separatorIndex === -1) return landingPathFor(user);
+
+  const id = cohortIntent.slice(0, separatorIndex);
+  const currency = cohortIntent.slice(separatorIndex + 1);
+
+  if (!PLAUSIBLE_RECORD_ID.test(id) || !isSupportedIntentCurrency(currency)) {
     return landingPathFor(user);
   }
 
-  return `/enrol/${cohortIntent}`;
+  return `/enrol/${id}?currency=${currency}`;
 }

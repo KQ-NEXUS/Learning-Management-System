@@ -35,9 +35,17 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurrentActor }));
-vi.mock("@/server/services/checkout-service", () => ({ startCheckout: mocks.startCheckout }));
+vi.mock("@/server/services/checkout-service", () => ({
+  startCheckout: mocks.startCheckout,
+  // 07-04 — `enrollAction` also imports this typed refusal from the same
+  // module; a mock factory that omits it makes `err instanceof
+  // CurrencyUnavailableError` throw (the right-hand side would be
+  // `undefined`), not merely evaluate to `false`.
+  CurrencyUnavailableError: class CurrencyUnavailableError extends Error {},
+}));
 vi.mock("@/server/services/seat-accounting", () => ({
   HOLD_MINUTES_DEFAULT: 30,
+  AlreadyEnrolledError: class AlreadyEnrolledError extends Error {},
   CapacityExceededError: class CapacityExceededError extends Error {},
   CohortClosedError: class CohortClosedError extends Error {},
   CohortNotFoundError: class CohortNotFoundError extends Error {},
@@ -51,10 +59,12 @@ import { enrollAction } from "@/app/(checkout)/actions";
 import { signInAction } from "@/app/(auth)/signin/actions";
 import { CHECKOUT_INTENT_COOKIE, CHECKOUT_INTENT_MAX_AGE_SECONDS } from "@/server/auth/landing";
 import { SESSION_COOKIE } from "@/server/auth/lockout";
+import { AlreadyEnrolledError } from "@/server/services/seat-accounting";
 
-function enrollForm(cohortId = "clh3x9f9a0000356k2j5g8h2q") {
+function enrollForm(cohortId = "clh3x9f9a0000356k2j5g8h2q", currency = "NGN") {
   const data = new FormData();
   data.set("cohortId", cohortId);
+  data.set("currency", currency);
   return data;
 }
 
@@ -64,15 +74,15 @@ beforeEach(() => {
 });
 
 describe("enrollAction — anonymous branch sets the checkout-intent cookie", () => {
-  it("sets the intent cookie to the submitted cohort id and redirects to /signin when unauthenticated", async () => {
+  it("sets the intent cookie to '{cohortId}.{currency}' and redirects to /signin when unauthenticated", async () => {
     mocks.getCurrentActor.mockResolvedValue(null);
     const cohortId = "clh3x9f9a0000356k2j5g8h2q";
 
-    await expect(enrollAction(enrollForm(cohortId))).rejects.toThrow("redirect:/signin");
+    await expect(enrollAction(enrollForm(cohortId, "NGN"))).rejects.toThrow("redirect:/signin");
 
     expect(fakeJar.set).toHaveBeenCalledWith(
       CHECKOUT_INTENT_COOKIE,
-      cohortId,
+      `${cohortId}.NGN`,
       expect.objectContaining({
         httpOnly: true,
         sameSite: "lax",
@@ -99,7 +109,32 @@ describe("enrollAction — anonymous branch sets the checkout-intent cookie", ()
     expect(mocks.startCheckout).toHaveBeenCalledWith(
       { userId: "user-1", isStaff: false },
       "clh3x9f9a0000356k2j5g8h2q",
+      "NGN",
     );
+  });
+
+  it("redirects an already-enrolled learner instead of surfacing a generic error", async () => {
+    mocks.getCurrentActor.mockResolvedValue({ userId: "user-1", isStaff: false });
+    mocks.startCheckout.mockRejectedValue(new AlreadyEnrolledError("user-1", "cohort-1"));
+
+    await expect(enrollAction(enrollForm())).rejects.toThrow("redirect:/courses");
+  });
+
+  it("redirects to /courses when currency is absent — never defaults to either rail (D-07)", async () => {
+    mocks.getCurrentActor.mockResolvedValue(null);
+    const formWithNoCurrency = new FormData();
+    formWithNoCurrency.set("cohortId", "clh3x9f9a0000356k2j5g8h2q");
+
+    await expect(enrollAction(formWithNoCurrency)).rejects.toThrow("redirect:/courses");
+    expect(fakeJar.set).not.toHaveBeenCalled();
+  });
+
+  it("redirects to /courses when currency is unsupported — never defaults to either rail (D-07)", async () => {
+    mocks.getCurrentActor.mockResolvedValue(null);
+    await expect(enrollAction(enrollForm("clh3x9f9a0000356k2j5g8h2q", "GBP"))).rejects.toThrow(
+      "redirect:/courses",
+    );
+    expect(fakeJar.set).not.toHaveBeenCalled();
   });
 });
 
@@ -111,8 +146,8 @@ function signInForm(email = "learner@example.com", password = "password123") {
 }
 
 describe("signInAction — consumes and clears the checkout-intent cookie", () => {
-  it("redirects to the cohort's resumption path when an intent cookie is present", async () => {
-    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q" });
+  it("redirects to the cohort's resumption path, with the currency carried through as a query parameter, when a dotted intent cookie is present", async () => {
+    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q.NGN" });
     mocks.signIn.mockResolvedValue({
       ok: true,
       token: "tok",
@@ -122,7 +157,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
 
     await expect(
       signInAction({ error: null }, signInForm()),
-    ).rejects.toThrow("redirect:/enrol/clh3x9f9a0000356k2j5g8h2q");
+    ).rejects.toThrow("redirect:/enrol/clh3x9f9a0000356k2j5g8h2q?currency=NGN");
 
     expect(fakeJar.delete).toHaveBeenCalledWith(CHECKOUT_INTENT_COOKIE);
   });
@@ -141,7 +176,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
   });
 
   it("redirects to /staff/courses for staff, whatever the intent value, and still clears the cookie", async () => {
-    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q" });
+    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q.NGN" });
     mocks.signIn.mockResolvedValue({
       ok: true,
       token: "tok",
@@ -157,7 +192,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
   });
 
   it("deletes the intent cookie on the same response that consumes it — a second unrelated sign-in does not restart checkout", async () => {
-    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q" });
+    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q.NGN" });
     mocks.signIn.mockResolvedValue({
       ok: true,
       token: "tok-1",
@@ -165,7 +200,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
       isStaff: false,
     });
     await expect(signInAction({ error: null }, signInForm())).rejects.toThrow(
-      "redirect:/enrol/clh3x9f9a0000356k2j5g8h2q",
+      "redirect:/enrol/clh3x9f9a0000356k2j5g8h2q?currency=NGN",
     );
     expect(fakeJar.store.has(CHECKOUT_INTENT_COOKIE)).toBe(false);
 
@@ -182,14 +217,14 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
   });
 
   it("leaves the intent cookie untouched on a failed sign-in, so the visitor can retry without losing their selection", async () => {
-    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q" });
+    fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q.NGN" });
     mocks.signIn.mockResolvedValue({ ok: false, reason: "INVALID" });
 
     const result = await signInAction({ error: null }, signInForm());
 
     expect(result.error).not.toBeNull();
     expect(fakeJar.delete).not.toHaveBeenCalled();
-    expect(fakeJar.store.get(CHECKOUT_INTENT_COOKIE)?.value).toBe("clh3x9f9a0000356k2j5g8h2q");
+    expect(fakeJar.store.get(CHECKOUT_INTENT_COOKIE)?.value).toBe("clh3x9f9a0000356k2j5g8h2q.NGN");
   });
 
   it("session cookie is still set with the pre-existing flags alongside the intent handling", async () => {

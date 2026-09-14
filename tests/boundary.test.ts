@@ -149,6 +149,21 @@ function webhookRuntimeClosure(): string[] {
 }
 
 /**
+ * The Paystack webhook route's own runtime import closure (07-04) — the
+ * third instance of this walk, proving the same "no request-only API"
+ * guarantee for a second, unauthenticated, actorless settlement path. Its
+ * one entrypoint is the route file itself; from there the walk follows
+ * `checkout-webhook-system-service.ts`, `providers/paystack/*`, and
+ * everything they import transitively.
+ */
+function paystackWebhookRuntimeClosure(): string[] {
+  const entrypoints = [
+    path.resolve(process.cwd(), "src", "app", "api", "webhooks", "paystack", "route.ts"),
+  ];
+  return runtimeClosureFrom(entrypoints);
+}
+
+/**
  * The specifier set both closure assertions flag — a request-only API that
  * must never reach an actorless worker/webhook module. Shared so the two
  * assertions can never flag a different set by accident.
@@ -205,8 +220,20 @@ describe("service-layer boundary", () => {
     expect(await lintAs("netlify/functions/release-expired-holds.ts")).toHaveLength(1);
   });
 
+  it("rejects a Prisma import from the reconcile-payments Netlify scheduled function (07-07)", async () => {
+    expect(await lintAs("netlify/functions/reconcile-payments.ts")).toHaveLength(1);
+  });
+
   it("keeps the scheduled-function runtime import closure away from request-only APIs", () => {
     expect(findRequestOnlyOffenders(workerRuntimeClosure())).toEqual([]);
+  });
+
+  it("the scheduled-function closure actually reaches the reconciliation service (07-07 — the assertion above is not vacuous)", () => {
+    const closure = workerRuntimeClosure();
+    const touchesReconciliationService = closure.some((filePath) =>
+      filePath.replace(/\\/g, "/").endsWith("src/server/services/payment-reconciliation-service.ts"),
+    );
+    expect(touchesReconciliationService).toBe(true);
   });
 
   it("keeps the Stripe webhook route's runtime import closure away from request-only APIs", () => {
@@ -215,6 +242,18 @@ describe("service-layer boundary", () => {
 
   it("the webhook closure actually reaches the settlement service (the assertion above is not vacuous)", () => {
     const closure = webhookRuntimeClosure();
+    const touchesSettlementService = closure.some((filePath) =>
+      filePath.replace(/\\/g, "/").endsWith("src/server/services/checkout-webhook-system-service.ts"),
+    );
+    expect(touchesSettlementService).toBe(true);
+  });
+
+  it("keeps the Paystack webhook route's runtime import closure away from request-only APIs (07-04)", () => {
+    expect(findRequestOnlyOffenders(paystackWebhookRuntimeClosure())).toEqual([]);
+  });
+
+  it("the Paystack webhook closure actually reaches the settlement service (the assertion above is not vacuous)", () => {
+    const closure = paystackWebhookRuntimeClosure();
     const touchesSettlementService = closure.some((filePath) =>
       filePath.replace(/\\/g, "/").endsWith("src/server/services/checkout-webhook-system-service.ts"),
     );

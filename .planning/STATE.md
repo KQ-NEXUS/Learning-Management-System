@@ -1,18 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 06
-current_phase_name: Registration, Checkout & Stripe Payments
-status: executing
-stopped_at: Completed 06-09-PLAN.md -- Phase 6 execution complete across all nine plans (uncommitted -- user commits personally)
-last_updated: "2026-09-10T12:16:17.722Z"
-last_activity: 2026-09-10
-state_head: 21fc1d9315622f2d3d25bf58c54690a6034b8915
+current_phase: 08
+current_phase_name: Finance Reconciliation, Dashboards & Reporting Exports
+status: ready_for_planning
+stopped_at: Phase 07 complete; Phase 08 ready for planning
+last_updated: "2026-09-14T00:00:00.000Z"
+last_activity: 2026-09-14
+last_activity_desc: Phase 07 completed with automated and real-provider test-mode acceptance
+state_head: 2cbdd0fbb71212f0990b8716e28fe6c2506bba44
 progress:
   total_phases: 16
-  completed_phases: 1
-  total_plans: 74
-  completed_plans: 59
-  percent: 6
+  completed_phases: 2
+  total_plans: 86
+  completed_plans: 63
+  percent: 44
 ---
 
 # Project State
@@ -22,15 +23,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 06 — Registration, Checkout & Stripe Payments
+**Current focus:** Phase 08 — Finance Reconciliation, Dashboards & Reporting Exports
 
 ## Current Position
 
-Phase: 06 (Registration, Checkout & Stripe Payments) — EXECUTING
-Status: Executing Phase 06
-Last activity: 2026-09-10
+Phase: 08 (Finance Reconciliation, Dashboards & Reporting Exports) — READY FOR PLANNING
+Status: Phase 07 complete; ready to plan Phase 08
+Last activity: 2026-09-14 — Phase 07 completed with automated and real-provider test-mode acceptance
 
-Progress: [█░░░░░░░░░] 6% (6/16 phases complete: 1, 2, 3, 4, 04.1, 5)
+Progress: [████░░░░░░] 44% (7/16 numbered phases complete: 1, 2, 3, 4, 5, 6, 7; Phase 04.1 also complete)
 
 ## Performance Metrics
 
@@ -48,6 +49,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 |-------|-------|-------|----------|
 | 1. Foundation | Retroactive | - | - |
 | 2 | 8 | - | - |
+| 06 | 9 | - | - |
 
 **Recent Trend:**
 
@@ -150,7 +152,7 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 
 - [Phase 3, resolved]: Password reset is now implemented (`password-reset-service.ts`, 1h token TTL, global session revocation on completion) — closes IAM-03's remaining gap. Human UAT of the live sign-in/reset/routing flows is still pending (see 03-06-SUMMARY.md coverage item D5).
 - [Phase 3, resolved]: Brevo is wired as the transactional email provider (`brevo-client.ts`) for verification, reset, and email-change confirmation sends. No manual smoke test with a real `BREVO_API_KEY` was run this session.
-- [Phase 6/7]: `src/server/payments/providers/` is an empty placeholder — Stripe and Paystack adapters, webhook signature verification, and the shared payment state machine are all still to be built.
+- [Phase 6/7, resolved]: Stripe and Paystack adapters, signature-verified webhooks, provider routing, settlement reconciliation, manual confirmation, and refunds are implemented and accepted in provider test mode. See Phase 7 `07-UAT.md` and `07-VALIDATION.md`.
 - [Phase 9/11]: No completion-rule evaluation engine exists yet despite `completionRule` JSON fields on Programme/Course/Lesson — needed before LRN-07 and CRD-01/02 can work.
 - [Phase 4/9]: No file upload/virus-scanning exists yet despite `scanStatus` fields on LessonResource/Submission/TicketAttachment — needed for CAT-04, LRN-03, ASM-04, SUP-01.
 - [Phase 14]: Licence module implementation is contingent on commercial-terms approval (business gate, not technical) — may need re-sequencing once that decision lands.
@@ -173,6 +175,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-10T12:15:51.657Z
-Stopped at: Completed 06-09-PLAN.md -- Phase 6 execution complete across all nine plans (uncommitted -- user commits personally)
-Resume file: None
+Last session: 2026-09-14
+Stopped at: Phase 07 complete; Phase 08 ready for planning
+Resume file: .planning/ROADMAP.md

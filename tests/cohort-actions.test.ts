@@ -12,7 +12,7 @@ function form(timezone = "Africa/Lagos") {
   const data = new FormData();
   Object.entries({ code: "C1", title: "Cohort", courseId: "course-1", deliveryMode: "SELF_PACED", timezone,
     startsAt: "2026-07-01T09:00", endsAt: "2026-08-01T17:00", enrolmentOpensAt: "2026-05-01T09:00",
-    enrolmentClosesAt: "2026-06-01T17:00", capacity: "20", priceMinor: "0", currency: "NGN",
+    enrolmentClosesAt: "2026-06-01T17:00", capacity: "20", priceNgnMinor: "45000000",
     cohortId: "cohort-1", expectedUpdatedAt: "2026-01-01T00:00:00.000Z",
   }).forEach(([key, value]) => data.set(key, value));
   return data;
@@ -39,4 +39,83 @@ it.each(["2026-02-30T09:00", "2026-03-08T02:30", "2026-07-01T09:00Z"])("rejects 
   data.set("startsAt", value);
   expect(await updateCohortAction(previous, data)).toMatchObject({ ok: false, errors: expect.arrayContaining([expect.objectContaining({ name: "startsAt" })]) });
   expect(mocks.update).not.toHaveBeenCalled();
+});
+
+// D-06/D-08/D-24 — dual-price validation (07-05).
+
+it("stores an NGN price and leaves USD null when only NGN is submitted, mirroring the legacy priceMinor/currency pair", async () => {
+  await expect(createCohortAction(previous, form())).rejects.toThrow("redirect:/staff/cohorts/cohort-1");
+  expect(mocks.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      priceNgnMinor: 45000000,
+      priceUsdMinor: null,
+      priceMinor: 45000000,
+      currency: "NGN",
+    }),
+  );
+});
+
+it("mirrors the USD price into the legacy priceMinor/currency pair when only USD is set", async () => {
+  const data = form();
+  data.delete("priceNgnMinor");
+  data.set("priceUsdMinor", "50000");
+  expect(await updateCohortAction(previous, data)).toEqual({ ok: true, id: "cohort-1" });
+  expect(mocks.update).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        priceNgnMinor: null,
+        priceUsdMinor: 50000,
+        priceMinor: 50000,
+        currency: "USD",
+      }),
+    }),
+  );
+});
+
+it("permits both price fields blank — neither rail is required (D-08); writes the 0/NGN legacy placeholder", async () => {
+  const data = form();
+  data.delete("priceNgnMinor");
+  expect(await updateCohortAction(previous, data)).toEqual({ ok: true, id: "cohort-1" });
+  expect(mocks.update).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        priceNgnMinor: null,
+        priceUsdMinor: null,
+        priceMinor: 0,
+        currency: "NGN",
+      }),
+    }),
+  );
+});
+
+it("rejects a negative NGN price with a field-scoped error and writes nothing", async () => {
+  const data = form();
+  data.set("priceNgnMinor", "-5");
+  expect(await updateCohortAction(previous, data)).toMatchObject({
+    ok: false,
+    errors: expect.arrayContaining([expect.objectContaining({ name: "priceNgnMinor" })]),
+  });
+  expect(mocks.update).not.toHaveBeenCalled();
+});
+
+it("rejects a non-integer USD minor-unit value with a field-scoped error and writes nothing", async () => {
+  const data = form();
+  data.set("priceUsdMinor", "500.50");
+  expect(await updateCohortAction(previous, data)).toMatchObject({
+    ok: false,
+    errors: expect.arrayContaining([expect.objectContaining({ name: "priceUsdMinor" })]),
+  });
+  expect(mocks.update).not.toHaveBeenCalled();
+});
+
+it("updating only the USD price leaves the create/update payload's NGN price present and unaltered from what was submitted (no cross-rail conversion)", async () => {
+  const data = form();
+  data.set("priceNgnMinor", "45000000");
+  data.set("priceUsdMinor", "50000");
+  expect(await updateCohortAction(previous, data)).toEqual({ ok: true, id: "cohort-1" });
+  expect(mocks.update).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ priceNgnMinor: 45000000, priceUsdMinor: 50000 }),
+    }),
+  );
 });

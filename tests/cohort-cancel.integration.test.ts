@@ -78,6 +78,9 @@ function buildCohortService(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     audit: audit as any,
     runInTransaction: (fn) => p.$transaction(fn),
+    // D-02/D-05 — this file never exercises readiness/publish, but the
+    // dependency is required by `CohortServiceDeps` (07-05).
+    enabledRails: () => ({ ngn: true, usd: true }),
   });
 }
 

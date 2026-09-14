@@ -69,3 +69,67 @@ export const stripe: Stripe = new Proxy({} as Stripe, {
     return Reflect.get(getStripe(), property, receiver);
   },
 });
+
+/**
+ * Thrown by `fetchActualSettlement` when a figure it needs is not yet
+ * resolvable from Stripe's own API — a charge not yet created, a balance
+ * transaction not yet settled, or (for a destination charge) a transfer not
+ * yet created. Never a partial or zero-filled result (D-14) — the caller
+ * (the reconciliation sweep) must treat this as "not yet available" and
+ * leave the row untouched for the next scheduled invocation.
+ */
+export class StripeActualSettlementUnavailableError extends Error {
+  constructor(paymentIntentId: string, reason: string) {
+    super(`Stripe actual settlement not yet available for PaymentIntent ${paymentIntentId}: ${reason}`);
+    this.name = "StripeActualSettlementUnavailableError";
+  }
+}
+
+/**
+ * 07-07 — resolves the actual settlement figures for a completed Stripe
+ * Connect destination charge (07-06), read directly from Stripe's own API —
+ * never the webhook event body. One `retrieve` call, expanding the
+ * PaymentIntent's latest charge plus that charge's balance transaction (for
+ * Stripe's own actual processing fee) and its transfer (for the amount
+ * actually moved to the connected account), so no second round trip is
+ * needed. Narrowed into the provider-neutral `ActualSettlement` shape
+ * `payment-reconciliation-service.ts` consumes — no Stripe SDK type crosses
+ * out of this directory (PAY-09).
+ */
+export async function fetchActualSettlement(paymentIntentId: string): Promise<{
+  gatewayFeeActualMinor: number;
+  schoolSettlementActualMinor: number;
+  platformGrossActualMinor: number;
+}> {
+  const intent = await getStripe().paymentIntents.retrieve(paymentIntentId, {
+    expand: ["latest_charge.balance_transaction", "latest_charge.transfer"],
+  });
+
+  const charge = typeof intent.latest_charge === "object" ? intent.latest_charge : null;
+  if (!charge) {
+    throw new StripeActualSettlementUnavailableError(paymentIntentId, "no charge exists on this PaymentIntent yet");
+  }
+
+  const balanceTransaction =
+    typeof charge.balance_transaction === "object" ? charge.balance_transaction : null;
+  if (!balanceTransaction) {
+    throw new StripeActualSettlementUnavailableError(paymentIntentId, "the charge's balance transaction has not settled yet");
+  }
+
+  const transfer = typeof charge.transfer === "object" ? charge.transfer : null;
+  if (!transfer) {
+    throw new StripeActualSettlementUnavailableError(
+      paymentIntentId,
+      "the transfer to the connected account has not been created yet",
+    );
+  }
+
+  const gatewayFeeActualMinor = balanceTransaction.fee;
+  const schoolSettlementActualMinor = transfer.amount;
+
+  return {
+    gatewayFeeActualMinor,
+    schoolSettlementActualMinor,
+    platformGrossActualMinor: charge.amount - schoolSettlementActualMinor,
+  };
+}

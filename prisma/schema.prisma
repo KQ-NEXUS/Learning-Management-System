@@ -759,6 +759,14 @@ model Cohort {
   priceMinor Int
   currency   String @default("NGN")
 
+  // D-06/D-08 — two independent, nullable, administrator-entered base
+  // prices. NULL means "this rail is not offered", never "free". No
+  // exchange rate is stored anywhere in the schema; setting one rail never
+  // changes the other. The non-negative CHECK lives in
+  // prisma/sql/004_payment_split_integrity.sql.
+  priceNgnMinor Int?
+  priceUsdMinor Int?
+
   status      CohortStatus @default(DRAFT)
   publishedAt DateTime?
 
@@ -1111,10 +1119,10 @@ model Submission {
   submittedAt DateTime @default(now())
   isLate      Boolean  @default(false)
 
-  storageKey String
-  filename   String
-  mimeType   String
-  sizeBytes  Int
+  storageKey   String
+  filename     String
+  mimeType     String
+  sizeBytes    Int
   // Shared private-file lifecycle with LessonResource and TicketAttachment.
   uploadStatus UploadStatus @default(UPLOADING)
 
@@ -1222,6 +1230,35 @@ model Certificate {
 // Commerce — REG-03, PAY-01 to PAY-14, PRD §19
 // ---------------------------------------------------------------------------
 
+// D-11, PAY-16 — provider fee rules as immutable, effective-dated records.
+// A rate change is a new version row, never an in-place edit — that
+// immutability is what makes an Order's snapshotted gatewayFeeScheduleId/
+// Version resolve to the exact rule it was priced under for the life of the
+// receipt. Seed rows are configurable examples of a provider's published
+// schedule, not hard-coded permanent truth (D-11).
+model GatewayFeeSchedule {
+  id       String          @id @default(cuid())
+  provider PaymentProvider
+  currency String
+
+  version Int
+
+  percentageBps        Int
+  fixedMinor           Int
+  waiverThresholdMinor Int?
+  capMinor             Int?
+  taxBps               Int    @default(0)
+  roundingRule         String
+
+  effectiveFrom DateTime
+  active        Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([provider, currency, version])
+  @@index([provider, currency, active, effectiveFrom])
+}
+
 // REG-03 — one traceable order per checkout attempt. idempotencyKey makes
 // replay produce at most one paid effect and one active enrolment.
 model Order {
@@ -1237,6 +1274,16 @@ model Order {
 
   // §19.1 — the provider chosen at checkout. Changing method keeps one order.
   selectedProvider PaymentProvider?
+
+  // D-13 — snapshotted at order creation so a later Cohort or fee-schedule
+  // edit never changes an existing Order or receipt. amountMinor above keeps
+  // its existing meaning (the learner total) and is not redefined here.
+  baseAmountMinor               Int?
+  platformFeeMinor              Int?
+  gatewayFeeEstimateMinor       Int?
+  gatewayFeeScheduleId          String?
+  gatewayFeeScheduleVersion     Int?
+  schoolSettlementExpectedMinor Int?
 
   idempotencyKey String  @unique
   correlationId  String?
@@ -1296,6 +1343,16 @@ model PaymentAttempt {
   // recorded state. Becomes a visible exception, not a duplicate effect.
   exceptionNote String?
 
+  // D-14 — actual settlement, populated only once verified provider evidence
+  // arrives. NULL means "no verified provider evidence yet" and is never
+  // equivalent to 0. reconciledAt lets the 07-07 scheduled sweep select
+  // un-enriched rows without inferring intent from a NULL fee.
+  gatewayFeeActualMinor       Int?
+  schoolSettlementActualMinor Int?
+  platformGrossActualMinor    Int?
+  platformNetActualMinor      Int?
+  reconciledAt                DateTime?
+
   order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   refunds Refund[]
 
@@ -1324,6 +1381,13 @@ model Refund {
   actorId     String?
   createdAt   DateTime  @default(now())
   completedAt DateTime?
+
+  // D-22 — component allocation across base/platform/gateway so Finance can
+  // reconcile a reversal against the order's own snapshot.
+  baseComponentMinor     Int?
+  platformComponentMinor Int?
+  gatewayComponentMinor  Int?
+  providerOutcome        String?
 
   order          Order          @relation(fields: [orderId], references: [id])
   paymentAttempt PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
@@ -1417,13 +1481,13 @@ model TicketAttachment {
   ticketId  String
   messageId String?
 
-  storageKey String
-  filename   String
-  mimeType   String
-  sizeBytes  Int
+  storageKey   String
+  filename     String
+  mimeType     String
+  sizeBytes    Int
   // Shared private-file lifecycle with LessonResource and Submission.
   uploadStatus UploadStatus @default(UPLOADING)
-  createdAt  DateTime   @default(now())
+  createdAt    DateTime     @default(now())
 
   ticket  Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   message TicketMessage? @relation(fields: [messageId], references: [id])

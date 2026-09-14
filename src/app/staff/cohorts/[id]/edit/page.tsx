@@ -66,8 +66,8 @@ export default async function EditCohortPage({
     enrolmentOpensAt: formatCohortDateTime(cohort.enrolmentOpensAt, cohort.timezone),
     enrolmentClosesAt: formatCohortDateTime(cohort.enrolmentClosesAt, cohort.timezone),
     capacity: cohort.capacity,
-    priceMinor: cohort.priceMinor,
-    currency: cohort.currency,
+    priceNgnMinor: cohort.priceNgnMinor,
+    priceUsdMinor: cohort.priceUsdMinor,
     attendanceThresholdPct: cohort.attendanceThresholdPct,
     holdMinutes: cohort.holdMinutes,
   };

@@ -56,8 +56,10 @@ export type Values = {
   enrolmentOpensAt?: string;
   enrolmentClosesAt?: string;
   capacity?: number;
-  priceMinor?: number;
-  currency?: string;
+  // D-06/D-08 — two independent, nullable dual-price rails. `null`/`undefined`
+  // means "this Cohort does not sell on this rail," never `0`.
+  priceNgnMinor?: number | null;
+  priceUsdMinor?: number | null;
   attendanceThresholdPct?: number | null;
   holdMinutes?: number | null;
 };
@@ -295,12 +297,16 @@ export function CohortForm(
           )}
         </FormField>
 
+        <p className="max-w-prose text-sm text-muted-foreground">
+          No currency conversion happens — each price is set independently and never derived from
+          the other.
+        </p>
+
         <FormField
-          name="priceMinor"
-          label="Price (minor units)"
-          required
-          error={errorFor("priceMinor")}
-          hint="Whole integer minor units — e.g. 500000 for ₦5,000.00, never a decimal amount."
+          name="priceNgnMinor"
+          label="NGN base price"
+          error={errorFor("priceNgnMinor")}
+          hint="Whole integer minor units (kobo) — e.g. 45000000 for ₦450,000.00. Leave blank if this Cohort does not sell in NGN."
         >
           {(field) => (
             <TextInput
@@ -308,23 +314,26 @@ export function CohortForm(
               type="number"
               min={0}
               step={1}
-              required
               mono
-              defaultValue={values.priceMinor ?? ""}
+              defaultValue={values.priceNgnMinor ?? ""}
             />
           )}
         </FormField>
 
-        <FormField name="currency" label="Currency" required error={errorFor("currency")}>
+        <FormField
+          name="priceUsdMinor"
+          label="USD base price"
+          error={errorFor("priceUsdMinor")}
+          hint="Whole integer minor units (cents) — e.g. 50000 for $500.00. Leave blank if this Cohort does not sell in USD."
+        >
           {(field) => (
             <TextInput
               {...field}
-              type="text"
-              required
-              maxLength={3}
+              type="number"
+              min={0}
+              step={1}
               mono
-              defaultValue={values.currency ?? "NGN"}
-              placeholder="NGN"
+              defaultValue={values.priceUsdMinor ?? ""}
             />
           )}
         </FormField>

@@ -52,6 +52,8 @@ function makeCohortRow(over: Partial<CohortRecord> = {}): CohortRecord {
     seatsTaken: 0,
     priceMinor: 50000,
     currency: "NGN",
+    priceNgnMinor: 50000,
+    priceUsdMinor: null,
     status: "DRAFT",
     publishedAt: null,
     attendanceThresholdPct: null,
@@ -71,8 +73,12 @@ function readyAggregateRow(over: Partial<CohortAggregateRow> = {}): CohortAggreg
     endsAt: COHORT_END,
     capacity: 20,
     seatsTaken: 0,
-    priceMinor: 50000,
-    currency: "NGN",
+    // Both rails priced by default so the pre-existing "ready cohort"
+    // publish-success tests stay ready under the harness's default
+    // enabledRails: { ngn: true, usd: true } — override per-test to exercise
+    // an unpriced-enabled-rail refusal (07-05).
+    priceNgnMinor: 50000,
+    priceUsdMinor: 50000,
     attendanceThresholdPct: null,
     courseId: "course-1",
     programmeId: null,
@@ -120,6 +126,9 @@ function harness(opts?: {
    *  readiness against fresh data rather than trusting the pre-tx read. */
   freshAggregateRow?: CohortAggregateRow | null;
   tx?: TxFake;
+  /** Which online rails this deployment has enabled (D-02/D-05). Defaults to
+   *  both enabled so existing price-agnostic tests are unaffected. */
+  enabledRails?: { ngn: boolean; usd: boolean };
 }) {
   const rows = new Map(
     (opts?.rows ?? [makeCohortRow()]).map((r) => [r.id, r] as const),
@@ -208,6 +217,7 @@ function harness(opts?: {
       audits.push(entry as unknown as Record<string, unknown>);
     },
     runInTransaction: (fn) => fn(),
+    enabledRails: () => opts?.enabledRails ?? { ngn: true, usd: true },
     now: () => NOW,
   });
 
@@ -442,6 +452,22 @@ describe("cohortService — factory CRUD", () => {
     expect(audits[0].after).toBeTruthy();
   });
 
+  it("threads priceNgnMinor/priceUsdMinor straight through create, leaving an unset rail null — never 0 (D-06/D-08)", async () => {
+    const { service, delegate } = harness({ grants: [grant("cohorts.manage")] });
+    await service.cohortService.create({
+      code: "C3",
+      title: "Cohort Three",
+      courseId: "course-1",
+      priceNgnMinor: 45000000,
+      priceUsdMinor: null,
+    });
+    expect(delegate.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ priceNgnMinor: 45000000, priceUsdMinor: null }),
+      }),
+    );
+  });
+
   it("archive writes status CANCELLED and there is no delete operation", async () => {
     const { service, delegate } = harness({ grants: [grant("cohorts.manage")] });
     await service.cohortService.archive("cohort-1", "Cancelled by operations");
@@ -476,6 +502,27 @@ describe("updateCohort — the D-30 offer-lock wrapper", () => {
     expect(delegate.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ title: "Renamed cohort" }) }),
     );
+  });
+
+  it("an update that omits priceNgnMinor leaves the stored NGN price byte-identical while writing the submitted USD price (D-06)", async () => {
+    const { service, delegate, rows } = harness({
+      rows: [makeCohortRow({ priceNgnMinor: 45000000, priceUsdMinor: null })],
+    });
+    await service.updateCohort({ id: "cohort-1", data: { priceUsdMinor: 5000000 } });
+    const callArgs = vi.mocked(delegate.update).mock.calls[0][0] as { data: Record<string, unknown> };
+    expect("priceNgnMinor" in callArgs.data).toBe(false);
+    expect(rows.get("cohort-1")?.priceNgnMinor).toBe(45000000);
+    expect(rows.get("cohort-1")?.priceUsdMinor).toBe(5000000);
+  });
+
+  it("an update that explicitly sets priceNgnMinor to null clears that rail — a distinct request from omitting it", async () => {
+    const { service, rows } = harness({
+      rows: [makeCohortRow({ priceNgnMinor: 45000000, priceUsdMinor: 5000000 })],
+    });
+    await service.updateCohort({ id: "cohort-1", data: { priceNgnMinor: null } });
+    expect(rows.get("cohort-1")?.priceNgnMinor).toBeNull();
+    // The rail not mentioned in this request is untouched.
+    expect(rows.get("cohort-1")?.priceUsdMinor).toBe(5000000);
   });
 
   it("does not lock when the submitted courseId equals the stored one", async () => {
@@ -514,8 +561,6 @@ describe("loadCohortReadinessAggregate", () => {
       deliveryMode: "INSTRUCTOR_LED",
       capacity: 20,
       seatsTaken: 3,
-      priceMinor: 50000,
-      currency: "NGN",
       attendanceThresholdPct: 75,
       instructorCount: 2,
       nonCancelledSessionCount: 1,
@@ -527,6 +572,17 @@ describe("loadCohortReadinessAggregate", () => {
       },
     });
     expect(input?.sessions).toHaveLength(2);
+  });
+
+  it("threads priceNgnMinor/priceUsdMinor and the injected enabledRails into the ReadinessCohortInput (D-06/D-08)", async () => {
+    const row = readyAggregateRow({ priceNgnMinor: 45000000, priceUsdMinor: null });
+    const { service } = harness({ aggregateRow: row, enabledRails: { ngn: true, usd: false } });
+    const input = await service.loadCohortReadinessAggregate("cohort-1");
+    expect(input).toMatchObject({
+      priceNgnMinor: 45000000,
+      priceUsdMinor: null,
+      enabledRails: { ngn: true, usd: false },
+    });
   });
 
   it("resolves the pin from the programme side for a programme cohort", async () => {
@@ -592,6 +648,25 @@ describe("publishCohort — permission-, readiness- and token-gated", () => {
     expect(err.failures.map((f: { id: string }) => f.id)).toContain("instructors");
     expect(tx.cohort.updateMany).not.toHaveBeenCalled();
     expect(tx.domainEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("throws CohortReadinessRefusedError when an enabled rail has no price, but never blocks on a disabled rail's missing price (D-08)", async () => {
+    const row = readyAggregateRow({ priceNgnMinor: null, priceUsdMinor: null });
+    const { service, tx } = harness({ aggregateRow: row, enabledRails: { ngn: true, usd: false } });
+    const err = await service
+      .publishCohort({ cohortId: "cohort-1", expectedUpdatedAt: T0 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(CohortReadinessRefusedError);
+    expect(err.failures.map((f: { id: string }) => f.id)).toContain("price-ngn");
+    expect(err.failures.map((f: { id: string }) => f.id)).not.toContain("price-usd");
+    expect(tx.cohort.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("publishes successfully when the only unpriced rail is disabled for this deployment", async () => {
+    const row = readyAggregateRow({ priceNgnMinor: 45000000, priceUsdMinor: null });
+    const { service, tx } = harness({ aggregateRow: row, enabledRails: { ngn: true, usd: false } });
+    await service.publishCohort({ cohortId: "cohort-1", expectedUpdatedAt: T0 });
+    expect(tx.cohort.updateMany).toHaveBeenCalled();
   });
 
   it("CR-02: re-evaluates readiness inside the transaction and refuses a cohort that went stale between the pre-check and the claim", async () => {
@@ -919,6 +994,7 @@ function cancelHarness(opts?: {
       audits.push(entry as unknown as Record<string, unknown>);
     },
     runInTransaction: (fn) => fn(),
+    enabledRails: () => ({ ngn: true, usd: true }),
     now: () => NOW,
   });
 

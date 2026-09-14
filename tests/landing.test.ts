@@ -79,14 +79,33 @@ describe("checkout-intent constants", () => {
 describe("checkoutReturnPathFor", () => {
   const VALID_COHORT_ID = "clh3x9f9a0000356k2j5g8h2q";
 
-  it("returns /enrol/{cohortIntent} for a non-staff user with a non-empty intent", () => {
-    expect(checkoutReturnPathFor({ isStaff: false }, VALID_COHORT_ID)).toBe(
-      `/enrol/${VALID_COHORT_ID}`,
+  // 07-04 — the intent value now carries `${cohortId}.${currency}` (D-07),
+  // never a bare cohort id; the output path gains a `?currency=` query
+  // parameter constructed from a two-value allowlist this module owns.
+  it("returns /enrol/{id}?currency={currency} for a non-staff user with a valid dotted cohort.currency intent", () => {
+    expect(checkoutReturnPathFor({ isStaff: false }, `${VALID_COHORT_ID}.NGN`)).toBe(
+      `/enrol/${VALID_COHORT_ID}?currency=NGN`,
+    );
+    expect(checkoutReturnPathFor({ isStaff: false }, `${VALID_COHORT_ID}.USD`)).toBe(
+      `/enrol/${VALID_COHORT_ID}?currency=USD`,
     );
   });
 
+  it("round-trips both supported currencies without altering the id half", () => {
+    for (const currency of ["NGN", "USD"] as const) {
+      const result = checkoutReturnPathFor({ isStaff: false }, `${VALID_COHORT_ID}.${currency}`);
+      expect(result).toBe(`/enrol/${VALID_COHORT_ID}?currency=${currency}`);
+    }
+  });
+
+  it("falls back to the learner landing path when the currency half is unsupported, wrong case, or absent (no separator at all)", () => {
+    expect(checkoutReturnPathFor({ isStaff: false }, `${VALID_COHORT_ID}.GBP`)).toBe(LEARNER_LANDING_PATH);
+    expect(checkoutReturnPathFor({ isStaff: false }, `${VALID_COHORT_ID}.ngn`)).toBe(LEARNER_LANDING_PATH);
+    expect(checkoutReturnPathFor({ isStaff: false }, VALID_COHORT_ID)).toBe(LEARNER_LANDING_PATH);
+  });
+
   it("returns the staff landing path for a staff user, whatever the intent value", () => {
-    expect(checkoutReturnPathFor({ isStaff: true }, VALID_COHORT_ID)).toBe(STAFF_LANDING_PATH);
+    expect(checkoutReturnPathFor({ isStaff: true }, `${VALID_COHORT_ID}.NGN`)).toBe(STAFF_LANDING_PATH);
     expect(checkoutReturnPathFor({ isStaff: true }, "//evil.example.com")).toBe(
       STAFF_LANDING_PATH,
     );
@@ -138,8 +157,8 @@ describe("checkoutReturnPathFor", () => {
 
   it("every returned value starts with exactly one slash and never contains //", () => {
     const cases: Array<[{ isStaff?: boolean | null }, string | null | undefined]> = [
-      [{ isStaff: false }, VALID_COHORT_ID],
-      [{ isStaff: true }, VALID_COHORT_ID],
+      [{ isStaff: false }, `${VALID_COHORT_ID}.NGN`],
+      [{ isStaff: true }, `${VALID_COHORT_ID}.NGN`],
       [{ isStaff: false }, null],
       [{ isStaff: false }, "//evil.example.com"],
       [{ isStaff: false }, "https://evil.example.com"],

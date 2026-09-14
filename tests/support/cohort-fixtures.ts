@@ -69,6 +69,18 @@ export async function seedCohortFixture(
     ).id;
 
   const now = Date.now();
+
+  // Phase 7 (plan 07-02) — dual-currency prices, D-06/D-08. Defaults the
+  // NGN rail to the legacy priceMinor value when the caller supplies only
+  // the legacy price/currency and neither new field explicitly (including
+  // every pre-existing Phase 5/6 call site, which keeps compiling
+  // unchanged). Passing `priceNgnMinor`/`priceUsdMinor` explicitly (even
+  // `null`) always wins via the `...cohortOverrides` spread below.
+  const legacyPriceMinor = (cohortOverrides.priceMinor as number | undefined) ?? 0;
+  const legacyCurrency = (cohortOverrides.currency as string | undefined) ?? "NGN";
+  const defaultPriceNgnMinor = legacyCurrency === "NGN" ? legacyPriceMinor : null;
+  const defaultPriceUsdMinor = legacyCurrency === "USD" ? legacyPriceMinor : null;
+
   const cohort = await prisma.cohort.create({
     data: {
       code: uniq("COH"),
@@ -82,15 +94,72 @@ export async function seedCohortFixture(
       enrolmentClosesAt: new Date(now + 5 * DAY_MS),
       capacity: 1,
       seatsTaken: 0,
-      priceMinor: 0,
-      currency: "NGN",
+      priceMinor: legacyPriceMinor,
+      currency: legacyCurrency,
       holdMinutes: 30,
+      priceNgnMinor: defaultPriceNgnMinor,
+      priceUsdMinor: defaultPriceUsdMinor,
       ...cohortOverrides,
     },
     select: { id: true },
   });
 
   return { cohortId: cohort.id, courseId };
+}
+
+export type GatewayFeeScheduleFixture = { id: string };
+
+/**
+ * 07-04 — `startTestDatabase()` (`tests/support/pg.ts`) applies the checked-in
+ * migrations only, never `prisma/seed.ts`, so every Testcontainers-backed
+ * checkout test that reaches `startCheckout` needs its own active
+ * `GatewayFeeSchedule` row or hits `MissingGatewayFeeScheduleError` — this is
+ * the D-25 worked-example PAYSTACK/NGN schedule (`prisma/seed.ts`'s own
+ * production values), seeded once per container in a file's own `beforeAll`.
+ */
+export async function seedPaystackNgnFeeScheduleFixture(
+  prisma: PrismaClient,
+): Promise<GatewayFeeScheduleFixture> {
+  const row = await prisma.gatewayFeeSchedule.create({
+    data: {
+      provider: "PAYSTACK",
+      currency: "NGN",
+      version: 1,
+      percentageBps: 150,
+      fixedMinor: 10_000,
+      waiverThresholdMinor: null,
+      capMinor: 200_000,
+      taxBps: 0,
+      roundingRule: "HALF_UP",
+      effectiveFrom: new Date(Date.now() - DAY_MS),
+      active: true,
+    },
+    select: { id: true },
+  });
+  return { id: row.id };
+}
+
+/** The USD/Stripe sibling of the fixture above — a distinct, table-driven schedule (not D-25's own numbers). */
+export async function seedStripeUsdFeeScheduleFixture(
+  prisma: PrismaClient,
+): Promise<GatewayFeeScheduleFixture> {
+  const row = await prisma.gatewayFeeSchedule.create({
+    data: {
+      provider: "STRIPE",
+      currency: "USD",
+      version: 1,
+      percentageBps: 290,
+      fixedMinor: 30,
+      waiverThresholdMinor: null,
+      capMinor: null,
+      taxBps: 0,
+      roundingRule: "HALF_UP",
+      effectiveFrom: new Date(Date.now() - DAY_MS),
+      active: true,
+    },
+    select: { id: true },
+  });
+  return { id: row.id };
 }
 
 export type LearnerFixture = { userId: string };

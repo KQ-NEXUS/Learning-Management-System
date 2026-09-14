@@ -46,9 +46,10 @@
  *
  * The PAYMENT-STATE transition guard (below, `PAYMENT_VALID_TRANSITIONS`)
  * is the payment-side twin of `enrolment-service.ts`'s `VALID_TRANSITIONS` —
- * same shape, same reason: every terminal `PaymentStatus` has an empty
- * allow-list, so a late or out-of-order webhook event can never walk a
- * settled payment backwards. `Order`'s own status is never separately
+ * same shape, same reason: a settled `SUCCEEDED` status has an empty
+ * allow-list, so a late or out-of-order webhook event cannot walk a settled
+ * payment backwards. A provider-confirmed success can still recover a
+ * declined or locally-cancelled attempt. `Order`'s own status is never separately
  * gated by a transition table of its own: every write this module makes to
  * `Order.status` happens directly inside one of the three exported
  * functions below, each already gated by the PaymentAttempt guard or the
@@ -73,6 +74,10 @@ import {
   type EnrolmentActivationTxClient,
   type EnrolmentRow,
 } from "@/server/services/enrolment-transitions";
+import {
+  AlreadyEnrolledError,
+  lockOpenCohort,
+} from "@/server/services/seat-accounting";
 // D-18 — Phase 3's minimal send-wrapper, reused verbatim (no second mail
 // client, no template engine, no dedup layer). `dispatchBestEffort` is
 // imported by name here so the opt-out from `dispatch`'s throw is visible at
@@ -85,10 +90,14 @@ import {
 
 export const SYSTEM_ACTOR_TYPE = "SYSTEM";
 
-const DEFAULT_BASE_URL = () => process.env.APP_BASE_URL ?? "http://localhost:3000";
+const DEFAULT_BASE_URL = () =>
+  process.env.APP_BASE_URL ?? "http://localhost:3000";
 
 function formatMinorAmount(amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amountMinor / 100);
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+  }).format(amountMinor / 100);
 }
 
 /**
@@ -154,20 +163,25 @@ export type PaymentStatusValue =
   | "PENDING_MANUAL_REVIEW";
 
 /**
- * The only legal `PaymentAttempt.status` moves. Every terminal status
- * (`SUCCEEDED`, `FAILED`, `CANCELLED`) has an empty allow-list — that empty
- * list is what stops a late or out-of-order webhook event from walking a
- * settled payment backwards. `PENDING_MANUAL_REVIEW` is Phase 7 scope; it is
+ * The only legal `PaymentAttempt.status` moves. `SUCCEEDED` has an empty
+ * allow-list, which stops a late or out-of-order event from walking a settled
+ * payment backwards. A provider can report a later real success for the same
+ * intent after a decline retry or local cancellation; captured money must
+ * win, so FAILED/CANCELLED may move only to SUCCEEDED.
+ * `PENDING_MANUAL_REVIEW` is Phase 7 scope; it is
  * declared here (rather than omitted) only so this table stays exhaustive
  * over the schema's full `PaymentStatus` enum, and is not reachable from any
  * transition this phase performs.
  */
-export const PAYMENT_VALID_TRANSITIONS: Record<PaymentStatusValue, PaymentStatusValue[]> = {
+export const PAYMENT_VALID_TRANSITIONS: Record<
+  PaymentStatusValue,
+  PaymentStatusValue[]
+> = {
   PENDING: ["PROCESSING", "FAILED", "CANCELLED"],
   PROCESSING: ["SUCCEEDED", "FAILED", "CANCELLED"],
   SUCCEEDED: [],
-  FAILED: [],
-  CANCELLED: [],
+  FAILED: ["SUCCEEDED"],
+  CANCELLED: ["SUCCEEDED"],
   PENDING_MANUAL_REVIEW: [],
 };
 
@@ -177,7 +191,11 @@ export class IllegalPaymentTransitionError extends Error {
   readonly to: string;
   readonly paymentAttemptId: string | null;
 
-  constructor(from: string, to: string, paymentAttemptId: string | null = null) {
+  constructor(
+    from: string,
+    to: string,
+    paymentAttemptId: string | null = null,
+  ) {
     super(`A PaymentAttempt cannot move from ${from} to ${to}.`);
     this.name = "IllegalPaymentTransitionError";
     this.from = from;
@@ -203,11 +221,45 @@ export function assertPaymentTransition(
 }
 
 // ---------------------------------------------------------------------------
+// buildReconciliationVarianceNote — shared exception-note text (07-07)
+// ---------------------------------------------------------------------------
+
+/**
+ * 07-07 — the shared exception-note wording for a reconciliation variance
+ * (D-18): names both the actual and expected figures for one commercial
+ * component (school settlement or gateway fee) so Finance's payment-detail
+ * view reads exactly what disagreed. A pure function, not a write — this
+ * module still writes no reconciliation columns of its own; the caller
+ * (`payment-reconciliation-service.ts`) is the only writer of
+ * `PaymentAttempt.exceptionNote` for a reconciliation variance, and reuses
+ * this helper only so its wording never drifts from a second, hand-written
+ * copy.
+ */
+export function buildReconciliationVarianceNote(args: {
+  label: string;
+  actualMinor: number;
+  expectedMinor: number;
+  toleranceMinor: number;
+}): string {
+  return `${args.label} variance: actual ${args.actualMinor} differs from expected ${args.expectedMinor} by more than the ${args.toleranceMinor}-minor-unit rounding tolerance.`;
+}
+
+// ---------------------------------------------------------------------------
 // recordWebhookEventOrSkip — the idempotency guard
 // ---------------------------------------------------------------------------
 
+/**
+ * The provider literal union every settlement entry point below accepts —
+ * widened from the original Stripe-only literal (07-04) so a second
+ * provider's webhook route and any future manual-confirmation path can
+ * share this module without a parallel settlement service. Deliberately NOT
+ * the Prisma `PaymentProvider` enum: this file (like `checkout-service.ts`)
+ * carries no `@prisma/client` type import.
+ */
+export type SettlementProvider = "STRIPE" | "PAYSTACK" | "MANUAL";
+
 export type RecordWebhookEventInput = {
-  provider: "STRIPE";
+  provider: SettlementProvider;
   providerEventId: string;
   eventType: string;
   payload: Record<string, unknown>;
@@ -255,6 +307,23 @@ export function createRecordWebhookEventOrSkip(deps: RecordWebhookEventDeps) {
       return { isNew: true };
     } catch (err) {
       if (isUniqueConstraintViolation(err)) {
+        // A previous delivery may have been recorded successfully but failed
+        // during downstream processing.  The route marks that row with a
+        // non-null error so one provider redelivery can atomically claim it.
+        // Ordinary concurrent duplicates have no error and still skip below.
+        const retryClaim = await deps.webhookEvent.updateMany({
+          where: {
+            provider: input.provider,
+            providerEventId: input.providerEventId,
+            status: "RECEIVED",
+            error: { not: null },
+          },
+          data: { status: "DUPLICATE", error: null },
+        });
+        if (retryClaim.count === 1) {
+          return { isNew: true };
+        }
+
         await deps.webhookEvent.updateMany({
           where: {
             provider: input.provider,
@@ -267,6 +336,32 @@ export function createRecordWebhookEventOrSkip(deps: RecordWebhookEventDeps) {
       }
       throw err;
     }
+  };
+}
+
+export type MarkWebhookEventRetryableInput = {
+  provider: SettlementProvider;
+  providerEventId: string;
+};
+
+/** Leaves an authenticated event claimable after unexpected processing failure. */
+export function createMarkWebhookEventRetryable(deps: RecordWebhookEventDeps) {
+  return async function markWebhookEventRetryable(
+    input: MarkWebhookEventRetryableInput,
+  ): Promise<{ marked: boolean }> {
+    const result = await deps.webhookEvent.updateMany({
+      where: {
+        provider: input.provider,
+        providerEventId: input.providerEventId,
+        status: { in: ["RECEIVED", "DUPLICATE"] },
+      },
+      data: {
+        status: "RECEIVED",
+        error: "Webhook processing failed; awaiting provider retry.",
+        processedAt: null,
+      },
+    });
+    return { marked: result.count === 1 };
   };
 }
 
@@ -306,12 +401,21 @@ export type OrderEmailFacts = {
  * Structural, so this file carries no `@prisma/client` type import.
  */
 export type SettlementTxClient = EnrolmentActivationTxClient & {
+  enrolment: EnrolmentActivationTxClient["enrolment"] & {
+    findFirst(args: {
+      where: Record<string, unknown>;
+      select: { id: true };
+    }): Promise<{ id: string } | null>;
+  };
   order: {
     findUnique(args: {
       where: { id: string };
       select: Record<string, unknown>;
     }): Promise<OrderRow | null>;
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
+    update(args: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
   };
   paymentAttempt: {
     findFirst(args: {
@@ -319,7 +423,10 @@ export type SettlementTxClient = EnrolmentActivationTxClient & {
       orderBy?: Record<string, unknown>;
       select: Record<string, unknown>;
     }): Promise<PaymentAttemptRow | null>;
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
+    update(args: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
   };
   webhookEvent: {
     updateMany(args: {
@@ -333,7 +440,12 @@ export type SettlementTxClient = EnrolmentActivationTxClient & {
 export type ActivationTxClient = SettlementTxClient;
 
 export type SettlementDeps = {
-  db: { $transaction: <R>(fn: (tx: SettlementTxClient) => Promise<R>) => Promise<R> };
+  db: {
+    $transaction: <R>(
+      fn: (tx: SettlementTxClient) => Promise<R>,
+      options?: { timeout?: number },
+    ) => Promise<R>;
+  };
   audit: (event: {
     actorId: string | null;
     actorType?: string;
@@ -345,7 +457,9 @@ export type SettlementDeps = {
   }) => Promise<void>;
   /** The `OrderEmailFacts` read the post-commit confirmation email needs. */
   orderEmailFacts: {
-    findUnique(args: { where: { id: string } }): Promise<OrderEmailFacts | null>;
+    findUnique(args: {
+      where: { id: string };
+    }): Promise<OrderEmailFacts | null>;
   };
   /** `emailDispatchService.dispatch`, imported by name at the call site (D-18). */
   dispatchEmail: (params: DispatchParams) => Promise<unknown>;
@@ -356,22 +470,34 @@ export type SettlementDeps = {
 /** @deprecated kept as an alias — `activateOrderAsSystem`'s original exported deps type name. */
 export type ActivateOrderAsSystemDeps = SettlementDeps;
 
+/**
+ * `provider` is threaded through explicitly (07-04) — the original hard-coded
+ * `provider: "STRIPE"` `where` clause would silently no-op (zero rows
+ * matched, no error) for a Paystack event's `providerEventId`, since a
+ * `WebhookEvent` row's uniqueness is `(provider, providerEventId)`, not
+ * `providerEventId` alone.
+ */
 async function markWebhookEventException(
   tx: SettlementTxClient,
-  args: { eventId: string; at: Date; error: string },
+  args: {
+    eventId: string;
+    at: Date;
+    error: string;
+    provider: SettlementProvider;
+  },
 ): Promise<void> {
   await tx.webhookEvent.updateMany({
-    where: { provider: "STRIPE", providerEventId: args.eventId },
+    where: { provider: args.provider, providerEventId: args.eventId },
     data: { status: "EXCEPTION", processedAt: args.at, error: args.error },
   });
 }
 
 async function markWebhookEventProcessed(
   tx: SettlementTxClient,
-  args: { eventId: string; at: Date },
+  args: { eventId: string; at: Date; provider: SettlementProvider },
 ): Promise<void> {
   await tx.webhookEvent.updateMany({
-    where: { provider: "STRIPE", providerEventId: args.eventId },
+    where: { provider: args.provider, providerEventId: args.eventId },
     data: { status: "PROCESSED", processedAt: args.at },
   });
 }
@@ -382,10 +508,27 @@ async function markWebhookEventProcessed(
 
 export type ActivateOrderAsSystemInput = {
   orderId: string;
+  /** Threaded into `markWebhookEventException`/`markWebhookEventProcessed`'s
+   *  `where` clause (07-04) — the `WebhookEvent` row's uniqueness is
+   *  `(provider, providerEventId)`, so omitting this or hard-coding "STRIPE"
+   *  would silently fail to mark a non-Stripe event's row. */
+  provider: SettlementProvider;
   providerIntentId: string;
   amountMinor: number;
   currency: string;
   eventId: string;
+  /**
+   * 07-06/07-07 — narrow, allow-listed provider correlation facts (e.g.
+   * Stripe's paymentIntentId/chargeId/transferId/transferDestination) merged
+   * into `PaymentAttempt.evidence` alongside the generic fields this
+   * function already builds below. Never a whole raw provider payload
+   * (D-21/PAY-14) — the caller (the webhook route) is responsible for
+   * narrowing before this reaches here. Deliberately NOT the four "actual
+   * settlement" columns (D-14) — those stay NULL regardless of what this
+   * carries; only 07-07's reconciliation sweep, working from independently
+   * verified provider evidence, may ever write them.
+   */
+  settlementEvidence?: Record<string, unknown> | null;
 };
 
 export function createActivateOrderAsSystem(deps: SettlementDeps) {
@@ -412,7 +555,7 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
    *     NOT moved to SUCCEEDED in this branch, since what actually settled
    *     cannot be trusted to equal what this Order expected.
    *   - `EXCEPTION` (illegal payment transition) — the matching
-   *     PaymentAttempt is already terminal (most likely already SUCCEEDED —
+   *     PaymentAttempt is already SUCCEEDED —
    *     an echo of an event this module already settled under a different
    *     event id) and cannot legally move to SUCCEEDED again. The attempt is
    *     left exactly as it is; only a note and an outbox row record that the
@@ -426,201 +569,290 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
   ): Promise<{ outcome: "ACTIVATED" | "EXCEPTION" }> {
     const at = now();
 
-    const result = await deps.db.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({
-        where: { id: input.orderId },
-        select: {
-          id: true,
-          status: true,
-          amountMinor: true,
-          currency: true,
-          enrolments: true,
-        },
-      });
+    const result = await deps.db.$transaction(
+      async (tx) => {
+        const order = await tx.order.findUnique({
+          where: { id: input.orderId },
+          select: {
+            id: true,
+            status: true,
+            amountMinor: true,
+            currency: true,
+            enrolments: true,
+          },
+        });
 
-      if (!order) {
-        // No matching Order for this webhook's client_reference_id. Nothing
-        // to settle or roll back — record the fact on the WebhookEvent row
-        // itself (there is no Order to flag instead) and let the route
-        // acknowledge with 200 so Stripe does not retry a payload this app
-        // can never resolve.
-        await markWebhookEventException(tx, {
+        if (!order) {
+          // No matching Order for this webhook's client_reference_id. Nothing
+          // to settle or roll back — record the fact on the WebhookEvent row
+          // itself (there is no Order to flag instead) and let the route
+          // acknowledge with 200 so Stripe does not retry a payload this app
+          // can never resolve.
+          await markWebhookEventException(tx, {
+            eventId: input.eventId,
+            at,
+            error: `No Order found for id ${input.orderId}.`,
+            provider: input.provider,
+          });
+          return {
+            outcome: "EXCEPTION" as const,
+            enrolmentId: null as string | null,
+            reason: "no_order" as const,
+          };
+        }
+
+        await markWebhookEventProcessed(tx, {
           eventId: input.eventId,
           at,
-          error: `No Order found for id ${input.orderId}.`,
+          provider: input.provider,
         });
-        return {
-          outcome: "EXCEPTION" as const,
-          enrolmentId: null as string | null,
-          reason: "no_order" as const,
-        };
-      }
 
-      await markWebhookEventProcessed(tx, { eventId: input.eventId, at });
+        // REG-03 — never mark PAID or activate from a webhook whose amount or
+        // currency does not match what this Order was created with.
+        const mismatched =
+          order.amountMinor !== input.amountMinor ||
+          order.currency.toUpperCase() !== input.currency.toUpperCase();
+        if (mismatched) {
+          await tx.order.update({
+            where: { id: order.id },
+            data: { status: "EXCEPTION" },
+          });
+          // The mismatch is written to PaymentAttempt.exceptionNote — status is
+          // deliberately NOT moved to SUCCEEDED (what settled cannot be
+          // trusted to equal what this Order expected), but the note itself
+          // still records what Stripe reported, naming both figures, for
+          // reconciliation.
+          const mismatchedAttempt = await tx.paymentAttempt.findFirst({
+            where: {
+              orderId: order.id,
+              providerIntentId: input.providerIntentId,
+            },
+            select: { id: true, status: true },
+          });
+          if (mismatchedAttempt) {
+            await tx.paymentAttempt.update({
+              where: { id: mismatchedAttempt.id },
+              data: {
+                exceptionNote: `${input.provider} reported ${input.amountMinor} ${input.currency.toUpperCase()}, but this Order was created for ${order.amountMinor} ${order.currency.toUpperCase()}.`,
+              },
+            });
+          }
+          await writeDomainEvent(tx, {
+            type: "order.exception",
+            payload: {
+              orderId: order.id,
+              providerIntentId: input.providerIntentId,
+              reason: "amount_or_currency_mismatch",
+            },
+          });
+          const enrolment = order.enrolments[0] ?? null;
+          return {
+            outcome: "EXCEPTION" as const,
+            enrolmentId: enrolment?.id ?? null,
+            reason: "amount_mismatch" as const,
+          };
+        }
 
-      // REG-03 — never mark PAID or activate from a webhook whose amount or
-      // currency does not match what this Order was created with.
-      const mismatched =
-        order.amountMinor !== input.amountMinor ||
-        order.currency.toUpperCase() !== input.currency.toUpperCase();
-      if (mismatched) {
-        await tx.order.update({ where: { id: order.id }, data: { status: "EXCEPTION" } });
-        // The mismatch is written to PaymentAttempt.exceptionNote — status is
-        // deliberately NOT moved to SUCCEEDED (what settled cannot be
-        // trusted to equal what this Order expected), but the note itself
-        // still records what Stripe reported, naming both figures, for
-        // reconciliation.
-        const mismatchedAttempt = await tx.paymentAttempt.findFirst({
-          where: { orderId: order.id, providerIntentId: input.providerIntentId },
+        const enrolment = order.enrolments[0];
+
+        const attempt = await tx.paymentAttempt.findFirst({
+          where: {
+            orderId: order.id,
+            providerIntentId: input.providerIntentId,
+          },
           select: { id: true, status: true },
         });
-        if (mismatchedAttempt) {
-          await tx.paymentAttempt.update({
-            where: { id: mismatchedAttempt.id },
-            data: {
-              exceptionNote: `Stripe reported ${input.amountMinor} ${input.currency.toUpperCase()}, but this Order was created for ${order.amountMinor} ${order.currency.toUpperCase()}.`,
-            },
+
+        if (!attempt) {
+          // Nothing to correlate this settlement to — flag for reconciliation
+          // rather than guessing which PaymentAttempt Stripe means.
+          await tx.order.update({
+            where: { id: order.id },
+            data: { status: "EXCEPTION" },
           });
-        }
-        await writeDomainEvent(tx, {
-          type: "order.exception",
-          payload: {
-            orderId: order.id,
-            providerIntentId: input.providerIntentId,
-            reason: "amount_or_currency_mismatch",
-          },
-        });
-        const enrolment = order.enrolments[0] ?? null;
-        return {
-          outcome: "EXCEPTION" as const,
-          enrolmentId: enrolment?.id ?? null,
-          reason: "amount_mismatch" as const,
-        };
-      }
-
-      const enrolment = order.enrolments[0];
-
-      const attempt = await tx.paymentAttempt.findFirst({
-        where: { orderId: order.id, providerIntentId: input.providerIntentId },
-        select: { id: true, status: true },
-      });
-
-      if (!attempt) {
-        // Nothing to correlate this settlement to — flag for reconciliation
-        // rather than guessing which PaymentAttempt Stripe means.
-        await tx.order.update({ where: { id: order.id }, data: { status: "EXCEPTION" } });
-        await writeDomainEvent(tx, {
-          type: "order.exception",
-          payload: {
-            orderId: order.id,
-            providerIntentId: input.providerIntentId,
-            reason: "payment_attempt_not_found",
-          },
-        });
-        return {
-          outcome: "EXCEPTION" as const,
-          enrolmentId: enrolment?.id ?? null,
-          reason: "attempt_not_found" as const,
-        };
-      }
-
-      // Narrowed evidence — ids, amount, currency, status. Never the whole
-      // raw Stripe object (PAY-14).
-      const evidence = {
-        providerIntentId: input.providerIntentId,
-        amountMinor: input.amountMinor,
-        currency: input.currency,
-        status: "paid",
-      };
-
-      try {
-        assertPaymentTransition(attempt.status as PaymentStatusValue, "SUCCEEDED", attempt.id);
-      } catch (err) {
-        if (err instanceof IllegalPaymentTransitionError) {
-          // The attempt is already terminal (most likely SUCCEEDED) — this
-          // is an echo, not a new settlement. Leave the attempt's status
-          // exactly as it is; only record that the echo arrived.
           await writeDomainEvent(tx, {
             type: "order.exception",
             payload: {
               orderId: order.id,
               providerIntentId: input.providerIntentId,
-              reason: "illegal_payment_transition",
-              from: attempt.status,
+              reason: "payment_attempt_not_found",
             },
           });
           return {
             outcome: "EXCEPTION" as const,
             enrolmentId: enrolment?.id ?? null,
-            reason: "illegal_payment_transition" as const,
+            reason: "attempt_not_found" as const,
           };
         }
-        throw err;
-      }
 
-      try {
-        if (!enrolment) throw new IllegalTransitionError("NONE", "ACTIVE", null);
+        // Narrowed evidence — ids, amount, currency, status, plus whatever
+        // narrow correlation facts the caller supplied (07-06/07-07). Never
+        // the whole raw provider object (PAY-14/D-21).
+        const evidence = {
+          providerIntentId: input.providerIntentId,
+          amountMinor: input.amountMinor,
+          currency: input.currency,
+          status: "paid",
+          ...(input.settlementEvidence ?? {}),
+        };
 
-        await applyEnrolmentActivation(tx, {
-          enrolment,
-          reason: "Stripe payment confirmed",
-          actorId: null,
-          now: at,
-        });
+        try {
+          assertPaymentTransition(
+            attempt.status as PaymentStatusValue,
+            "SUCCEEDED",
+            attempt.id,
+          );
+        } catch (err) {
+          if (err instanceof IllegalPaymentTransitionError) {
+            // The attempt is already SUCCEEDED — this is an echo, not a new
+            // settlement. Leave the attempt's status
+            // exactly as it is; only record that the echo arrived.
+            await writeDomainEvent(tx, {
+              type: "order.exception",
+              payload: {
+                orderId: order.id,
+                providerIntentId: input.providerIntentId,
+                reason: "illegal_payment_transition",
+                from: attempt.status,
+              },
+            });
+            return {
+              outcome: "EXCEPTION" as const,
+              enrolmentId: enrolment?.id ?? null,
+              reason: "illegal_payment_transition" as const,
+            };
+          }
+          throw err;
+        }
 
-        await tx.paymentAttempt.update({
-          where: { id: attempt.id },
-          data: { status: "SUCCEEDED", confirmedAt: at, evidence },
-        });
+        try {
+          if (!enrolment)
+            throw new IllegalTransitionError("NONE", "ACTIVE", null);
 
-        await tx.order.update({ where: { id: order.id }, data: { status: "PAID", paidAt: at } });
+          await lockOpenCohort(tx, enrolment.cohortId);
+          const activeConflict = await tx.enrolment.findFirst({
+            where: {
+              userId: enrolment.userId,
+              cohortId: enrolment.cohortId,
+              status: "ACTIVE",
+              id: { not: enrolment.id },
+            },
+            select: { id: true },
+          });
+          if (activeConflict) {
+            throw new AlreadyEnrolledError(
+              enrolment.userId,
+              enrolment.cohortId,
+            );
+          }
 
-        await writeDomainEvent(tx, {
-          type: "order.paid",
-          payload: {
-            orderId: order.id,
-            providerIntentId: input.providerIntentId,
-            amountMinor: input.amountMinor,
-            currency: input.currency,
-          },
-        });
+          // 07-08 — the enrolment-transition reason names the ACTUAL settlement
+          // provider (was hard-coded to "Stripe payment confirmed" for every
+          // provider, including Paystack, before this plan; Rule 1 fix). The
+          // Stripe wording is preserved byte-for-byte for backward
+          // compatibility with anything reading that exact string.
+          const providerLabel =
+            input.provider === "STRIPE"
+              ? "Stripe"
+              : input.provider === "PAYSTACK"
+                ? "Paystack"
+                : "Manual";
 
-        return { outcome: "ACTIVATED" as const, enrolmentId: enrolment.id, reason: "activated" as const };
-      } catch (err) {
-        if (err instanceof IllegalTransitionError) {
+          await applyEnrolmentActivation(tx, {
+            enrolment,
+            reason: `${providerLabel} payment confirmed`,
+            actorId: null,
+            now: at,
+          });
+
           await tx.paymentAttempt.update({
             where: { id: attempt.id },
-            data: {
-              status: "SUCCEEDED",
-              confirmedAt: at,
-              evidence,
-              exceptionNote:
-                "Stripe payment confirmed after the seat hold was no longer eligible to activate; money captured, needs reconciliation.",
-            },
+            data: { status: "SUCCEEDED", confirmedAt: at, evidence },
           });
-          await tx.order.update({ where: { id: order.id }, data: { status: "EXCEPTION" } });
+
+          await tx.order.update({
+            where: { id: order.id },
+            data: { status: "PAID", paidAt: at },
+          });
+
           await writeDomainEvent(tx, {
-            type: "order.exception",
+            type: "order.paid",
             payload: {
               orderId: order.id,
               providerIntentId: input.providerIntentId,
-              reason: "illegal_transition",
+              amountMinor: input.amountMinor,
+              currency: input.currency,
             },
           });
+
           return {
-            outcome: "EXCEPTION" as const,
-            enrolmentId: enrolment?.id ?? null,
-            reason: "illegal_enrolment_transition" as const,
+            outcome: "ACTIVATED" as const,
+            enrolmentId: enrolment.id,
+            reason: "activated" as const,
           };
+        } catch (err) {
+          if (
+            err instanceof IllegalTransitionError ||
+            err instanceof AlreadyEnrolledError
+          ) {
+            const duplicateActive = err instanceof AlreadyEnrolledError;
+            await tx.paymentAttempt.update({
+              where: { id: attempt.id },
+              data: {
+                status: "SUCCEEDED",
+                confirmedAt: at,
+                evidence,
+                exceptionNote: duplicateActive
+                  ? `${input.provider} payment confirmed, but the learner already has an active enrolment in this cohort; money captured, needs reconciliation.`
+                  : `${input.provider} payment confirmed after the seat hold was no longer eligible to activate; money captured, needs reconciliation.`,
+              },
+            });
+            await tx.order.update({
+              where: { id: order.id },
+              data: { status: "EXCEPTION" },
+            });
+            await writeDomainEvent(tx, {
+              type: "order.exception",
+              payload: {
+                orderId: order.id,
+                providerIntentId: input.providerIntentId,
+                reason: duplicateActive
+                  ? "duplicate_active_enrolment"
+                  : "illegal_transition",
+              },
+            });
+            return {
+              outcome: "EXCEPTION" as const,
+              enrolmentId: enrolment?.id ?? null,
+              reason: duplicateActive
+                ? ("duplicate_active_enrolment" as const)
+                : ("illegal_enrolment_transition" as const),
+            };
+          }
+          throw err;
         }
-        throw err;
-      }
-    });
+      },
+      { timeout: 15_000 },
+    );
+
+    // 07-08 — a MANUAL activation's action name carries a `_manual` suffix so
+    // it is distinguishable from a webhook-driven one in the audit view, per
+    // this plan's own action text. STRIPE/PAYSTACK keep the exact
+    // pre-existing action strings — additive, not a breaking rename, since
+    // other tests already assert those two literal names.
+    const isManual = input.provider === "MANUAL";
 
     await deps.audit({
       actorId: null,
       actorType: SYSTEM_ACTOR_TYPE,
-      action: result.outcome === "ACTIVATED" ? "order.paid" : "order.exception",
+      action:
+        result.outcome === "ACTIVATED"
+          ? isManual
+            ? "order.paid_manual"
+            : "order.paid"
+          : isManual
+            ? "order.exception_manual"
+            : "order.exception",
       targetType: "Order",
       targetId: input.orderId,
       outcome: "SUCCESS",
@@ -630,7 +862,14 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
       await deps.audit({
         actorId: null,
         actorType: SYSTEM_ACTOR_TYPE,
-        action: result.outcome === "ACTIVATED" ? "enrolment.activated" : "enrolment.activation_exception",
+        action:
+          result.outcome === "ACTIVATED"
+            ? isManual
+              ? "enrolment.activated_manual"
+              : "enrolment.activated"
+            : isManual
+              ? "enrolment.activation_exception_manual"
+              : "enrolment.activation_exception",
         targetType: "Enrolment",
         targetId: result.enrolmentId,
         outcome: "SUCCESS",
@@ -659,8 +898,13 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
     // recordWebhookEventOrSkip already returns before this transaction ever
     // runs for a redelivered event, so a duplicate send from a replay is
     // unreachable from this call site — see that function's own comment.
-    if (result.reason === "activated" || result.reason === "illegal_enrolment_transition") {
-      const facts = await deps.orderEmailFacts.findUnique({ where: { id: input.orderId } });
+    if (
+      result.reason === "activated" ||
+      result.reason === "illegal_enrolment_transition"
+    ) {
+      const facts = await deps.orderEmailFacts.findUnique({
+        where: { id: input.orderId },
+      });
       if (facts?.email) {
         const receiptUrl = `${baseUrl()}/orders/${facts.reference}`;
         if (result.reason === "activated") {
@@ -736,22 +980,39 @@ export function createRecordPaymentFailureAsSystem(deps: SettlementDeps) {
     const result = await deps.db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: input.orderId },
-        select: { id: true, status: true, amountMinor: true, currency: true, enrolments: true },
+        select: {
+          id: true,
+          status: true,
+          amountMinor: true,
+          currency: true,
+          enrolments: true,
+        },
       });
       if (!order) {
+        // Stripe-only entry point (PAY-02 failure bookkeeping) — the literal
+        // is intentional, not a regression of 07-04's `SettlementProvider`
+        // widening, which scoped only `activateOrderAsSystem`.
         await markWebhookEventException(tx, {
           eventId: input.eventId,
           at,
           error: `No Order found for id ${input.orderId}.`,
+          provider: "STRIPE",
         });
         return { outcome: "EXCEPTION" as const };
       }
 
-      await markWebhookEventProcessed(tx, { eventId: input.eventId, at });
+      await markWebhookEventProcessed(tx, {
+        eventId: input.eventId,
+        at,
+        provider: "STRIPE",
+      });
 
       const attempt = input.providerIntentId
         ? await tx.paymentAttempt.findFirst({
-            where: { orderId: order.id, providerIntentId: input.providerIntentId },
+            where: {
+              orderId: order.id,
+              providerIntentId: input.providerIntentId,
+            },
             select: { id: true, status: true },
           })
         : await tx.paymentAttempt.findFirst({
@@ -769,7 +1030,11 @@ export function createRecordPaymentFailureAsSystem(deps: SettlementDeps) {
       }
 
       try {
-        assertPaymentTransition(attempt.status as PaymentStatusValue, "FAILED", attempt.id);
+        assertPaymentTransition(
+          attempt.status as PaymentStatusValue,
+          "FAILED",
+          attempt.id,
+        );
       } catch (err) {
         if (err instanceof IllegalPaymentTransitionError) {
           // Never move an already-terminal attempt (most likely SUCCEEDED)
@@ -795,7 +1060,10 @@ export function createRecordPaymentFailureAsSystem(deps: SettlementDeps) {
           failedAt: at,
           failureReason: input.failureReason,
           // Narrowed evidence — never the whole raw Stripe object (PAY-14).
-          evidence: { providerIntentId: input.providerIntentId ?? null, status: "failed" },
+          evidence: {
+            providerIntentId: input.providerIntentId ?? null,
+            status: "failed",
+          },
         },
       });
 
@@ -805,7 +1073,8 @@ export function createRecordPaymentFailureAsSystem(deps: SettlementDeps) {
     await deps.audit({
       actorId: null,
       actorType: SYSTEM_ACTOR_TYPE,
-      action: result.outcome === "FAILED" ? "payment.failed" : "order.exception",
+      action:
+        result.outcome === "FAILED" ? "payment.failed" : "order.exception",
       targetType: "Order",
       targetId: input.orderId,
       outcome: "SUCCESS",
@@ -842,18 +1111,31 @@ export function createRecordSessionExpiredAsSystem(deps: SettlementDeps) {
     const result = await deps.db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: input.orderId },
-        select: { id: true, status: true, amountMinor: true, currency: true, enrolments: true },
+        select: {
+          id: true,
+          status: true,
+          amountMinor: true,
+          currency: true,
+          enrolments: true,
+        },
       });
       if (!order) {
+        // Stripe-only entry point (PAY-02 session-expiry bookkeeping) — same
+        // intentional literal as `recordPaymentFailureAsSystem`, above.
         await markWebhookEventException(tx, {
           eventId: input.eventId,
           at,
           error: `No Order found for id ${input.orderId}.`,
+          provider: "STRIPE",
         });
         return { outcome: "EXCEPTION" as const };
       }
 
-      await markWebhookEventProcessed(tx, { eventId: input.eventId, at });
+      await markWebhookEventProcessed(tx, {
+        eventId: input.eventId,
+        at,
+        provider: "STRIPE",
+      });
 
       const attempt = await tx.paymentAttempt.findFirst({
         where: { orderId: order.id, providerIntentId: input.providerIntentId },
@@ -873,7 +1155,11 @@ export function createRecordSessionExpiredAsSystem(deps: SettlementDeps) {
       }
 
       try {
-        assertPaymentTransition(attempt.status as PaymentStatusValue, "CANCELLED", attempt.id);
+        assertPaymentTransition(
+          attempt.status as PaymentStatusValue,
+          "CANCELLED",
+          attempt.id,
+        );
       } catch (err) {
         if (err instanceof IllegalPaymentTransitionError) {
           // Never move an already-terminal attempt (most likely SUCCEEDED —
@@ -899,7 +1185,10 @@ export function createRecordSessionExpiredAsSystem(deps: SettlementDeps) {
         data: {
           status: "CANCELLED",
           // Narrowed evidence — never the whole raw Stripe object (PAY-14).
-          evidence: { providerIntentId: input.providerIntentId, status: "expired" },
+          evidence: {
+            providerIntentId: input.providerIntentId,
+            status: "expired",
+          },
         },
       });
 
@@ -909,7 +1198,10 @@ export function createRecordSessionExpiredAsSystem(deps: SettlementDeps) {
     await deps.audit({
       actorId: null,
       actorType: SYSTEM_ACTOR_TYPE,
-      action: result.outcome === "CANCELLED" ? "payment.session_expired" : "order.exception",
+      action:
+        result.outcome === "CANCELLED"
+          ? "payment.session_expired"
+          : "order.exception",
       targetType: "Order",
       targetId: input.orderId,
       outcome: "SUCCESS",
@@ -928,8 +1220,11 @@ type AnyPrisma = any;
 
 const settlementDeps: SettlementDeps = {
   db: {
-    $transaction: (fn) =>
-      (prisma as AnyPrisma).$transaction((tx: unknown) => fn(tx as SettlementTxClient)),
+    $transaction: (fn, options) =>
+      (prisma as AnyPrisma).$transaction(
+        (tx: unknown) => fn(tx as SettlementTxClient),
+        options,
+      ),
   },
   audit: (event) => recordAudit(event),
   orderEmailFacts: {
@@ -957,11 +1252,18 @@ const settlementDeps: SettlementDeps = {
 
 const built = {
   recordWebhookEventOrSkip: createRecordWebhookEventOrSkip({
-    webhookEvent: prisma.webhookEvent as unknown as RecordWebhookEventDeps["webhookEvent"],
+    webhookEvent:
+      prisma.webhookEvent as unknown as RecordWebhookEventDeps["webhookEvent"],
+  }),
+  markWebhookEventRetryable: createMarkWebhookEventRetryable({
+    webhookEvent:
+      prisma.webhookEvent as unknown as RecordWebhookEventDeps["webhookEvent"],
   }),
   activateOrderAsSystem: createActivateOrderAsSystem(settlementDeps),
-  recordPaymentFailureAsSystem: createRecordPaymentFailureAsSystem(settlementDeps),
-  recordSessionExpiredAsSystem: createRecordSessionExpiredAsSystem(settlementDeps),
+  recordPaymentFailureAsSystem:
+    createRecordPaymentFailureAsSystem(settlementDeps),
+  recordSessionExpiredAsSystem:
+    createRecordSessionExpiredAsSystem(settlementDeps),
 };
 
 /**
@@ -972,6 +1274,12 @@ export function recordWebhookEventOrSkip(
   input: RecordWebhookEventInput,
 ): Promise<{ isNew: boolean }> {
   return built.recordWebhookEventOrSkip(input);
+}
+
+export function markWebhookEventRetryable(
+  input: MarkWebhookEventRetryableInput,
+): Promise<{ marked: boolean }> {
+  return built.markWebhookEventRetryable(input);
 }
 
 /**

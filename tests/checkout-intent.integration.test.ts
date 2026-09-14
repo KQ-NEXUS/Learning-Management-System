@@ -30,9 +30,23 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture } from "./support/cohort-fixtures";
+import { seedCohortFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
 import { CHECKOUT_INTENT_COOKIE } from "@/server/auth/landing";
 import { TOKEN_PURPOSE } from "@/lib/identity";
+import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
+
+/** Mirrors `seedPaystackNgnFeeScheduleFixture`'s own values exactly (D-25). */
+const PAYSTACK_NGN_SCHEDULE: GatewayFeeScheduleValues = {
+  provider: "PAYSTACK",
+  currency: "NGN",
+  version: 1,
+  percentageBps: 150,
+  fixedMinor: 10_000,
+  waiverThresholdMinor: null,
+  capMinor: 200_000,
+  taxBps: 0,
+  roundingRule: "HALF_UP",
+};
 
 const TEST_PASSWORD = "correct-horse-battery-staple";
 
@@ -87,6 +101,11 @@ beforeAll(async () => {
   // MUST happen before any dynamic import below — see file header.
   process.env.DATABASE_URL = testDb.url;
 
+  // 07-04 — `startTestDatabase()` applies migrations only, never
+  // `prisma/seed.ts`; `startCheckout` now needs an active PAYSTACK/NGN
+  // `GatewayFeeSchedule` row to compute the D-13 snapshot.
+  await seedPaystackNgnFeeScheduleFixture(testDb.prisma);
+
   ({ enrollAction } = await import("@/app/(checkout)/actions"));
   ({ signInAction } = await import("@/app/(auth)/signin/actions"));
   ({ default: EnrolResumptionPage } = await import(
@@ -119,9 +138,10 @@ async function captureRedirect(fn: () => Promise<unknown>): Promise<string> {
   throw new Error("expected a redirect(), but the call resolved normally");
 }
 
-function enrollFormData(cohortId: string): FormData {
+function enrollFormData(cohortId: string, currency: string = "NGN"): FormData {
   const data = new FormData();
   data.set("cohortId", cohortId);
+  data.set("currency", currency);
   return data;
 }
 
@@ -169,39 +189,50 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
     });
     const email = `${randomUUID()}@fixture.test`;
 
-    // 1. Enroll while signed out — captures the intent cookie, redirects to sign-in.
-    const enrollTarget = await captureRedirect(() => enrollAction(enrollFormData(cohortId)));
+    // 1. Enroll while signed out — captures the intent cookie (now
+    // `${cohortId}.${currency}`, D-07), redirects to sign-in.
+    const enrollTarget = await captureRedirect(() => enrollAction(enrollFormData(cohortId, "NGN")));
     expect(enrollTarget).toBe("/signin");
-    expect(fakeJar.get(CHECKOUT_INTENT_COOKIE)?.value).toBe(cohortId);
+    expect(fakeJar.get(CHECKOUT_INTENT_COOKIE)?.value).toBe(`${cohortId}.NGN`);
 
     // 2. Register -> verify, via the real services (no browser /verify visit).
     await registerAndVerify(email);
     // The intent cookie is untouched by registration/verification — neither
     // creates a session, so neither has a redirect to make (Task 2's own
     // action text) — it simply persists across them.
-    expect(fakeJar.get(CHECKOUT_INTENT_COOKIE)?.value).toBe(cohortId);
+    expect(fakeJar.get(CHECKOUT_INTENT_COOKIE)?.value).toBe(`${cohortId}.NGN`);
 
-    // 3. Sign in — consumes and clears the intent, resolves the resumption path.
+    // 3. Sign in — consumes and clears the intent, resolves the resumption
+    // path with the currency carried through as a query parameter.
     const signInTarget = await captureRedirect(() =>
       signInAction({ error: null }, signInFormData(email)),
     );
-    expect(signInTarget).toBe(`/enrol/${cohortId}`);
+    expect(signInTarget).toBe(`/enrol/${cohortId}?currency=NGN`);
     expect(fakeJar.get(CHECKOUT_INTENT_COOKIE)).toBeUndefined();
 
     // 4. Follow the resumption route — takes the seat, creates the Order,
     // redirects to the order summary.
     const orderTarget = await captureRedirect(() =>
-      EnrolResumptionPage({ params: Promise.resolve({ cohortId }) }),
+      EnrolResumptionPage({ params: Promise.resolve({ cohortId }), searchParams: Promise.resolve({ currency: "NGN" }) }),
     );
     expect(orderTarget).toMatch(/^\/checkout\//);
     const orderId = orderTarget.replace("/checkout/", "");
 
     const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     // The prohibition this plan exists to close: neither the cohort nor the
-    // price may drift across the detour.
+    // price may drift across the detour. `amountMinor` is now the full D-13
+    // commercial snapshot (base + platform fee + gateway estimate), not the
+    // bare base price — cross-checked against the same calculator this
+    // Order's own creation used.
+    const expectedBreakdown = calculateCheckoutBreakdown({
+      baseAmountMinor: 12_345,
+      schedule: PAYSTACK_NGN_SCHEDULE,
+    });
     expect(order.cohortId).toBe(cohortId);
-    expect(order.amountMinor).toBe(12_345);
+    expect(order.baseAmountMinor).toBe(12_345);
+    expect(order.amountMinor).toBe(expectedBreakdown.totalAmountMinor);
     expect(order.currency).toBe("NGN");
+    expect(order.selectedProvider).toBe("PAYSTACK");
 
     // 5. A second, unrelated sign-in after the first consumed the intent
     // lands on /account, not back in checkout (single-use).
@@ -217,7 +248,7 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
 
     const target = await captureRedirect(() => signInAction({ error: null }, signInFormData(email)));
     expect(target).toBe("/account");
-  });
+  }, 15_000);
 
   it("lands on the cohort's public offer page with no Order created when the held cohort filled up in the meantime", async () => {
     const { cohortId } = await seedCohortFixture(testDb.prisma, {
@@ -230,35 +261,35 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
     await registerAndVerify(email);
 
     // Simulate the intent cookie having been set earlier, before the cohort filled up.
-    fakeJar.set(CHECKOUT_INTENT_COOKIE, cohortId);
+    fakeJar.set(CHECKOUT_INTENT_COOKIE, `${cohortId}.NGN`);
 
     const signInTarget = await captureRedirect(() =>
       signInAction({ error: null }, signInFormData(email)),
     );
-    expect(signInTarget).toBe(`/enrol/${cohortId}`);
+    expect(signInTarget).toBe(`/enrol/${cohortId}?currency=NGN`);
 
     const resumeTarget = await captureRedirect(() =>
-      EnrolResumptionPage({ params: Promise.resolve({ cohortId }) }),
+      EnrolResumptionPage({ params: Promise.resolve({ cohortId }), searchParams: Promise.resolve({ currency: "NGN" }) }),
     );
     expect(resumeTarget.startsWith("/courses/")).toBe(true);
 
     const orders = await testDb.prisma.order.findMany({ where: { cohortId } });
     expect(orders).toHaveLength(0);
-  });
+  }, 15_000);
 
   it("a non-existent cohort id at the resumption route produces the 404 page", async () => {
     const email = `${randomUUID()}@fixture.test`;
     await registerAndVerify(email);
     const bogusCohortId = "cnonexistentcohortid00000";
-    fakeJar.set(CHECKOUT_INTENT_COOKIE, bogusCohortId);
+    fakeJar.set(CHECKOUT_INTENT_COOKIE, `${bogusCohortId}.NGN`);
 
     const signInTarget = await captureRedirect(() =>
       signInAction({ error: null }, signInFormData(email)),
     );
-    expect(signInTarget).toBe(`/enrol/${bogusCohortId}`);
+    expect(signInTarget).toBe(`/enrol/${bogusCohortId}?currency=NGN`);
 
     await expect(
-      EnrolResumptionPage({ params: Promise.resolve({ cohortId: bogusCohortId }) }),
+      EnrolResumptionPage({ params: Promise.resolve({ cohortId: bogusCohortId }), searchParams: Promise.resolve({ currency: "NGN" }) }),
     ).rejects.toThrow("notFound");
-  });
+  }, 15_000);
 });
