@@ -86,8 +86,8 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 - [ ] **LRN-01**: Each learner sees an enrolment dashboard with next action, progress, scheduled sessions, assessment obligations, results, tickets, and certificate state — own records only.
 - [ ] **LRN-02**: Published Modules and Lessons render in defined order with prerequisite locks where configured; required sequencing is enforced server-side; locked content explains the unmet condition.
 - [ ] **LRN-03**: Supported lesson content is delivered securely and accessibly — text, images, permitted files, uploaded video, embeds, links — with appropriate labels, keyboard behavior, and authorized file access.
-- [ ] **LRN-04**: Learner progress is tracked using completion rules appropriate to each content type; progress is idempotent, attributable, timestamped, recalculable, and not advanced by unauthorized requests.
-- [ ] **LRN-05**: Manual Lesson completion is allowed only where the published rule permits it, only by the enrolled learner in the valid access window, reversible only per policy.
+- [x] **LRN-04**: Learner progress is tracked using completion rules appropriate to each content type; progress is idempotent, attributable, timestamped, recalculable, and not advanced by unauthorized requests.
+- [x] **LRN-05**: Manual Lesson completion is allowed only where the published rule permits it, only by the enrolled learner in the valid access window, reversible only per policy.
 - [ ] **LRN-06**: Scheduled-session details and meeting links are provided to eligible learners; links are hidden before the visibility window and from unenrolled users; time-zone/access guidance is clear.
 - [ ] **LRN-07**: Course and Programme completion is calculated from versioned rules and current learner evidence; the calculation identifies each satisfied/unmet rule, handles corrections, and records completion time and rule version.
 
@@ -255,8 +255,8 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | LRN-01 | Phase 9 | Pending |
 | LRN-02 | Phase 9 | Pending |
 | LRN-03 | Phase 9 | Pending |
-| LRN-04 | Phase 9 | Pending |
-| LRN-05 | Phase 9 | Pending |
+| LRN-04 | Phase 9 | Complete |
+| LRN-05 | Phase 9 | Complete |
 | LRN-06 | Phase 9 | Pending |
 | LRN-07 | Phase 9 | Pending |
 | ASM-01 | Phase 10 | Pending |
