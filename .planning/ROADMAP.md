@@ -420,8 +420,8 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 09-08-PLAN.md — (learner) route group layout + /dashboard page + progress/gap components
-- [ ] 09-13-PLAN.md — Staff progress-override screen + roster Progress column widening
+- [x] 09-08-PLAN.md — (learner) route group layout + /dashboard page + progress/gap components
+- [x] 09-13-PLAN.md — Staff progress-override screen + roster Progress column widening
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -562,7 +562,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
-| 9. Learning Delivery & Progress Tracking | 7/14 | In Progress|  |
+| 9. Learning Delivery & Progress Tracking | 9/14 | In Progress|  |
 | 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
