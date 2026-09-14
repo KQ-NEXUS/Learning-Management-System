@@ -503,6 +503,7 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
 
     const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
     const evidence = attemptAfter.evidence as Record<string, unknown>;
+    expect(attemptAfter.providerRef).toBe(chargeId);
     expect(evidence.paymentIntentId).toBe(paymentIntentId);
     expect(evidence.chargeId).toBe(chargeId);
     expect(evidence.transferId).toBe(transferId);
@@ -555,6 +556,7 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
 
     const attemptAfter = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
     const evidence = attemptAfter.evidence as Record<string, unknown>;
+    expect(attemptAfter.providerRef).toBe(paymentIntentId);
     expect(evidence.paymentIntentId).toBe(paymentIntentId);
     expect(evidence.transferDestination).toBe(TEST_STRIPE_CONNECTED_ACCOUNT_ID);
     expect(evidence.chargeId).toBeNull();

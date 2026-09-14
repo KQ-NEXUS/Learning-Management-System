@@ -159,16 +159,21 @@ export async function POST(req: Request): Promise<Response> {
       const session = event.data.object as CheckoutSessionFacts;
       const orderId = session.client_reference_id;
       if (orderId) {
+        const settlementEvidence = buildStripeSettlementEvidence(session);
         await activateOrderAsSystem({
           orderId,
           provider: "STRIPE",
           providerIntentId: session.id,
+          providerRef:
+            settlementEvidence.chargeId ??
+            settlementEvidence.paymentIntentId ??
+            session.id,
           amountMinor: session.amount_total ?? 0,
           currency: session.currency ?? "ngn",
           eventId: event.id,
           // 07-06/07-07 — correlation identifiers for the later reconciliation
           // sweep; never the four "actual settlement" columns themselves (D-14).
-          settlementEvidence: buildStripeSettlementEvidence(session),
+          settlementEvidence,
         });
       }
     } else if (event.type === "checkout.session.expired") {

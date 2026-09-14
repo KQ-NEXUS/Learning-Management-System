@@ -35,10 +35,9 @@
  * 1.5%-of-base formula has no provider term). The only figure that changes
  * for a manual confirmation is `gatewayFeeEstimateMinor`, which becomes
  * exactly 0 (no provider split ever happens for a bank transfer) — this
- * service recomputes the Order's snapshot to reflect that BEFORE calling the
- * settlement transition, so the transition's own amount/currency match guard
- * (REG-03) compares against the correct manual total, not the stale online
- * one.
+ * shared settlement transaction recomputes the Order's snapshot after
+ * locking the Order row, so the amount/currency match guard (REG-03) sees
+ * the manual total without exposing an intermediate snapshot to a webhook.
  */
 
 import type { Actor } from "@/server/permissions/with-permission";
@@ -53,6 +52,7 @@ import { isManualPaymentConfirmationBlocked } from "@/server/payments/order-stat
 import {
   activateOrderAsSystem as liveActivateOrderAsSystem,
   type ActivateOrderAsSystemInput,
+  type ActivateOrderAsSystemResult,
 } from "@/server/services/checkout-webhook-system-service";
 import { z } from "zod";
 
@@ -188,7 +188,7 @@ export type ManualPaymentServiceDeps = {
     create(args: { data: Record<string, unknown> }): Promise<{ id: string }>;
   };
   /** Injected so tests never exercise the real settlement transaction — defaults to the real one at the Prisma-backed binding, below. */
-  activateOrderAsSystem: (input: ActivateOrderAsSystemInput) => Promise<{ outcome: "ACTIVATED" | "EXCEPTION" }>;
+  activateOrderAsSystem: (input: ActivateOrderAsSystemInput) => Promise<ActivateOrderAsSystemResult>;
   audit: Audit;
   orderScope: (orderId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
@@ -229,62 +229,33 @@ export function createManualPaymentService(deps: ManualPaymentServiceDeps) {
 
     // D-15 — same 1.5%-of-base formula as every other Order, zero gateway fee.
     const platformFeeMinor = calculatePlatformFeeMinor(order.baseAmountMinor);
-    const gatewayFeeEstimateMinor = 0;
     const expectedTotalMinor = order.baseAmountMinor + platformFeeMinor;
 
     if (input.amountMinor !== expectedTotalMinor) {
       throw new ManualPaymentAmountMismatchError(rawInput.orderId, input.amountMinor, expectedTotalMinor);
     }
 
-    // Recompute the Order's own snapshot for the manual rail BEFORE the
-    // settlement transition runs, so its amount/currency match guard (REG-03)
-    // compares against the manual total, not a stale online-rail one.
-    await deps.order.update({
-      where: { id: rawInput.orderId },
-      data: {
-        amountMinor: expectedTotalMinor,
-        platformFeeMinor,
-        gatewayFeeEstimateMinor,
-        selectedProvider: "MANUAL",
-        schoolSettlementExpectedMinor: order.baseAmountMinor,
-      },
-    });
-
     // The idempotency key mirrors the provider+eventId shape the webhook
     // path uses (07-04) — `manual:{orderId}:{reference}` — so a resubmission
     // of the exact same reference cannot create a second PaymentAttempt.
     const idempotencyKey = `manual:${rawInput.orderId}:${input.manualReference}`;
 
-    await deps.paymentAttempt.create({
-      data: {
-        orderId: rawInput.orderId,
-        provider: "MANUAL",
-        providerIntentId: input.manualReference,
-        amountMinor: expectedTotalMinor,
-        currency: input.currency,
-        // PROCESSING, not PENDING — `activateOrderAsSystem`'s own
-        // `PAYMENT_VALID_TRANSITIONS` only allows SUCCEEDED from PROCESSING,
-        // mirroring how `initiatePaystackPayment`/`initiateStripePayment`
-        // move an attempt to PROCESSING once the provider call is underway.
-        // Here, the confirmation itself IS that "underway" moment.
-        status: "PROCESSING",
-        idempotencyKey,
-        manualChannel: input.manualChannel,
-        manualReference: input.manualReference,
-        manualPaidAt: input.manualPaidAt,
-        manualEvidenceKey: input.manualEvidenceKey,
-        confirmedById: ctx.actor.userId,
-        reason: input.reason,
-      },
-    });
-
     const result = await deps.activateOrderAsSystem({
       orderId: rawInput.orderId,
       provider: "MANUAL",
       providerIntentId: input.manualReference,
+      providerRef: input.manualReference,
       amountMinor: expectedTotalMinor,
       currency: input.currency,
       eventId: idempotencyKey,
+      manualConfirmation: {
+        confirmedById: ctx.actor.userId,
+        manualChannel: input.manualChannel,
+        manualReference: input.manualReference,
+        manualPaidAt: input.manualPaidAt,
+        manualEvidenceKey: input.manualEvidenceKey,
+        reason: input.reason,
+      },
       // D-15 — the school amount and KQ allocation/remittance evidence exist
       // ONLY in this audit trail, since no provider split ever occurs for a
       // manual confirmation.
@@ -295,6 +266,10 @@ export function createManualPaymentService(deps: ManualPaymentServiceDeps) {
         kqAllocationMinor: platformFeeMinor,
       },
     });
+
+    if (result.outcome === "ALREADY_PAID") {
+      return result;
+    }
 
     // Exactly one audit row naming the confirming actor and the reason — the
     // settlement transition's own audit writes (above) are SYSTEM-attributed

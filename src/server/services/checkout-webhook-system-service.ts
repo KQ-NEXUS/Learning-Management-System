@@ -78,6 +78,8 @@ import {
   AlreadyEnrolledError,
   lockOpenCohort,
 } from "@/server/services/seat-accounting";
+import { calculatePlatformFeeMinor } from "@/server/payments/pricing";
+import { isManualPaymentConfirmationBlocked } from "@/server/payments/order-status";
 // D-18 — Phase 3's minimal send-wrapper, reused verbatim (no second mail
 // client, no template engine, no dedup layer). `dispatchBestEffort` is
 // imported by name here so the opt-out from `dispatch`'s throw is visible at
@@ -374,10 +376,18 @@ type OrderRow = {
   status: string;
   amountMinor: number;
   currency: string;
+  baseAmountMinor?: number | null;
   enrolments: EnrolmentRow[];
 };
 
-type PaymentAttemptRow = { id: string; status: string };
+type PaymentAttemptRow = {
+  id: string;
+  status: string;
+  provider?: string;
+  confirmedAt?: Date | null;
+  providerRef?: string | null;
+  providerIntentId?: string | null;
+};
 
 /**
  * The non-transactional order-reference/cohort-title/recipient-email read
@@ -427,6 +437,10 @@ export type SettlementTxClient = EnrolmentActivationTxClient & {
       where: { id: string };
       data: Record<string, unknown>;
     }): Promise<unknown>;
+    create(args: {
+      data: Record<string, unknown>;
+      select: { id: true };
+    }): Promise<{ id: string }>;
   };
   webhookEvent: {
     updateMany(args: {
@@ -514,6 +528,8 @@ export type ActivateOrderAsSystemInput = {
    *  would silently fail to mark a non-Stripe event's row. */
   provider: SettlementProvider;
   providerIntentId: string;
+  /** Human/provider-facing transaction reference stored for staff lookup. */
+  providerRef?: string | null;
   amountMinor: number;
   currency: string;
   eventId: string;
@@ -529,7 +545,34 @@ export type ActivateOrderAsSystemInput = {
    * verified provider evidence, may ever write them.
    */
   settlementEvidence?: Record<string, unknown> | null;
+  /**
+   * Present only for an authorized staff confirmation. Keeping preparation
+   * here makes the manual snapshot, attempt creation, and settlement one
+   * Order-row-locked transaction shared with provider webhooks.
+   */
+  manualConfirmation?: {
+    confirmedById: string;
+    manualChannel: string;
+    manualReference: string;
+    manualPaidAt: Date;
+    manualEvidenceKey: string;
+    reason: string;
+  };
 };
+
+type ExistingSettlementAttempt = {
+  provider: string;
+  confirmedAt: Date | null;
+  providerRef: string | null;
+  providerIntentId: string | null;
+};
+
+export type ActivateOrderAsSystemResult =
+  | { outcome: "ACTIVATED" | "EXCEPTION" }
+  | {
+      outcome: "ALREADY_PAID";
+      existingAttempt: ExistingSettlementAttempt | null;
+    };
 
 export function createActivateOrderAsSystem(deps: SettlementDeps) {
   const now = deps.now ?? (() => new Date());
@@ -566,11 +609,17 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
    */
   return async function activateOrderAsSystem(
     input: ActivateOrderAsSystemInput,
-  ): Promise<{ outcome: "ACTIVATED" | "EXCEPTION" }> {
+  ): Promise<ActivateOrderAsSystemResult> {
     const at = now();
 
     const result = await deps.db.$transaction(
       async (tx) => {
+        // All settlement rails serialize on the Order before reading its
+        // state. This closes the manual-vs-webhook check/write race.
+        await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE
+        `;
+
         const order = await tx.order.findUnique({
           where: { id: input.orderId },
           select: {
@@ -578,6 +627,7 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
             status: true,
             amountMinor: true,
             currency: true,
+            baseAmountMinor: true,
             enrolments: true,
           },
         });
@@ -599,6 +649,94 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
             enrolmentId: null as string | null,
             reason: "no_order" as const,
           };
+        }
+
+        if (input.manualConfirmation) {
+          if (isManualPaymentConfirmationBlocked(order.status)) {
+            const existingAttempt = await tx.paymentAttempt.findFirst({
+              where: { orderId: order.id, status: "SUCCEEDED" },
+              orderBy: { confirmedAt: "desc" },
+              select: {
+                provider: true,
+                confirmedAt: true,
+                providerRef: true,
+                providerIntentId: true,
+              },
+            });
+            return {
+              outcome: "ALREADY_PAID" as const,
+              existingAttempt: existingAttempt
+                ? {
+                    provider: existingAttempt.provider ?? "MANUAL",
+                    confirmedAt: existingAttempt.confirmedAt ?? null,
+                    providerRef: existingAttempt.providerRef ?? null,
+                    providerIntentId:
+                      existingAttempt.providerIntentId ?? null,
+                  }
+                : null,
+              enrolmentId: null as string | null,
+              reason: "already_paid" as const,
+            };
+          }
+
+          if (order.baseAmountMinor == null) {
+            throw new Error(
+              `Order ${order.id} has no baseAmountMinor for manual settlement.`,
+            );
+          }
+          const platformFeeMinor = calculatePlatformFeeMinor(
+            order.baseAmountMinor,
+          );
+          const manualTotalMinor = order.baseAmountMinor + platformFeeMinor;
+          if (
+            manualTotalMinor !== input.amountMinor ||
+            order.currency.toUpperCase() !== input.currency.toUpperCase()
+          ) {
+            throw new Error(
+              `Order ${order.id} changed while its manual confirmation was being prepared.`,
+            );
+          }
+
+          await tx.order.update({
+            where: { id: order.id },
+            data: {
+              amountMinor: manualTotalMinor,
+              platformFeeMinor,
+              gatewayFeeEstimateMinor: 0,
+              selectedProvider: "MANUAL",
+              schoolSettlementExpectedMinor: order.baseAmountMinor,
+            },
+          });
+          order.amountMinor = manualTotalMinor;
+
+          const existingManualAttempt = await tx.paymentAttempt.findFirst({
+            where: { idempotencyKey: input.eventId },
+            select: { id: true, status: true },
+          });
+          if (!existingManualAttempt) {
+            await tx.paymentAttempt.create({
+              data: {
+                orderId: order.id,
+                provider: "MANUAL",
+                providerRef:
+                  input.providerRef ??
+                  input.manualConfirmation.manualReference,
+                providerIntentId: input.providerIntentId,
+                amountMinor: manualTotalMinor,
+                currency: input.currency,
+                status: "PROCESSING",
+                idempotencyKey: input.eventId,
+                manualChannel: input.manualConfirmation.manualChannel,
+                manualReference: input.manualConfirmation.manualReference,
+                manualPaidAt: input.manualConfirmation.manualPaidAt,
+                manualEvidenceKey:
+                  input.manualConfirmation.manualEvidenceKey,
+                confirmedById: input.manualConfirmation.confirmedById,
+                reason: input.manualConfirmation.reason,
+              },
+              select: { id: true },
+            });
+          }
         }
 
         await markWebhookEventProcessed(tx, {
@@ -767,7 +905,12 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
 
           await tx.paymentAttempt.update({
             where: { id: attempt.id },
-            data: { status: "SUCCEEDED", confirmedAt: at, evidence },
+            data: {
+              status: "SUCCEEDED",
+              confirmedAt: at,
+              providerRef: input.providerRef ?? input.providerIntentId,
+              evidence,
+            },
           });
 
           await tx.order.update({
@@ -801,6 +944,7 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
               data: {
                 status: "SUCCEEDED",
                 confirmedAt: at,
+                providerRef: input.providerRef ?? input.providerIntentId,
                 evidence,
                 exceptionNote: duplicateActive
                   ? `${input.provider} payment confirmed, but the learner already has an active enrolment in this cohort; money captured, needs reconciliation.`
@@ -841,6 +985,13 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
     // pre-existing action strings — additive, not a breaking rename, since
     // other tests already assert those two literal names.
     const isManual = input.provider === "MANUAL";
+
+    if (result.outcome === "ALREADY_PAID") {
+      return {
+        outcome: result.outcome,
+        existingAttempt: result.existingAttempt,
+      };
+    }
 
     await deps.audit({
       actorId: null,
@@ -1289,7 +1440,7 @@ export function markWebhookEventRetryable(
  */
 export function activateOrderAsSystem(
   input: ActivateOrderAsSystemInput,
-): Promise<{ outcome: "ACTIVATED" | "EXCEPTION" }> {
+): Promise<ActivateOrderAsSystemResult> {
   return built.activateOrderAsSystem(input);
 }
 

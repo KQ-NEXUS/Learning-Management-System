@@ -370,6 +370,7 @@ describe("POST /api/webhooks/paystack — replay safety, transaction verificatio
       orderId: "order-42",
       provider: "PAYSTACK",
       providerIntentId: "ORD-20260910-TESTREF1",
+      providerRef: "ORD-20260910-TESTREF1",
       amountMinor: 45_875_000,
       currency: "NGN",
       eventId: "2002",
@@ -485,6 +486,7 @@ describe("POST /api/webhooks/paystack — replay safety, transaction verificatio
         amountMinor: 45_875_000,
         currency: "NGN",
         providerIntentId: "ORD-20260910-REAL",
+        providerRef: "ORD-20260910-REAL",
       }),
     );
   });

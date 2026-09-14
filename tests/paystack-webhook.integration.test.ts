@@ -291,6 +291,7 @@ describe("Paystack webhook settlement — real Postgres (PAY-07, PAY-10, PAY-11,
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
     expect(attempt.provider).toBe("PAYSTACK");
     expect(attempt.status).toBe("SUCCEEDED");
+    expect(attempt.providerRef).toBe(reference);
 
     const webhookEvent = await testDb.prisma.webhookEvent.findUniqueOrThrow({
       where: { provider_providerEventId: { provider: "PAYSTACK", providerEventId: String(eventCounter) } },

@@ -126,6 +126,11 @@ type OrderRow = {
   status: string;
   amountMinor: number;
   currency: string;
+  baseAmountMinor?: number | null;
+  platformFeeMinor?: number | null;
+  gatewayFeeEstimateMinor?: number | null;
+  selectedProvider?: string | null;
+  schoolSettlementExpectedMinor?: number | null;
   enrolments: EnrolmentRow[];
 };
 
@@ -134,6 +139,9 @@ type PaymentAttemptRow = {
   status: string;
   orderId: string;
   providerIntentId: string | null;
+  providerRef?: string | null;
+  provider?: string;
+  confirmedAt?: Date | null;
   exceptionNote?: string | null;
 };
 
@@ -175,12 +183,14 @@ function buildHarness(args: {
   const transactionOptions: Array<{ timeout?: number } | undefined> = [];
   const auditEvents: Array<Record<string, unknown>> = [];
   const dispatchCalls: DispatchParams[] = [];
+  const rawQueries: string[] = [];
 
   const tx: SettlementTxClient = {
     $queryRaw: async <T = unknown>(
-      _s: TemplateStringsArray,
+      strings: TemplateStringsArray,
       ...vals: unknown[]
     ): Promise<T> => {
+      rawQueries.push(strings.join("?"));
       const c = cohorts.get(vals[0] as string);
       return (
         c
@@ -249,6 +259,12 @@ function buildHarness(args: {
         Object.assign(a, data);
         return a;
       },
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const id = `pa-${attempts.size + 1}`;
+        const created = { id, ...data } as PaymentAttemptRow;
+        attempts.set(id, created);
+        return { id };
+      },
     },
     webhookEvent: {
       updateMany: async ({ where, data }) => {
@@ -302,6 +318,7 @@ function buildHarness(args: {
     attempts,
     webhookEvents,
     transactionOptions,
+    rawQueries,
   };
 }
 
@@ -340,6 +357,174 @@ function baseOrder(
 }
 
 describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
+  it("locks the Order row before reading settlement state", async () => {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment);
+    const { deps, rawQueries } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+        },
+      ],
+      email: null,
+    });
+
+    await createActivateOrderAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      provider: "STRIPE",
+      providerIntentId: SESSION_ID,
+      amountMinor: 45_000_000,
+      currency: "NGN",
+      eventId: "evt-order-lock",
+    });
+
+    expect(rawQueries[0]).toMatch(/FROM "Order"[\s\S]*FOR UPDATE/);
+  });
+
+  it("prepares and settles a manual confirmation inside the shared transaction", async () => {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment, {
+      amountMinor: 45_875_000,
+      baseAmountMinor: 45_000_000,
+      platformFeeMinor: 675_000,
+      gatewayFeeEstimateMinor: 200_000,
+      selectedProvider: "PAYSTACK",
+      schoolSettlementExpectedMinor: 45_000_000,
+    });
+    const { deps, orders, attempts } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [],
+      email: null,
+    });
+
+    const result = await createActivateOrderAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      provider: "MANUAL",
+      providerIntentId: "BANK-REF-1",
+      providerRef: "BANK-REF-1",
+      amountMinor: 45_675_000,
+      currency: "NGN",
+      eventId: "manual:order-1:BANK-REF-1",
+      manualConfirmation: {
+        confirmedById: "staff-1",
+        manualChannel: "bank_transfer",
+        manualReference: "BANK-REF-1",
+        manualPaidAt: new Date("2026-09-14T10:00:00Z"),
+        manualEvidenceKey: "evidence/order-1.pdf",
+        reason: "Matched against the school bank statement.",
+      },
+    });
+
+    expect(result).toEqual({ outcome: "ACTIVATED" });
+    expect(orders.get(BASE_ORDER_ID)).toMatchObject({
+      status: "PAID",
+      amountMinor: 45_675_000,
+      gatewayFeeEstimateMinor: 0,
+      selectedProvider: "MANUAL",
+    });
+    expect([...attempts.values()]).toHaveLength(1);
+    expect([...attempts.values()][0]).toMatchObject({
+      provider: "MANUAL",
+      providerRef: "BANK-REF-1",
+      status: "SUCCEEDED",
+    });
+  });
+
+  it("writes the provider transaction reference when settlement succeeds", async () => {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment);
+    const { deps, attempts } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+        },
+      ],
+      email: null,
+    });
+
+    await createActivateOrderAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      provider: "STRIPE",
+      providerIntentId: SESSION_ID,
+      providerRef: "ch_test_1",
+      amountMinor: 45_000_000,
+      currency: "NGN",
+      eventId: "evt-provider-ref",
+    });
+
+    expect(attempts.get("pa-1")?.providerRef).toBe("ch_test_1");
+  });
+
+  it("treats a manual confirmation that loses the race to online settlement as already paid", async () => {
+    const enrolment = baseEnrolment({ status: "ACTIVE" });
+    const order = baseOrder(enrolment, {
+      status: "PAID",
+      baseAmountMinor: 45_000_000,
+      selectedProvider: "PAYSTACK",
+    });
+    const { deps, orders, attempts } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-online",
+          status: "SUCCEEDED",
+          orderId: BASE_ORDER_ID,
+          provider: "PAYSTACK",
+          providerIntentId: "paystack-reference",
+          providerRef: "paystack-reference",
+          confirmedAt: new Date("2026-09-14T09:59:00Z"),
+        },
+      ],
+      email: null,
+    });
+
+    const result = await createActivateOrderAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      provider: "MANUAL",
+      providerIntentId: "BANK-REF-2",
+      amountMinor: 45_675_000,
+      currency: "NGN",
+      eventId: "manual:order-1:BANK-REF-2",
+      manualConfirmation: {
+        confirmedById: "staff-1",
+        manualChannel: "bank_transfer",
+        manualReference: "BANK-REF-2",
+        manualPaidAt: new Date("2026-09-14T10:00:00Z"),
+        manualEvidenceKey: "evidence/order-1.pdf",
+        reason: "Matched against the school bank statement.",
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "ALREADY_PAID",
+      existingAttempt: {
+        provider: "PAYSTACK",
+        providerIntentId: "paystack-reference",
+      },
+    });
+    expect(orders.get(BASE_ORDER_ID)).toMatchObject({
+      status: "PAID",
+      selectedProvider: "PAYSTACK",
+    });
+    expect([...attempts.values()]).toHaveLength(1);
+  });
+
   it("gives the settlement transaction enough time to finish the full paid-order write sequence", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
