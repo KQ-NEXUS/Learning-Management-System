@@ -77,3 +77,4 @@ reference/
 .planning/current-agent-id.txt
 .planning/async-jobs/
 .planning/**/.review-fix-recovery-pending.json
+_tmp-*
