@@ -6,26 +6,30 @@ import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShe
 import { deriveAvatarDisplay } from "@/lib/avatar-display";
 
 /**
- * The Learner account shell — not `staff/layout.tsx`'s sidebar workspace.
- * A Learner has no `Assignment`-based grants to check, just "is this their
- * own record" (profile-service.ts's ownership model), so this guard checks
- * only that a session exists, with no staff-role requirement.
+ * The `(learner)` route-group layout — `/dashboard` and `/learn/*` (LRN-01
+ * through LRN-06).
  *
- * Convenience only. The server action's own actor resolution is the
- * security boundary — a layout guard protects rendering, not data.
+ * DD-7: one route group, one guard, one nav definition, for both delivery
+ * surfaces (`dashboard/`, `learn/`) — mirroring `account/layout.tsx`'s single
+ * `LearnerShell` mount for its one surface. The group's parentheses keep the
+ * URLs exactly `/dashboard` and `/learn/[enrolmentId]/...`.
  *
- * `deriveAvatarDisplay` now lives in `src/lib/avatar-display.ts` (09-08 Task
- * 1) so this shell and `(learner)/layout.tsx` cannot drift on the initials
- * rule. The learner shell shows no name or role line beside the avatar
- * (UI-SPEC 8.18 empty) — this is the only identity surface here.
+ * DD-20: this guard is convenience only, exactly as `account/layout.tsx`'s
+ * header states. Every page and Server Action beneath it re-resolves the
+ * actor and re-checks ownership; a layout protects rendering, not data.
+ *
+ * A missing profile row is an anomaly in chrome, not grounds for signing a
+ * learner out mid-session — the avatar degrades to a neutral state instead,
+ * matching `account/layout.tsx`'s identical handling.
  */
 
 const NAV: LearnerNavItem[] = [
+  { label: "Dashboard", href: "/dashboard" },
   { label: "Catalogue", href: "/courses" },
   { label: "Account", href: "/account" },
 ];
 
-export default async function AccountLayout({
+export default async function LearnerDeliveryLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -33,9 +37,6 @@ export default async function AccountLayout({
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
-  // A missing profile row is an anomaly in chrome, not grounds for signing a
-  // Learner out mid-session — the avatar degrades to a neutral state instead
-  // (UI-SPEC 8.18 empty).
   const profile = await profileService.getOwnProfile(actor);
   const display = deriveAvatarDisplay(profile ? { name: profile.name, email: profile.email } : null);
 

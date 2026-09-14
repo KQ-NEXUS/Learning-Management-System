@@ -205,6 +205,12 @@ export type NextAction =
 
 export type LearnerDashboardCard = {
   enrolmentId: string;
+  /** `Cohort.title` — 09-08 Task 3 heads each dashboard section with it. */
+  cohortTitle: string;
+  /** `Cohort.timezone` (IANA) — 09-08's session/date rendering reads this
+   *  rather than the server's local zone (matches
+   *  `scheduled-session-service.ts`'s existing convention). */
+  timezone: string;
   assessmentObligations: DeferredColumn;
   results: DeferredColumn;
   tickets: DeferredColumn;
@@ -473,6 +479,8 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
 
     const base = {
       enrolmentId: enrolment.id,
+      cohortTitle: enrolment.cohort.title,
+      timezone: enrolment.cohort.timezone,
       assessmentObligations: ASSESSMENT_OBLIGATIONS_DEFERRED,
       results: RESULTS_DEFERRED,
       tickets: TICKETS_DEFERRED,
