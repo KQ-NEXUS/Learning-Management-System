@@ -396,7 +396,50 @@ Plans:
   4. Lesson completion is tracked idempotently per content-appropriate rule, and a learner can manually complete a Lesson only where policy allows and only within their own valid access window. (LRN-04, LRN-05)
   5. Eligible learners see session details and meeting links within the configured visibility window, and Course/Programme completion is calculated from versioned rules against current evidence, identifying each satisfied/unmet rule. (LRN-06, LRN-07)
 
-**Plans**: TBD
+**Plans**: 14 plans in 9 waves
+
+Plans:
+**Wave 1**
+
+- [ ] 09-01-PLAN.md — Schema (Cohort.accessDurationDays, LessonWatchProgress) + migration + pure access-window evaluator
+- [ ] 09-02-PLAN.md — Pure evaluators: lesson sequencing, completionRule v1 parser, completion engine
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 09-03-PLAN.md — learner-access.ts: ownership-scoped enrolment, pinned course structure, server-side lesson gate
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 09-04-PLAN.md — completion-service.ts, three new domain events, attendance-change recalculation trigger
+- [ ] 09-05-PLAN.md — Learner download predicate + dual-predicate lesson-resource route
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 09-06-PLAN.md — lesson-progress-service.ts: mark/undo, video watch write + 90% auto-complete, staff override
+- [ ] 09-07-PLAN.md — enrolment-dashboard-service.ts: aggregate read, typed named gaps, next-action derivation
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 09-08-PLAN.md — (learner) route group layout + /dashboard page + progress/gap components
+- [ ] 09-13-PLAN.md — Staff progress-override screen + roster Progress column widening
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 09-09-PLAN.md — /learn/[enrolmentId] lesson list with lock affordances and the D-07 access gate
+- [ ] 09-10-PLAN.md — learner-session-service.ts + /learn/[enrolmentId]/sessions with the meeting-link window
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 09-11-PLAN.md — Lesson reading pane, mark/undo Server Actions, complete-control island
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 09-12-PLAN.md — Video watch tracker island + recordWatchProgress action
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 09-14-PLAN.md — Phase invariants test, real-Postgres learner journey, human walkthrough checkpoint
+
 **UI hint**: yes
 
 ---
