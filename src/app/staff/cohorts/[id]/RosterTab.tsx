@@ -81,10 +81,11 @@ const STATUS_LABEL: Record<string, string> = {
 /** D-18 — the exact literal labels the grep gate and the component test key
  *  off. Never computed via a template so the strings are physically present
  *  in this file, not merely producible at runtime. */
-const DEFERRED_LABEL: Record<9 | 10 | 11, string> = {
+const DEFERRED_LABEL: Record<9 | 10 | 11 | 12, string> = {
   9: "not tracked yet · Phase 9",
   10: "not tracked yet · Phase 10",
   11: "not tracked yet · Phase 11",
+  12: "not tracked yet · Phase 12",
 };
 
 function DeferredCell({ column }: { column: DeferredColumn }) {

@@ -51,8 +51,13 @@ type WithPermission = ReturnType<typeof createWithPermission>;
  * will DELIBERATELY widen its column's type (e.g. `DeferredColumn | { kind:
  * "tracked"; pct: number }`); until then the roster is structurally incapable
  * of rendering a fake zero for these columns.
+ *
+ * Phase 12 (support tickets) joined the set via the Phase 9 learner
+ * dashboard (`enrolment-dashboard-service.ts`) — a fourth named gap for the
+ * same reason as the original three: no ticket-count engine exists yet, and
+ * a fake zero would read as "no tickets" rather than "not built yet".
  */
-export type DeferredColumn = { kind: "deferred"; phase: 9 | 10 | 11 };
+export type DeferredColumn = { kind: "deferred"; phase: 9 | 10 | 11 | 12 };
 
 const PROGRESS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 9 };
 const ASSESSMENT_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
