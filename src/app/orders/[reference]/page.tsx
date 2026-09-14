@@ -5,6 +5,8 @@ import { getOwnOrderByReference } from "@/server/services/checkout-service";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
 import { StatusPill } from "@/components/primitives/ResourceTable";
+import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
+import { SUPPORT_CONTACT_EMAIL } from "@/server/support-contact";
 
 // Rendered per request, never prerendered — this page reads a real Order.
 export const dynamic = "force-dynamic";
@@ -13,22 +15,6 @@ const NAV: LearnerNavItem[] = [
   { label: "Catalogue", href: "/courses" },
   { label: "Account", href: "/account" },
 ];
-
-/**
- * REG-05's required support route (D-19 — static contact info; Phase 12's
- * real ticket system doesn't exist yet). No static support-contact string
- * exists anywhere in this codebase or its docs (checked at plan time — see
- * `06-08-SUMMARY.md`), so this is sourced from configuration
- * (`SUPPORT_CONTACT_EMAIL`, added to `.env.example`) rather than a literal
- * baked into this page. The `.env.example` value is a documented
- * must-override-before-launch placeholder, exactly like that file's existing
- * `EMAIL_SENDER_ADDRESS` fallback (`brevo-client.ts`).
- */
-const SUPPORT_CONTACT_EMAIL = process.env.SUPPORT_CONTACT_EMAIL ?? "support@example.com";
-
-function formatAmount(amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amountMinor / 100);
-}
 
 export default async function OrderReceiptPage({
   params,
@@ -46,12 +32,20 @@ export default async function OrderReceiptPage({
   if (!order) notFound();
 
   // Read straight off the Order/Enrolment's own recorded state — never a
-  // flag. `amountMinor`/`currency` come from the Order row exactly as
-  // created (D-07 amount-immutability): re-reading the cohort's current
-  // price here would produce a receipt that silently rewrites its own
-  // history the moment someone edits that cohort (T-06-51).
+  // flag. `amountMinor`/`currency`, and (07-09) `baseAmountMinor`/
+  // `platformFeeMinor`/`gatewayFeeEstimateMinor`/`selectedProvider`, all come
+  // from the Order row exactly as created (D-07/D-13 amount-immutability):
+  // re-reading the cohort's current price, or the currently-active
+  // GatewayFeeSchedule, here would produce a receipt that silently rewrites
+  // its own history the moment someone edits either of those (T-06-51,
+  // D-18). This page performs no fee calculation of its own and imports
+  // nothing from `pricing.ts` — it renders a snapshot, it does not price
+  // anything.
   const enrolmentStatus = order.enrolment?.status ?? null;
   const active = order.status === "PAID" && enrolmentStatus === "ACTIVE";
+  const partiallyRefunded = order.status === "PARTIALLY_REFUNDED";
+  const refunded = order.status === "REFUNDED";
+  const hasRefund = partiallyRefunded || refunded;
   // "Paid" covers both sub-states this page ever intentionally shows: a
   // clean settlement (PAID + ACTIVE) and the Pitfall-4 race (PAID or
   // EXCEPTION, enrolment not yet ACTIVE) — the money moved in both, only the
@@ -67,7 +61,50 @@ export default async function OrderReceiptPage({
   // really is ACTIVE. Everything else — including an EXCEPTION order and a
   // PAID order whose seat never activated — renders the same honest,
   // non-danger-toned "still finishing up" copy, verbatim from UI-SPEC 6.1.
-  const heading = active ? "You're enrolled" : "Payment received — finishing up";
+  const heading = refunded
+    ? "Payment refunded"
+    : partiallyRefunded
+      ? "Payment partially refunded"
+      : active
+        ? "You're enrolled"
+        : "Payment received — finishing up";
+
+  const paymentPresentation = refunded
+    ? { label: "Refunded", tone: "warning" as const }
+    : partiallyRefunded
+      ? { label: "Partially refunded", tone: "warning" as const }
+      : moneyMoved
+        ? { label: "Paid", tone: "success" as const }
+        : { label: "Pending", tone: "neutral" as const };
+
+  const refundEnrolmentPresentation =
+    enrolmentStatus === "ACTIVE"
+      ? { label: "Active", tone: "success" as const }
+      : enrolmentStatus === "WITHDRAWN"
+        ? { label: "Withdrawn", tone: "neutral" as const }
+        : enrolmentStatus === "CANCELLED"
+          ? { label: "Cancelled", tone: "neutral" as const }
+          : { label: "Pending review", tone: "warning" as const };
+
+  const enrolmentPresentation = hasRefund
+    ? refundEnrolmentPresentation
+    : active
+      ? { label: "Active", tone: "success" as const }
+      : { label: "Pending review", tone: "warning" as const };
+
+  // D-13/D-18 — never null for an Order this codebase's own `startCheckout`
+  // created; see `OrderSnapshot`'s own doc comment (checkout-service.ts) and
+  // the identical guard on `/checkout/[orderId]`. A null value here can only
+  // mean a pre-Phase-7 legacy Order, which is a hard invariant violation on
+  // a PAID receipt, not a silent fallback UI.
+  if (
+    order.baseAmountMinor === null ||
+    order.platformFeeMinor === null ||
+    order.gatewayFeeEstimateMinor === null ||
+    order.selectedProvider === null
+  ) {
+    throw new Error(`Order ${order.id} has no commercial snapshot to render a receipt breakdown from.`);
+  }
 
   const rightSlot = (
     <form action={signOutAction}>
@@ -85,7 +122,7 @@ export default async function OrderReceiptPage({
       <article className="mx-auto flex w-full max-w-[640px] flex-col gap-6">
         <h1 className="text-[25px] font-semibold leading-[1.2] text-foreground">{heading}</h1>
 
-        {!active && (
+        {!active && !hasRefund && (
           <p className="max-w-prose text-sm text-muted-foreground">
             Your payment succeeded but we need a moment to confirm your seat. We&apos;ll email you
             as soon as it&apos;s done — no action needed. If you don&apos;t hear from us within a
@@ -112,20 +149,12 @@ export default async function OrderReceiptPage({
             </div>
             <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Amount
-              </dt>
-              <dd className="break-words text-sm text-foreground">
-                {formatAmount(order.amountMinor, order.currency)}
-              </dd>
-            </div>
-            <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Payment
               </dt>
               <dd className="break-words text-sm">
                 <StatusPill
-                  label={moneyMoved ? "Paid" : "Pending"}
-                  tone={moneyMoved ? "success" : "neutral"}
+                  label={paymentPresentation.label}
+                  tone={paymentPresentation.tone}
                 />
               </dd>
             </div>
@@ -135,13 +164,27 @@ export default async function OrderReceiptPage({
               </dt>
               <dd className="break-words text-sm">
                 <StatusPill
-                  label={active ? "Active" : "Pending review"}
-                  tone={active ? "success" : "warning"}
+                  label={enrolmentPresentation.label}
+                  tone={enrolmentPresentation.tone}
                 />
               </dd>
             </div>
           </dl>
         </section>
+
+        {/* D-18 — the same breakdown card the order-summary page rendered
+            before payment, in the position the single "Amount" fact used to
+            occupy. Read straight from the Order's own snapshot columns
+            above; a later Cohort price or GatewayFeeSchedule edit can never
+            change what this receipt shows. */}
+        <OrderBreakdownCard
+          baseAmountMinor={order.baseAmountMinor}
+          platformFeeMinor={order.platformFeeMinor}
+          gatewayFeeEstimateMinor={order.gatewayFeeEstimateMinor}
+          amountMinor={order.amountMinor}
+          currency={order.currency}
+          provider={order.selectedProvider}
+        />
 
         <p className="text-sm text-muted-foreground">
           Need help with this order? Email{" "}

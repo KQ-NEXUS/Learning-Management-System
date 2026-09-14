@@ -1,7 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
-import { startCheckout, getCohortOfferPath } from "@/server/services/checkout-service";
 import {
+  startCheckout,
+  getCohortOfferPath,
+  CurrencyUnavailableError,
+} from "@/server/services/checkout-service";
+import { isSupportedCurrency } from "@/server/payments/routing";
+import {
+  AlreadyEnrolledError,
   CapacityExceededError,
   CohortClosedError,
   CohortNotFoundError,
@@ -41,10 +47,13 @@ export const dynamic = "force-dynamic";
 
 export default async function EnrolResumptionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ cohortId: string }>;
+  searchParams: Promise<{ currency?: string }>;
 }) {
   const { cohortId } = await params;
+  const { currency: currencyInput } = await searchParams;
 
   // The `(checkout)` layout already redirects an unauthenticated visitor to
   // /signin before this component ever renders — this is belt-and-braces,
@@ -53,19 +62,32 @@ export default async function EnrolResumptionPage({
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
+  // D-07 — an order must never be created with a guessed currency. A
+  // missing or unsupported value sends the visitor back to the cohort's own
+  // offer page rather than assuming either rail.
+  if (!currencyInput || !isSupportedCurrency(currencyInput)) {
+    redirect(await getCohortOfferPath(cohortId));
+  }
+
   let orderId: string;
   try {
-    ({ orderId } = await startCheckout(actor, cohortId));
+    ({ orderId } = await startCheckout(actor, cohortId, currencyInput));
   } catch (err) {
     // A guessed/stale id that never existed: the 404 page, not an error
     // boundary and not a redirect that would imply the id once meant
     // something.
     if (err instanceof CohortNotFoundError) notFound();
-    // Filled up or no longer accepting enrolments since the visitor first
-    // clicked Enroll: send them back to the cohort's own public offer page
-    // (or the catalogue index if that page can't be resolved), never an
-    // error boundary that would confirm anything about why.
-    if (err instanceof CapacityExceededError || err instanceof CohortClosedError) {
+    // Filled up, no longer accepting enrolments, or no price for this
+    // currency (D-05/D-19) since the visitor first clicked Enroll: send them
+    // back to the cohort's own public offer page (or the catalogue index if
+    // that page can't be resolved), never an error boundary that would
+    // confirm anything about why.
+    if (
+      err instanceof AlreadyEnrolledError ||
+      err instanceof CapacityExceededError ||
+      err instanceof CohortClosedError ||
+      err instanceof CurrencyUnavailableError
+    ) {
       redirect(await getCohortOfferPath(cohortId));
     }
     throw err;

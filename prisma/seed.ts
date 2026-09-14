@@ -303,7 +303,12 @@ async function main() {
     // D-02 default — reasserted explicitly (plan 05-11) rather than left to
     // the schema `@default(30)` so a re-seed after any future default change
     // keeps this cohort on the documented value.
-    update: { holdMinutes: 30 },
+    //
+    // D-25 (plan 07-02) — this is the worked-acceptance-example Cohort:
+    // priceNgnMinor 45_000_000 (NGN 450,000) is the exact base price D-25's
+    // Paystack fee calculation walks through. Reasserted on update, same
+    // rationale as holdMinutes.
+    update: { holdMinutes: 30, priceNgnMinor: 45_000_000 },
     create: {
       code: "SLP-2026-01",
       title: "Safety Leadership Programme — January 2026",
@@ -318,6 +323,7 @@ async function main() {
       seatsTaken: 0,
       priceMinor: 45000000, // NGN 450,000.00
       currency: "NGN",
+      priceNgnMinor: 45_000_000, // D-25 worked-example base price
       status: "PUBLISHED",
       attendanceThresholdPct: 75,
       publishedAt: new Date(),
@@ -730,6 +736,57 @@ async function main() {
     });
   }
 
+  // --- Gateway fee schedules (Phase 7, plan 07-02, D-11) --------------------
+  // Seed examples of each rail's published fee schedule -- configurable
+  // commercial configuration, not hard-coded permanent truth. Keyed by the
+  // provider+currency+version unique constraint, so re-seeding twice
+  // upserts the same two rows rather than creating four.
+  const FEE_SCHEDULE_EFFECTIVE_FROM = new Date("2026-01-01T00:00:00.000Z");
+
+  await prisma.gatewayFeeSchedule.upsert({
+    where: {
+      provider_currency_version: { provider: "PAYSTACK", currency: "NGN", version: 1 },
+    },
+    update: {},
+    create: {
+      provider: "PAYSTACK",
+      currency: "NGN",
+      version: 1,
+      // Paystack's published Nigeria local-card schedule: 1.5% + NGN 100,
+      // capped at NGN 2,000 -- the exact schedule D-25's worked example
+      // walks through against programmeCohort's NGN 450,000 base price.
+      percentageBps: 150,
+      fixedMinor: 10_000, // NGN 100.00 in kobo
+      waiverThresholdMinor: 250_000, // Paystack waives the flat fee under NGN 2,500
+      capMinor: 200_000, // NGN 2,000.00 cap
+      taxBps: 0,
+      roundingRule: "CEIL",
+      effectiveFrom: FEE_SCHEDULE_EFFECTIVE_FROM,
+      active: true,
+    },
+  });
+
+  await prisma.gatewayFeeSchedule.upsert({
+    where: {
+      provider_currency_version: { provider: "STRIPE", currency: "USD", version: 1 },
+    },
+    update: {},
+    create: {
+      provider: "STRIPE",
+      currency: "USD",
+      version: 1,
+      // Stripe's published US card schedule: 2.9% + $0.30, no waiver or cap.
+      percentageBps: 290,
+      fixedMinor: 30, // $0.30 in cents
+      waiverThresholdMinor: null,
+      capMinor: null,
+      taxBps: 0,
+      roundingRule: "CEIL",
+      effectiveFrom: FEE_SCHEDULE_EFFECTIVE_FROM,
+      active: true,
+    },
+  });
+
   // --- Summary -------------------------------------------------------------
   const counts = {
     roles: await prisma.role.count(),
@@ -744,6 +801,7 @@ async function main() {
     enrolments: await prisma.enrolment.count(),
     attendanceRecords: await prisma.attendanceRecord.count(),
     assessments: await prisma.assessment.count(),
+    gatewayFeeSchedules: await prisma.gatewayFeeSchedule.count(),
   };
 
   console.log("Seed complete:");

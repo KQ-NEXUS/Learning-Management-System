@@ -66,7 +66,12 @@ const course = (over: Partial<Row>): Row => ({
   ...over,
 });
 
-const build = (courses: Row[], programmes: Row[] = [], cohorts: unknown[] = []) =>
+const build = (
+  courses: Row[],
+  programmes: Row[] = [],
+  cohorts: unknown[] = [],
+  enabledRails?: () => { ngn: boolean; usd: boolean },
+) =>
   createPublicCatalogueService({
     courseDelegate: makeDelegate(courses),
     programmeDelegate: makeDelegate(programmes),
@@ -74,6 +79,7 @@ const build = (courses: Row[], programmes: Row[] = [], cohorts: unknown[] = []) 
       findMany: vi.fn(async () => cohorts as never[]),
     },
     now: () => new Date("2026-06-01T00:00:00Z"),
+    enabledRails,
   });
 
 describe("public-catalogue-service", () => {
@@ -173,8 +179,6 @@ describe("public-catalogue-service", () => {
     enrolmentOpensAt: new Date("2026-05-01T00:00:00Z"),
     enrolmentClosesAt: new Date("2026-08-01T00:00:00Z"),
     deliveryMode: "INSTRUCTOR_LED",
-    priceMinor: 45000000,
-    currency: "NGN",
     capacity: 10,
     seatsTaken: 3,
     status: "PUBLISHED",
@@ -202,19 +206,74 @@ describe("public-catalogue-service", () => {
     expect(cohort.seatsAvailable).toBe(0);
   });
 
+  describe("07-09: D-05 rail enablement folded into the price, never leaked as a reason", () => {
+    it("defaults both rails enabled when the caller injects no enabledRails (backward-compatible default)", async () => {
+      const svc = build(
+        [course({ slug: "both" })],
+        [],
+        [cohortRow({ priceNgnMinor: 45_000_000, priceUsdMinor: null })],
+      );
+      const one = await svc.getPublicCourseBySlug("both");
+      const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+      expect(cohort.priceNgnMinor).toBe(45_000_000);
+    });
+
+    it("nulls out a priced NGN rail when this deployment's Paystack settlement account is not enabled (D-05)", async () => {
+      const svc = build(
+        [course({ slug: "ngn-disabled" })],
+        [],
+        [cohortRow({ priceNgnMinor: 45_000_000, priceUsdMinor: 50_000 })],
+        () => ({ ngn: false, usd: true }),
+      );
+      const one = await svc.getPublicCourseBySlug("ngn-disabled");
+      const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+      expect(cohort.priceNgnMinor).toBeNull();
+      expect(cohort.priceUsdMinor).toBe(50_000);
+    });
+
+    it("nulls out a priced USD rail when this deployment's Stripe connected account is not enabled (D-05)", async () => {
+      const svc = build(
+        [course({ slug: "usd-disabled" })],
+        [],
+        [cohortRow({ priceNgnMinor: 45_000_000, priceUsdMinor: 50_000 })],
+        () => ({ ngn: true, usd: false }),
+      );
+      const one = await svc.getPublicCourseBySlug("usd-disabled");
+      const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+      expect(cohort.priceNgnMinor).toBe(45_000_000);
+      expect(cohort.priceUsdMinor).toBeNull();
+    });
+
+    it("never distinguishes 'unpriced' from 'priced but disabled' on the returned shape — both are the identical null", async () => {
+      const svc = build(
+        [course({ slug: "indistinguishable" })],
+        [],
+        [cohortRow({ priceNgnMinor: 45_000_000, priceUsdMinor: null })],
+        () => ({ ngn: false, usd: true }),
+      );
+      const one = await svc.getPublicCourseBySlug("indistinguishable");
+      const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+      expect(cohort.priceNgnMinor).toBeNull();
+      expect(cohort.priceUsdMinor).toBeNull();
+      expect(Object.keys(cohort)).not.toContain("ngnRailEnabled");
+      expect(Object.keys(cohort)).not.toContain("usdRailEnabled");
+    });
+  });
+
   it("the returned cohort has no seatsTaken and no capacity key — only the derived figure", async () => {
     const svc = build([course({ slug: "no-occupancy" })], [], [cohortRow()]);
     const one = await svc.getPublicCourseBySlug("no-occupancy");
     const [cohort] = (one as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
     expect(Object.keys(cohort).sort()).toEqual(
       [
-        "currency",
         "deliveryMode",
         "endsAt",
         "enrolmentClosesAt",
         "enrolmentOpensAt",
         "id",
-        "priceMinor",
+        // 07-04/07-11 — the dual-currency rails (D-06); the legacy priceMinor/currency pair is gone.
+        "priceNgnMinor",
+        "priceUsdMinor",
         "seatsAvailable",
         "startsAt",
       ].sort(),

@@ -25,9 +25,19 @@ function formatRemaining(remainingMs: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function HoldCountdown({ holdExpiresAt }: { holdExpiresAt: string }) {
+export function HoldCountdown({
+  holdExpiresAt,
+  initialRemainingMs,
+}: {
+  holdExpiresAt: string;
+  initialRemainingMs: number;
+}) {
   const expiry = new Date(holdExpiresAt).getTime();
-  const [remainingMs, setRemainingMs] = useState(() => Math.max(expiry - Date.now(), 0));
+  // The server and the browser must hydrate from the exact same snapshot.
+  // Reading Date.now() here used two different clocks and made a one-second
+  // text mismatch likely on every checkout-page hydration. The first effect
+  // tick catches the browser up immediately after hydration.
+  const [remainingMs, setRemainingMs] = useState(() => Math.max(initialRemainingMs, 0));
 
   useEffect(() => {
     const tick = () => setRemainingMs(Math.max(expiry - Date.now(), 0));

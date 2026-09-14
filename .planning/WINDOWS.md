@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 12
+open_count: 13
 waived_count: 0
 fixed_count: 2
-total_count: 14
-last_updated: 2026-09-10T05:18:51.181Z
+total_count: 15
+last_updated: 2026-09-12T21:38:46.116Z
 ---
 
 # Broken Windows Ledger
@@ -29,6 +29,7 @@ last_updated: 2026-09-10T05:18:51.181Z
 | 12 | 06 | stub | src/server/services/checkout-service.ts |  | initiateStripePayment's successUrl points at /checkout/{orderId}/confirming, not built until plan 06-07 (D-05 interstitial) -- 404s momentarily after a real Stripe test payment until that plan ships | open |  | 2026-09-10T05:18:06.391Z |  |
 | 13 | 06 | unrun-verify | tests/checkout-webhook.integration.test.ts |  | 6-case real-Postgres webhook settlement suite could not run in this execution sandbox -- Docker unavailable; needs a Docker-enabled environment before REG-03/REG-05/PAY-10's real-Postgres proof is complete | open |  | 2026-09-10T05:18:42.581Z |  |
 | 14 | 06 | unrun-verify | 06-03-SUMMARY.md |  | Task 3's human-check browser walkthrough (enroll, pay with a real Stripe test card via stripe listen, confirm receipt page and cross-learner 404) not yet performed | open |  | 2026-09-10T05:18:51.181Z |  |
+| 15 | 07 | deviation | tests/cohort-lifecycle-security.integration.test.ts |  | Pre-existing (not caused by 07-05): 'cannot overwrite CANCELLED/COMPLETED after a stale readiness read' asserts StaleOrderError but publishCohort's unconditional assertCohortOpen on the fresh in-tx row throws CohortClosedError first, unchanged by this plan; see deferred-items.md | open |  | 2026-09-12T21:38:46.116Z |  |
 
 ````json
 [
@@ -198,6 +199,18 @@ last_updated: 2026-09-10T05:18:51.181Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-10T05:18:51.181Z",
+    "resolved_at": null
+  },
+  {
+    "id": 15,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/cohort-lifecycle-security.integration.test.ts",
+    "line": null,
+    "description": "Pre-existing (not caused by 07-05): 'cannot overwrite CANCELLED/COMPLETED after a stale readiness read' asserts StaleOrderError but publishCohort's unconditional assertCohortOpen on the fresh in-tx row throws CohortClosedError first, unchanged by this plan; see deferred-items.md",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-12T21:38:46.116Z",
     "resolved_at": null
   }
 ]

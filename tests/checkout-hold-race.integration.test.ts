@@ -30,9 +30,34 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import Stripe from "stripe";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedLearnerFixture } from "./support/cohort-fixtures";
+import { seedCohortFixture, seedLearnerFixture, seedStripeUsdFeeScheduleFixture } from "./support/cohort-fixtures";
 import { STRIPE_API_VERSION } from "@/server/payments/providers/stripe/client";
 import type { CheckoutTxClient } from "@/server/services/checkout-service";
+import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
+
+/**
+ * 07-04 — provider is now DERIVED from currency (D-07), so this file's
+ * `initiateStripePayment`/real Stripe route exercise switches its cohorts
+ * from NGN to USD (mirrors `seedStripeUsdFeeScheduleFixture`'s own values
+ * exactly) rather than leaving a pre-Phase-7 NGN/Stripe pairing that no
+ * longer reflects how an Order actually gets created.
+ */
+const STRIPE_USD_SCHEDULE: GatewayFeeScheduleValues = {
+  provider: "STRIPE",
+  currency: "USD",
+  version: 1,
+  percentageBps: 290,
+  fixedMinor: 30,
+  waiverThresholdMinor: null,
+  capMinor: null,
+  taxBps: 0,
+  roundingRule: "HALF_UP",
+};
+const BASE_AMOUNT_MINOR = 45_000_000;
+const EXPECTED_TOTAL_MINOR = calculateCheckoutBreakdown({
+  baseAmountMinor: BASE_AMOUNT_MINOR,
+  schedule: STRIPE_USD_SCHEDULE,
+}).totalAmountMinor;
 
 type CheckoutServiceModule = typeof import("@/server/services/checkout-service");
 type RouteModule = typeof import("@/app/api/webhooks/stripe/route");
@@ -108,6 +133,13 @@ beforeAll(async () => {
   // getStripe() needs a non-empty key to CONSTRUCT the client at all; the
   // key itself is never used by webhooks.constructEvent's signature math.
   process.env.STRIPE_SECRET_KEY = "sk_test_fake_key_for_getstripe_construction_only";
+  // 07-06 — `initiateStripePayment` now fails closed without this (D-05).
+  process.env.STRIPE_CONNECTED_ACCOUNT_ID = "acct_test_connected_hold_race_integration";
+
+  // 07-04 — `startTestDatabase()` applies migrations only, never
+  // `prisma/seed.ts`; `startCheckout` now needs an active STRIPE/USD
+  // `GatewayFeeSchedule` row (this file's cohorts are USD, see above).
+  await seedStripeUsdFeeScheduleFixture(testDb.prisma);
 
   const checkoutServiceModule = await import("@/server/services/checkout-service");
   const routeModule = await import("@/app/api/webhooks/stripe/route");
@@ -166,6 +198,13 @@ beforeAll(async () => {
         },
       },
     },
+    // 07-04 compile-level consequence of `CheckoutServiceDeps` gaining a
+    // `paystack` field — this race is exercised on the Stripe path only.
+    paystack: {
+      initiate: async () => {
+        throw new Error("paystack.initiate is not exercised by this Stripe-only integration suite.");
+      },
+    },
     audit: (event) =>
       testDb.prisma.auditEvent
         .create({
@@ -193,7 +232,7 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
       holdMinutes: 30,
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
@@ -201,7 +240,7 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
     const cohortBefore = await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
     const seatsTakenBeforeCheckout = cohortBefore.seatsTaken;
 
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
     const enrolmentBefore = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
@@ -227,8 +266,8 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
     const response = await POST(signedWebhookRequest(body));
     expect(response.status).toBe(200); // never a non-2xx — Stripe must not retry this forever
@@ -262,20 +301,20 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
     expect(sweepAudit).toBeDefined();
     expect(webhookAudit).toBeDefined();
     expect(sweepAudit?.action).not.toBe(webhookAudit?.action); // distinguishable by action name
-  });
+  }, 15_000);
 
   it("contention variant: a different learner who took the freed seat keeps it — the late webhook does not evict them or oversell the cohort", async () => {
     const { cohortId } = await seedCohortFixture(testDb.prisma, {
       capacity: 1, // tight — learner B can only take the seat if it was genuinely freed
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
       holdMinutes: 30,
     });
     const { userId: userA } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
     const { userId: userB } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
 
-    const { orderId: orderIdA } = await checkoutService.startCheckout({ userId: userA }, cohortId);
+    const { orderId: orderIdA } = await checkoutService.startCheckout({ userId: userA }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId: userA }, orderIdA, FULL_CONSENT);
     const attemptA = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: orderIdA } });
     const enrolmentA = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId: orderIdA } });
@@ -290,7 +329,7 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
     expect(enrolmentAAfterSweep.status).toBe("CANCELLED");
 
     // Between the sweep and A's webhook, learner B takes the freed seat.
-    const { orderId: orderIdB } = await checkoutService.startCheckout({ userId: userB }, cohortId);
+    const { orderId: orderIdB } = await checkoutService.startCheckout({ userId: userB }, cohortId, "USD");
     const enrolmentB = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId: orderIdB } });
     expect(enrolmentB.status).toBe("PENDING_PAYMENT");
     expect(enrolmentB.holdExpiresAt).not.toBeNull();
@@ -304,8 +343,8 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
       eventId,
       sessionId: attemptA.providerIntentId!,
       orderId: orderIdA,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
     const response = await POST(signedWebhookRequest(body));
     expect(response.status).toBe(200);
@@ -320,19 +359,19 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
 
     const cohortFinal = await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
     expect(cohortFinal.seatsTaken).toBe(1); // still exactly B's seat — never oversold, never re-claimed
-  });
+  }, 15_000);
 
   it("control: the same setup with no sweep in between still produces PAID and ACTIVE — the guard discriminates rather than always refusing", async () => {
     const { cohortId } = await seedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
-      currency: "NGN",
+      currency: "USD",
       holdMinutes: 30,
     });
     const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
 
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId);
+    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
     await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
     const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
 
@@ -341,8 +380,8 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
       eventId,
       sessionId: attempt.providerIntentId!,
       orderId,
-      amountTotal: 45_000_000,
-      currency: "NGN",
+      amountTotal: EXPECTED_TOTAL_MINOR,
+      currency: "USD",
     });
     const response = await POST(signedWebhookRequest(body));
     expect(response.status).toBe(200);

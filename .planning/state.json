@@ -31,12 +31,12 @@
     {
       "number": "6",
       "name": "Registration, Checkout & Stripe Payments",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "7",
       "name": "Multi-Gateway Payments — Paystack, Manual & Refunds",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "8",
@@ -82,7 +82,7 @@
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 6 of 16 · 6% · executing"
+    "reason": "Phase 7 of 16 · 13% · executing"
   },
-  "updated_at": "2026-09-09T11:34:57.810Z"
+  "updated_at": "2026-09-12T18:19:01.572Z"
 }

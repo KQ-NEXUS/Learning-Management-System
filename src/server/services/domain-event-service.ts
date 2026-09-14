@@ -48,7 +48,14 @@ export type DomainEventType =
   // exercised enrolments.manage; activated means a verified Stripe payment
   // did it with no actor. Phase 8's reconciliation views and Phase 13's
   // email drain need to tell those apart from the outbox alone.
-  | "enrolment.activated";
+  | "enrolment.activated"
+  // 07-07 — the idempotent actual-settlement sweep (payment-reconciliation-
+  // service.ts). "reconciled" is the ordinary case (actual figures recorded,
+  // no variance); "reconciliation_exception" is the same write PLUS a
+  // variance beyond the schedule's rounding tolerance (D-14/D-18) — never a
+  // second Order.status change, never an Enrolment write.
+  | "payment.reconciled"
+  | "payment.reconciliation_exception";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction

@@ -46,6 +46,14 @@ function services(client = db.prisma) {
     db: { $transaction: (fn) => client.$transaction((tx) => fn(tx as unknown as CohortPublishTx)) },
     toScope: scopes.cohortResourceScope, withPermission, audit,
     runInTransaction: (fn) => client.$transaction(fn),
+    // This file's fixtures seed a cohort with `priceNgnMinor: 0` (the
+    // legacy-price default, see `seedCohortFixture`) and no USD price —
+    // neither would PASS the 07-05 per-rail price check. Nothing in this
+    // file's own concurrency/lifecycle scenarios is about pricing, so both
+    // rails are disabled here, matching how "Price" was effectively always
+    // PASS before 07-05 (D-08 only blocks on an ENABLED rail's missing
+    // price).
+    enabledRails: () => ({ ngn: false, usd: false }),
   });
   return {
     cohort, enrolment: createPrismaBackedEnrolmentService(client, withPermission, audit), audits,

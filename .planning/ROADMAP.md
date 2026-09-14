@@ -24,8 +24,8 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 3: Public Identity — Registration, Verification & Secure Sessions** *(Track A)* - Visitors register, verify, sign in/out, reset passwords, and manage profiles, resistant to enumeration/brute-force. (completed 2026-09-03)
 - [x] **Phase 4: Catalogue Authoring — Programmes, Courses, Modules & Lessons** *(Track B, parallel-eligible with Phases 2–3)* - Staff author Programmes, Modules, Lessons, and content, versioned and published. (completed 2026-09-03)
 - [x] **Phase 5: Cohorts, Scheduling, Enrolment Operations & Attendance** *(Track B, parallel-eligible with Phases 2–3)* - Staff stand up Cohorts, schedule sessions, manage enrolment lifecycle and capacity, mark and correct attendance. (completed 2026-09-07)
-- [ ] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement.
-- [ ] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
+- [x] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement. (completed 2026-09-12)
+- [x] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
 - [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
 - [ ] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion.
 - [ ] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides.
@@ -249,11 +249,13 @@ Plans:
 **Requirements**: REG-01, REG-02, REG-03, REG-04, REG-05, PAY-02, PAY-09, PAY-10
 **Success Criteria** (what must be TRUE):
 
-  1. A visitor can select an open Cohort and see current price, dates, mode, availability, prerequisites, and completion expectation before continuing. (REG-01) — `tests/public-catalogue-service.test.ts` (derived availability/floor-at-zero/no-occupancy-leak), `tests/components/cohort-cards.test.tsx` (10 boundary-state cases) automated; walkthrough step 1 of 06-09's twelve-step journey (human, outstanding — see 06-09-SUMMARY.md).
-  2. The selected offer survives identity verification/sign-in and returns the learner to their intended order. (REG-02) — `tests/landing.test.ts` (`checkoutReturnPathFor`, 20 cases), `tests/checkout-intent.test.ts` (9 cases) automated; `tests/checkout-intent.integration.test.ts` (4 cases, Docker-gated, not yet run — see Blockers) and walkthrough steps 2–5 (human, outstanding).
-  3. Each checkout attempt creates exactly one traceable, idempotent order; replays cannot create duplicate enrolments. (REG-03) — `tests/checkout-service.test.ts` (idempotency key, supersede-on-repeat-Enroll) automated; `tests/checkout-webhook.integration.test.ts`'s redelivery/mismatch cases (Docker-gated, not yet run) and walkthrough steps 11–12 (forgery/redirect checks, human, outstanding).
-  4. Required terms, privacy notice, refund/cancellation policy, and optional marketing consent are captured with versions, separately, at order time. (REG-04) — `tests/checkout-service.test.ts` (consent-gate cases), `tests/components/checkout-summary.test.tsx` (13 cases) automated; walkthrough steps 6 and 10 (three-row PolicyAcceptance database check, human, outstanding).
-  5. A learner can pay via Stripe; only a server-verified result (never a client redirect) marks the order paid and activates enrolment exactly once, through a shared, provider-agnostic payment state machine, and the learner receives a confirmation email and receipt/order record. (PAY-02, PAY-09, PAY-10, REG-05) — `tests/checkout-phase-invariants.test.ts` (PAY-09 provider isolation, PAY-10 single-paid-writer, both green), `tests/boundary.test.ts`'s webhook import-closure case (actorless settlement, green), `tests/components/order-confirmation.test.tsx` (10 cases, REG-05's six fields) automated; `tests/checkout-webhook.integration.test.ts` (Docker-gated, not yet run) and walkthrough steps 7–9 (human, outstanding).
+  1. A visitor can select an open Cohort and see current price, dates, mode, availability, prerequisites, and completion expectation before continuing. (REG-01) — `tests/public-catalogue-service.test.ts`, `tests/components/cohort-cards.test.tsx` (10 boundary-state cases) automated; walkthrough step 1 of 06-09's twelve-step journey verified live 2026-09-12 (real Playwright session, screenshot reviewed — see 06-UAT.md).
+  2. The selected offer survives identity verification/sign-in and returns the learner to their intended order. (REG-02) — `tests/landing.test.ts` (20 cases), `tests/checkout-intent.test.ts` (9 cases) automated; `tests/checkout-intent.integration.test.ts` (4 cases) run for real against Testcontainers Postgres 2026-09-12, all passing; full brand-new-account walkthrough (register → verify → sign-in → resume to checkout) completed live, see 06-UAT.md tests 22/45.
+  3. Each checkout attempt creates exactly one traceable, idempotent order; replays cannot create duplicate enrolments. (REG-03) — `tests/checkout-service.test.ts` automated; `tests/checkout-webhook.integration.test.ts`'s redelivery/mismatch cases run for real 2026-09-12 (all passing); forgery/redirect security probes (walkthrough steps 11–12) verified live against a real order — unsigned webhook rejected with 400, direct navigation did not bypass payment.
+  4. Required terms, privacy notice, refund/cancellation policy, and optional marketing consent are captured with versions, separately, at order time. (REG-04) — `tests/checkout-service.test.ts`, `tests/components/checkout-summary.test.tsx` (13 cases) automated; consent-gate UI behavior and the three-row PolicyAcceptance database check both verified live 2026-09-12 with real Playwright automation (screenshots reviewed) — see 06-UAT.md tests 32/34.
+  5. A learner can pay via Stripe; only a server-verified result (never a client redirect) marks the order paid and activates enrolment exactly once, through a shared, provider-agnostic payment state machine, and the learner receives a confirmation email and receipt/order record. (PAY-02, PAY-09, PAY-10, REG-05) — `tests/checkout-phase-invariants.test.ts`, `tests/boundary.test.ts`, `tests/components/order-confirmation.test.tsx` automated; `tests/checkout-webhook.integration.test.ts` run for real 2026-09-12, all passing; full real order→Stripe session→signed-webhook settlement→receipt round trip verified live, including the honest exception-state rendering (real hold-expiry race reproduced, not simulated) — see 06-UAT.md.
+
+**UAT**: 45/45 checks passed 2026-09-12 (23 auto-verified by the test suite at close-out, 22 verified live in this session — real Postgres, real Stripe test-mode traffic, real Playwright browser automation). See `06-UAT.md` for full detail per item. One non-blocking item flagged for a maintainer's review: a duplicate settlement-webhook delivery (self-inflicted during testing) still resulted in a correct final PAID/ACTIVE state, but logged an `order.exception` audit row alongside `order.paid` — worth confirming whether a second settlement attempt against an already-paid order should be a silent no-op instead.
 
 **Plans**: 9/9 plans executed across 6 waves (tracer-first: plan 03 proves the full visitor-to-enrolled path end to end — cohort card, order summary, Stripe Checkout, signature-verified webhook, receipt — before any expansion)
 Plans:
@@ -312,19 +314,54 @@ Plans:
   7. Paystack sends the school's immutable NGN base price to its subaccount while KQ NEXUS's main account receives the flat platform-plus-gateway allocation and bears the actual processing fee; Stripe transfers the school's immutable USD base price to its connected account while KQ NEXUS bears Stripe's actual fee. (PAY-17)
   8. Finance evidence distinguishes estimated from actual provider fees and proves learner charge, school settlement, KQ NEXUS gross allocation, actual gateway deduction, and KQ NEXUS net; mismatches become reconciliation exceptions instead of rewriting historical orders. (PAY-07, PAY-17)
 
-**Plans**: Design approved. The executable 9-task implementation plan is `docs/superpowers/plans/2026-09-11-dual-currency-fee-splitting.md`; GSD plan files will be generated from `07-CONTEXT.md` before execution.
+**Plans**: 12/12 plans executed across 8 waves (tracer-first: plan 04 proves the full NGN path end to end — dual-price read, snapshotted Order, Paystack split initialization, signature-verified webhook, PAID settlement — before any expansion). Decomposed from the approved 9-task design plan `docs/superpowers/plans/2026-09-11-dual-currency-fee-splitting.md`, with `07-RESEARCH.md`'s drift reconciliation applied (Task 7's `worker/` target retargeted to a Netlify Scheduled Function) and a credentials/one-way-decision gate added ahead of the tracer.
 
-Planned sequence:
+Plans:
+**Wave 1**
 
-1. Add additive dual-price, fee-schedule, order-snapshot, settlement, and refund schema.
-2. Prove integer fee calculation and fixed currency/provider routing.
-3. Migrate Cohort administration and publication readiness to independent NGN/USD prices.
-4. Snapshot price, fees, provider, currency, and school settlement during Order creation.
-5. Add provider-neutral initiation and Paystack NGN split payments/webhooks.
-6. Convert Stripe USD checkout to Connect destination charges.
-7. Normalize settlement, actual-fee reconciliation, manual allocations, and refunds.
-8. Update learner breakdowns, receipts, and Finance evidence.
-9. Remove legacy Cohort price reads only after full automated and provider test-mode acceptance.
+- [x] 07-01-PLAN.md — Provider settlement credentials, the two one-way policy decisions, and the fail-closed payments config (PAY-13, PAY-14, PAY-17)
+- [x] 07-02-PLAN.md — Additive dual-price, gateway-fee-schedule and snapshot schema, migration and seed (COH-02, PAY-15, PAY-16, PAY-17)
+- [x] 07-03-PLAN.md — Pure integer fee calculator and fixed currency-to-provider routing (PAY-08, PAY-15, PAY-16)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 07-04-PLAN.md — Tracer: an NGN cohort paid through Paystack split settlement to an ACTIVE enrolment, end to end (PAY-07, PAY-08, PAY-11, PAY-16, PAY-17)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 07-05-PLAN.md — Cohort dual-price administration and per-rail publication readiness (COH-02)
+- [x] 07-06-PLAN.md — Stripe USD Connect destination charges and crossed-rail refusal (PAY-08, PAY-17)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 07-07-PLAN.md — Actual-settlement reconciliation on a Netlify Scheduled Function, idempotent, with visible variances (PAY-07, PAY-11, PAY-17)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 07-08-PLAN.md — Manual payment confirmation and component-aware refunds routed to the original provider (PAY-03, PAY-04, PAY-05, PAY-11, PAY-13)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 07-09-PLAN.md — Learner dual-currency CTAs, the four-line breakdown, and the immutable receipt (PAY-08, PAY-15, PAY-16, PAY-17)
+- [x] 07-10-PLAN.md — Finance payments list and detail, expected-versus-actual settlement, and the two staff dialogs (PAY-03, PAY-04, PAY-05, PAY-13, PAY-14)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 07-11-PLAN.md — Legacy Cohort price removal behind an executable invariant, and deployment configuration docs (COH-02, PAY-08, PAY-14, PAY-16)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 07-12-PLAN.md — Phase close: lint/suite/build, the eight-scenario provider test-mode acceptance, and record reconciliation (all twelve requirements)
+
+**Cross-cutting constraints:**
+
+- Executors never run `git commit` — every plan stages with `git add` and reports a suggested message; the repository owner creates each commit explicitly.
+- Only the signature-verified webhook or an authorized manual confirmation may mark an order paid, and `Order.status = "PAID"` is written by exactly one module, enforced by `tests/checkout-phase-invariants.test.ts` (PAY-10).
+- Paystack- and Stripe-specific types stay inside their own `src/server/payments/providers/*` directories, enforced by one generalized AST scan, never two (PAY-09).
+- Provider is always derived server-side from the selected currency; no request field can pair NGN with Stripe or USD with Paystack (D-07, PAY-08).
+- All monetary arithmetic is integer minor units with deterministic rounding; no floating-point money math anywhere in domain or provider code (D-24).
+- An Order's commercial snapshot is immutable — a later Cohort or fee-schedule edit never changes an existing order or receipt (D-13, PAY-16).
+
 **UI hint**: yes
 
 ---
@@ -479,8 +516,8 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 3. Public Identity — Registration, Verification & Secure Sessions | 10/10 | Complete | 2026-09-03 |
 | 4. Catalogue Authoring — Programmes, Courses, Modules & Lessons | 15/15 | Complete | 2026-09-03 |
 | 5. Cohorts, Scheduling, Enrolment Operations & Attendance | 16/16 | Complete | 2026-09-07 |
-| 6. Registration, Checkout & Stripe Payments | 9/9 | In Progress|  |
-| 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 0/TBD | Not started | - |
+| 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
+| 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 0/TBD | Not started | - |
 | 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |

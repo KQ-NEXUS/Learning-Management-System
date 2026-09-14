@@ -1,6 +1,7 @@
 /**
  * Learner-facing checkout: seat hold + Order creation, ownership-scoped order
- * reads, and Stripe Checkout Session initiation (REG-01..05, PAY-02, PAY-09).
+ * reads, and Stripe/Paystack payment initiation (REG-01..05, PAY-02, PAY-08,
+ * PAY-09, PAY-17).
  *
  * Authorization here is an ownership comparison, not a permission check —
  * and that is the intended model, not a gap, following `profile-service.ts`'s
@@ -16,9 +17,21 @@
  * Every seat/capacity operation below calls straight into
  * `seat-accounting.ts` — `takeSeat`, `releaseSeat`, `holdExpiryFrom`,
  * `holdsSeat`, `lockOpenCohort` — never re-derives the row lock or the
- * capacity check. The amount and currency Stripe is ever told about come
- * from the `Cohort` row read inside the same transaction that takes the
- * seat — never from a client-supplied value (D-07).
+ * capacity check. The amount, currency and provider a payment adapter is
+ * ever told about come from the `Cohort` row and the active
+ * `GatewayFeeSchedule`, both read inside the same transaction that takes the
+ * seat — never from a client-supplied value (D-07, D-13).
+ *
+ * `providerForCurrency` (07-03) is the ONLY place a provider is chosen —
+ * this file never accepts a provider as an argument or a form field.
+ * Importing `providers/paystack/initialize.ts`'s `initiatePaystackTransaction`
+ * here, like this file already imports `providers/stripe/client.ts`'s
+ * `getStripe` and `providers/stripe/checkout-session.ts`'s
+ * `buildCheckoutSessionParams`, is not a PAY-09 violation: the generalized
+ * provider-isolation scan (`tests/checkout-phase-invariants.test.ts`) flags
+ * the `"stripe"` SDK specifier and a Paystack-namespaced *type*, never a
+ * project-owned wrapper function whose own return shape is already
+ * provider-neutral (`payment-provider.ts`'s `PaymentInitiationResult`).
  */
 
 import { randomUUID } from "node:crypto";
@@ -26,6 +39,7 @@ import { prisma } from "@/server/db";
 import type { Actor } from "@/server/permissions/with-permission";
 import { POLICY_TYPE, POLICY_VERSIONS } from "@/lib/identity";
 import {
+  AlreadyEnrolledError,
   takeSeat,
   releaseSeat,
   holdExpiryFrom,
@@ -37,6 +51,13 @@ import { writeDomainEvent, type DomainEventTxClient } from "@/server/services/do
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
 import { getStripe } from "@/server/payments/providers/stripe/client";
 import { buildCheckoutSessionParams } from "@/server/payments/providers/stripe/checkout-session";
+import { initiatePaystackTransaction } from "@/server/payments/providers/paystack/initialize";
+import { providerForCurrency, type SupportedCurrency } from "@/server/payments/routing";
+import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
+import {
+  paystackSubaccountCode,
+  stripeConnectedAccountId,
+} from "@/server/payments/settlement-config";
 
 // ---------------------------------------------------------------------------
 // Typed refusals — one class per case, never a raw thrown string.
@@ -104,6 +125,61 @@ export class PolicyConsentRequiredError extends Error {
   }
 }
 
+/**
+ * D-05/D-19 — a Cohort has no price set for the currency the learner picked.
+ * Raised BEFORE any seat hold or Order is created, so the caller can route
+ * to a support path instead of creating an unpayable order (07-UI-SPEC's
+ * "Payment is temporarily unavailable" notice reads this as a configuration
+ * gap, distinct from `CapacityExceededError`'s capacity gap).
+ */
+export class CurrencyUnavailableError extends Error {
+  readonly cohortId: string;
+  readonly currency: string;
+  constructor(cohortId: string, currency: string) {
+    super(`Cohort ${cohortId} does not offer a price in ${currency}.`);
+    this.name = "CurrencyUnavailableError";
+    this.cohortId = cohortId;
+    this.currency = currency;
+  }
+}
+
+/**
+ * D-05 — the deployment has no active, effective `GatewayFeeSchedule` for
+ * the derived provider/currency pair. Distinct from `CurrencyUnavailableError`
+ * (a Cohort-level configuration gap): this is a deployment-level one — every
+ * Cohort priced in this currency is unpayable until an administrator seeds a
+ * schedule (07-02).
+ */
+export class MissingGatewayFeeScheduleError extends Error {
+  readonly provider: string;
+  readonly currency: string;
+  constructor(provider: string, currency: string) {
+    super(`No active GatewayFeeSchedule found for provider ${provider} and currency ${currency}.`);
+    this.name = "MissingGatewayFeeScheduleError";
+    this.provider = provider;
+    this.currency = currency;
+  }
+}
+
+/**
+ * D-07/T-07-29 — the two payment rails never cross: an NGN Order can only be
+ * paid through Paystack, a USD Order only through Stripe. Raised BEFORE any
+ * provider network call and BEFORE the `PaymentAttempt` transaction, so a
+ * crossed rail leaves no orphan attempt row.
+ */
+export class ProviderCurrencyMismatchError extends Error {
+  readonly orderId: string;
+  readonly provider: "STRIPE" | "PAYSTACK";
+  readonly currency: string;
+  constructor(orderId: string, provider: "STRIPE" | "PAYSTACK", currency: string) {
+    super(`Order ${orderId}'s currency (${currency}) cannot be paid through ${provider} — the two rails never cross (D-07).`);
+    this.name = "ProviderCurrencyMismatchError";
+    this.orderId = orderId;
+    this.provider = provider;
+    this.currency = currency;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Shapes
 // ---------------------------------------------------------------------------
@@ -128,18 +204,45 @@ export type OrderSnapshot = {
   status: string;
   amountMinor: number;
   currency: string;
+  // §19.1/D-13 — snapshotted once at Order creation. `selectedProvider` is
+  // what `payAction` dispatches on so the page never chooses a provider
+  // itself (PAY-08); the other three feed a Paystack `initiate` call. All
+  // three are `null` only for a pre-Phase-7 Order this migration backfilled
+  // with no snapshot (D-08) — never for one created by this file.
+  selectedProvider: string | null;
+  baseAmountMinor: number | null;
+  platformFeeMinor: number | null;
+  gatewayFeeEstimateMinor: number | null;
   cohort: OrderCohortFacts;
   enrolment: OrderEnrolmentFacts | null;
 };
 
 type OrderWithRelationsRow = OrderSnapshot & { userId: string };
 
-/** The `cohort` columns `startCheckout` reads inside its own transaction. */
+/**
+ * The `cohort` columns `startCheckout` reads inside its own transaction —
+ * the two independent, nullable rails (D-06), not the legacy
+ * `priceMinor`/`currency` pair this file no longer reads.
+ */
 type TxCohortFacts = {
   title: string;
-  priceMinor: number;
-  currency: string;
+  priceNgnMinor: number | null;
+  priceUsdMinor: number | null;
   holdMinutes: number | null;
+};
+
+/** The `GatewayFeeSchedule` columns `startCheckout` reads inside its own transaction (07-02, 07-03). */
+type TxGatewayFeeScheduleRow = {
+  id: string;
+  provider: "PAYSTACK" | "STRIPE" | "MANUAL";
+  currency: string;
+  version: number;
+  percentageBps: number;
+  fixedMinor: number;
+  waiverThresholdMinor: number | null;
+  capMinor: number | null;
+  taxBps: number;
+  roundingRule: string;
 };
 
 type TxEnrolmentFindRow = {
@@ -167,6 +270,12 @@ export type CheckoutTxClient = SeatTxClient &
     enrolment: SeatTxClient["enrolment"] & {
       findFirst(args: { where: Record<string, unknown> }): Promise<TxEnrolmentFindRow | null>;
     };
+    gatewayFeeSchedule: {
+      findFirst(args: {
+        where: Record<string, unknown>;
+        orderBy?: Record<string, unknown>;
+      }): Promise<TxGatewayFeeScheduleRow | null>;
+    };
     order: {
       create(args: { data: Record<string, unknown>; select: { id: true } }): Promise<{ id: string }>;
       update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
@@ -187,7 +296,12 @@ export type CheckoutTxClient = SeatTxClient &
   };
 
 export type CheckoutServiceDeps = {
-  db: { $transaction: <R>(fn: (tx: CheckoutTxClient) => Promise<R>) => Promise<R> };
+  db: {
+    $transaction: <R>(
+      fn: (tx: CheckoutTxClient) => Promise<R>,
+      options?: { timeout?: number },
+    ) => Promise<R>;
+  };
   order: {
     findUnique(args: { where: { id: string } }): Promise<OrderWithRelationsRow | null>;
     findByReference(args: { reference: string }): Promise<OrderWithRelationsRow | null>;
@@ -221,6 +335,24 @@ export type CheckoutServiceDeps = {
         ): Promise<{ id: string; url: string | null }>;
       };
     };
+  };
+  // PAY-09 — deliberately a structural shape, not
+  // `ReturnType<typeof initiatePaystackTransaction>`'s parameter type named
+  // directly here; the shape below is exactly `PaymentProviderAdapter`'s own
+  // `initiate` signature (`payment-provider.ts`), which this deps surface
+  // satisfies without importing anything Paystack-namespaced.
+  paystack: {
+    initiate(input: {
+      orderId: string;
+      orderReference: string;
+      enrolmentId: string;
+      learnerEmail: string;
+      currency: string;
+      amountMinor: number;
+      platformFeeMinor: number;
+      gatewayFeeEstimateMinor: number;
+      callbackUrl: string;
+    }): Promise<{ redirectUrl: string; providerIntentId: string }>;
   };
   audit: (event: BusinessAuditEvent) => Promise<void>;
   baseUrl?: () => string;
@@ -263,7 +395,11 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
    * transaction that takes the new seat, so a repeated Enroll click never
    * leaves a learner holding two seats (D-06) — net seat delta zero.
    */
-  async function startCheckout(actor: Actor, cohortId: string): Promise<{ orderId: string }> {
+  async function startCheckout(
+    actor: Actor,
+    cohortId: string,
+    currency: SupportedCurrency,
+  ): Promise<{ orderId: string }> {
     const at = now();
 
     const { orderId } = await deps.db.$transaction(async (tx) => {
@@ -274,13 +410,56 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
 
       const cohort = await tx.cohort.findUnique({
         where: { id: cohortId },
-        select: { title: true, priceMinor: true, currency: true, holdMinutes: true },
+        select: { title: true, priceNgnMinor: true, priceUsdMinor: true, holdMinutes: true },
       });
       if (!cohort) {
         // lockOpenCohort already proved the row exists — reachable only if a
         // concurrent hard-delete happened, which this codebase forbids.
         throw new Error(`Cohort ${cohortId} vanished mid-transaction.`);
       }
+
+      const activeEnrolment = await tx.enrolment.findFirst({
+        where: { userId: actor.userId, cohortId, status: "ACTIVE" },
+      });
+      if (activeEnrolment) {
+        throw new AlreadyEnrolledError(actor.userId, cohortId);
+      }
+
+      // D-05/D-19 — refuse BEFORE any seat/hold mutation. A missing rail is a
+      // configuration gap, not a capacity gap; no Order and no seat hold are
+      // ever created for it.
+      const baseAmountMinor = currency === "NGN" ? cohort.priceNgnMinor : cohort.priceUsdMinor;
+      if (baseAmountMinor === null) {
+        throw new CurrencyUnavailableError(cohortId, currency);
+      }
+
+      // D-07 — the ONLY call site that chooses a provider. No request field,
+      // form field, cookie or query parameter reaches this call.
+      const provider = providerForCurrency(currency);
+
+      // D-11/D-16 — the active, effective-dated fee schedule for this
+      // provider+currency pair, read inside THIS transaction so the snapshot
+      // below is reproducible even if a later plan edits the schedule.
+      const schedule = await tx.gatewayFeeSchedule.findFirst({
+        where: { provider, currency, active: true, effectiveFrom: { lte: at } },
+        orderBy: { effectiveFrom: "desc" },
+      });
+      if (!schedule) {
+        throw new MissingGatewayFeeScheduleError(provider, currency);
+      }
+
+      const scheduleValues: GatewayFeeScheduleValues = {
+        provider: schedule.provider,
+        currency: currency,
+        version: schedule.version,
+        percentageBps: schedule.percentageBps,
+        fixedMinor: schedule.fixedMinor,
+        waiverThresholdMinor: schedule.waiverThresholdMinor,
+        capMinor: schedule.capMinor,
+        taxBps: schedule.taxBps,
+        roundingRule: schedule.roundingRule,
+      };
+      const breakdown = calculateCheckoutBreakdown({ baseAmountMinor, schedule: scheduleValues });
 
       const existing = await tx.enrolment.findFirst({
         where: { userId: actor.userId, cohortId, status: "PENDING_PAYMENT" },
@@ -304,8 +483,18 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
           reference: generateOrderReference(),
           userId: actor.userId,
           cohortId,
-          amountMinor: cohort.priceMinor,
-          currency: cohort.currency,
+          // D-13 — the learner's total charge, the full commercial snapshot.
+          amountMinor: breakdown.totalAmountMinor,
+          currency,
+          selectedProvider: provider,
+          baseAmountMinor: breakdown.baseAmountMinor,
+          platformFeeMinor: breakdown.platformFeeMinor,
+          gatewayFeeEstimateMinor: breakdown.gatewayFeeEstimateMinor,
+          gatewayFeeScheduleId: schedule.id,
+          gatewayFeeScheduleVersion: schedule.version,
+          // The base price, not the total (D-03/D-04) — what the school is
+          // expected to receive net of the split.
+          schoolSettlementExpectedMinor: baseAmountMinor,
           status: "PENDING",
           idempotencyKey: randomUUID(),
           correlationId: randomUUID(),
@@ -330,14 +519,18 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
           orderId: order.id,
           cohortId,
           userId: actor.userId,
-          amountMinor: cohort.priceMinor,
-          currency: cohort.currency,
+          amountMinor: breakdown.totalAmountMinor,
+          currency,
+          provider,
+          baseAmountMinor: breakdown.baseAmountMinor,
+          platformFeeMinor: breakdown.platformFeeMinor,
+          gatewayFeeEstimateMinor: breakdown.gatewayFeeEstimateMinor,
           enrolmentId: enrolment.id,
         },
       });
 
       return { orderId: order.id };
-    });
+    }, { timeout: 15_000 });
 
     await deps.audit({
       actorId: actor.userId,
@@ -384,20 +577,22 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     return { verified: !!user?.emailVerified, email: user?.email ?? "" };
   }
 
+  type PaymentConsent = { acceptedTerms: boolean; acceptedRefundCancellation: boolean; acceptedMarketing: boolean };
+
   /**
-   * Creates one `PaymentAttempt` and a real Stripe Checkout Session for it.
-   * The hold check here is server-side and authoritative — the client
-   * countdown (plan 06-07) is a UI clock and proves nothing.
-   *
-   * Gates fail cheapest-first: ownership (via `getOwnOrder`), then
-   * verification, then the hold, then consent — matching the plan's own
-   * ordering. Nothing is written until every gate has passed.
+   * The gate chain both `initiateStripePayment` and `initiatePaystackPayment`
+   * run, in the same cheapest-first order: ownership (via `getOwnOrder`),
+   * then verification, then the hold, then consent. Shared so the two
+   * providers can never drift apart on which checks run or in what order —
+   * exactly the same "one shared walk, not two" discipline
+   * `checkout-phase-invariants.test.ts`'s own header comment states for its
+   * provider-isolation scan.
    */
-  async function initiateStripePayment(
+  async function runPaymentGuards(
     actor: Actor,
     orderId: string,
-    consent: { acceptedTerms: boolean; acceptedRefundCancellation: boolean; acceptedMarketing: boolean },
-  ): Promise<{ url: string }> {
+    consent: PaymentConsent,
+  ): Promise<{ order: OrderSnapshot; enrolment: OrderEnrolmentFacts; email: string }> {
     const order = await getOwnOrder(actor, orderId);
     if (!order) throw new OrderNotFoundError(orderId);
     if (order.status !== "PENDING") throw new OrderNotPayableError(orderId);
@@ -428,17 +623,31 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
       throw new PolicyConsentRequiredError(orderId);
     }
 
-    const idempotencyKey = randomUUID();
+    return { order, enrolment, email: user.email };
+  }
 
-    // The acceptance rows and the PaymentAttempt are created in the SAME
-    // transaction, so a Stripe failure afterwards cannot leave consent
-    // recorded for a payment that never started, and consent can never be
-    // missing for an attempt that did.
-    const attempt = await deps.db.$transaction(async (tx) => {
+  /**
+   * Creates one `PaymentAttempt` (for `provider`) and, on the first call for
+   * this Order, the three order-bound `PolicyAcceptance` rows — in the SAME
+   * transaction, so a provider-side failure afterwards cannot leave consent
+   * recorded for a payment that never started, and consent can never be
+   * missing for an attempt that did. Idempotent per order (D-04's retry path
+   * re-enters this function against the same Order): create-only, never
+   * find-then-update — an order-bound acceptance records what was agreed for
+   * one order at one moment and must not be mutated by a later attempt.
+   */
+  async function createPaymentAttemptWithConsent(
+    actor: Actor,
+    order: OrderSnapshot,
+    provider: "STRIPE" | "PAYSTACK",
+    consent: PaymentConsent,
+    idempotencyKey: string,
+  ): Promise<{ id: string }> {
+    return deps.db.$transaction(async (tx) => {
       const created = await tx.paymentAttempt.create({
         data: {
           orderId: order.id,
-          provider: "STRIPE",
+          provider,
           amountMinor: order.amountMinor,
           currency: order.currency,
           status: "PENDING",
@@ -448,11 +657,6 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
         select: { id: true },
       });
 
-      // Idempotent per order — D-04's retry path re-enters this function
-      // against the same Order, and three rows per declined card would turn
-      // the consent record into noise. Create-only, never find-then-update:
-      // an order-bound acceptance records what was agreed for one order at
-      // one moment and must not be mutated by a later attempt.
       const existing = await tx.policyAcceptance.findMany({ where: { orderId: order.id } });
       if (existing.length === 0) {
         await tx.policyAcceptance.create({
@@ -491,6 +695,40 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
 
       return created;
     });
+  }
+
+  /**
+   * Creates one `PaymentAttempt` and a real Stripe Checkout Session for it.
+   * The hold check here is server-side and authoritative — the client
+   * countdown (plan 06-07) is a UI clock and proves nothing.
+   */
+  async function initiateStripePayment(
+    actor: Actor,
+    orderId: string,
+    consent: PaymentConsent,
+  ): Promise<{ url: string }> {
+    const { order, enrolment } = await runPaymentGuards(actor, orderId, consent);
+
+    // D-07/T-07-29 — refuse before any provider call and before the
+    // PaymentAttempt transaction, so a crossed rail leaves no orphan row.
+    if (order.currency !== "USD") {
+      throw new ProviderCurrencyMismatchError(orderId, "STRIPE", order.currency);
+    }
+
+    // D-13's snapshot is read back from the Order itself, never recomputed —
+    // see OrderSnapshot's own doc comment for why this is never null for an
+    // Order this file created.
+    if (order.baseAmountMinor === null) {
+      throw new Error(`Order ${orderId} has no commercial snapshot to initiate a Stripe payment from.`);
+    }
+
+    // D-05 — fails checkout closed (MissingSettlementAccountError) rather
+    // than creating a Session whose funds would settle into the platform
+    // account unattributed. Resolved BEFORE the PaymentAttempt transaction.
+    const connectedAccountId = stripeConnectedAccountId();
+
+    const idempotencyKey = randomUUID();
+    const attempt = await createPaymentAttemptWithConsent(actor, order, "STRIPE", consent, idempotencyKey);
 
     await deps.order.update({ where: { id: order.id }, data: { selectedProvider: "STRIPE" } });
 
@@ -513,6 +751,10 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
         currency: order.currency,
         successUrl: `${root}/checkout/${order.id}/confirming`,
         cancelUrl: `${root}/checkout/${order.id}?declined=1`,
+        // D-04/PAY-17 — the Connect destination-charge split, sourced only
+        // from the Order's own immutable snapshot and deployment config.
+        schoolSettlementMinor: order.baseAmountMinor,
+        connectedAccountId,
       }),
       { idempotencyKey },
     );
@@ -527,6 +769,68 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     }
 
     return { url: session.url };
+  }
+
+  /**
+   * Creates one `PaymentAttempt` and a real Paystack split transaction for
+   * it — the same guard chain, transaction shape and idempotency discipline
+   * as `initiateStripePayment`, above (Layer 6, 07-04).
+   */
+  async function initiatePaystackPayment(
+    actor: Actor,
+    orderId: string,
+    consent: PaymentConsent,
+  ): Promise<{ url: string }> {
+    const { order, enrolment, email } = await runPaymentGuards(actor, orderId, consent);
+
+    // D-07/T-07-29 — the mirror-image refusal of initiateStripePayment's own
+    // guard. Refused before any provider call and before the PaymentAttempt
+    // transaction, so a crossed rail leaves no orphan row.
+    if (order.currency !== "NGN") {
+      throw new ProviderCurrencyMismatchError(orderId, "PAYSTACK", order.currency);
+    }
+
+    // D-13's snapshot is read back from the Order itself, never recomputed —
+    // see `OrderSnapshot`'s own doc comment for why these three are never
+    // null for an Order this file created.
+    if (
+      order.baseAmountMinor === null ||
+      order.platformFeeMinor === null ||
+      order.gatewayFeeEstimateMinor === null
+    ) {
+      throw new Error(`Order ${orderId} has no commercial snapshot to initiate a Paystack payment from.`);
+    }
+
+    // D-05 — validate the school split destination before reserving a
+    // PaymentAttempt. The provider builder validates it again when building
+    // the request, but this earlier check prevents an orphan attempt when
+    // deployment configuration is missing.
+    paystackSubaccountCode();
+
+    const idempotencyKey = randomUUID();
+    const attempt = await createPaymentAttemptWithConsent(actor, order, "PAYSTACK", consent, idempotencyKey);
+
+    await deps.order.update({ where: { id: order.id }, data: { selectedProvider: "PAYSTACK" } });
+
+    const root = baseUrl();
+    const result = await deps.paystack.initiate({
+      orderId: order.id,
+      orderReference: order.reference,
+      enrolmentId: enrolment.id,
+      learnerEmail: email,
+      currency: order.currency,
+      amountMinor: order.amountMinor,
+      platformFeeMinor: order.platformFeeMinor,
+      gatewayFeeEstimateMinor: order.gatewayFeeEstimateMinor,
+      callbackUrl: `${root}/checkout/${order.id}/confirming`,
+    });
+
+    await deps.paymentAttempt.update({
+      where: { id: attempt.id },
+      data: { providerIntentId: result.providerIntentId, status: "PROCESSING" },
+    });
+
+    return { url: result.redirectUrl };
   }
 
   /**
@@ -548,6 +852,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     getOwnOrderByReference,
     getOwnVerificationStatus,
     initiateStripePayment,
+    initiatePaystackPayment,
     getCohortOfferPath,
   };
 }
@@ -566,6 +871,10 @@ const ORDER_SELECT = {
   status: true,
   amountMinor: true,
   currency: true,
+  selectedProvider: true,
+  baseAmountMinor: true,
+  platformFeeMinor: true,
+  gatewayFeeEstimateMinor: true,
   cohort: {
     select: { id: true, title: true, startsAt: true, endsAt: true, deliveryMode: true },
   },
@@ -582,7 +891,8 @@ function mapOrderRow(row: AnyPrisma): OrderWithRelationsRow {
 export function createPrismaBackedCheckoutService(client: AnyPrisma) {
   return createCheckoutService({
     db: {
-      $transaction: (fn) => client.$transaction((tx: unknown) => fn(tx as CheckoutTxClient)),
+      $transaction: (fn, options) =>
+        client.$transaction((tx: unknown) => fn(tx as CheckoutTxClient), options),
     },
     order: {
       findUnique: async (args) => {
@@ -612,6 +922,9 @@ export function createPrismaBackedCheckoutService(client: AnyPrisma) {
         },
       },
     },
+    paystack: {
+      initiate: (input) => initiatePaystackTransaction(input),
+    },
     audit: recordAudit,
     cohortOffer: {
       findUnique: async ({ where }) => {
@@ -632,4 +945,5 @@ export const getOwnOrder = built.getOwnOrder;
 export const getOwnOrderByReference = built.getOwnOrderByReference;
 export const getOwnVerificationStatus = built.getOwnVerificationStatus;
 export const initiateStripePayment = built.initiateStripePayment;
+export const initiatePaystackPayment = built.initiatePaystackPayment;
 export const getCohortOfferPath = built.getCohortOfferPath;

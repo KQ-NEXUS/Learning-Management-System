@@ -10,6 +10,7 @@ import {
 import { payAction } from "@/app/(checkout)/checkout/[orderId]/actions";
 import { PolicyConsentForm } from "@/app/(checkout)/checkout/[orderId]/PolicyConsentForm";
 import { HoldCountdown } from "@/app/(checkout)/checkout/[orderId]/HoldCountdown";
+import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
 
 // Rendered per request, never prerendered — matches the public course-detail
 // page's own reasoning, and this page reads a real Order.
@@ -100,11 +101,27 @@ export default async function CheckoutOrderPage({
   const verification = await getOwnVerificationStatus(actor);
   const emailUnverified = !verification.verified;
 
+  // D-13 — these four snapshot values (plus `amountMinor`/`currency` above)
+  // are never null for an Order this codebase's own `startCheckout` created;
+  // see `OrderSnapshot`'s own doc comment (checkout-service.ts). A null value
+  // here can only mean a pre-Phase-7 legacy Order — and a hold this old
+  // cannot still be PENDING_PAYMENT by the time this migration shipped
+  // (holds expire in minutes) — so this is treated as a hard invariant
+  // violation, not a silent fallback UI, exactly like the equivalent guard
+  // `initiateStripePayment` already carries.
+  if (
+    order.baseAmountMinor === null ||
+    order.platformFeeMinor === null ||
+    order.gatewayFeeEstimateMinor === null ||
+    order.selectedProvider === null
+  ) {
+    throw new Error(`Order ${order.id} has no commercial snapshot to render a breakdown from.`);
+  }
+
   const facts: [string, string][] = [
     ["Cohort", order.cohort.title],
     ["Dates", formatDateRange(order.cohort.startsAt, order.cohort.endsAt)],
     ["Mode", DELIVERY_MODE_LABEL[order.cohort.deliveryMode] ?? order.cohort.deliveryMode],
-    ["Price", formatAmount(order.amountMinor, order.currency)],
   ];
 
   // The verification and decline banners are mutually exclusive
@@ -117,7 +134,13 @@ export default async function CheckoutOrderPage({
 
       <section className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-card">
         {enrolment?.holdExpiresAt && (
-          <HoldCountdown holdExpiresAt={new Date(enrolment.holdExpiresAt).toISOString()} />
+          <HoldCountdown
+            holdExpiresAt={new Date(enrolment.holdExpiresAt).toISOString()}
+            initialRemainingMs={Math.max(
+              new Date(enrolment.holdExpiresAt).getTime() - at.getTime(),
+              0,
+            )}
+          />
         )}
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {facts.map(([label, value]) => (
@@ -133,6 +156,18 @@ export default async function CheckoutOrderPage({
           ))}
         </dl>
       </section>
+
+      {/* D-16 — the last thing the learner reads before the policy
+          checkboxes. Replaces the single "Price" fact that used to live in
+          the grid above; the Cohort/Dates/Mode facts are unchanged. */}
+      <OrderBreakdownCard
+        baseAmountMinor={order.baseAmountMinor}
+        platformFeeMinor={order.platformFeeMinor}
+        gatewayFeeEstimateMinor={order.gatewayFeeEstimateMinor}
+        amountMinor={order.amountMinor}
+        currency={order.currency}
+        provider={order.selectedProvider}
+      />
 
       {emailUnverified && (
         <div className="flex flex-col gap-1 rounded-md border border-warning/30 bg-warning-surface px-4 py-3">

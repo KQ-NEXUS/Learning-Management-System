@@ -107,6 +107,25 @@ describe("Phase-5 schema delta is declared in prisma/schema.prisma", () => {
   });
 });
 
+describe("Phase-7 dual price columns are declared and legacy prices are backfilled (D-06/D-08)", () => {
+  it("Cohort.priceNgnMinor and priceUsdMinor are nullable Int", () => {
+    const model = sliceModel("Cohort");
+    expect(model).toMatch(/priceNgnMinor\s+Int\?/);
+    expect(model).toMatch(/priceUsdMinor\s+Int\?/);
+  });
+
+  it("the migration backfills both currency rails from the legacy priceMinor column, leaving the other rail NULL", () => {
+    expect(allMigrationSql).toMatch(
+      /UPDATE\s+"Cohort"\s+SET\s+"priceNgnMinor"\s*=\s*"priceMinor"\s+WHERE\s+upper\("currency"\)\s*=\s*'NGN'\s+AND\s+"priceNgnMinor"\s+IS\s+NULL/i,
+    );
+    expect(allMigrationSql).toMatch(
+      /UPDATE\s+"Cohort"\s+SET\s+"priceUsdMinor"\s*=\s*"priceMinor"\s+WHERE\s+upper\("currency"\)\s*=\s*'USD'\s+AND\s+"priceUsdMinor"\s+IS\s+NULL/i,
+    );
+    expect(allMigrationSql).not.toMatch(/"priceNgnMinor"\s*=\s*0\b/);
+    expect(allMigrationSql).not.toMatch(/"priceUsdMinor"\s*=\s*0\b/);
+  });
+});
+
 describe("The manual paste-in from 003_cohort_operations.sql was actually applied", () => {
   for (const name of NEW_CONSTRAINTS) {
     it(`${name} appears in an applied migration file`, () => {

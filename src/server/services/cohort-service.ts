@@ -26,6 +26,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { isPaystackRailEnabled, isStripeRailEnabled } from "@/server/payments/settlement-config";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
@@ -73,6 +74,10 @@ export type CohortRecord = {
   seatsTaken: number;
   priceMinor: number;
   currency: string;
+  // D-06/D-08 (07-05) — two independent, nullable dual-currency base
+  // prices. `priceMinor`/`currency` above remain until 07-11 removes them.
+  priceNgnMinor: number | null;
+  priceUsdMinor: number | null;
   status: string;
   publishedAt: Date | null;
   attendanceThresholdPct: number | null;
@@ -226,8 +231,12 @@ export type CohortAggregateRow = {
   endsAt: Date;
   capacity: number;
   seatsTaken: number;
-  priceMinor: number;
-  currency: string | null;
+  // D-06/D-08 (07-05) — see `CohortRecord` above for the same fields. The
+  // legacy `priceMinor`/`currency` pair that used to sit here is gone
+  // (07-11) — this aggregate never read it for a readiness decision, only
+  // carried it through unused.
+  priceNgnMinor: number | null;
+  priceUsdMinor: number | null;
   attendanceThresholdPct: number | null;
   courseId: string | null;
   programmeId: string | null;
@@ -257,8 +266,8 @@ const AGGREGATE_SELECT = {
   endsAt: true,
   capacity: true,
   seatsTaken: true,
-  priceMinor: true,
-  currency: true,
+  priceNgnMinor: true,
+  priceUsdMinor: true,
   attendanceThresholdPct: true,
   courseId: true,
   programmeId: true,
@@ -297,7 +306,10 @@ function extractCompletionRule(payload: unknown): unknown {
   return null;
 }
 
-function toReadinessInput(row: CohortAggregateRow): ReadinessCohortInput {
+function toReadinessInput(
+  row: CohortAggregateRow,
+  enabledRails: { ngn: boolean; usd: boolean },
+): ReadinessCohortInput {
   const kind: "course" | "programme" = row.courseId ? "course" : "programme";
   const target = kind === "course" ? row.course : row.programme;
   const latestPublication = target?.publications?.[0] ?? null;
@@ -313,8 +325,9 @@ function toReadinessInput(row: CohortAggregateRow): ReadinessCohortInput {
     endsAt: row.endsAt,
     capacity: row.capacity,
     seatsTaken: row.seatsTaken,
-    priceMinor: row.priceMinor,
-    currency: row.currency,
+    priceNgnMinor: row.priceNgnMinor,
+    priceUsdMinor: row.priceUsdMinor,
+    enabledRails,
     attendanceThresholdPct: row.attendanceThresholdPct,
     instructorCount: row._count.instructors,
     nonCancelledSessionCount: sessions.filter((session) => session.cancelledAt == null)
@@ -473,6 +486,9 @@ export type CohortServiceDeps = {
   withPermission: WithPermission;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
   runInTransaction: <R>(fn: () => Promise<R>) => Promise<R>;
+  /** Which online rails THIS DEPLOYMENT has enabled (D-02/D-05) — read here,
+   *  never inside the pure `readiness-service.ts` evaluator. */
+  enabledRails: () => { ngn: boolean; usd: boolean };
   now?: () => Date;
 };
 
@@ -564,7 +580,7 @@ export function createCohortService(deps: CohortServiceDeps) {
     cohortId: string,
   ): Promise<ReadinessCohortInput | null> {
     const row = await loadAggregateRow(cohortId);
-    return row ? toReadinessInput(row) : null;
+    return row ? toReadinessInput(row, deps.enabledRails()) : null;
   }
 
   /**
@@ -683,7 +699,8 @@ export function createCohortService(deps: CohortServiceDeps) {
       if (!row) throw new CohortNotFoundError(input.cohortId);
       assertCohortOpen(input.cohortId, row.status);
 
-      const aggregate = toReadinessInput(row);
+      const railsEnabled = deps.enabledRails();
+      const aggregate = toReadinessInput(row, railsEnabled);
       const pin = aggregate.pin!;
       if (pin.publicationId == null) {
         throw new NoPublishedOfferError(input.cohortId, pin.kind);
@@ -709,9 +726,15 @@ export function createCohortService(deps: CohortServiceDeps) {
           select: AGGREGATE_SELECT as unknown as Record<string, unknown>,
         });
         if (!freshRow) throw new CohortNotFoundError(input.cohortId);
-        assertCohortOpen(input.cohortId, freshRow.status);
+        // The request already passed the public "closed" check above. If the
+        // status changed before this transactional re-read, that is a lost
+        // optimistic-concurrency race, not a newly submitted closed-cohort
+        // request. Preserve the stale-write contract and write nothing.
+        if (!["DRAFT", "PUBLISHED", "IN_PROGRESS"].includes(freshRow.status)) {
+          throw new StaleOrderError();
+        }
 
-        const freshAggregate = toReadinessInput(freshRow);
+        const freshAggregate = toReadinessInput(freshRow, railsEnabled);
         const freshPin = freshAggregate.pin!;
         if (freshPin.publicationId == null) {
           throw new NoPublishedOfferError(input.cohortId, freshPin.kind);
@@ -927,6 +950,7 @@ const built = createCohortService({
   },
   toScope: cohortResourceScope,
   withPermission: liveWithPermission,
+  enabledRails: () => ({ ngn: isPaystackRailEnabled(), usd: isStripeRailEnabled() }),
   audit: (entry) =>
     recordAudit({
       actorId: entry.actorId,
