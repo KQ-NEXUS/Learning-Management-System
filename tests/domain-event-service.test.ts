@@ -102,6 +102,24 @@ describe("buildDomainEventRow", () => {
       expect(payload.token).toBe("[redacted]");
     },
   );
+
+  it.each([
+    "lesson.completed",
+    "course.completed",
+    "programme.completed",
+  ] satisfies DomainEventType[])(
+    "type-checks and redacts the payload for the Phase 9 completion event %s (DD-13)",
+    (type) => {
+      const row = buildDomainEventRow({
+        type,
+        payload: { enrolmentId: "enr-1", token: "super-secret" },
+      });
+      expect(row.type).toBe(type);
+      const payload = row.payload as { enrolmentId: string; token: string };
+      expect(payload.enrolmentId).toBe("enr-1");
+      expect(payload.token).toBe("[redacted]");
+    },
+  );
 });
 
 describe("writeDomainEvent", () => {
