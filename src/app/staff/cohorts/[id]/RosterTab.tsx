@@ -9,18 +9,24 @@
  * the RSC boundary, the same way `SessionsTab`/`CohortsTable` do — this file
  * never receives a `Date`).
  *
- * The Progress / Assessment / Completion columns render the D-18 named third
+ * The Assessment / Completion columns still render the D-18 named third
  * state — `DeferredColumn` is a `{ kind: "deferred"; phase: 9 | 10 | 11 }`
  * discriminated union with NO numeric member, so there is no cast or
  * numeric fallback (a zero, which would read as "failing") that could
  * produce a fake result here even by accident; the type itself refuses one.
+ *
+ * The Progress column (DD-32, plan 09-13) widened: a pinned cohort now shows
+ * "{completed} of {total}" real counts (`TrackedProgress`); an unpinned
+ * cohort keeps rendering the D-18 deferred gap through `DeferredCell`. The
+ * learner's name links to the new per-learner staff progress page.
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
 import type { AttendanceComponent } from "@/server/services/attendance-component";
-import type { DeferredColumn } from "@/server/services/roster-service";
+import type { DeferredColumn, TrackedProgress } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
 import { formatTimestamp } from "@/lib/format-timestamp";
 
@@ -45,7 +51,7 @@ export type RosterRowView = {
   accessEndsAt: string | null;
   instructors: string[];
   attendance: AttendanceComponent;
-  progress: DeferredColumn;
+  progress: DeferredColumn | TrackedProgress;
   assessment: DeferredColumn;
   completion: DeferredColumn;
 };
@@ -99,6 +105,18 @@ function DeferredCell({ column }: { column: DeferredColumn }) {
   );
 }
 
+/** DD-32 — the real "{completed} of {total}" figure for a pinned cohort.
+ *  `0 of 0` (no required lessons in the offer) renders exactly like any
+ *  other count, never as the deferred gap — `total: 0` is a legitimate
+ *  tracked value, not a missing one. */
+function TrackedProgressCell({ progress }: { progress: TrackedProgress }) {
+  return (
+    <span className="font-mono text-[11px] tabular-nums">
+      {progress.completed} of {progress.total}
+    </span>
+  );
+}
+
 /** The genuine `no-rule` / `no-sessions` third state — mirrors
  *  `ReadinessPanel`'s `NOT_YET_CHECKED` glyph and colour treatment, never a
  *  fake `0%`. */
@@ -146,7 +164,14 @@ export function RosterTab({
     {
       key: "learner",
       header: "Learner",
-      render: (r) => r.learnerName,
+      render: (r) => (
+        <Link
+          href={`/staff/cohorts/${cohortId}/learners/${r.enrolmentId}`}
+          className="text-accent underline underline-offset-2"
+        >
+          {r.learnerName}
+        </Link>
+      ),
       subtitle: (r) => r.learnerEmail,
       width: "18%",
     },
@@ -199,7 +224,12 @@ export function RosterTab({
     {
       key: "progress",
       header: "Progress",
-      render: (r) => <DeferredCell column={r.progress} />,
+      render: (r) =>
+        r.progress.kind === "tracked" ? (
+          <TrackedProgressCell progress={r.progress} />
+        ) : (
+          <DeferredCell column={r.progress} />
+        ),
       width: "9%",
       hideOnMobile: true,
     },

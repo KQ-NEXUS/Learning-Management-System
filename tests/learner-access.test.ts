@@ -616,8 +616,17 @@ describe("loadLearnerPath", () => {
     const lesson1 = path!.courses[0].modules[0].lessons[0];
     const lesson2 = path!.courses[0].modules[0].lessons[1];
     expect(lesson1.completed).toBe(true);
+    expect(lesson1.completedAt).toEqual(new Date("2026-01-05T00:00:00.000Z"));
     expect(lesson2.locked).toBe(false);
     expect(lesson2.blockingLessonTitle).toBeNull();
+  });
+
+  it("carries completedAt as null for a lesson with no LessonProgress row", async () => {
+    const store = twoLessonCourseStore();
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+
+    expect(path!.courses[0].modules[0].lessons[0].completedAt).toBeNull();
   });
 
   it("a programme cohort locks course 2's first lesson on course 1's last required lesson", async () => {
