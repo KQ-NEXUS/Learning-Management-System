@@ -224,6 +224,9 @@ export type DecoratedLesson = LearnerCourseLesson & {
   blockingLessonTitle: string | null;
   completed: boolean;
   completedSource: string | null;
+  /** `LessonProgress.completedAt`, or `null` when never completed (plan
+   *  09-13's staff per-learner page renders this alongside `completedSource`). */
+  completedAt: Date | null;
 };
 
 export type DecoratedModule = { id: string; title: string; position: number; lessons: DecoratedLesson[] };
@@ -646,6 +649,7 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
             blockingLessonTitle: seq?.blockingLessonTitle ?? null,
             completed: !!progressRow,
             completedSource: progressRow?.source ?? null,
+            completedAt: progressRow?.completedAt ?? null,
           };
         }),
       })),

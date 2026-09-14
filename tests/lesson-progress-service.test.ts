@@ -54,6 +54,7 @@ function makeLesson(overrides: Partial<DecoratedLesson> & { id: string }): Decor
     blockingLessonTitle: overrides.blockingLessonTitle ?? null,
     completed: overrides.completed ?? false,
     completedSource: overrides.completedSource ?? null,
+    completedAt: overrides.completedAt ?? null,
   };
 }
 
