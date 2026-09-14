@@ -415,8 +415,8 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 09-06-PLAN.md — lesson-progress-service.ts: mark/undo, video watch write + 90% auto-complete, staff override
-- [ ] 09-07-PLAN.md — enrolment-dashboard-service.ts: aggregate read, typed named gaps, next-action derivation
+- [x] 09-06-PLAN.md — lesson-progress-service.ts: mark/undo, video watch write + 90% auto-complete, staff override
+- [x] 09-07-PLAN.md — enrolment-dashboard-service.ts: aggregate read, typed named gaps, next-action derivation
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -562,7 +562,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
-| 9. Learning Delivery & Progress Tracking | 5/14 | In Progress|  |
+| 9. Learning Delivery & Progress Tracking | 7/14 | In Progress|  |
 | 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
