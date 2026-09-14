@@ -15,8 +15,13 @@ import {
   type EnrolmentStoreRow,
   type CohortStoreRow,
   type CohortCourseStoreRow,
+  type CourseStoreRow,
+  type PublicationStoreRow,
+  type ModuleStoreRow,
+  type LessonStoreRow,
 } from "@/server/services/learner-access";
 import type { Actor } from "@/server/permissions/with-permission";
+import type { CourseObligationPayload, ProgrammeObligationPayload } from "@/server/services/publication";
 
 // ---------------------------------------------------------------------------
 // Fixtures + fake store
@@ -55,14 +60,82 @@ function enrolment(overrides: Partial<EnrolmentStoreRow> = {}): EnrolmentStoreRo
   };
 }
 
+function course(overrides: Partial<CourseStoreRow> = {}): CourseStoreRow {
+  return { id: "course-1", title: "Course One", ...overrides };
+}
+
+function moduleRow(overrides: Partial<ModuleStoreRow> = {}): ModuleStoreRow {
+  return {
+    id: "module-1",
+    courseId: "course-1",
+    title: "Module One",
+    position: 0,
+    withdrawnAt: null,
+    ...overrides,
+  };
+}
+
+function lessonRow(overrides: Partial<LessonStoreRow> = {}): LessonStoreRow {
+  return {
+    id: "lesson-1",
+    moduleId: "module-1",
+    title: "Lesson One",
+    type: "TEXT",
+    position: 0,
+    required: true,
+    allowManualComplete: true,
+    withdrawnAt: null,
+    ...overrides,
+  };
+}
+
+function coursePayload(overrides: Partial<CourseObligationPayload> = {}): CourseObligationPayload {
+  return {
+    schema: 1,
+    completionRule: null,
+    completionRuleVersion: 1,
+    modules: [
+      {
+        id: "module-1",
+        position: 0,
+        lessons: [{ id: "lesson-1", position: 0, required: true, type: "TEXT", assessmentId: null }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function programmePayload(
+  overrides: Partial<ProgrammeObligationPayload> = {},
+): ProgrammeObligationPayload {
+  return {
+    schema: 1,
+    sequential: true,
+    completionRule: null,
+    completionRuleVersion: 1,
+    courses: [{ courseId: "course-1", position: 0 }],
+    ...overrides,
+  };
+}
+
 function makeStore(opts: {
   enrolments?: EnrolmentStoreRow[];
   cohorts?: CohortStoreRow[];
   cohortCourses?: CohortCourseStoreRow[];
+  courses?: CourseStoreRow[];
+  coursePublications?: Record<string, PublicationStoreRow>;
+  programmePublications?: Record<string, PublicationStoreRow>;
+  modules?: ModuleStoreRow[];
+  lessons?: LessonStoreRow[];
 }): LearnerAccessStore {
   const enrolments = opts.enrolments ?? [];
   const cohorts = opts.cohorts ?? [];
   const cohortCourses = opts.cohortCourses ?? [];
+  const courses = opts.courses ?? [];
+  const coursePublications = opts.coursePublications ?? {};
+  const programmePublications = opts.programmePublications ?? {};
+  const modules = opts.modules ?? [];
+  const lessons = opts.lessons ?? [];
 
   return {
     enrolment: {
@@ -79,6 +152,24 @@ function makeStore(opts: {
       findFirst: async ({ where }) =>
         cohortCourses.find((c) => c.cohortId === where.cohortId && c.courseId === where.courseId) ??
         null,
+    },
+    course: {
+      findUnique: async ({ where }) => courses.find((c) => c.id === where.id) ?? null,
+    },
+    coursePublication: {
+      findUnique: async ({ where }) => coursePublications[where.id] ?? null,
+    },
+    programmePublication: {
+      findUnique: async ({ where }) => programmePublications[where.id] ?? null,
+    },
+    module: {
+      findMany: async ({ where }) => modules.filter((m) => m.courseId === where.courseId),
+    },
+    lesson: {
+      findMany: async ({ where }) => lessons.filter((l) => where.moduleId.in.includes(l.moduleId)),
+    },
+    lessonProgress: {
+      findMany: async () => [],
     },
   };
 }
@@ -238,5 +329,213 @@ describe("hasActiveEnrolmentCoveringCourse", () => {
     const store = makeStore({ enrolments: [enrolment()], cohorts: [cohort({ courseId: "course-1" })] });
     const service = createLearnerAccessService({ store, now: () => NOW });
     expect(await service.hasActiveEnrolmentCoveringCourse("user-1", "course-999")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 — pinned course structure and pinned completion-rule source
+// ---------------------------------------------------------------------------
+
+describe("loadLearnerCourseStructure", () => {
+  it("returns one course entry for a course-cohort", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const structure = await service.loadLearnerCourseStructure(own!);
+
+    expect(structure.kind).toBe("structure");
+    if (structure.kind !== "structure") throw new Error("unreachable");
+    expect(structure.courses).toHaveLength(1);
+    expect(structure.courses[0].courseId).toBe("course-1");
+    expect(structure.courses[0].modules[0].lessons[0].id).toBe("lesson-1");
+  });
+
+  it("returns member courses ordered by CohortCourse position for a programme-cohort", async () => {
+    const store = makeStore({
+      enrolments: [enrolment({ cohortId: "cohort-prog" })],
+      cohorts: [
+        cohort({
+          id: "cohort-prog",
+          courseId: null,
+          programmeId: "programme-1",
+          programmePublicationId: "prog-pub-1",
+        }),
+      ],
+      cohortCourses: [
+        { id: "cc-2", cohortId: "cohort-prog", courseId: "course-2", position: 1, coursePublicationId: "pub-2" },
+        { id: "cc-1", cohortId: "cohort-prog", courseId: "course-1", position: 0, coursePublicationId: "pub-1" },
+      ],
+      courses: [course({ id: "course-1", title: "Course One" }), course({ id: "course-2", title: "Course Two" })],
+      coursePublications: {
+        "pub-1": { payload: coursePayload() },
+        "pub-2": {
+          payload: coursePayload({
+            modules: [
+              {
+                id: "module-2",
+                position: 0,
+                lessons: [{ id: "lesson-2", position: 0, required: true, type: "TEXT", assessmentId: null }],
+              },
+            ],
+          }),
+        },
+      },
+      modules: [moduleRow(), moduleRow({ id: "module-2", courseId: "course-2" })],
+      lessons: [lessonRow(), lessonRow({ id: "lesson-2", moduleId: "module-2" })],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const structure = await service.loadLearnerCourseStructure(own!);
+
+    expect(structure.kind).toBe("structure");
+    if (structure.kind !== "structure") throw new Error("unreachable");
+    expect(structure.courses.map((c) => c.courseId)).toEqual(["course-1", "course-2"]);
+  });
+
+  it("excludes a live lesson absent from the pinned payload entirely", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } }, // only lesson-1 pinned
+      modules: [moduleRow()],
+      lessons: [lessonRow(), lessonRow({ id: "lesson-2", position: 1 })], // lesson-2 live but not pinned
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const structure = await service.loadLearnerCourseStructure(own!);
+
+    expect(structure.kind).toBe("structure");
+    if (structure.kind !== "structure") throw new Error("unreachable");
+    const lessonIds = structure.courses[0].modules[0].lessons.map((l) => l.id);
+    expect(lessonIds).toEqual(["lesson-1"]);
+  });
+
+  it("still renders a pinned lesson that has since been withdrawn live", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow({ withdrawnAt: new Date("2026-02-01T00:00:00.000Z") })],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const structure = await service.loadLearnerCourseStructure(own!);
+
+    expect(structure.kind).toBe("structure");
+    if (structure.kind !== "structure") throw new Error("unreachable");
+    const lesson = structure.courses[0].modules[0].lessons[0];
+    expect(lesson.id).toBe("lesson-1");
+    expect(lesson.withdrawnAt).not.toBeNull();
+  });
+
+  it("uses the PINNED required flag, not the live one, when they differ", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } }, // pinned required: true
+      modules: [moduleRow()],
+      lessons: [lessonRow({ required: false })], // live required: false
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const structure = await service.loadLearnerCourseStructure(own!);
+
+    expect(structure.kind).toBe("structure");
+    if (structure.kind !== "structure") throw new Error("unreachable");
+    expect(structure.courses[0].modules[0].lessons[0].required).toBe(true);
+  });
+
+  it("returns { kind: 'unpinned' } for a cohort with no publication pin at all, never a live-tree fallback", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: null })],
+      courses: [course()],
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const structure = await service.loadLearnerCourseStructure(own!);
+
+    expect(structure).toEqual({ kind: "unpinned" });
+  });
+
+  it("returns { kind: 'unpinned' } for a malformed publication payload", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: { garbage: true } } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const structure = await service.loadLearnerCourseStructure(own!);
+
+    expect(structure).toEqual({ kind: "unpinned" });
+  });
+});
+
+describe("loadPinnedCompletionRuleSource", () => {
+  it("resolves a COURSE scope rule from the pinned CoursePublication for a course-cohort", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      coursePublications: { "pub-1": { payload: coursePayload({ completionRuleVersion: 3 }) } },
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const source = await service.loadPinnedCompletionRuleSource(own!, "course-1");
+
+    expect(source).not.toBeNull();
+    expect(source?.ruleVersion).toBe(3);
+  });
+
+  it("resolves a PROGRAMME scope rule from the pinned ProgrammePublication for a programme-cohort", async () => {
+    const store = makeStore({
+      enrolments: [enrolment({ cohortId: "cohort-prog" })],
+      cohorts: [
+        cohort({
+          id: "cohort-prog",
+          courseId: null,
+          programmeId: "programme-1",
+          programmePublicationId: "prog-pub-1",
+        }),
+      ],
+      cohortCourses: [
+        { id: "cc-1", cohortId: "cohort-prog", courseId: "course-1", position: 0, coursePublicationId: null },
+      ],
+      programmePublications: { "prog-pub-1": { payload: programmePayload({ completionRuleVersion: 5 }) } },
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const source = await service.loadPinnedCompletionRuleSource(own!, "course-1");
+
+    expect(source).not.toBeNull();
+    expect(source?.ruleVersion).toBe(5);
+  });
+
+  it("returns null when no pin exists", async () => {
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: null })],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const own = await service.getOwnActiveEnrolment(actorFor("user-1"), "enrolment-1");
+    const source = await service.loadPinnedCompletionRuleSource(own!, "course-1");
+
+    expect(source).toBeNull();
   });
 });
