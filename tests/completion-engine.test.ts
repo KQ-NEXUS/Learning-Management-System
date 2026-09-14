@@ -15,7 +15,10 @@ import {
   parseCompletionRule,
   UnsupportedCompletionRuleFieldError,
   UnsupportedCompletionRuleVersionError,
+  type CompletionRuleV1,
 } from "@/server/services/completion-rule";
+import { evaluateCompletion } from "@/server/services/completion-engine";
+import type { AttendanceComponent } from "@/server/services/attendance-component";
 
 describe("parseCompletionRule", () => {
   it("null json, ruleVersion 1, null cohort threshold -> v1 shape with attendanceThresholdPct: null", () => {
@@ -136,5 +139,165 @@ describe("parseCompletionRule", () => {
         cohortAttendanceThresholdPct: null,
       }),
     ).toThrow(UnsupportedCompletionRuleVersionError);
+  });
+});
+
+function ruleWithThreshold(attendanceThresholdPct: number | null): CompletionRuleV1 {
+  return { version: 1, requireAllRequiredLessons: true, attendanceThresholdPct };
+}
+
+describe("evaluateCompletion", () => {
+  it("always emits a required-lessons item with an 'N of M complete' detail", () => {
+    const verdict = evaluateCompletion(ruleWithThreshold(null), {
+      requiredLessonIds: ["l1", "l2", "l3"],
+      completedLessonIds: new Set(["l1", "l2"]),
+      attendance: null,
+    });
+    expect(verdict.items[0]).toEqual({
+      id: "required-lessons",
+      label: "All required lessons complete",
+      satisfied: false,
+      state: "UNMET",
+      detail: "2 of 3 complete",
+    });
+  });
+
+  it("zero required lessons -> satisfied: true with detail '0 of 0 complete'", () => {
+    const verdict = evaluateCompletion(ruleWithThreshold(null), {
+      requiredLessonIds: [],
+      completedLessonIds: new Set(),
+      attendance: null,
+    });
+    expect(verdict.items[0]).toEqual({
+      id: "required-lessons",
+      label: "All required lessons complete",
+      satisfied: true,
+      state: "SATISFIED",
+      detail: "0 of 0 complete",
+    });
+    expect(verdict.satisfied).toBe(true);
+  });
+
+  it("attendanceThresholdPct null -> no attendance item at all, items array has length exactly 1", () => {
+    const verdict = evaluateCompletion(ruleWithThreshold(null), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance: { kind: "computed", earnedPct: 40, requiredPct: 75, attendedCount: 2, countableCount: 5, meetsThreshold: false },
+    });
+    expect(verdict.items).toHaveLength(1);
+    expect(verdict.items.find((i) => i.id === "attendance")).toBeUndefined();
+  });
+
+  it("attendanceThresholdPct set and attendance computed meeting threshold -> satisfied item naming earned/required percentages", () => {
+    const attendance: AttendanceComponent = {
+      kind: "computed",
+      earnedPct: 80,
+      requiredPct: 75,
+      attendedCount: 4,
+      countableCount: 5,
+      meetsThreshold: true,
+    };
+    const verdict = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance,
+    });
+    expect(verdict.items[1]).toEqual({
+      id: "attendance",
+      label: "Attendance threshold met",
+      satisfied: true,
+      state: "SATISFIED",
+      detail: "80% of 75% required",
+    });
+    expect(verdict.satisfied).toBe(true);
+  });
+
+  it("attendanceThresholdPct set and attendance computed NOT meeting threshold -> unmet item", () => {
+    const attendance: AttendanceComponent = {
+      kind: "computed",
+      earnedPct: 60,
+      requiredPct: 75,
+      attendedCount: 3,
+      countableCount: 5,
+      meetsThreshold: false,
+    };
+    const verdict = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance,
+    });
+    expect(verdict.items[1]).toEqual({
+      id: "attendance",
+      label: "Attendance threshold met",
+      satisfied: false,
+      state: "UNMET",
+      detail: "60% of 75% required",
+    });
+    expect(verdict.satisfied).toBe(false);
+  });
+
+  it("attendanceThresholdPct set and attendance kind 'no-sessions' -> NOT_YET_CHECKED, satisfied: false, never a pass", () => {
+    const verdict = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance: { kind: "no-sessions" },
+    });
+    expect(verdict.items[1]).toMatchObject({
+      id: "attendance",
+      satisfied: false,
+      state: "NOT_YET_CHECKED",
+    });
+    expect(verdict.items[1].detail).toMatch(/no countable sessions/i);
+    expect(verdict.satisfied).toBe(false);
+  });
+
+  it("attendanceThresholdPct set and attendance null (evidence not gathered) -> NOT_YET_CHECKED, satisfied: false", () => {
+    const verdict = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance: null,
+    });
+    expect(verdict.items[1]).toMatchObject({
+      id: "attendance",
+      satisfied: false,
+      state: "NOT_YET_CHECKED",
+    });
+    expect(verdict.satisfied).toBe(false);
+  });
+
+  it("overall satisfied is true only when every emitted item is satisfied", () => {
+    const allSatisfied = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance: { kind: "computed", earnedPct: 100, requiredPct: 75, attendedCount: 5, countableCount: 5, meetsThreshold: true },
+    });
+    expect(allSatisfied.satisfied).toBe(true);
+
+    const requiredLessonsUnmet = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1", "l2"],
+      completedLessonIds: new Set(["l1"]),
+      attendance: { kind: "computed", earnedPct: 100, requiredPct: 75, attendedCount: 5, countableCount: 5, meetsThreshold: true },
+    });
+    expect(requiredLessonsUnmet.satisfied).toBe(false);
+  });
+
+  it("the returned item order is stable: required-lessons first, attendance second", () => {
+    const verdict = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance: { kind: "computed", earnedPct: 100, requiredPct: 75, attendedCount: 5, countableCount: 5, meetsThreshold: true },
+    });
+    expect(verdict.items.map((i) => i.id)).toEqual(["required-lessons", "attendance"]);
+  });
+
+  it("does not merge the two rule components into one composite percentage (UI-SPEC 7.1)", () => {
+    const verdict = evaluateCompletion(ruleWithThreshold(75), {
+      requiredLessonIds: ["l1"],
+      completedLessonIds: new Set(["l1"]),
+      attendance: { kind: "computed", earnedPct: 100, requiredPct: 75, attendedCount: 5, countableCount: 5, meetsThreshold: true },
+    });
+    expect(verdict).not.toHaveProperty("percentage");
+    expect(verdict).not.toHaveProperty("overallPct");
+    expect(verdict.items).toHaveLength(2);
   });
 });
