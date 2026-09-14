@@ -38,6 +38,11 @@ import type {
   CourseObligationLesson,
   ProgrammeObligationPayload,
 } from "@/server/services/publication";
+import {
+  evaluateLessonSequencing,
+  type SequencingLesson,
+  type SequencingResult,
+} from "@/server/services/lesson-sequencing";
 
 // ---------------------------------------------------------------------------
 // Store rows — the narrow structural slice this module needs.
@@ -100,6 +105,7 @@ export type LessonStoreRow = {
 };
 
 export type LessonProgressStoreRow = {
+  enrolmentId: string;
   lessonId: string;
   completedAt: Date;
   source: string;
@@ -207,6 +213,58 @@ export type LearnerCourseStructure =
   | { kind: "unpinned" };
 
 export type PinnedCompletionRuleSource = { json: unknown; ruleVersion: number };
+
+// ---------------------------------------------------------------------------
+// The sequencing-applied learner path (D-04, D-05, D-06, D-16) and the one
+// server-side open gate (LRN-02, T-09-02).
+// ---------------------------------------------------------------------------
+
+export type DecoratedLesson = LearnerCourseLesson & {
+  locked: boolean;
+  blockingLessonTitle: string | null;
+  completed: boolean;
+  completedSource: string | null;
+};
+
+export type DecoratedModule = { id: string; title: string; position: number; lessons: DecoratedLesson[] };
+
+export type DecoratedCourseEntry = { courseId: string; courseTitle: string; modules: DecoratedModule[] };
+
+export type LearnerPath = {
+  enrolment: OwnEnrolmentSnapshot;
+  courses: DecoratedCourseEntry[];
+  /** Completed lesson ids, from live `LessonProgress` — recomputed on every call (D-16's lazy re-lock). */
+  progress: ReadonlySet<string>;
+  sequencing: SequencingResult[];
+};
+
+export type LessonOpenResult =
+  | { ok: true; lesson: DecoratedLesson }
+  | { ok: false; reason: "not-found" | "locked" | "access-window-closed" };
+
+/**
+ * Flattened course/module-index stride used to synthesise a globally
+ * increasing `position` across a programme cohort's ordered member courses
+ * before handing the flat list to the pure sequencing evaluator (which
+ * sorts by `position`). Pinned lesson positions are only unique WITHIN
+ * their own course, so `courseIndex * STRIDE + lesson.position` is used
+ * rather than trusting cross-course uniqueness. 1,000,000 comfortably
+ * exceeds any real course's lesson count while staying well clear of the
+ * schema's own negative `WITHDRAWN_PARK_BASE` (-1,000,000) convention, so a
+ * synthesised position can never collide with that band.
+ */
+const COURSE_POSITION_STRIDE = 1_000_000;
+
+function findDecoratedLesson(path: LearnerPath, lessonId: string): DecoratedLesson | null {
+  for (const course of path.courses) {
+    for (const mod of course.modules) {
+      for (const lesson of mod.lessons) {
+        if (lesson.id === lessonId) return lesson;
+      }
+    }
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Runtime guards over `payload: Json` — never cast, always validated. A
@@ -528,12 +586,105 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     return null;
   }
 
+  /**
+   * A learner's whole path with lock state and completion applied.
+   * `null` for every denial cause `getOwnActiveEnrolment` returns `null`
+   * for. Un-completing is not modelled as a distinct operation here at
+   * all — sequencing is recomputed fresh from live `LessonProgress` on
+   * every call, which IS D-16's lazy re-lock: nothing needs to walk a
+   * downstream chain eagerly, because the next read simply recomputes it.
+   */
+  async function loadLearnerPath(actor: Actor, enrolmentId: string): Promise<LearnerPath | null> {
+    const enrolment = await getOwnActiveEnrolment(actor, enrolmentId);
+    if (!enrolment) return null;
+
+    const structure = await loadLearnerCourseStructure(enrolment);
+    const courses = structure.kind === "structure" ? structure.courses : [];
+
+    const progressRows = await store.lessonProgress.findMany({ where: { enrolmentId: enrolment.id } });
+    const progressByLesson = new Map(progressRows.map((p) => [p.lessonId, p]));
+    const completedIds = new Set(progressRows.map((p) => p.lessonId));
+
+    // D-05 extended across a programme cohort (see COURSE_POSITION_STRIDE):
+    // flatten ALL lessons of ALL member courses, course-position then
+    // module-position then lesson-position, before handing to the pure
+    // evaluator — one global path, not one per course.
+    const flatLessons: SequencingLesson[] = [];
+    courses.forEach((courseEntry, courseIndex) => {
+      for (const mod of courseEntry.modules) {
+        for (const lesson of mod.lessons) {
+          flatLessons.push({
+            id: lesson.id,
+            title: lesson.title,
+            required: lesson.required,
+            position: courseIndex * COURSE_POSITION_STRIDE + lesson.position,
+            moduleId: mod.id,
+            withdrawnAt: lesson.withdrawnAt,
+          });
+        }
+      }
+    });
+
+    const sequencing = evaluateLessonSequencing(flatLessons, completedIds);
+    const sequencingByLesson = new Map(sequencing.map((s) => [s.lessonId, s]));
+
+    const decoratedCourses: DecoratedCourseEntry[] = courses.map((courseEntry) => ({
+      courseId: courseEntry.courseId,
+      courseTitle: courseEntry.courseTitle,
+      modules: courseEntry.modules.map((mod) => ({
+        id: mod.id,
+        title: mod.title,
+        position: mod.position,
+        lessons: mod.lessons.map((lesson) => {
+          const seq = sequencingByLesson.get(lesson.id);
+          const progressRow = progressByLesson.get(lesson.id);
+          return {
+            ...lesson,
+            // T-09-13 — an unevaluated (e.g. withdrawn) lesson defaults to
+            // locked, never open by default.
+            locked: seq?.locked ?? true,
+            blockingLessonTitle: seq?.blockingLessonTitle ?? null,
+            completed: !!progressRow,
+            completedSource: progressRow?.source ?? null,
+          };
+        }),
+      })),
+    }));
+
+    return { enrolment, courses: decoratedCourses, progress: completedIds, sequencing };
+  }
+
+  /**
+   * The single server-side gate LRN-02 requires — the lesson-reading page
+   * and every progress-write path MUST call this before reading content or
+   * writing a row, because a UI lock is not a gate (T-09-02). A refusal is
+   * a discriminated reason, never a thrown error, so a caller can render
+   * the specific denial: `"not-found"` for an unknown/cross-course lesson
+   * id, `"access-window-closed"` when D-03's window is `readOnly` (closed
+   * or not yet started) — checked BEFORE the lock, so a closed window
+   * refuses even an otherwise-unlocked lesson — and `"locked"` otherwise.
+   */
+  function assertLessonOpenable(path: LearnerPath, lessonId: string): LessonOpenResult {
+    const lesson = findDecoratedLesson(path, lessonId);
+    if (!lesson) return { ok: false, reason: "not-found" };
+
+    if (path.enrolment.accessWindow.readOnly) {
+      return { ok: false, reason: "access-window-closed" };
+    }
+
+    if (lesson.locked) return { ok: false, reason: "locked" };
+
+    return { ok: true, lesson };
+  }
+
   return {
     getOwnActiveEnrolment,
     listOwnActiveEnrolments,
     hasActiveEnrolmentCoveringCourse,
     loadLearnerCourseStructure,
     loadPinnedCompletionRuleSource,
+    loadLearnerPath,
+    assertLessonOpenable,
   };
 }
 
@@ -559,3 +710,5 @@ export const listOwnActiveEnrolments = built.listOwnActiveEnrolments;
 export const hasActiveEnrolmentCoveringCourse = built.hasActiveEnrolmentCoveringCourse;
 export const loadLearnerCourseStructure = built.loadLearnerCourseStructure;
 export const loadPinnedCompletionRuleSource = built.loadPinnedCompletionRuleSource;
+export const loadLearnerPath = built.loadLearnerPath;
+export const assertLessonOpenable = built.assertLessonOpenable;
