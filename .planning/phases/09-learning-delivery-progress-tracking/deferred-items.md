@@ -29,6 +29,31 @@ task's own changes).
     `LayoutProps` error is unrelated to Phase 9 entirely (Next.js 16
     App-Router typed-route global, pre-existing).
 
+## 09-04 (execution date: 2026-09-14)
+
+- **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Same
+  seven errors as 09-01 logged above (`LayoutProps` in `src/app/layout.tsx`,
+  and `Cannot find module 'stripe'` across `src/server/payments/providers/
+  stripe/*` and two Stripe integration test files) — the `stripe` package is
+  still absent from `node_modules` in this worktree. None reference
+  `completion-service.ts`, `attendance-service.ts`, or
+  `domain-event-service.ts` (this plan's three files). Confirmed via
+  `git status --short` before/after execution that this plan touched only
+  those three files plus their test files. Not fixed — same out-of-scope
+  reasoning as 09-01 (Rule 3 excludes package installs from auto-fix).
+- **`tests/attendance-service.integration.test.ts` and `tests/completion-
+  service.test.ts` acceptance-criteria greps flag prose, not code.** The
+  plan's acceptance criteria ask for `grep -c "assertTransition"` and
+  `grep -c "setTimeout\|setInterval\|cron\|..."` to return 0 in
+  `completion-service.ts`; the actual counts are 1 each, both from the
+  header doc comment's own prose describing what the module deliberately
+  does NOT do ("This module does not import `assertTransition`...", "...
+  it never sets a timer or a cron entry"). No executable code matches
+  either pattern — confirmed by reading the two flagged lines directly.
+  Not treated as a violation; noted here for verifier visibility rather
+  than stripped from the documentation, since the prose is exactly the
+  DD-6/DD-12 record the plan's own `<action>` text asked for.
+
 ## 09-02
 
 - **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Running the full-repo
