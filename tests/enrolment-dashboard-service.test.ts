@@ -16,6 +16,7 @@ import {
   deriveAccessNotice,
   buildUpcomingSessions,
   collectRequiredLessonEvidence,
+  deriveNextAction,
   type EnrolmentDashboardStore,
   type DashboardSessionStoreRow,
   type DashboardAttendanceRecordStoreRow,
@@ -23,6 +24,7 @@ import {
 import {
   createLearnerAccessService,
   type LearnerAccessStore,
+  type LearnerPath,
   type EnrolmentStoreRow,
   type CohortStoreRow,
   type CohortCourseStoreRow,
@@ -33,8 +35,9 @@ import {
   type LessonProgressStoreRow,
 } from "@/server/services/learner-access";
 import type { Actor } from "@/server/permissions/with-permission";
-import type { CourseObligationPayload, ProgrammeObligationPayload } from "@/server/services/publication";
+import type { CourseObligationPayload } from "@/server/services/publication";
 import type { AccessWindow } from "@/server/services/access-window";
+import type { CompletionVerdict } from "@/server/services/completion-engine";
 
 // ---------------------------------------------------------------------------
 // Fixtures + fake stores
@@ -43,7 +46,6 @@ import type { AccessWindow } from "@/server/services/access-window";
 const NOW = new Date("2026-09-14T12:00:00.000Z");
 
 const actorA: Actor = { userId: "user-a", roles: [] } as unknown as Actor;
-const actorB: Actor = { userId: "user-b", roles: [] } as unknown as Actor;
 
 function cohort(overrides: Partial<CohortStoreRow> = {}): CohortStoreRow {
   return {
@@ -510,6 +512,106 @@ describe("loadLearnerDashboard", () => {
 // ---------------------------------------------------------------------------
 // Pure helper unit tests (no store fake needed)
 // ---------------------------------------------------------------------------
+
+describe("deriveNextAction", () => {
+  async function pathFor(options: { optional?: boolean; completed?: boolean; closed?: boolean } = {}): Promise<LearnerPath> {
+    const store = makeLearnerAccessStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+    });
+    const access = createLearnerAccessService({ store, now: () => NOW });
+    const path = await access.loadLearnerPath(actorA, "enrolment-1");
+    if (!path) throw new Error("Expected fixture learner path");
+    const lesson = path.courses[0].modules[0].lessons[0];
+    lesson.required = !options.optional;
+    lesson.completed = options.completed ?? false;
+    if (options.closed) path.enrolment.accessWindow = { kind: "windowed", endsAt: NOW, readOnly: true };
+    return path;
+  }
+
+  const unmet: CompletionVerdict = { satisfied: false, items: [] };
+  const satisfied: CompletionVerdict = { satisfied: true, items: [] };
+  const base = { enrolmentId: "enrolment-1", now: NOW, nearestFutureSession: null, path: null, verdict: unmet };
+  const sessionAt = (hours: number) => ({ id: "session-1", title: "Session One", startsAt: new Date(NOW.getTime() + hours * 3600000) });
+
+  it("prioritizes a session in three hours over an incomplete lesson", async () => {
+    expect(deriveNextAction({ ...base, path: await pathFor(), nearestFutureSession: sessionAt(3) })).toEqual({
+      kind: "session", sessionId: "session-1", title: "Session One", startsAt: new Date("2026-09-14T15:00:00.000Z"),
+    });
+  });
+
+  it("does not prioritize a session 25 hours away", async () => {
+    expect(deriveNextAction({ ...base, path: await pathFor(), nearestFutureSession: sessionAt(25) }).kind).toBe("lesson");
+  });
+
+  it("includes the session exactly at the 24-hour boundary", () => {
+    expect(deriveNextAction({ ...base, nearestFutureSession: sessionAt(24) }).kind).toBe("session");
+  });
+
+  it.each([0, -1])("excludes sessions starting %s hours from now", (hours) => {
+    expect(deriveNextAction({ ...base, nearestFutureSession: sessionAt(hours) })).toEqual({ kind: "none" });
+  });
+
+  it("returns the open required lesson with its enrolment and module context", async () => {
+    expect(deriveNextAction({ ...base, path: await pathFor() })).toEqual({
+      kind: "lesson", enrolmentId: "enrolment-1", lessonId: "lesson-1", lessonTitle: "Lesson One", moduleTitle: "Module One",
+    });
+  });
+
+  it("does not recommend an incomplete optional lesson", async () => {
+    expect(deriveNextAction({ ...base, path: await pathFor({ optional: true }) })).toEqual({ kind: "none" });
+  });
+
+  it("does not recommend a completed required lesson", async () => {
+    expect(deriveNextAction({ ...base, path: await pathFor({ completed: true }) })).toEqual({ kind: "none" });
+  });
+
+  it("skips a withdrawn lesson and continues into the next module", async () => {
+    const path = await pathFor();
+    const first = path.courses[0].modules[0].lessons[0];
+    const second = { ...first, id: "lesson-2", title: "Lesson Two" };
+    first.withdrawnAt = NOW;
+    path.courses[0].modules.push({ id: "module-2", title: "Module Two", position: 1, lessons: [second] });
+    expect(deriveNextAction({ ...base, path })).toEqual({
+      kind: "lesson", enrolmentId: "enrolment-1", lessonId: "lesson-2", lessonTitle: "Lesson Two", moduleTitle: "Module Two",
+    });
+  });
+
+  it("does not recommend lesson content after the access window closes", async () => {
+    expect(deriveNextAction({ ...base, path: await pathFor({ closed: true }) })).toEqual({ kind: "none" });
+  });
+
+  it("does not recommend a prerequisite-locked required lesson", async () => {
+    const path = await pathFor();
+    path.courses[0].modules[0].lessons[0].locked = true;
+    expect(deriveNextAction({ ...base, path })).toEqual({ kind: "none" });
+  });
+
+  it("returns complete when no earlier priority matches and the verdict is satisfied", async () => {
+    expect(deriveNextAction({ ...base, path: await pathFor({ completed: true }), verdict: satisfied })).toEqual({ kind: "complete" });
+  });
+
+  it("keeps an imminent session ahead of a satisfied completion verdict", () => {
+    expect(deriveNextAction({ ...base, verdict: satisfied, nearestFutureSession: sessionAt(3) }).kind).toBe("session");
+  });
+
+  it("returns none for missing path and verdict", () => {
+    expect(deriveNextAction({ ...base, verdict: null })).toEqual({ kind: "none" });
+  });
+
+  it("attaches the derived lesson action to the aggregate dashboard card", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()], cohorts: [cohort()], courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } }, modules: [moduleRow()], lessons: [lessonRow()],
+    });
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.nextAction).toEqual({ kind: "lesson", enrolmentId: "enrolment-1", lessonId: "lesson-1", lessonTitle: "Lesson One", moduleTitle: "Module One" });
+  });
+});
 
 describe("deriveSessionMode", () => {
   it("returns 'in-person' when a non-empty location is present", () => {

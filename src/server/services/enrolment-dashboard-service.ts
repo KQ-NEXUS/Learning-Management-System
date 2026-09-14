@@ -187,6 +187,22 @@ export type UpcomingSessionCard = {
   cancelledAt: Date | null;
 };
 
+/**
+ * DD-5 — exactly four variants, first match wins, evaluated per enrolment:
+ * (1) `session` — an upcoming non-cancelled session starting within the
+ * next 24 hours; (2) `lesson` — the next incomplete required lesson in
+ * whole-course order, ONLY if it is confirmed openable; (3) `complete` —
+ * the enrolment's completion verdict is satisfied; (4) `none` — anything
+ * else, including a closed self-paced access window with required lessons
+ * still outstanding. `deriveNextAction` below is total: every input
+ * produces exactly one of these four.
+ */
+export type NextAction =
+  | { kind: "session"; sessionId: string; title: string; startsAt: Date }
+  | { kind: "lesson"; enrolmentId: string; lessonId: string; lessonTitle: string; moduleTitle: string }
+  | { kind: "complete" }
+  | { kind: "none" };
+
 export type LearnerDashboardCard = {
   enrolmentId: string;
   assessmentObligations: DeferredColumn;
@@ -197,6 +213,7 @@ export type LearnerDashboardCard = {
   accessNotice: AccessNotice;
   upcomingSessions: UpcomingSessionCard[];
   hasMoreSessions: boolean;
+  nextAction: NextAction;
 };
 
 export type LearnerDashboard = {
@@ -316,6 +333,94 @@ export function collectRequiredLessonEvidence(path: LearnerPath): {
   return { requiredLessonIds, completedLessonIds: path.progress };
 }
 
+/** A session's minimal shape for priority-1 next-action evaluation. */
+export type NextActionSession = { id: string; title: string; startsAt: Date };
+
+/**
+ * The first required, not-since-withdrawn lesson with no `LessonProgress`
+ * row, walked in whole-course order (the same order `path.courses` already
+ * carries — course, then module, then lesson position). An optional
+ * incomplete lesson is never a candidate; a withdrawn required lesson is
+ * excluded for the same D-17 reason `collectRequiredLessonEvidence` excludes
+ * it from the required count.
+ */
+function findNextIncompleteRequiredLesson(
+  path: LearnerPath,
+): { lessonId: string; lessonTitle: string; moduleTitle: string } | null {
+  for (const course of path.courses) {
+    for (const mod of course.modules) {
+      for (const lesson of mod.lessons) {
+        if (lesson.required && lesson.withdrawnAt == null && !lesson.completed) {
+          return { lessonId: lesson.id, lessonTitle: lesson.title, moduleTitle: mod.title };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+const NEXT_ACTION_SESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * DD-5's four-branch priority order, pure and total. Takes ALREADY-LOADED
+ * evidence (nearest future session, the decorated path with lock state, the
+ * completion verdict, `now`) rather than reading anything itself — fully
+ * unit-testable with no store fake at all, and the priority order stays
+ * inspectable in exactly one place.
+ *
+ * Priority 2 re-checks `assertLessonOpenable` rather than assuming the next
+ * required lesson is open: a closed self-paced access window (D-03) leaves
+ * a lesson unopenable while it still exists in the path, and the render
+ * must never assume "next required lesson" implies "open".
+ */
+export function deriveNextAction(input: {
+  enrolmentId: string;
+  now: Date;
+  nearestFutureSession: NextActionSession | null;
+  path: LearnerPath | null;
+  verdict: CompletionVerdict | null;
+}): NextAction {
+  const { enrolmentId, now, nearestFutureSession, path, verdict } = input;
+
+  if (nearestFutureSession) {
+    const msUntilStart = nearestFutureSession.startsAt.getTime() - now.getTime();
+    if (msUntilStart > 0 && msUntilStart <= NEXT_ACTION_SESSION_WINDOW_MS) {
+      return {
+        kind: "session",
+        sessionId: nearestFutureSession.id,
+        title: nearestFutureSession.title,
+        startsAt: nearestFutureSession.startsAt,
+      };
+    }
+  }
+
+  if (path) {
+    const nextLesson = findNextIncompleteRequiredLesson(path);
+    if (nextLesson) {
+      const openable = assertLessonOpenable(path, nextLesson.lessonId);
+      if (openable.ok) {
+        return {
+          kind: "lesson",
+          enrolmentId,
+          lessonId: nextLesson.lessonId,
+          lessonTitle: nextLesson.lessonTitle,
+          moduleTitle: nextLesson.moduleTitle,
+        };
+      }
+      // Not openable (e.g. a closed self-paced window, D-03) — falls through.
+      // The required-lessons verdict item can never be satisfied while this
+      // lesson is outstanding, so priority 3 below will not fire either;
+      // this naturally lands on priority 4 without a special case.
+    }
+  }
+
+  if (verdict && verdict.satisfied) {
+    return { kind: "complete" };
+  }
+
+  return { kind: "none" };
+}
+
 /**
  * The internal per-enrolment context `buildCard` assembles once and
  * `loadLearnerDashboard` (Task 1) narrows to `.card`. `verdict` and `path`
@@ -362,6 +467,9 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     const attendance = computeAttendanceComponentForCard(enrolment, sessions, records);
     const { upcomingSessions, hasMoreSessions, futureNonCancelled } = buildUpcomingSessions(sessions, nowDate);
     const accessNotice = deriveAccessNotice(enrolment.accessWindow, nowDate);
+    const nearestFutureSession: NextActionSession | null = futureNonCancelled[0]
+      ? { id: futureNonCancelled[0].id, title: futureNonCancelled[0].title, startsAt: futureNonCancelled[0].startsAt }
+      : null;
 
     const base = {
       enrolmentId: enrolment.id,
@@ -375,8 +483,15 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     };
 
     if (structure.kind === "unpinned") {
+      const nextAction = deriveNextAction({
+        enrolmentId: enrolment.id,
+        now: nowDate,
+        nearestFutureSession,
+        path: null,
+        verdict: null,
+      });
       return {
-        card: { ...base, progress: unpinnedProgress(attendance) },
+        card: { ...base, progress: unpinnedProgress(attendance), nextAction },
         verdict: null,
         path: null,
         futureNonCancelled,
@@ -390,8 +505,15 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     // learner's dashboard must never hard-fail on one enrolment.
     const path = await learnerAccess.loadLearnerPath(actor, enrolment.id);
     if (!path) {
+      const nextAction = deriveNextAction({
+        enrolmentId: enrolment.id,
+        now: nowDate,
+        nearestFutureSession,
+        path: null,
+        verdict: null,
+      });
       return {
-        card: { ...base, progress: unpinnedProgress(attendance) },
+        card: { ...base, progress: unpinnedProgress(attendance), nextAction },
         verdict: null,
         path: null,
         futureNonCancelled,
@@ -432,6 +554,14 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       }
     }
 
+    const nextAction = deriveNextAction({
+      enrolmentId: enrolment.id,
+      now: nowDate,
+      nearestFutureSession,
+      path,
+      verdict,
+    });
+
     return {
       card: {
         ...base,
@@ -441,6 +571,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
           attendance,
           structure: "structure",
         },
+        nextAction,
       },
       verdict,
       path,
