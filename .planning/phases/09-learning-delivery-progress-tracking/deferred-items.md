@@ -69,6 +69,47 @@ task's own changes).
   Added a `12: "not tracked yet · Phase 12"` entry — additive only, no other
   change to that file's roster rendering.
 
+## 09-13 (execution date: 2026-09-15)
+
+- **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Same
+  `LayoutProps` (`src/app/layout.tsx`) and `Cannot find module 'stripe'`
+  errors already logged under 09-01/09-04/09-07 — the `stripe` package is
+  still absent from `node_modules` in this worktree. Not fixed (Rule 3
+  excludes package installs from auto-fix). Confirmed none reference this
+  plan's files (`roster-service.ts`, `RosterTab.tsx`, `progress-actions.ts`,
+  the new `learners/[enrolmentId]/` page/panel, `learner-access.ts`).
+- **`npx next build` cannot run in this sandbox at all** — Turbopack fails
+  immediately with "Could not find the Next.js package (next/package.json)"
+  because this worktree's `node_modules` contains no physical `next` package
+  directory (confirmed: `node_modules` here holds only a `.vite` cache dir;
+  `npx next --version` resolves via some external mechanism sufficient for
+  the CLI banner but not for a real build, which needs the package on disk
+  for Turbopack's workspace-root detection). This is an environment/install
+  gap identical in kind to 09-01's missing `stripe` package, not a defect in
+  this plan's code — `npx tsc --noEmit` and `npx eslint` both pass cleanly
+  against every file this plan touched. Not fixed (Rule 3 excludes package
+  installs from auto-fix; this is a whole-package absence, not a single
+  missing dependency, so there is nothing to install without full sandbox
+  network/registry access this session does not have).
+- **`npx vitest run tests/cohort-actions.test.ts tests/cohort-service.test.ts
+  tests/components` surfaces 4 pre-existing failing files unrelated to this
+  plan** (`checkout-summary.test.tsx`, `cohort-cards.test.tsx`,
+  `cohort-pages.test.tsx`, `order-confirmation.test.tsx`) — all failures are
+  `Intl.NumberFormat` currency-symbol rendering mismatches (e.g. expected
+  `"$500.00"`, received `"US$500.00""`), an ICU/locale difference in this
+  sandbox's Node build, not a code defect. None concern rosters, progress,
+  or any Phase 9 surface; confirmed by reading each failing assertion
+  directly. Not fixed — out of scope for this plan (Phase 6/7 checkout and
+  cohort-detail price-fact rendering, untouched by 09-13).
+- A full `npx vitest run` (all ~2000 tests) was also run as an extra sanity
+  check beyond the plan's own `<verification>` block: 18 pre-existing failing
+  files (the `stripe` package absence above, plus real-Postgres integration
+  tests that need `DATABASE_URL` — e.g. `enrolment-service.integration.test.ts`
+  throwing `PrismaClientInitializationError` — consistent with STATE.md's
+  already-documented Docker/DB-unavailable sandbox limitation). Zero of the
+  1987 passing tests or 27 pre-existing failures touch any file this plan
+  modified or created.
+
 ## 09-02
 
 - **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Running the full-repo
