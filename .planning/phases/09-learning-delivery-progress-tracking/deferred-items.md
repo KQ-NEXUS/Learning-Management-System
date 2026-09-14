@@ -54,6 +54,21 @@ task's own changes).
   than stripped from the documentation, since the prose is exactly the
   DD-6/DD-12 record the plan's own `<action>` text asked for.
 
+## 09-07 (execution date: 2026-09-14)
+
+- **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Same
+  `LayoutProps` (`src/app/layout.tsx`) and `Cannot find module 'stripe'`
+  errors already logged under 09-01/09-04 — the `stripe` package is still
+  absent from `node_modules` in this worktree. Not fixed (Rule 3 excludes
+  package installs from auto-fix).
+- **Fixed as Rule 1 (bug introduced by this plan's own change):**
+  `src/app/staff/cohorts/[id]/RosterTab.tsx`'s `DEFERRED_LABEL` map was typed
+  `Record<9 | 10 | 11, string>`; widening `DeferredColumn.phase` to
+  `9 | 10 | 11 | 12` (this plan's Task 1, additive per DD-18) made that map
+  non-exhaustive, surfacing a real `tsc` error at `RosterTab.tsx(96,8)`.
+  Added a `12: "not tracked yet · Phase 12"` entry — additive only, no other
+  change to that file's roster rendering.
+
 ## 09-02
 
 - **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Running the full-repo
