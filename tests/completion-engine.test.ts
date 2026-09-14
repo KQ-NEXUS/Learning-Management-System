@@ -65,7 +65,7 @@ describe("parseCompletionRule", () => {
   it("json { version: 2, ... } throws UnsupportedCompletionRuleVersionError, never falls back to v1", () => {
     expect(() =>
       parseCompletionRule({
-        json: { version: 2, someNewField: true },
+        json: { version: 2, requireAllRequiredLessons: true },
         ruleVersion: 1,
         cohortAttendanceThresholdPct: null,
       }),
@@ -73,7 +73,7 @@ describe("parseCompletionRule", () => {
 
     try {
       parseCompletionRule({
-        json: { version: 2, someNewField: true },
+        json: { version: 2, requireAllRequiredLessons: true },
         ruleVersion: 1,
         cohortAttendanceThresholdPct: null,
       });
