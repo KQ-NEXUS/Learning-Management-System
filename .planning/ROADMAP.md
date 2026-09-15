@@ -425,8 +425,8 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 09-09-PLAN.md — /learn/[enrolmentId] lesson list with lock affordances and the D-07 access gate
-- [ ] 09-10-PLAN.md — learner-session-service.ts + /learn/[enrolmentId]/sessions with the meeting-link window
+- [x] 09-09-PLAN.md — /learn/[enrolmentId] lesson list with lock affordances and the D-07 access gate
+- [x] 09-10-PLAN.md — learner-session-service.ts + /learn/[enrolmentId]/sessions with the meeting-link window
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
@@ -562,7 +562,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
-| 9. Learning Delivery & Progress Tracking | 9/14 | In Progress|  |
+| 9. Learning Delivery & Progress Tracking | 11/14 | In Progress|  |
 | 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
