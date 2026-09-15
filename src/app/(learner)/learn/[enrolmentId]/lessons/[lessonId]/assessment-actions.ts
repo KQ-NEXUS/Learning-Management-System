@@ -16,7 +16,7 @@ function refusal(error: unknown) {
   if (error instanceof AttemptNotStartableError || error instanceof AttemptNotWritableError) {
     if (error.reason === "window-closed") return "The window for this assessment has closed.";
     if (error.reason === "window-not-open") return "The window for this assessment has not opened yet.";
-    if (error.reason === "attempt-limit-reached") return "You've used all of your attempts for this quiz.";
+    if (error instanceof AttemptNotStartableError && error.reason === "attempt-limit-reached") return error.message;
   }
   return "This quiz could not be opened. Reload the lesson and try again.";
 }

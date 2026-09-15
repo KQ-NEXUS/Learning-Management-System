@@ -5,9 +5,14 @@ vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: m.actor }));
 vi.mock("@/server/services/learner-quiz-service", () => ({ loadLearnerQuiz: m.load, toSafeQuizAttempt: () => ({ id: "a", questions: [], responses: [] }), quizResultForLearner: (result: unknown) => result }));
 vi.mock("@/server/services/attempt-service", async importOriginal => ({ ...await importOriginal<object>(), startAttempt: m.start, getOwnAttempt: m.get, saveAttemptAnswers: m.save, submitAttempt: m.submit }));
 import { startAttemptAction, saveAttemptAnswersAction, submitAttemptAction } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions";
+import { AttemptNotStartableError } from "@/server/services/attempt-service";
 const input = { enrolmentId: "e", lessonId: "l", attemptId: "a", responses: [{ questionId: "q", selectedOptionIds: ["o"] }] };
 beforeEach(() => { vi.clearAllMocks(); m.actor.mockResolvedValue({ userId: "u" }); m.load.mockResolvedValue({ assessmentId: "quiz", feedbackBehaviour: "IMMEDIATE", history: [] }); m.get.mockResolvedValue({ id: "a", enrolmentId: "e", assessmentId: "quiz", status: "IN_PROGRESS" }); m.start.mockResolvedValue({}); m.save.mockResolvedValue({}); m.submit.mockResolvedValue({ score: 1 }); });
 describe("quiz action boundary", () => {
+  it("reports the authored attempt limit on a refused start", async () => {
+    m.start.mockRejectedValue(new AttemptNotStartableError("quiz", "attempt-limit-reached", 2));
+    expect(await startAttemptAction({ enrolmentId: "e", lessonId: "l", assessmentId: "quiz" })).toMatchObject({ ok: false, message: "You've used all 2 of your attempts for this quiz." });
+  });
   it.each(["score", "maxScore", "passed"])("rejects client verdict %s", async key => { expect((await submitAttemptAction({ ...input, [key]: 100 })).ok).toBe(false); expect(m.submit).not.toHaveBeenCalled(); });
   it("rejects nested verdicts on save", async () => { expect((await saveAttemptAnswersAction({ ...input, responses: [{ ...input.responses[0], score: 1 }] })).ok).toBe(false); expect(m.save).not.toHaveBeenCalled(); });
   it("checks the lesson's actual assessment before starting", async () => { expect((await startAttemptAction({ enrolmentId: "e", lessonId: "l", assessmentId: "foreign" })).ok).toBe(false); expect(m.start).not.toHaveBeenCalled(); });
