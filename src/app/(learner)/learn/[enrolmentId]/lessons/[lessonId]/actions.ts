@@ -6,8 +6,11 @@ import { getCurrentActor } from "@/server/auth/current-actor";
 import {
   markLessonComplete,
   undoLessonComplete,
+  recordWatchProgress,
   LessonNotOpenableError,
   ManualCompletionNotPermittedError,
+  NotAVideoLessonError,
+  InvalidWatchProgressError,
 } from "@/server/services/lesson-progress-service";
 
 /**
@@ -112,4 +115,71 @@ export async function undoLessonCompleteAction(formData: FormData): Promise<void
   }
 
   revalidatePath(lessonPath(enrolmentId, lessonId));
+}
+
+/**
+ * recordWatchProgressAction — the throttled watch-position write dispatched
+ * imperatively by `VideoWatchTracker` (09-12 Task 1, D-09, DD-28/DD-29).
+ *
+ * Unlike the two actions above, this one takes a plain object rather than
+ * `FormData` — it is called from a `useEffect` timer/listener, never
+ * submitted from a `<form>`.
+ *
+ * A missing session actor returns `{ completed: false }` rather than
+ * redirecting (DD-29): a background write firing after the session has
+ * expired, or while the tab is backgrounded, must never navigate the
+ * learner away mid-video. The same silent-refusal shape covers every typed
+ * domain refusal (`LessonNotOpenableError`, `NotAVideoLessonError`,
+ * `InvalidWatchProgressError`) — the client has no useful recovery for any
+ * of them, and DD-29 requires the failure to stay invisible to playback.
+ * Any OTHER error re-throws to the route's error boundary, matching the
+ * other two actions' convention.
+ *
+ * Revalidation: unlike `markLessonCompleteAction`/`undoLessonCompleteAction`
+ * (which revalidate on every successful call because a learner-initiated
+ * submit is inherently a single, deliberate event), this action is dispatched
+ * on a 15-second timer during playback (DD-28) — revalidating the whole
+ * route on every throttled tick would re-render the page roughly four times
+ * a minute while a video plays. `revalidatePath`
+ * (`node_modules/next/dist/docs/01-app/02-guides/server-actions.md`,
+ * "Choosing a cache update" — the same API and the same one-affected-route
+ * reasoning `markLessonCompleteAction` already uses above) is therefore
+ * called ONLY on the tick where `recordWatchProgress`'s returned `completed`
+ * transitions to `true`, never on every tick.
+ *
+ * Deliberately simple, fast and idempotent: the client dispatches it on a
+ * timer, so it must never itself become the slow part of the throttle loop.
+ */
+export async function recordWatchProgressAction(input: {
+  enrolmentId: string;
+  lessonId: string;
+  secondsWatched: number;
+  durationSeconds: number | null;
+}): Promise<{ completed: boolean }> {
+  const actor = await getCurrentActor();
+  if (!actor) return { completed: false };
+
+  try {
+    const result = await recordWatchProgress(actor, {
+      enrolmentId: input.enrolmentId,
+      lessonId: input.lessonId,
+      secondsWatched: input.secondsWatched,
+      durationSeconds: input.durationSeconds,
+    });
+
+    if (result.completed) {
+      revalidatePath(lessonPath(input.enrolmentId, input.lessonId));
+    }
+
+    return { completed: result.completed };
+  } catch (error) {
+    if (
+      error instanceof LessonNotOpenableError ||
+      error instanceof NotAVideoLessonError ||
+      error instanceof InvalidWatchProgressError
+    ) {
+      return { completed: false };
+    }
+    throw error;
+  }
 }

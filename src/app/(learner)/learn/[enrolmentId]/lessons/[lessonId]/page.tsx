@@ -9,9 +9,13 @@ import {
 } from "@/server/services/learner-access";
 import { getLessonContentForLearner } from "@/server/services/lesson-service";
 import { listLessonResourcesForLearner } from "@/server/services/lesson-resource-service";
-import { countLessonsRelockedBy } from "@/server/services/lesson-progress-service";
+import {
+  countLessonsRelockedBy,
+  getOwnWatchProgress,
+} from "@/server/services/lesson-progress-service";
 import { LessonContent } from "@/components/catalogue/LessonContent";
 import { LessonCompleteControl } from "@/components/learner/LessonCompleteControl";
+import { VideoWatchTracker } from "@/components/learner/VideoWatchTracker";
 
 /**
  * `/learn/[enrolmentId]/lessons/[lessonId]` (LRN-03/04/05, 09-11 Task 1) —
@@ -22,6 +26,13 @@ import { LessonCompleteControl } from "@/components/learner/LessonCompleteContro
  *
  * Content column is constrained to `max-w-[720px]` — no narrower, since
  * `LessonContent` already assumes `max-w-2xl` for embedded media/images.
+ *
+ * 09-12 Task 3: for a VIDEO lesson ALONE (`lesson.type === "VIDEO"`, never
+ * `allowManualComplete` — DD-16's two completion gates stay independent, so
+ * a VIDEO lesson may render both the auto-tracker and the manual control),
+ * `LessonContent` is wrapped in `VideoWatchTracker` with the learner's own
+ * stored watch position (`getOwnWatchProgress`, 0 when no row exists yet).
+ * Every other lesson type renders `LessonContent` exactly as 09-11 left it.
  */
 
 export const metadata = { title: "Lesson" };
@@ -115,6 +126,26 @@ export default async function LessonReadingPage({
 
   const relockCount = countLessonsRelockedBy(path, lessonId);
 
+  const isVideoLesson = content.type === "VIDEO";
+  const initialSecondsWatched = isVideoLesson
+    ? ((await getOwnWatchProgress(actor, { enrolmentId, lessonId }))?.secondsWatched ?? 0)
+    : 0;
+
+  const lessonContent = (
+    <LessonContent
+      lesson={{
+        id: content.id,
+        title: content.title,
+        type: content.type,
+        body: content.body,
+        embedUrl: content.embedUrl,
+        linkUrl: content.linkUrl,
+        withdrawnAt: content.withdrawnAt,
+      }}
+      resources={shapedResources}
+    />
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6">
       <header className="flex flex-col gap-1">
@@ -132,18 +163,17 @@ export default async function LessonReadingPage({
         <h1 className="text-[25px] font-semibold leading-[1.2] text-foreground">{content.title}</h1>
       </header>
 
-      <LessonContent
-        lesson={{
-          id: content.id,
-          title: content.title,
-          type: content.type,
-          body: content.body,
-          embedUrl: content.embedUrl,
-          linkUrl: content.linkUrl,
-          withdrawnAt: content.withdrawnAt,
-        }}
-        resources={shapedResources}
-      />
+      {isVideoLesson ? (
+        <VideoWatchTracker
+          enrolmentId={enrolmentId}
+          lessonId={lessonId}
+          initialSecondsWatched={initialSecondsWatched}
+        >
+          {lessonContent}
+        </VideoWatchTracker>
+      ) : (
+        lessonContent
+      )}
 
       <LessonCompleteControl
         enrolmentId={enrolmentId}
