@@ -131,7 +131,7 @@ export function QuestionBuilder({ assessmentId, initialQuestions, readinessInput
                   {q.type==="MULTI_CHOICE" && <p className="text-sm text-muted-foreground">Correct choices earn partial credit. Selecting extra wrong options loses marks, down to zero.</p>}
                   <Droppable droppableId={`options-${q.key}`} type={`OPTION-${q.key}`}>
                     {(optionsProvided)=><div ref={optionsProvided.innerRef} {...optionsProvided.droppableProps} className="flex flex-col gap-2">
-                      {q.options.map((option,oi)=><Draggable key={option.key} draggableId={option.key} index={oi}>
+                      {q.options.map((option,oi)=><Draggable key={option.key} draggableId={option.key} index={oi} isDragDisabled={q.type==="TRUE_FALSE"}>
                         {(optionDrag)=><div ref={optionDrag.innerRef} {...optionDrag.draggableProps} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface p-4">
                           {q.type!=="TRUE_FALSE" && <button type="button" className={BTN} {...optionDrag.dragHandleProps} aria-label={`Drag question ${index+1} option ${oi+1}`}><GripVertical aria-hidden="true" size={16}/></button>}
                           {q.type==="TRUE_FALSE" ? <span className="text-sm">{option.label}</span> : <input aria-label={`Question ${index+1} option ${oi+1} label`} className={`${INPUT} flex-1`} value={option.label} onChange={e=>change(q.key,{options:q.options.map(o=>o.key===option.key ? {...o,label:e.target.value} : o)})}/>}

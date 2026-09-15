@@ -17,11 +17,15 @@ describe("quiz question builder",()=>{
   expect(screen.getByLabelText('Question 1 marks')).toHaveProperty('value','1');
  });
  it("creates fixed true/false labels and a single correct radio",()=>{
+  const errors=vi.spyOn(console,'error');
   setup([question('First')]);fireEvent.change(screen.getByLabelText('Question 1 type'),{target:{value:'TRUE_FALSE'}});
   expect(screen.getByText('True')).toBeTruthy();expect(screen.getByText('False')).toBeTruthy();
   expect(screen.queryByLabelText('Question 1 option 1 label')).toBeNull();
   const radios=screen.getAllByRole('radio');fireEvent.click(radios[0]);fireEvent.click(radios[1]);
   expect(radios[0]).toHaveProperty('checked',false);expect(radios[1]).toHaveProperty('checked',true);
+  expect(screen.queryByRole('button',{name:'Drag question 1 option 1'})).toBeNull();
+  expect(errors.mock.calls.flat().some(value=>String(value).includes('Unable to find drag handle'))).toBe(false);
+  errors.mockRestore();
  });
  it("keeps single-choice correctness exclusive",()=>{
   setup([question('First')]);const radios=screen.getAllByRole('radio');fireEvent.click(radios[1]);
