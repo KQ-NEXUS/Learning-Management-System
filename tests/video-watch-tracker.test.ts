@@ -326,13 +326,14 @@ describe("attachWatchTracker", () => {
 
 describe("VideoWatchTracker component shape", () => {
   it("renders no element other than the wrapping div plus its children", () => {
+    const props = {
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+      initialSecondsWatched: 0,
+      children: createElement("video", { controls: true, src: "/x", "data-testid": "child-video" }),
+    };
     const html = renderToStaticMarkup(
-      createElement(VideoWatchTracker, {
-        enrolmentId: "enrolment-1",
-        lessonId: "lesson-1",
-        initialSecondsWatched: 0,
-        children: createElement("video", { controls: true, src: "/x", "data-testid": "child-video" }),
-      }),
+      createElement(VideoWatchTracker, props),
     );
 
     expect(html).toMatch(/^<div[^>]*><video[^>]*><\/video><\/div>$/);

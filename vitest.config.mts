@@ -28,6 +28,10 @@ export default defineConfig({
         plugins: [react()],
         test: {
           name: "components",
+          // jsdom suites do not manage external server processes. Threads
+          // avoid Windows fork startup delays; node integration suites keep
+          // their default process isolation for database/server lifecycle work.
+          pool: "threads",
           environment: "jsdom",
           include: ["tests/components/**/*.test.tsx"],
           setupFiles: ["tests/components/setup.ts"],
