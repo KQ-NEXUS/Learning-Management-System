@@ -295,11 +295,15 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
   // this is the only place the closed set is enforced (T-10-13).
   const assessmentService = {
     ...baseService,
-    create: (data: Record<string, unknown>) => {
+    // `async` deliberately — a synchronous throw here would surface as a
+    // thrown exception rather than a rejected Promise, breaking every
+    // caller (including `.rejects.toThrow()` in tests) that expects
+    // `create`/`update` to always return a Promise.
+    create: async (data: Record<string, unknown>) => {
       assertValidFeedbackBehaviour(data);
       return baseService.create(data);
     },
-    update: (id: string, data: Record<string, unknown>, reason?: string) => {
+    update: async (id: string, data: Record<string, unknown>, reason?: string) => {
       assertValidFeedbackBehaviour(data);
       return baseService.update(id, data, reason);
     },
@@ -386,10 +390,14 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
    * Loads the Assessment with its questions and options, evaluates the
    * SAME readiness function the authoring panel renders (T-10-14), and
    * refuses with `AssessmentNotPublishableError` when a blocking item still
-   * FAILs. On success, sets `status: "PUBLISHED"` and bumps `version` — the
-   * first publish (current `status` is not yet `PUBLISHED`) leaves
-   * `version` unchanged; every publish after that increments it, because
-   * `Attempt.versionUsed` / `Submission.versionUsed` stamp it (ASM-01).
+   * FAILs — refusing BEFORE any write happens. On success, sets
+   * `status: "PUBLISHED"` and bumps `version` — the first publish (current
+   * `status` is not yet `PUBLISHED`) leaves `version` unchanged; every
+   * publish after that increments it, because `Attempt.versionUsed` /
+   * `Submission.versionUsed` stamp it (ASM-01). A single-row status/version
+   * update needs no multi-table transaction, so this goes straight through
+   * the same `delegate.update` the base CRUD service uses — no second write
+   * path for the same column.
    */
   const publishAssessment = deps.withPermission<PublishAssessmentInput>(
     "assessments.edit",
@@ -405,12 +413,10 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
 
     const nextVersion = row.status === "PUBLISHED" ? row.version + 1 : row.version;
 
-    const after = await deps.db.$transaction((tx) =>
-      tx.assessment.update({
-        where: { id: input.assessmentId },
-        data: { status: "PUBLISHED", version: nextVersion },
-      }),
-    );
+    const after = await deps.delegate.update({
+      where: { id: input.assessmentId },
+      data: { status: "PUBLISHED", version: nextVersion },
+    });
 
     await deps.audit({
       action: "assessment.published",
