@@ -462,8 +462,8 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — Schema migration for attemptGradingMethod, four domain-event types, assessment scope resolver, Submission storage keys
-- [ ] 10-02-PLAN.md — Pure quiz-scoring module — per-QuestionType scoring with D-09 partial credit, effective-attempt selection, purity gate
+- [x] 10-01-PLAN.md — Schema migration for attemptGradingMethod, four domain-event types, assessment scope resolver, Submission storage keys
+- [x] 10-02-PLAN.md — Pure quiz-scoring module — per-QuestionType scoring with D-09 partial credit, effective-attempt selection, purity gate
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -600,7 +600,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
-| 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
+| 10. Assessment — Quizzes, Assignments & Grading | 2/17 | In Progress|  |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
