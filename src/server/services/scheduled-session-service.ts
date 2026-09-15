@@ -238,8 +238,13 @@ export function isMeetingLinkVisible(
   return now.getTime() >= opensAt;
 }
 
-/** The instant the link becomes visible — for the "appears {n} minutes before" copy. */
-function linkVisibleFrom(session: {
+/**
+ * The instant the link becomes visible — for the "appears {n} minutes
+ * before" copy. Exported (09-10 DD-23) so `learner-session-service.ts` can
+ * reuse this arithmetic rather than reimplementing it — the same reasoning
+ * that keeps `isMeetingLinkVisible` a single source of truth.
+ */
+export function linkVisibleFrom(session: {
   startsAt: Date;
   linkVisibleFromMinutes: number;
 }): Date {
