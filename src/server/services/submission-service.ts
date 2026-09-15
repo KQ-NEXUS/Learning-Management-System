@@ -174,6 +174,8 @@ export type SubmissionAssessmentContext = {
   type: string;
   status: string;
   version: number;
+  title: string;
+  instructions: string | null;
   dueAt: Date | null;
   availableUntil: Date | null;
   allowedFileTypes: string[];
@@ -270,6 +272,26 @@ export type SubmissionReceipt = {
   submittedAt: Date;
   isLate: boolean;
   uploadStatus: UploadStatusValue;
+};
+
+/**
+ * The pre-submit view (ASM-03) — everything `AssignmentSubmissionPanel` must
+ * show BEFORE a learner picks a file: the authored instructions and
+ * constraints, plus the full submission history (D-04). Deliberately built
+ * from the same `resolveAssessment`/`resolveOwnEnrolmentForCourse` pair
+ * every write path already uses, so a learner can never see constraints for
+ * an assessment their enrolment does not cover.
+ */
+export type SubmissionAssignmentView = {
+  assessmentId: string;
+  title: string;
+  instructions: string | null;
+  dueAt: Date | null;
+  availableUntil: Date | null;
+  allowedFileTypes: string[];
+  maxFileSizeBytes: number | null;
+  allowResubmission: boolean;
+  submissions: SubmissionReceipt[];
 };
 
 function toReceipt(row: SubmissionRecord): SubmissionReceipt {
@@ -571,6 +593,38 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
       .map(toReceipt);
   }
 
+  /**
+   * The pre-submit view-builder's service half (ASM-03) — resolves the
+   * published constraints plus the full submission history for one
+   * assessment, scoped the same way every other export here is: `null` for
+   * a wrong type, an unpublished assessment, or an actor with no covering
+   * enrolment, never a distinguishable error.
+   */
+  async function getOwnAssignmentView(
+    actor: Actor,
+    input: { assessmentId: string; enrolmentId: string },
+  ): Promise<SubmissionAssignmentView | null> {
+    const assessment = await deps.resolveAssessment(input.assessmentId);
+    if (!assessment || assessment.type !== "ASSIGNMENT" || assessment.status !== "PUBLISHED") return null;
+
+    const enrolmentId = await resolveOwnEnrolmentForCourse(actor.userId, assessment.courseId, input.enrolmentId);
+    if (!enrolmentId) return null;
+
+    const submissions = await getOwnSubmissions(actor, { assessmentId: assessment.id, enrolmentId });
+
+    return {
+      assessmentId: assessment.id,
+      title: assessment.title,
+      instructions: assessment.instructions,
+      dueAt: assessment.dueAt,
+      availableUntil: assessment.availableUntil,
+      allowedFileTypes: assessment.allowedFileTypes,
+      maxFileSizeBytes: assessment.maxFileSizeBytes,
+      allowResubmission: assessment.allowResubmission,
+      submissions,
+    };
+  }
+
   /** Presigns the FINAL key only, and only once verified (T-10-20) — a staged key must never be downloadable. */
   async function getOwnSubmissionDownloadUrl(actor: Actor, input: { submissionId: string }): Promise<string> {
     const submission = await loadOwnSubmission(actor, input.submissionId);
@@ -590,6 +644,7 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
     completeSubmissionUpload,
     failSubmissionUpload,
     getOwnSubmissions,
+    getOwnAssignmentView,
     getOwnSubmissionDownloadUrl,
   };
 }
@@ -636,6 +691,8 @@ const built = createSubmissionService({
         type: true,
         status: true,
         version: true,
+        title: true,
+        instructions: true,
         dueAt: true,
         availableUntil: true,
         allowedFileTypes: true,
@@ -668,4 +725,5 @@ export const beginSubmissionUpload = built.beginSubmissionUpload;
 export const completeSubmissionUpload = built.completeSubmissionUpload;
 export const failSubmissionUpload = built.failSubmissionUpload;
 export const getOwnSubmissions = built.getOwnSubmissions;
+export const getOwnAssignmentView = built.getOwnAssignmentView;
 export const getOwnSubmissionDownloadUrl = built.getOwnSubmissionDownloadUrl;
