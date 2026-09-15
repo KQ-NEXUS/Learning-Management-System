@@ -606,6 +606,44 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
   }
 
   // -------------------------------------------------------------------------
+  // getOwnWatchProgress — the learner's own stored watch position (09-12
+  // Task 3, ownership-scoped like markLessonComplete/undoLessonComplete/
+  // recordWatchProgress above — DD-15, never withPermission-wrapped).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Reads the caller's own `LessonWatchProgress` row so the lesson-reading
+   * page can resume `VideoWatchTracker` at the right position on load.
+   * `null` when the enrolment isn't the caller's own (mirrors every other
+   * ownership read in this file — no distinct "forbidden" outcome) or when
+   * no row exists yet (a VIDEO lesson never opened before). Unlike
+   * `recordWatchProgress`, this is a pure read — it does not gate on
+   * `assertLessonOpenable` or `lesson.type`, since a page that already
+   * rendered a VIDEO lesson has no further gating decision left to make
+   * here; it only needs the stored number.
+   */
+  async function getOwnWatchProgress(
+    actor: Actor,
+    args: { enrolmentId: string; lessonId: string },
+  ): Promise<{ secondsWatched: number; durationSeconds: number | null; percentWatched: number } | null> {
+    const path = await deps.loadLearnerPath(actor, args.enrolmentId);
+    if (!path) return null;
+
+    const row = await deps.runInTransaction((tx) =>
+      tx.lessonWatchProgress.findUnique({
+        where: { enrolmentId_lessonId: { enrolmentId: args.enrolmentId, lessonId: args.lessonId } },
+      }),
+    );
+    if (!row) return null;
+
+    return {
+      secondsWatched: row.secondsWatched,
+      durationSeconds: row.durationSeconds,
+      percentWatched: row.percentWatched,
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // overrideLessonProgress — mandatory-reason staff correction (D-14)
   // -------------------------------------------------------------------------
   //
@@ -693,7 +731,13 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
     },
   );
 
-  return { markLessonComplete, undoLessonComplete, recordWatchProgress, overrideLessonProgress };
+  return {
+    markLessonComplete,
+    undoLessonComplete,
+    recordWatchProgress,
+    getOwnWatchProgress,
+    overrideLessonProgress,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -751,4 +795,5 @@ const built = createPrismaBackedLessonProgressService(prisma, liveWithPermission
 export const markLessonComplete = built.markLessonComplete;
 export const undoLessonComplete = built.undoLessonComplete;
 export const recordWatchProgress = built.recordWatchProgress;
+export const getOwnWatchProgress = built.getOwnWatchProgress;
 export const overrideLessonProgress = built.overrideLessonProgress;

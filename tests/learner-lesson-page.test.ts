@@ -36,6 +36,7 @@ const { mocks } = vi.hoisted(() => ({
     getLessonContentForLearner: vi.fn(),
     listLessonResourcesForLearner: vi.fn(),
     countLessonsRelockedBy: vi.fn(),
+    getOwnWatchProgress: vi.fn(),
     markLessonCompleteAction: vi.fn(),
     undoLessonCompleteAction: vi.fn(),
     redirect: vi.fn((url: string) => {
@@ -69,10 +70,38 @@ vi.mock("@/server/services/lesson-resource-service", () => ({
 }));
 vi.mock("@/server/services/lesson-progress-service", () => ({
   countLessonsRelockedBy: mocks.countLessonsRelockedBy,
+  getOwnWatchProgress: mocks.getOwnWatchProgress,
 }));
 vi.mock("@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions", () => ({
   markLessonCompleteAction: mocks.markLessonCompleteAction,
   undoLessonCompleteAction: mocks.undoLessonCompleteAction,
+}));
+// VideoWatchTracker's own client-effect behaviour is covered by
+// tests/video-watch-tracker.test.ts — mocked here to a plain marker wrapper
+// so this file only proves the PAGE's wiring decision (which lesson types
+// get wrapped, and with what props), not the tracker's internals.
+vi.mock("@/components/learner/VideoWatchTracker", () => ({
+  VideoWatchTracker: ({
+    enrolmentId,
+    lessonId,
+    initialSecondsWatched,
+    children,
+  }: {
+    enrolmentId: string;
+    lessonId: string;
+    initialSecondsWatched: number;
+    children?: ReactNode;
+  }) =>
+    createElement(
+      "div",
+      {
+        "data-testid": "video-watch-tracker",
+        "data-enrolment-id": enrolmentId,
+        "data-lesson-id": lessonId,
+        "data-initial-seconds-watched": initialSecondsWatched,
+      },
+      children,
+    ),
 }));
 
 import Page from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/page";
@@ -208,6 +237,7 @@ beforeEach(() => {
   mocks.getLessonContentForLearner.mockResolvedValue(contentFixture());
   mocks.listLessonResourcesForLearner.mockResolvedValue([]);
   mocks.countLessonsRelockedBy.mockReturnValue(0);
+  mocks.getOwnWatchProgress.mockResolvedValue(null);
 });
 
 describe("/learn/[enrolmentId]/lessons/[lessonId]", () => {
@@ -462,5 +492,135 @@ describe("LessonCompleteControl, rendered inside the reading pane (09-11 Task 3)
   it("undoRelockNotice renders DD-27's exact copy, singular and plural", () => {
     expect(undoRelockNotice(3)).toBe("Undoing this will also re-lock 3 lessons after it");
     expect(undoRelockNotice(1)).toBe("Undoing this will also re-lock 1 lesson after it");
+  });
+});
+
+describe("VideoWatchTracker wiring (09-12 Task 3)", () => {
+  it("wraps LessonContent in VideoWatchTracker for a VIDEO lesson, and still renders the lesson content", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [moduleFixture({ lessons: [lessonFixture({ type: "VIDEO" })] })],
+          }),
+        ],
+      }),
+    );
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "VIDEO" }));
+
+    const html = await renderPage();
+
+    expect(html).toContain('data-testid="video-watch-tracker"');
+    expect(html).toContain("Lesson body text for Lesson One");
+  });
+
+  it("does not render VideoWatchTracker output for a TEXT lesson", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(pathFixture());
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "TEXT" }));
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("video-watch-tracker");
+  });
+
+  it("renders both the tracker and the Mark complete button for a VIDEO lesson with allowManualComplete true (DD-16)", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [
+                  lessonFixture({ type: "VIDEO", allowManualComplete: true, completed: false }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "VIDEO" }));
+
+    const html = await renderPage();
+
+    expect(html).toContain('data-testid="video-watch-tracker"');
+    expect(html).toContain("Mark complete");
+  });
+
+  it("gates the tracker on lesson.type alone, never on allowManualComplete — a VIDEO lesson with allowManualComplete false still gets the tracker", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [
+                  lessonFixture({ type: "VIDEO", allowManualComplete: false, completed: false }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "VIDEO" }));
+
+    const html = await renderPage();
+
+    expect(html).toContain('data-testid="video-watch-tracker"');
+    expect(html).not.toContain("Mark complete");
+  });
+
+  it("passes initialSecondsWatched from the learner's own stored LessonWatchProgress row", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [moduleFixture({ lessons: [lessonFixture({ type: "VIDEO" })] })],
+          }),
+        ],
+      }),
+    );
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "VIDEO" }));
+    mocks.getOwnWatchProgress.mockResolvedValue({
+      secondsWatched: 42,
+      durationSeconds: 100,
+      percentWatched: 42,
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain('data-initial-seconds-watched="42"');
+    expect(mocks.getOwnWatchProgress).toHaveBeenCalledWith(ACTOR, {
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+    });
+  });
+
+  it("defaults initialSecondsWatched to 0 when no stored row exists", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [moduleFixture({ lessons: [lessonFixture({ type: "VIDEO" })] })],
+          }),
+        ],
+      }),
+    );
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "VIDEO" }));
+    mocks.getOwnWatchProgress.mockResolvedValue(null);
+
+    const html = await renderPage();
+
+    expect(html).toContain('data-initial-seconds-watched="0"');
+  });
+
+  it("never calls getOwnWatchProgress for a non-VIDEO lesson", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(pathFixture());
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "TEXT" }));
+
+    await renderPage();
+
+    expect(mocks.getOwnWatchProgress).not.toHaveBeenCalled();
   });
 });

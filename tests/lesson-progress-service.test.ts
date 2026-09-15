@@ -867,6 +867,55 @@ describe("recordWatchProgress", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 09-12 Task 3 — getOwnWatchProgress
+// ---------------------------------------------------------------------------
+
+describe("getOwnWatchProgress", () => {
+  it("returns null when no LessonWatchProgress row exists yet", async () => {
+    const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
+    const { deps } = buildDeps({ path });
+    const service = createLessonProgressService(deps);
+
+    const result = await service.getOwnWatchProgress(
+      { userId: "learner-1" },
+      { enrolmentId: "enr-1", lessonId: "les-1" },
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns the stored watch position after recordWatchProgress has written one", async () => {
+    const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
+    const { deps } = buildDeps({ path });
+    const service = createLessonProgressService(deps);
+
+    await service.recordWatchProgress(
+      { userId: "learner-1" },
+      { enrolmentId: "enr-1", lessonId: "les-1", secondsWatched: 30, durationSeconds: 100 },
+    );
+
+    const result = await service.getOwnWatchProgress(
+      { userId: "learner-1" },
+      { enrolmentId: "enr-1", lessonId: "les-1" },
+    );
+
+    expect(result).toEqual({ secondsWatched: 30, durationSeconds: 100, percentWatched: 30 });
+  });
+
+  it("returns null when loadLearnerPath resolves null (not the caller's own enrolment)", async () => {
+    const { deps } = buildDeps({ path: null });
+    const service = createLessonProgressService(deps);
+
+    const result = await service.getOwnWatchProgress(
+      { userId: "learner-1" },
+      { enrolmentId: "enr-1", lessonId: "les-1" },
+    );
+
+    expect(result).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Task 3 — overrideLessonProgress
 // ---------------------------------------------------------------------------
 
