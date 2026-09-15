@@ -315,9 +315,159 @@ export function createAttemptService(deps: AttemptServiceDeps) {
     actor: Actor,
     input: { assessmentId: string; startNew?: boolean },
   ): Promise<AttemptRow> {
-    throw new Error("Task 2 implements this.");
-    void actor;
-    void input;
+    const assessment = await deps.store.assessment.findUnique({
+      where: { id: input.assessmentId },
+    });
+    if (!assessment) {
+      throw new AttemptNotStartableError(input.assessmentId, "not-found");
+    }
+
+    // Re-derived from actor.userId, never accepted from the caller (T-10-02).
+    // The identical "not-found" refusal for a non-existent assessment and for
+    // an assessment this actor's enrolment doesn't reach keeps a guessed
+    // assessment id from confirming whether it exists.
+    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId);
+    if (!enrolment) {
+      throw new AttemptNotStartableError(input.assessmentId, "not-found");
+    }
+
+    if (assessment.type !== "QUIZ") {
+      throw new AttemptNotStartableError(input.assessmentId, "not-a-quiz");
+    }
+    if (assessment.status !== "PUBLISHED") {
+      throw new AttemptNotStartableError(input.assessmentId, "not-published");
+    }
+
+    const nowValue = now();
+    if (assessment.availableFrom && nowValue < assessment.availableFrom) {
+      throw new AttemptNotStartableError(input.assessmentId, "window-not-open");
+    }
+    // Per CONTEXT.md's Resolved note, availableUntil is the hard cutoff for
+    // both Assessment types; dueAt never blocks anything.
+    if (assessment.availableUntil && nowValue > assessment.availableUntil) {
+      throw new AttemptNotStartableError(input.assessmentId, "window-closed");
+    }
+
+    const startNew = input.startNew === true;
+
+    // Re-bound to non-null consts — TS's control-flow narrowing from the
+    // `if (!assessment)`/`if (!enrolment)` guards above does not carry into
+    // the nested closure below.
+    const assessmentRow: AssessmentRow = assessment;
+    const enrolmentRow: EnrolmentRow = enrolment;
+
+    async function attemptWrite(): Promise<AttemptRow> {
+      return deps.runInTransaction(async (tx) => {
+        const existingAttempts = await tx.attempt.findMany({
+          where: { assessmentId: input.assessmentId, enrolmentId: enrolmentRow.id },
+        });
+
+        const inProgress = existingAttempts.find((a) => a.status === "IN_PROGRESS");
+
+        // Resume: return the existing attempt unchanged, no new row, no
+        // attempt-limit check (resuming never consumes a new slot).
+        if (inProgress && !startNew) {
+          return inProgress;
+        }
+
+        // startNew: true abandons the prior IN_PROGRESS attempt inside this
+        // same transaction (UI-SPEC §0.3) before creating a fresh one.
+        if (inProgress && startNew) {
+          await tx.attempt.update({ where: { id: inProgress.id }, data: { status: "ABANDONED" } });
+        }
+
+        // An attempt just abandoned above no longer counts toward the limit —
+        // abandoning frees the slot it held. A null maxAttempts means
+        // unlimited.
+        const nonAbandonedCount = existingAttempts.filter((a) => {
+          if (inProgress && startNew && a.id === inProgress.id) return false;
+          return a.status !== "ABANDONED";
+        }).length;
+        if (assessmentRow.maxAttempts !== null && nonAbandonedCount >= assessmentRow.maxAttempts) {
+          throw new AttemptNotStartableError(
+            input.assessmentId,
+            "attempt-limit-reached",
+            assessmentRow.maxAttempts,
+          );
+        }
+
+        // The @@unique([assessmentId, enrolmentId, attemptNumber]) constraint
+        // is the race backstop if two requests land here concurrently — a
+        // collision retries once below, in the same spirit as
+        // resource-service.ts's PositionContentionError handling.
+        const highestAttemptNumber = existingAttempts.reduce(
+          (max, a) => Math.max(max, a.attemptNumber),
+          0,
+        );
+
+        // The D-08 snapshot freeze — the ONE read of the live question/option
+        // set for this attempt, ever. passMark and totalMarks are frozen
+        // alongside it (10-RESEARCH.md Open Question 1's follow-up): a later
+        // edit to either must never retroactively change whether this attempt
+        // reads as passed.
+        const questionSnapshot: QuestionSnapshot[] = assessmentRow.questions
+          .slice()
+          .sort((a, b) => a.position - b.position)
+          .map((question) => ({
+            id: question.id,
+            position: question.position,
+            prompt: question.prompt,
+            type: question.type,
+            marks: question.marks,
+            explanation: question.explanation,
+            options: question.options
+              .slice()
+              .sort((a, b) => a.position - b.position)
+              .map((option) => ({
+                id: option.id,
+                position: option.position,
+                label: option.label,
+                isCorrect: option.isCorrect,
+              })),
+          }));
+
+        const answers: AttemptAnswersPayload = {
+          questionSnapshot,
+          responses: [],
+          passMark: assessmentRow.passMark,
+          totalMarks: assessmentRow.totalMarks,
+        };
+
+        return tx.attempt.create({
+          data: {
+            assessmentId: input.assessmentId,
+            enrolmentId: enrolmentRow.id,
+            attemptNumber: highestAttemptNumber + 1,
+            versionUsed: assessmentRow.version,
+            status: "IN_PROGRESS",
+            startedAt: nowValue,
+            answers,
+          },
+        });
+      });
+    }
+
+    let result: AttemptRow;
+    try {
+      result = await attemptWrite();
+    } catch (err) {
+      if (err instanceof AttemptNotStartableError) throw err;
+      if (!isUniqueConstraintViolation(err)) throw err;
+      result = await attemptWrite();
+    }
+
+    // No domain event at start — the outbox event fires at submit (plan
+    // 10-06).
+    await deps.audit({
+      actorId: actor.userId,
+      action: "attempt.started",
+      targetType: "Attempt",
+      targetId: result.id,
+      outcome: "SUCCESS",
+      after: { assessmentId: input.assessmentId, attemptNumber: result.attemptNumber, status: result.status },
+    });
+
+    return result;
   }
 
   // -------------------------------------------------------------------------
@@ -329,9 +479,68 @@ export function createAttemptService(deps: AttemptServiceDeps) {
     actor: Actor,
     input: { attemptId: string; responses: AttemptResponse[] },
   ): Promise<AttemptRow> {
-    throw new Error("Task 2 implements this.");
-    void actor;
-    void input;
+    const attempt = await deps.store.attempt.findUnique({ where: { id: input.attemptId } });
+    if (!attempt) {
+      throw new AttemptNotWritableError(input.attemptId, "not-found");
+    }
+
+    const enrolment = await deps.store.enrolment.findUnique({ where: { id: attempt.enrolmentId } });
+    if (!enrolment || enrolment.userId !== actor.userId) {
+      throw new AttemptNotWritableError(input.attemptId, "not-own");
+    }
+
+    if (attempt.status !== "IN_PROGRESS") {
+      throw new AttemptNotWritableError(input.attemptId, "already-submitted");
+    }
+
+    // Plan 10-06's submit path handles the lazy IN_PROGRESS -> EXPIRED
+    // transition; this path only refuses the write once the window is closed.
+    const assessment = await deps.store.assessment.findUnique({ where: { id: attempt.assessmentId } });
+    const nowValue = now();
+    if (assessment?.availableUntil && nowValue > assessment.availableUntil) {
+      throw new AttemptNotWritableError(input.attemptId, "window-closed");
+    }
+
+    const payload: AttemptAnswersPayload = attempt.answers ?? {
+      questionSnapshot: [],
+      responses: [],
+      passMark: null,
+      totalMarks: null,
+    };
+
+    const knownQuestions = new Map(payload.questionSnapshot.map((q) => [q.id, q]));
+    const mergedByQuestionId = new Map(payload.responses.map((r) => [r.questionId, r]));
+
+    for (const response of input.responses) {
+      // A questionId absent from the frozen snapshot is discarded outright —
+      // a crafted payload cannot inject a phantom question (T-10-16).
+      const question = knownQuestions.get(response.questionId);
+      if (!question) continue;
+
+      const knownOptionIds = new Set(question.options.map((o) => o.id));
+      const selectedOptionIds = response.selectedOptionIds.filter((id) => knownOptionIds.has(id));
+
+      mergedByQuestionId.set(response.questionId, {
+        questionId: response.questionId,
+        selectedOptionIds,
+      });
+    }
+
+    // Only the `responses` key changes — questionSnapshot, passMark and
+    // totalMarks are carried through byte-identical from the frozen payload,
+    // never rewritten after start.
+    const updatedPayload: AttemptAnswersPayload = {
+      questionSnapshot: payload.questionSnapshot,
+      responses: [...mergedByQuestionId.values()],
+      passMark: payload.passMark,
+      totalMarks: payload.totalMarks,
+    };
+
+    // No audit entry per keystroke-level save — this is in-progress scratch
+    // state, not a decision.
+    return deps.runInTransaction((tx) =>
+      tx.attempt.update({ where: { id: input.attemptId }, data: { answers: updatedPayload } }),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -339,9 +548,15 @@ export function createAttemptService(deps: AttemptServiceDeps) {
   // -------------------------------------------------------------------------
 
   async function getOwnAttempt(actor: Actor, attemptId: string): Promise<AttemptRow | null> {
-    throw new Error("Task 2 implements this.");
-    void actor;
-    void attemptId;
+    const attempt = await deps.store.attempt.findUnique({ where: { id: attemptId } });
+    if (!attempt) return null;
+
+    // "Not mine" and "does not exist" are the SAME answer — mirrors
+    // checkout-service.ts's getOwnOrder (T-10-02).
+    const enrolment = await deps.store.enrolment.findUnique({ where: { id: attempt.enrolmentId } });
+    if (!enrolment || enrolment.userId !== actor.userId) return null;
+
+    return attempt;
   }
 
   // -------------------------------------------------------------------------
@@ -352,9 +567,17 @@ export function createAttemptService(deps: AttemptServiceDeps) {
     actor: Actor,
     input: { assessmentId: string },
   ): Promise<AttemptRow[]> {
-    throw new Error("Task 2 implements this.");
-    void actor;
-    void input;
+    const assessment = await deps.store.assessment.findUnique({ where: { id: input.assessmentId } });
+    if (!assessment) return [];
+
+    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId);
+    if (!enrolment) return [];
+
+    const attempts = await deps.store.attempt.findMany({
+      where: { assessmentId: input.assessmentId, enrolmentId: enrolment.id },
+    });
+
+    return attempts.slice().sort((a, b) => b.attemptNumber - a.attemptNumber);
   }
 
   return { startAttempt, saveAttemptAnswers, getOwnAttempt, listOwnAttempts };
