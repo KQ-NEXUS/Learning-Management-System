@@ -37,16 +37,37 @@ const mocks = vi.hoisted(() => {
       this.lessonId = lessonId;
     }
   }
+  class FakeNotAVideoLessonError extends Error {
+    lessonId: string;
+    constructor(lessonId: string) {
+      super("not a video lesson");
+      this.name = "NotAVideoLessonError";
+      this.lessonId = lessonId;
+    }
+  }
+  class FakeInvalidWatchProgressError extends Error {
+    field: string;
+    value: number;
+    constructor(field: string, value: number) {
+      super("invalid watch progress");
+      this.name = "InvalidWatchProgressError";
+      this.field = field;
+      this.value = value;
+    }
+  }
   return {
     getCurrentActor: vi.fn(),
     markLessonComplete: vi.fn(),
     undoLessonComplete: vi.fn(),
+    recordWatchProgress: vi.fn(),
     revalidatePath: vi.fn(),
     redirect: vi.fn((url: string) => {
       throw new Error(`NEXT_REDIRECT:${url}`);
     }),
     FakeLessonNotOpenableError,
     FakeManualCompletionNotPermittedError,
+    FakeNotAVideoLessonError,
+    FakeInvalidWatchProgressError,
   };
 });
 
@@ -56,13 +77,17 @@ vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurren
 vi.mock("@/server/services/lesson-progress-service", () => ({
   markLessonComplete: mocks.markLessonComplete,
   undoLessonComplete: mocks.undoLessonComplete,
+  recordWatchProgress: mocks.recordWatchProgress,
   LessonNotOpenableError: mocks.FakeLessonNotOpenableError,
   ManualCompletionNotPermittedError: mocks.FakeManualCompletionNotPermittedError,
+  NotAVideoLessonError: mocks.FakeNotAVideoLessonError,
+  InvalidWatchProgressError: mocks.FakeInvalidWatchProgressError,
 }));
 
 import {
   markLessonCompleteAction,
   undoLessonCompleteAction,
+  recordWatchProgressAction,
 } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions";
 
 const ACTOR = { userId: "user-a", roles: [] };
@@ -220,5 +245,113 @@ describe("undoLessonCompleteAction", () => {
     await expect(undoLessonCompleteAction(form())).rejects.toThrow(
       "NEXT_REDIRECT:/learn/enrolment-1",
     );
+  });
+});
+
+describe("recordWatchProgressAction", () => {
+  function watchInput(over: Partial<{
+    enrolmentId: string;
+    lessonId: string;
+    secondsWatched: number;
+    durationSeconds: number | null;
+  }> = {}) {
+    return {
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+      secondsWatched: 30,
+      durationSeconds: 100,
+      ...over,
+    };
+  }
+
+  it("returns { completed: false } and does not call redirect for a signed-out caller", async () => {
+    mocks.getCurrentActor.mockResolvedValue(null);
+
+    const result = await recordWatchProgressAction(watchInput());
+
+    expect(result).toEqual({ completed: false });
+    expect(mocks.recordWatchProgress).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("calls the service with the session-derived actor and the plain-object input", async () => {
+    mocks.recordWatchProgress.mockResolvedValue({
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+      percentWatched: 30,
+      completed: false,
+    });
+
+    await recordWatchProgressAction(watchInput());
+
+    expect(mocks.recordWatchProgress).toHaveBeenCalledWith(ACTOR, {
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+      secondsWatched: 30,
+      durationSeconds: 100,
+    });
+  });
+
+  it("returns { completed: false } and does not revalidate when the lesson has not yet crossed 90%", async () => {
+    mocks.recordWatchProgress.mockResolvedValue({
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+      percentWatched: 30,
+      completed: false,
+    });
+
+    const result = await recordWatchProgressAction(watchInput());
+
+    expect(result).toEqual({ completed: false });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("returns { completed: true } and revalidates the lesson page when completion transitions to true", async () => {
+    mocks.recordWatchProgress.mockResolvedValue({
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+      percentWatched: 95,
+      completed: true,
+    });
+
+    const result = await recordWatchProgressAction(watchInput());
+
+    expect(result).toEqual({ completed: true });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/learn/enrolment-1/lessons/lesson-1");
+  });
+
+  it("swallows LessonNotOpenableError and returns { completed: false }", async () => {
+    mocks.recordWatchProgress.mockRejectedValue(
+      new mocks.FakeLessonNotOpenableError("enrolment-1", "lesson-1", "locked"),
+    );
+
+    const result = await recordWatchProgressAction(watchInput());
+
+    expect(result).toEqual({ completed: false });
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("swallows NotAVideoLessonError and returns { completed: false }", async () => {
+    mocks.recordWatchProgress.mockRejectedValue(new mocks.FakeNotAVideoLessonError("lesson-1"));
+
+    const result = await recordWatchProgressAction(watchInput());
+
+    expect(result).toEqual({ completed: false });
+  });
+
+  it("swallows InvalidWatchProgressError and returns { completed: false }", async () => {
+    mocks.recordWatchProgress.mockRejectedValue(
+      new mocks.FakeInvalidWatchProgressError("secondsWatched", -5),
+    );
+
+    const result = await recordWatchProgressAction(watchInput());
+
+    expect(result).toEqual({ completed: false });
+  });
+
+  it("re-throws an error of no known type to the route's error boundary", async () => {
+    mocks.recordWatchProgress.mockRejectedValue(new Error("db exploded"));
+
+    await expect(recordWatchProgressAction(watchInput())).rejects.toThrow("db exploded");
   });
 });
