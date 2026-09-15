@@ -26,7 +26,13 @@ export type ReadinessCategory =
   | "Price"
   | "Capacity"
   | "Instructors"
-  | "Completion";
+  | "Completion"
+  // Added by 10-03 for `evaluateAssessmentReadiness` (assessment-readiness.ts)
+  // — pass mark, attempt limit, attempt-grading method and feedback-behaviour
+  // items. None of the existing seven slots fit a per-Assessment grading
+  // setting, so this extends the union rather than forcing those items into
+  // "Content" (which is reserved for questions/instructions/file settings).
+  | "Grading";
 
 export type ReadinessItem = {
   /** Stable identifier. The panel keys on it — never derive it from `label`. */
