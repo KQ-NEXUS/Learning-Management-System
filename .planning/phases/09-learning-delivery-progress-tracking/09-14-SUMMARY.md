@@ -11,7 +11,7 @@ provides:
   - Eight compiler-API architectural invariants for this phase, enforced as an executable test
   - Real-Postgres end-to-end proof of LRN-01 through LRN-07
   - Human-verified walkthrough of the learner and staff surfaces, with a real production bug found and fixed
-affects: [any future phase adding a course/module/lesson to a programme cohort — the position-collision class of bug this plan fixed is worth re-checking if lesson.position semantics change again]
+affects: [any future phase adding a course/module/lesson to a programme cohort — flattenSequencingLessons-shaped code (learner-access.ts, lesson-progress-service.ts) must keep using a running index, never a synthesised stride, if this walk is ever touched again]
 
 tech-stack:
   added: []
@@ -27,14 +27,17 @@ key-files:
   modified:
     - tests/boundary.test.ts
     - src/server/services/learner-access.ts
+    - src/server/services/lesson-progress-service.ts
     - tests/learner-access.test.ts
+    - tests/lesson-progress-service.test.ts
 
 key-decisions:
   - "Extracted tests/boundary.test.ts's import-walking helpers into tests/import-graph.ts (a plain module, not *.test.ts) rather than importing boundary.test.ts directly — a literal import of one .test.ts file from another re-executes its describe/it registrations"
-  - "Task 3's human walkthrough surfaced a real production bug (module-position collision in loadLearnerPath's sequencing offset) — fixed at the root (learner-access.ts) with a TDD regression test, not worked around in the checkpoint"
+  - "Task 3's human walkthrough surfaced a real production bug (module-position collision in loadLearnerPath's sequencing offset). First fix (a second numeric stride) was itself reviewed and found to only move the collision boundary, not remove it — final fix uses a plain running index, which is collision-free by construction since both flattening walks already visit lessons in correct order"
+  - "The same collision bug existed a second time, duplicated in lesson-progress-service.ts's flattenSequencingLessons (backing the Undo re-lock count) — missed by the first fix entirely; found by re-auditing for the same pattern after the code review flagged the stride approach as fragile"
 
 patterns-established:
-  - "Pattern: when a global sequencing offset combines multiple nesting levels (course, module, lesson), every level needs its own stride — collapsing two levels into one stride silently reintroduces collisions"
+  - "Pattern: when a nested loop already visits items in the correct final order, use a running index for a downstream flat-array sort key — never synthesise one from per-level strides. A stride is a live assumption (per-level max count) that nothing enforces; a running index has no assumption to violate"
 
 requirements-completed: [LRN-01, LRN-02, LRN-03, LRN-04, LRN-05, LRN-06, LRN-07]
 
@@ -48,9 +51,9 @@ completed: 2026-09-15
 
 ## Performance
 
-- **Duration:** ~6h total (Tasks 1-2 automated: ~35 min; Task 3 human walkthrough plus investigation and fix: the remainder)
+- **Duration:** ~7h total (Tasks 1-2 automated: ~35 min; Task 3 human walkthrough, investigation, fix, and a code-review follow-up fix: the remainder)
 - **Tasks:** 3/3 complete
-- **Files modified:** 6 (3 created, 3 modified)
+- **Files modified:** 8 (3 created, 5 modified)
 
 ## Accomplishments
 - `tests/learning-phase-invariants.test.ts` — 8 compiler-API tests (INV-1 through INV-8) covering pure-module import-freedom, ownership services never importing `withPermission`, DD-6's `Enrolment.status` protection, `meetingUrl` gating outside `SessionCard.tsx`, the zero-client-JS guarantee on `LessonContent`/`LessonMediaPlayer`, zero raw hex outside `globals.css`, the historical `DomainEventType` member set, and Server Action `"use server"` + no-`userId`-from-formData discipline
@@ -61,7 +64,8 @@ completed: 2026-09-15
 
 1. **Task 1: Phase invariants test** - `88050cd` (feat)
 2. **Task 2: Real-Postgres learner journey integration test** - `491dbd9` (feat)
-3. **Task 3 follow-up: module-position sequencing fix** - `f7b0564` (fix, found during the walkthrough)
+3. **Task 3 follow-up: module-position sequencing fix (stride-based, first pass)** - `f7b0564` (fix, found during the walkthrough)
+4. **Task 3 follow-up: collision-proof running-index fix (final)** - `f947047` (fix, found via code review of commit 3)
 
 **Plan metadata:** (this commit)
 
@@ -69,9 +73,11 @@ completed: 2026-09-15
 - `tests/learning-phase-invariants.test.ts` - the 8 architectural invariants
 - `tests/import-graph.ts` - extracted import-walking traversal, shared by `boundary.test.ts` and the new invariants file
 - `tests/boundary.test.ts` - re-exports its traversal from `import-graph.ts` instead of a second copy; its own 14 tests unchanged
-- `tests/learner-journey.integration.test.ts` - the real-Postgres end-to-end proof
-- `src/server/services/learner-access.ts` - `MODULE_POSITION_STRIDE` added; `loadLearnerPath`'s flattening now offsets by module index as well as course index
-- `tests/learner-access.test.ts` - regression test for the module-position collision, using ids deliberately chosen to sort the wrong way
+- `tests/learner-journey.integration.test.ts` - the real-Postgres end-to-end proof; fixture later changed to module-local lesson positions (see deviation 3)
+- `src/server/services/learner-access.ts` - `loadLearnerPath`'s flattening now uses a plain running index instead of a synthesised per-level stride
+- `src/server/services/lesson-progress-service.ts` - `flattenSequencingLessons` (backing `countLessonsRelockedBy`/Undo) fixed the same way — it had the identical original bug, undetected by the first fix
+- `tests/learner-access.test.ts` - two regression tests: the original module-collision case, and a 1001-lesson case proving no stride-sized boundary remains
+- `tests/lesson-progress-service.test.ts` - regression test for `countLessonsRelockedBy` across a module-local position reset
 
 ## Decisions Made
 See `key-decisions` above. The most consequential: Task 3's checkpoint is designed to catch exactly what automated fixture-based tests structurally cannot (per its own `<what-built>` framing) — it did, on the first real multi-module course it was pointed at.
@@ -91,14 +97,27 @@ See `key-decisions` above. The most consequential: Task 3's checkpoint is design
 - **Found during:** Task 3, step 1 (dashboard "Next up" showed no action despite a real accessible incomplete lesson) and step 2/3 investigation
 - **Issue:** `loadLearnerPath` flattened a course's lessons into one global sequence via `courseIndex * COURSE_POSITION_STRIDE + lesson.position`, but `lesson.position` is module-LOCAL — every module's own lessons restart at 0. Any course with more than one module (i.e. nearly every real course) collided module-1-position-0 with module-2-position-0 in the global walk. `evaluateLessonSequencing`'s position-then-id tiebreak then sorted the colliding lessons by lesson id string, which can and did put a later module's lesson ahead of an earlier module's incomplete required blocker — showing it as unlocked when it should have been locked, and hiding the true next action.
 - **Why automated tests missed it:** every existing fixture in `tests/learner-access.test.ts` used either a single module per course, or sequential test ids (`"lesson-1"`/`"lesson-2"`) that happen to sort correctly regardless of the collision. The real seed data's cuid-generated ids do not have that luck.
-- **Fix:** Added `MODULE_POSITION_STRIDE` and offset by the module's index within `courseEntry.modules` (already sorted by pinned position) in addition to `courseIndex`, in `src/server/services/learner-access.ts`.
-- **Verification (TDD):** New regression test in `tests/learner-access.test.ts` uses lesson ids chosen to sort the wrong way on purpose — confirmed RED against the old code (`expected false to be true`), confirmed GREEN after the fix. Re-ran the full affected suite (184 tests across `learner-access`, `enrolment-dashboard-service`, `lesson-progress-service`, `learning-phase-invariants`, `boundary`, `learner-lesson-page`, `learner-lesson-list-page`, `video-watch-tracker`) plus the real-Postgres integration test (2/2) — all green. Re-verified directly against Tunde Bello's live dev-database enrolment: `nextAction` now correctly resolves to the true next required lesson instead of `{kind:"none"}`.
-- **Committed in:** `f7b0564`
+- **First fix (superseded by deviation 3):** added a second `MODULE_POSITION_STRIDE` and offset by module index in addition to course index. Confirmed RED against the old code, GREEN after — but this fix itself was a stride, and a code review of it (deviation 3) found it only moved the collision boundary rather than removing it.
+- **Committed in:** `f7b0564` (superseded, kept in history — see deviation 3 for the final fix)
+
+**3. [Code-review finding, addressed before considering the fix robust] Stride-based fix only moved the collision boundary; duplicate occurrence in `lesson-progress-service.ts` missed entirely**
+- **Found during:** review of commit `f7b0564`, after Task 3's checkpoint had already been recorded as a qualified close-out
+- **Issue A:** `moduleIndex * MODULE_POSITION_STRIDE + lesson.position` (STRIDE = 1,000) still collides — a module with ≥ 1,000 lessons reproduces the exact original bug at a further-out boundary, with no enforced per-module lesson-count limit protecting the assumption.
+- **Issue B:** `lesson-progress-service.ts`'s `flattenSequencingLessons` (which backs `countLessonsRelockedBy` — the Undo feature's "N lessons will re-lock" disclosure) is a second, independent copy of the identical flattening logic, carrying the *original* course-index-only bug. The first fix touched only `learner-access.ts` and never audited for a duplicate.
+- **Root cause common to both:** synthesising a sort key from per-level strides encodes an assumed maximum count at each level. Both flattening loops already iterate courses → modules → lessons in the exact correct final order (each level pre-sorted by `loadCourseEntryFromPin`), so no synthesis is needed at all.
+- **Fix:** replaced both stride computations with a plain incrementing counter (`globalPosition++` / equivalent) over the existing nested loop in both `learner-access.ts` and `lesson-progress-service.ts` — collision-free by construction, no count assumption to violate.
+- **Coverage gap also closed:** `tests/learner-journey.integration.test.ts`'s fixture deliberately used globally-increasing lesson positions (0,1,2,3) specifically to *avoid* the module-local-reset collision, with a comment mischaracterizing the collision as a "live authoring gap outside this test's scope." It is not an edge case — every real published course resets lesson position per module (confirmed against production seed data). Changed the fixture to module-local positions (module A: 0,1; module B: 0,1) so the real-Postgres suite independently exercises the same defect class the unit regression does.
+- **Verification (TDD, three separate regressions):**
+  - `tests/learner-access.test.ts` — a module with 1,001 lessons, chosen specifically to break any fixed 1,000-lesson-per-module stride. Confirmed RED against the stride fix, GREEN after the running-index fix.
+  - `tests/lesson-progress-service.test.ts` — `countLessonsRelockedBy` across a hand-built two-module path with position resets. Confirmed RED by temporarily reverting the fix via `git stash`, GREEN after restoring it.
+  - `tests/learner-journey.integration.test.ts` — confirmed RED against the *original* (pre-`f7b0564`) course-index-only bug by temporarily reintroducing that exact formula and re-running against real Postgres (Testcontainers) — the existing "lesson 2 unlocks after lesson 1" assertion failed exactly as predicted; confirmed GREEN after restoring the real fix.
+  - Full re-run after all fixes: 470/470 unit/component tests (23 files) + 2/2 real-Postgres integration tests, `tsc --noEmit` and `eslint` clean on every touched file.
+- **Committed in:** `f947047`
 
 ---
 
-**Total deviations:** 2 (1 auto-fixed per Rule 3, 1 real bug found and fixed via TDD during the human checkpoint)
-**Impact on plan:** The second item is the most significant finding of this entire phase — it affects LRN-02's core lock/unlock guarantee for any course with more than one module. Caught exactly where the plan intended it to be caught (the human walkthrough), not shipped silently.
+**Total deviations:** 3 (1 auto-fixed per Rule 3, 1 real bug found and fixed via TDD during the human checkpoint — later superseded by a more robust fix after code review, 1 code-review finding that closed both the remaining collision boundary and a coverage gap)
+**Impact on plan:** Deviations 2 and 3 are the most significant finding of this entire phase — they affect LRN-02's core lock/unlock guarantee for any course with more than one module, and the Undo feature's re-lock count. The first fix attempt (deviation 2) would have shipped a narrower version of the same defect class had it not been reviewed; the final fix (deviation 3) removes the defect class by construction rather than by a wider assumed bound.
 
 ## Issues Encountered
 
@@ -132,7 +151,9 @@ Beyond the bug above, the human walkthrough surfaced two **environment/data** is
 None - no external service configuration required for the code changes. Separately (not required, but recommended): publish "Workplace Safety Essentials" and "Incident Investigation" to Amara's cohort (March) the same way, and consider seeding one long-title lesson and one small real video file, to close the three remaining human-needed backstops in a future session.
 
 ## Next Phase Readiness
-All 14 plans are executed and every automated gate is green, including the one real bug the human checkpoint was designed to catch — found and fixed at its root, with a TDD regression test. That said, this is a **qualified close-out**, not a fully signed-off UAT: the developer has not personally re-verified the sequencing fix (step 1) or the session-link opening transition (step 7) in the browser, and said so explicitly rather than rubber-stamping. Recommended before treating Phase 9 as fully human-verified: the developer independently reloads Tunde's dashboard to confirm "Next up" now shows the correct lesson, and watches a session's join link appear in real time as its window opens. The three backstop escalations and the one pending item remain seed-data/content gaps outside this plan's scope to fix, not open code defects.
+All 14 plans are executed and every automated gate is green, including the real bug the human checkpoint was designed to catch — found, fixed, then further hardened after a code review found the first fix was itself fragile (a second occurrence of the same bug class in `lesson-progress-service.ts`, and a stride boundary that could still collide at scale). The final fix is collision-free by construction, not by an assumed bound, and is proven at three levels: two unit regressions and one real-Postgres integration regression, each independently confirmed RED-then-GREEN.
+
+That said, this is still a **qualified close-out**, not a fully signed-off UAT: the developer has not personally re-verified the sequencing fix (step 1) or the session-link opening transition (step 7) in the browser, and said so explicitly rather than rubber-stamping. Recommended before treating Phase 9 as fully human-verified: the developer independently reloads Tunde's dashboard to confirm "Next up" now shows the correct lesson, and watches a session's join link appear in real time as its window opens. The three backstop escalations and the one pending item remain seed-data/content gaps outside this plan's scope to fix, not open code defects.
 
 ---
 *Phase: 09-learning-delivery-progress-tracking*
