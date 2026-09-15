@@ -40,7 +40,15 @@ import { prisma } from "@/server/db";
 import type { Actor } from "@/server/permissions/with-permission";
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
 import { writeDomainEvent, type DomainEventTxClient } from "@/server/services/domain-event-service";
-import type { QuestionSnapshot, AttemptResponse } from "@/server/services/quiz-scoring";
+import {
+  scoreAttempt,
+  selectEffectiveAttempt,
+  type QuestionSnapshot,
+  type AttemptResponse,
+  type AttemptScore,
+  type AttemptGradingMethod,
+  type EffectiveAttemptResult,
+} from "@/server/services/quiz-scoring";
 
 // ---------------------------------------------------------------------------
 // The frozen snapshot payload contract — plan 10-06's scoring and plan
@@ -174,6 +182,8 @@ export type AssessmentRow = {
   maxAttempts: number | null;
   passMark: number | null;
   totalMarks: number | null;
+  /** D-02 — which Attempt's score getOwnAssessmentResult reports as effective. */
+  attemptGradingMethod: AttemptGradingMethod;
   questions: QuizQuestionRow[];
 };
 
@@ -190,6 +200,43 @@ export type AttemptRow = {
   score: number | null;
   maxScore: number | null;
   passed: boolean | null;
+};
+
+/**
+ * An `AttemptRow` plus the `expired` presentation flag plan 10-11 renders the
+ * UI-SPEC §0.3 provenance banner from. `getOwnAttempt`/`listOwnAttempts`
+ * return this after `resolveAttemptExpiry` has had a chance to run — `expired`
+ * is simply `status === "EXPIRED"`, computed once here so a caller never has
+ * to repeat that comparison.
+ */
+export type AttemptView = AttemptRow & { expired: boolean };
+
+/**
+ * The post-submit/post-expiry result view — plan 10-11's review render and
+ * plan 10-09's results page both consume this shape. Per T-10-22, the
+ * `correctOptionIds`/`explanation` fields are populated ONLY here, never on
+ * an in-progress `AttemptRow` read, and this type is built ONLY for
+ * `SUBMITTED`/`EXPIRED` attempts.
+ */
+export type AttemptResultView = {
+  attemptId: string;
+  attemptNumber: number;
+  status: AttemptRow["status"];
+  score: number | null;
+  maxScore: number | null;
+  passed: boolean | null;
+  submittedAt: Date | null;
+  perQuestion: Array<{
+    questionId: string;
+    prompt: string;
+    marks: number;
+    awarded: number;
+    correct: boolean;
+    selectedOptionIds: string[];
+    correctOptionIds: string[];
+    explanation: string | null;
+  }>;
+  expired: boolean;
 };
 
 export type EnrolmentRow = {
@@ -237,9 +284,15 @@ export type AttemptStore = {
   };
 };
 
-/** The transactional surface `startAttempt`'s write path runs against. */
+/** Satisfied by `prisma.grade` inside a `$transaction` callback — narrow to exactly the one call this file makes. */
+export type GradeDelegate = {
+  create(args: { data: Record<string, unknown> }): Promise<{ id: string }>;
+};
+
+/** The transactional surface `startAttempt`/`submitAttempt`/`resolveAttemptExpiry`'s write paths run against. */
 export type AttemptTxClient = DomainEventTxClient & {
   attempt: AttemptDelegate;
+  grade: GradeDelegate;
 };
 
 type Audit = (event: BusinessAuditEvent) => Promise<void>;
@@ -270,6 +323,88 @@ function isUniqueConstraintViolation(err: unknown): boolean {
     "code" in err &&
     (err as { code?: unknown }).code === "P2002"
   );
+}
+
+/** The shape `saveAttemptAnswers` falls back to when `Attempt.answers` is somehow null. */
+function emptyPayload(): AttemptAnswersPayload {
+  return { questionSnapshot: [], responses: [], passMark: null, totalMarks: null };
+}
+
+/**
+ * The ONE discard-rule implementation `saveAttemptAnswers`, `submitAttempt`
+ * and `resolveAttemptExpiry` all share — a questionId absent from the frozen
+ * snapshot is dropped outright (T-10-16), and a selectedOptionId absent from
+ * that question's snapshot options is dropped too. A second, drifted copy of
+ * this logic is exactly what would let the submit path score something the
+ * save path would have refused to persist.
+ */
+function mergeResponses(
+  payload: AttemptAnswersPayload,
+  incoming: AttemptResponse[],
+): AttemptResponse[] {
+  const knownQuestions = new Map(payload.questionSnapshot.map((q) => [q.id, q]));
+  const mergedByQuestionId = new Map(payload.responses.map((r) => [r.questionId, r]));
+
+  for (const response of incoming) {
+    const question = knownQuestions.get(response.questionId);
+    if (!question) continue;
+
+    const knownOptionIds = new Set(question.options.map((o) => o.id));
+    const selectedOptionIds = response.selectedOptionIds.filter((id) => knownOptionIds.has(id));
+
+    mergedByQuestionId.set(response.questionId, {
+      questionId: response.questionId,
+      selectedOptionIds,
+    });
+  }
+
+  return [...mergedByQuestionId.values()];
+}
+
+/**
+ * Builds the learner-facing result view from a (now SUBMITTED/EXPIRED)
+ * `AttemptRow`, the `scoreAttempt` output that produced it, and the frozen
+ * payload — joining `scoreAttempt`'s per-question award against the
+ * snapshot's `prompt`/`explanation`/`correctOptionIds` and the merged
+ * responses' `selectedOptionIds`. T-10-22: only ever called for a
+ * SUBMITTED/EXPIRED attempt, never for an in-progress one.
+ */
+function buildAttemptResultView(
+  attempt: AttemptRow,
+  attemptScore: AttemptScore,
+  payload: AttemptAnswersPayload,
+  mergedResponses: AttemptResponse[],
+  expired: boolean,
+): AttemptResultView {
+  const responsesByQuestionId = new Map(mergedResponses.map((r) => [r.questionId, r]));
+  const questionsById = new Map(payload.questionSnapshot.map((q) => [q.id, q]));
+
+  const perQuestion = attemptScore.perQuestion.map((item) => {
+    const question = questionsById.get(item.questionId);
+    const response = responsesByQuestionId.get(item.questionId);
+    return {
+      questionId: item.questionId,
+      prompt: question?.prompt ?? "",
+      marks: item.marks,
+      awarded: item.awarded,
+      correct: item.correct,
+      selectedOptionIds: response?.selectedOptionIds ?? [],
+      correctOptionIds: question ? question.options.filter((o) => o.isCorrect).map((o) => o.id) : [],
+      explanation: question?.explanation ?? null,
+    };
+  });
+
+  return {
+    attemptId: attempt.id,
+    attemptNumber: attempt.attemptNumber,
+    status: attempt.status,
+    score: attempt.score,
+    maxScore: attempt.maxScore,
+    passed: attempt.passed,
+    submittedAt: attempt.submittedAt,
+    perQuestion,
+    expired,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -501,37 +636,16 @@ export function createAttemptService(deps: AttemptServiceDeps) {
       throw new AttemptNotWritableError(input.attemptId, "window-closed");
     }
 
-    const payload: AttemptAnswersPayload = attempt.answers ?? {
-      questionSnapshot: [],
-      responses: [],
-      passMark: null,
-      totalMarks: null,
-    };
-
-    const knownQuestions = new Map(payload.questionSnapshot.map((q) => [q.id, q]));
-    const mergedByQuestionId = new Map(payload.responses.map((r) => [r.questionId, r]));
-
-    for (const response of input.responses) {
-      // A questionId absent from the frozen snapshot is discarded outright —
-      // a crafted payload cannot inject a phantom question (T-10-16).
-      const question = knownQuestions.get(response.questionId);
-      if (!question) continue;
-
-      const knownOptionIds = new Set(question.options.map((o) => o.id));
-      const selectedOptionIds = response.selectedOptionIds.filter((id) => knownOptionIds.has(id));
-
-      mergedByQuestionId.set(response.questionId, {
-        questionId: response.questionId,
-        selectedOptionIds,
-      });
-    }
+    const payload: AttemptAnswersPayload = attempt.answers ?? emptyPayload();
 
     // Only the `responses` key changes — questionSnapshot, passMark and
     // totalMarks are carried through byte-identical from the frozen payload,
-    // never rewritten after start.
+    // never rewritten after start. `mergeResponses` is the ONE discard-rule
+    // implementation this file has — `submitAttempt`/`resolveAttemptExpiry`
+    // reuse it so the save path and the submit path can never drift apart.
     const updatedPayload: AttemptAnswersPayload = {
       questionSnapshot: payload.questionSnapshot,
-      responses: [...mergedByQuestionId.values()],
+      responses: mergeResponses(payload, input.responses),
       passMark: payload.passMark,
       totalMarks: payload.totalMarks,
     };
@@ -544,19 +658,220 @@ export function createAttemptService(deps: AttemptServiceDeps) {
   }
 
   // -------------------------------------------------------------------------
-  // getOwnAttempt — ownership read, `null` on "not yours" or "does not exist"
+  // The shared submit/expire write body — submitAttempt and
+  // resolveAttemptExpiry both funnel through this so the Attempt update, the
+  // D-01 auto-released Grade, and the two outbox events are written exactly
+  // once, identically, for both terminal transitions.
   // -------------------------------------------------------------------------
 
-  async function getOwnAttempt(actor: Actor, attemptId: string): Promise<AttemptRow | null> {
+  async function applySubmission(params: {
+    attempt: AttemptRow;
+    payload: AttemptAnswersPayload;
+    mergedResponses: AttemptResponse[];
+    terminalStatus: "SUBMITTED" | "EXPIRED";
+    submittedAt: Date;
+  }): Promise<{ attempt: AttemptRow; attemptScore: AttemptScore }> {
+    // Scoring reads ONLY the frozen snapshot passed in `params.payload` —
+    // never a fresh QuizQuestion query (D-08, T-10-08).
+    const attemptScore = scoreAttempt({
+      questions: params.payload.questionSnapshot,
+      responses: params.mergedResponses,
+      passMark: params.payload.passMark,
+    });
+
+    const updatedAnswers: AttemptAnswersPayload = {
+      questionSnapshot: params.payload.questionSnapshot,
+      responses: params.mergedResponses,
+      passMark: params.payload.passMark,
+      totalMarks: params.payload.totalMarks,
+    };
+
+    const updatedAttempt = await deps.runInTransaction(async (tx) => {
+      const updated = await tx.attempt.update({
+        where: { id: params.attempt.id },
+        data: {
+          status: params.terminalStatus,
+          submittedAt: params.submittedAt,
+          score: attemptScore.score,
+          maxScore: attemptScore.maxScore,
+          passed: attemptScore.passed,
+          answers: updatedAnswers,
+        },
+      });
+
+      // D-01 — a quiz Grade is created already RELEASED inside this same
+      // transaction. There is no staff DRAFT stage for a quiz grade because
+      // there is no human judgment call to make on an objectively-scored
+      // attempt. gradedById/releasedById are null because no staff member
+      // acted, NOT a bug — do not "fix" these to the learner's id.
+      const grade = await tx.grade.create({
+        data: {
+          assessmentId: params.attempt.assessmentId,
+          enrolmentId: params.attempt.enrolmentId,
+          attemptId: params.attempt.id,
+          score: attemptScore.score,
+          maxScore: attemptScore.maxScore,
+          passed: attemptScore.passed,
+          submissionId: null,
+          status: "RELEASED",
+          gradedById: null,
+          gradedAt: params.submittedAt,
+          releasedById: null,
+          releasedAt: params.submittedAt,
+        },
+      });
+
+      await deps.writeEvent(tx, {
+        // Always "attempt.submitted" regardless of terminalStatus — the
+        // closed DomainEventType union documents this: the type fires when
+        // an Attempt transitions to SUBMITTED OR EXPIRED, distinguished by
+        // the payload's `status`, not by a second event type.
+        type: "attempt.submitted",
+        payload: {
+          attemptId: params.attempt.id,
+          assessmentId: params.attempt.assessmentId,
+          enrolmentId: params.attempt.enrolmentId,
+          attemptNumber: params.attempt.attemptNumber,
+          status: params.terminalStatus,
+        },
+        occurredAt: params.submittedAt,
+      });
+
+      await deps.writeEvent(tx, {
+        type: "grade.released",
+        payload: {
+          gradeId: grade.id,
+          assessmentId: params.attempt.assessmentId,
+          enrolmentId: params.attempt.enrolmentId,
+          attemptId: params.attempt.id,
+          score: attemptScore.score,
+          maxScore: attemptScore.maxScore,
+          passed: attemptScore.passed,
+          // Distinguishes this automatic quiz release from a staff release —
+          // Phase 11/13 both drain grade.released and need to tell the two
+          // apart without a second event type.
+          releasedBy: "SYSTEM_AUTO",
+        },
+        occurredAt: params.submittedAt,
+      });
+
+      return updated;
+    });
+
+    return { attempt: updatedAttempt, attemptScore };
+  }
+
+  // -------------------------------------------------------------------------
+  // submitAttempt — server-side scoring from the frozen snapshot, an
+  // auto-released Grade, both outbox events, and an audit row with the
+  // learner as actor (ASM-02, D-01, T-10-21)
+  // -------------------------------------------------------------------------
+
+  async function submitAttempt(
+    actor: Actor,
+    input: { attemptId: string; responses: AttemptResponse[] },
+  ): Promise<AttemptResultView> {
+    const attempt = await deps.store.attempt.findUnique({ where: { id: input.attemptId } });
+    if (!attempt) {
+      throw new AttemptNotWritableError(input.attemptId, "not-found");
+    }
+
+    const enrolment = await deps.store.enrolment.findUnique({ where: { id: attempt.enrolmentId } });
+    if (!enrolment || enrolment.userId !== actor.userId) {
+      throw new AttemptNotWritableError(input.attemptId, "not-own");
+    }
+
+    if (attempt.status !== "IN_PROGRESS") {
+      throw new AttemptNotWritableError(input.attemptId, "already-submitted");
+    }
+
+    const payload = attempt.answers ?? emptyPayload();
+    const mergedResponses = mergeResponses(payload, input.responses);
+    const submittedAt = now();
+
+    const { attempt: updatedAttempt, attemptScore } = await applySubmission({
+      attempt,
+      payload,
+      mergedResponses,
+      terminalStatus: "SUBMITTED",
+      submittedAt,
+    });
+
+    // The actor IS the learner — their submit action is the trigger — so
+    // unlike an actorless system write, this audits with a real actor id
+    // (10-RESEARCH.md Pitfall 4: the audit trail must not be skipped just
+    // because no staff member clicked release).
+    await deps.audit({
+      actorId: actor.userId,
+      action: "attempt.submitted",
+      targetType: "Attempt",
+      targetId: attempt.id,
+      outcome: "SUCCESS",
+      reason: null,
+      before: { status: attempt.status, score: attempt.score },
+      after: { status: updatedAttempt.status, score: updatedAttempt.score },
+    });
+
+    return buildAttemptResultView(updatedAttempt, attemptScore, payload, mergedResponses, false);
+  }
+
+  // -------------------------------------------------------------------------
+  // resolveAttemptExpiry — lazy IN_PROGRESS -> EXPIRED transition on read,
+  // reactive-only — resolved only when read, never by a background job or a
+  // periodic sweep — mirrors completion-engine.ts's own convention
+  // -------------------------------------------------------------------------
+
+  async function resolveAttemptExpiry(actor: Actor, attemptId: string): Promise<AttemptRow | null> {
     const attempt = await deps.store.attempt.findUnique({ where: { id: attemptId } });
     if (!attempt) return null;
 
-    // "Not mine" and "does not exist" are the SAME answer — mirrors
-    // checkout-service.ts's getOwnOrder (T-10-02).
     const enrolment = await deps.store.enrolment.findUnique({ where: { id: attempt.enrolmentId } });
     if (!enrolment || enrolment.userId !== actor.userId) return null;
 
-    return attempt;
+    if (attempt.status !== "IN_PROGRESS") return attempt;
+
+    const assessment = await deps.store.assessment.findUnique({ where: { id: attempt.assessmentId } });
+    const nowValue = now();
+    if (!assessment?.availableUntil || nowValue <= assessment.availableUntil) return attempt;
+
+    // Auto-submit whatever responses were already saved — mergeResponses
+    // with no new input just re-derives the already-valid stored responses,
+    // so this write path is byte-identical to submitAttempt's.
+    const payload = attempt.answers ?? emptyPayload();
+    const mergedResponses = mergeResponses(payload, []);
+
+    const { attempt: updatedAttempt } = await applySubmission({
+      attempt,
+      payload,
+      mergedResponses,
+      terminalStatus: "EXPIRED",
+      submittedAt: nowValue,
+    });
+
+    // The actor reading the stale page is still the trigger for this write —
+    // same T-10-21 rationale as submitAttempt's audit, distinct action name.
+    await deps.audit({
+      actorId: actor.userId,
+      action: "attempt.expired",
+      targetType: "Attempt",
+      targetId: attempt.id,
+      outcome: "SUCCESS",
+      reason: null,
+      before: { status: attempt.status, score: attempt.score },
+      after: { status: updatedAttempt.status, score: updatedAttempt.score },
+    });
+
+    return updatedAttempt;
+  }
+
+  // -------------------------------------------------------------------------
+  // getOwnAttempt — ownership read, `null` on "not yours" or "does not exist"
+  // -------------------------------------------------------------------------
+
+  async function getOwnAttempt(actor: Actor, attemptId: string): Promise<AttemptView | null> {
+    const resolved = await resolveAttemptExpiry(actor, attemptId);
+    if (!resolved) return null;
+    return { ...resolved, expired: resolved.status === "EXPIRED" };
   }
 
   // -------------------------------------------------------------------------
@@ -566,7 +881,7 @@ export function createAttemptService(deps: AttemptServiceDeps) {
   async function listOwnAttempts(
     actor: Actor,
     input: { assessmentId: string },
-  ): Promise<AttemptRow[]> {
+  ): Promise<AttemptView[]> {
     const assessment = await deps.store.assessment.findUnique({ where: { id: input.assessmentId } });
     if (!assessment) return [];
 
@@ -577,10 +892,105 @@ export function createAttemptService(deps: AttemptServiceDeps) {
       where: { assessmentId: input.assessmentId, enrolmentId: enrolment.id },
     });
 
-    return attempts.slice().sort((a, b) => b.attemptNumber - a.attemptNumber);
+    // A learner reloading a stale page must see the scored result, not a
+    // live form — resolve any lazily-expirable IN_PROGRESS attempt before
+    // returning.
+    const resolved = await Promise.all(
+      attempts.map(async (attempt) => {
+        if (attempt.status !== "IN_PROGRESS") return attempt;
+        return (await resolveAttemptExpiry(actor, attempt.id)) ?? attempt;
+      }),
+    );
+
+    return resolved
+      .slice()
+      .sort((a, b) => b.attemptNumber - a.attemptNumber)
+      .map((attempt) => ({ ...attempt, expired: attempt.status === "EXPIRED" }));
   }
 
-  return { startAttempt, saveAttemptAnswers, getOwnAttempt, listOwnAttempts };
+  // -------------------------------------------------------------------------
+  // getOwnAssessmentResult — the effective result across attempts (D-02)
+  // -------------------------------------------------------------------------
+
+  async function getOwnAssessmentResult(
+    actor: Actor,
+    input: { assessmentId: string },
+  ): Promise<{
+    effective: EffectiveAttemptResult | null;
+    attempts: AttemptResultView[];
+    attemptsRemaining: number | null;
+  } | null> {
+    const assessment = await deps.store.assessment.findUnique({ where: { id: input.assessmentId } });
+    if (!assessment) return null;
+
+    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId);
+    if (!enrolment) return null;
+
+    const rawAttempts = await deps.store.attempt.findMany({
+      where: { assessmentId: input.assessmentId, enrolmentId: enrolment.id },
+    });
+
+    // Resolve any stale IN_PROGRESS attempts first, so both the effective
+    // result and the remaining-attempts count see up-to-date data.
+    const resolvedAttempts = await Promise.all(
+      rawAttempts.map(async (attempt) => {
+        if (attempt.status !== "IN_PROGRESS") return attempt;
+        return (await resolveAttemptExpiry(actor, attempt.id)) ?? attempt;
+      }),
+    );
+
+    const effective = selectEffectiveAttempt(
+      assessment.attemptGradingMethod,
+      assessment.passMark,
+      resolvedAttempts.map((attempt) => ({
+        attemptNumber: attempt.attemptNumber,
+        status: attempt.status,
+        score: attempt.score,
+        maxScore: attempt.maxScore,
+      })),
+    );
+
+    // T-10-22: only SUBMITTED/EXPIRED attempts are ever turned into a
+    // AttemptResultView (which carries correctOptionIds/explanation) — an
+    // ABANDONED or still-IN_PROGRESS attempt never appears here.
+    const attemptViews = resolvedAttempts
+      .filter((attempt) => attempt.status === "SUBMITTED" || attempt.status === "EXPIRED")
+      .slice()
+      .sort((a, b) => b.attemptNumber - a.attemptNumber)
+      .map((attempt) => {
+        const payload = attempt.answers ?? emptyPayload();
+        const attemptScore = scoreAttempt({
+          questions: payload.questionSnapshot,
+          responses: payload.responses,
+          passMark: payload.passMark,
+        });
+        return buildAttemptResultView(
+          attempt,
+          attemptScore,
+          payload,
+          payload.responses,
+          attempt.status === "EXPIRED",
+        );
+      });
+
+    // An ABANDONED attempt frees the slot it held (mirrors startAttempt's own
+    // non-abandoned count) — it must not count against attemptsRemaining.
+    const nonAbandonedCount = resolvedAttempts.filter((attempt) => attempt.status !== "ABANDONED").length;
+    const attemptsRemaining =
+      assessment.maxAttempts === null ? null : Math.max(0, assessment.maxAttempts - nonAbandonedCount);
+
+    return { effective, attempts: attemptViews, attemptsRemaining };
+  }
+
+  return {
+    startAttempt,
+    saveAttemptAnswers,
+    submitAttempt,
+    resolveAttemptExpiry,
+    getOwnAttempt,
+    listOwnAttempts,
+    getOwnAssessmentResult,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -640,5 +1050,8 @@ const built = createPrismaBackedAttemptService(prisma);
 
 export const startAttempt = built.startAttempt;
 export const saveAttemptAnswers = built.saveAttemptAnswers;
+export const submitAttempt = built.submitAttempt;
+export const resolveAttemptExpiry = built.resolveAttemptExpiry;
 export const getOwnAttempt = built.getOwnAttempt;
 export const listOwnAttempts = built.listOwnAttempts;
+export const getOwnAssessmentResult = built.getOwnAssessmentResult;
