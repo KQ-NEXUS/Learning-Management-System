@@ -100,8 +100,8 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Quizzes, Assignments, Grading, and Feedback (ASM)
 
-- [ ] **ASM-01**: Quizzes are created with questions, options/answers, marks, pass threshold, attempt limit, availability, and feedback behavior; draft validation catches incomplete questions; published settings are versioned.
-- [ ] **ASM-02**: Supported objective Quiz questions are scored automatically with reproducible calculation; attempts store start/submit time, answers, version, result, status.
+- [x] **ASM-01**: Quizzes are created with questions, options/answers, marks, pass threshold, attempt limit, availability, and feedback behavior; draft validation catches incomplete questions; published settings are versioned.
+- [x] **ASM-02**: Supported objective Quiz questions are scored automatically with reproducible calculation; attempts store start/submit time, answers, version, result, status.
 - [ ] **ASM-03**: Assignments are created with instructions, due date, permitted file types/size, grading scale, and resubmission policy; published constraints apply consistently to server validation.
 - [ ] **ASM-04**: Assignment submissions are accepted and issue a durable receipt; a successful submission stores file metadata/reference, learner, assessment version, time, attempt, receipt ID; failures never display false success.
 - [ ] **ASM-05**: Authorized graders can view in-scope submissions, record grades/feedback, save drafts, and release results; learners cannot see draft grades; release is explicit and attributed.
@@ -259,8 +259,8 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | LRN-05 | Phase 9 | Complete |
 | LRN-06 | Phase 9 | Pending |
 | LRN-07 | Phase 9 | Pending |
-| ASM-01 | Phase 10 | Pending |
-| ASM-02 | Phase 10 | Pending |
+| ASM-01 | Phase 10 | Complete |
+| ASM-02 | Phase 10 | Complete |
 | ASM-03 | Phase 10 | Pending |
 | ASM-04 | Phase 10 | Pending |
 | ASM-05 | Phase 10 | Pending |
