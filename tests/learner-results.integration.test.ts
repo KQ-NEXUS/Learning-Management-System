@@ -90,7 +90,7 @@ async function auditSink(entry: {
   actorId: string | null;
   action: string;
   targetType: string;
-  targetId: string | null;
+  targetId?: string | null;
   outcome: string;
   reason?: string | null;
   before?: unknown;

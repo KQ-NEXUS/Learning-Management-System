@@ -24,6 +24,7 @@ describe("QuizAttemptPanel", () => {
   it("explains the closed window", () => { setup({ availableUntil: "2000-01-01" }); expect(screen.getByText(/window for this assessment has closed/)).toBeTruthy(); expect(screen.queryByText("Start quiz")).toBeNull(); });
   it("uses one form, native inputs and a live answered count; submits raw selections once", async () => {
     const { container, onSubmit } = setup(); fireEvent.click(screen.getByText("Start quiz")); await screen.findByText("1. One?");
+    await screen.findByRole("button", { name: "Submit quiz" });
     expect(container.querySelectorAll("form")).toHaveLength(1); expect(screen.getAllByRole("radio")).toHaveLength(2); expect(screen.getAllByRole("checkbox")).toHaveLength(1);
     expect((screen.getByText("Submit quiz") as HTMLButtonElement).disabled).toBe(true); expect(screen.getByText("0 of 2 answered")).toBeTruthy();
     expect(container.innerHTML).not.toMatch(/Correct answer|isCorrect|text-success|text-danger/);

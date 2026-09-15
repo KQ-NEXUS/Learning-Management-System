@@ -423,7 +423,7 @@ describe("releaseGradesBatch — atomicity and all-or-nothing authorization (D-0
     const graderId = await seedGrader("Batch Releaser");
     const svc = buildGradingService([grant("grades.manage", "COHORT", f.cohortId)], { userId: graderId });
 
-    const drafts = [];
+    const drafts: Array<{ id: string }> = [];
     for (const sub of f.submissions) {
       drafts.push(await svc.saveDraftGrade({ submissionId: sub.id, score: 60, feedback: null }));
     }

@@ -197,7 +197,7 @@ async function putBytes(url: string, bytes: Buffer, contentType: string): Promis
   const res = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": contentType },
-    body: bytes,
+    body: new Uint8Array(bytes),
   });
   if (!res.ok) {
     throw new Error(`PUT failed: ${res.status} ${res.statusText} ${await res.text()}`);
