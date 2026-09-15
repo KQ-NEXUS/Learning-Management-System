@@ -67,7 +67,21 @@ export type DomainEventType =
   // second time while the same CompletionRecord stays open.
   | "lesson.completed"
   | "course.completed"
-  | "programme.completed";
+  | "programme.completed"
+  // Phase 10 (ASM-01..07) — Assessment/Attempt/Submission/Grade lifecycle.
+  // "grade.released" covers BOTH D-01's automatic quiz release AND staff
+  // single/batch release — one type, distinguished by payload, so Phase
+  // 13's drain needs exactly one handler for both origins.
+  // "grade.overridden" is ASM-06/D-07's audited correction of an
+  // already-RELEASED grade.
+  // "submission.created" fires only after the object store has confirmed
+  // the upload (ASM-04) — never optimistically, before the bytes exist.
+  // "attempt.submitted" fires when an Attempt transitions to SUBMITTED or
+  // EXPIRED.
+  | "attempt.submitted"
+  | "submission.created"
+  | "grade.released"
+  | "grade.overridden";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction

@@ -95,6 +95,56 @@ export function finalStorageKeyFor(stagedKey: string): string {
 }
 
 /**
+ * `submissions/<enrolmentId>/<assessmentId>/<randomUUID()>` — Submission's
+ * final key. Mirrors `buildStorageKey`'s no-predictable-path rationale
+ * (NFR-06) in the Submission domain (ASM-04). Kept as a separate function
+ * from the Lesson builders above (not a shared parameterised helper) so a
+ * Lesson staged key can never be promoted into `submissions/` and vice versa
+ * (T-10-06).
+ */
+export function buildSubmissionStorageKey({
+  enrolmentId,
+  assessmentId,
+}: {
+  enrolmentId: string;
+  assessmentId: string;
+}): string {
+  return `submissions/${enrolmentId}/${assessmentId}/${randomUUID()}`;
+}
+
+/**
+ * `submission-uploads/<enrolmentId>/<assessmentId>/<randomUUID()>` — the key
+ * the browser is allowed to `PUT` to. It is never the final `submissions/`
+ * key, so a leaked upload URL can only overwrite an unpromoted staging
+ * object (T-10-06).
+ */
+export function buildStagedSubmissionStorageKey({
+  enrolmentId,
+  assessmentId,
+}: {
+  enrolmentId: string;
+  assessmentId: string;
+}): string {
+  return `submission-uploads/${enrolmentId}/${assessmentId}/${randomUUID()}`;
+}
+
+/**
+ * The deterministic final key for a staged Submission upload. Only a staged
+ * `submission-uploads/` key can be promoted — passing anything else
+ * (including a Lesson `lesson-uploads/` key) is a programming error and
+ * throws, the same shape `finalStorageKeyFor` uses for Lesson keys. This
+ * function is deliberately NOT a generalisation of `finalStorageKeyFor` — a
+ * Lesson staged key must remain incapable of promoting into `submissions/`
+ * (T-10-06).
+ */
+export function finalSubmissionKeyFor(stagedKey: string): string {
+  if (!stagedKey.startsWith("submission-uploads/")) {
+    throw new Error("A final key can only be derived from a staged submission upload.");
+  }
+  return stagedKey.replace(/^submission-uploads\//, "submissions/");
+}
+
+/**
  * A presigned `PUT` URL bound to one staged key and one `Content-Type`, valid
  * for `UPLOAD_URL_TTL_SECONDS`. The browser sends the file straight to private
  * storage with this URL, bypassing the platform request-body limit.
