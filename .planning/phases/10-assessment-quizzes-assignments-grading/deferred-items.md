@@ -50,3 +50,10 @@ task's changes are auto-fixed).
 - cohort-lifecycle-security.integration.test.ts also reports six timeout failures after the same missing DATABASE_URL errors in unchanged cohort-scope.ts. The concurrent-test barrier waits for a read that the global client cannot perform. These paths and tests are unchanged by Wave 3.
 
 Final full Node regression result: 128 files passed / 3 failed; 2101 tests passed / 17 failed; exit 1, 755.61 seconds. Failures: ten enrolment integration cases and six cohort lifecycle cases using the existing global cohort-scope client without DATABASE_URL, plus one payment-invariant timeout (isolated rerun passed 10/10 at a 15-second timeout). No assessment Wave 3 tests failed in the full run.
+
+## 2026-09-15 Wave 4 verification limits
+
+- The sandboxed broad Node run reached 116 passing files / 1,975 passing tests, but 21 files failed Docker initialization (22 failing suite groups); 181 cases were skipped after setup failed. Docker configuration/runtime access was denied. This is not a passing integration run.
+- An explicit unit-file run subsequently passed all 117 files / 1,943 tests. Final main-workspace focused regression passed 136 tests before adding one exhausted-attempt refusal-copy regression; the corrected action suite passed 11/11 afterward. All three new component suites passed 20/20, and the final main Turbopack build passed after the correction.
+- Existing tests/components/cohort-pages.test.tsx still expects "$500.00" where this locale returns "US$500.00". The price formatter and expectation are unchanged by Wave 4; adding the new GradingTab sibling mock allows the existing suite to run (8/9 pass). No currency behavior was changed to satisfy the locale-dependent assertion.
+- Real PostgreSQL/MinIO proof for override, batch and released-results boundaries remains plan 10-16; the human visual/keyboard walkthrough remains plan 10-17.
