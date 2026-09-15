@@ -61,6 +61,21 @@ type WithPermission = ReturnType<typeof createWithPermission>;
  * dashboard (`enrolment-dashboard-service.ts`) — a fourth named gap for the
  * same reason as the original three: no ticket-count engine exists yet, and
  * a fake zero would read as "no tickets" rather than "not built yet".
+ *
+ * Plan 10-15 (Phase 10) did the DELIBERATE widening this comment promised,
+ * for exactly the two columns Phase 10 owns on the learner dashboard —
+ * `enrolment-dashboard-service.ts`'s `assessmentObligations` and `results`
+ * fields, each now typed `DeferredColumn | { kind: "tracked"; ... }`
+ * (`AssessmentObligationsColumn` / `ResultsColumn`, defined there), backed by
+ * `learner-results-service.ts`'s `getOwnAssessmentObligations`/`getOwnResults`.
+ * Follows DD-32's Progress-column precedent exactly: `DeferredColumn` itself
+ * is UNCHANGED here, and an unpinned cohort's card still gets the deferred
+ * inhabitant (no computable obligation set), mirroring Progress's own
+ * `"unpinned"` branch. This roster file's OWN `RosterRow.assessment` /
+ * `.completion` columns (below) are a separate staff-facing named gap, not
+ * touched by plan 10-15 — they stay deferred until their own owning plan
+ * widens them. Certificate (Phase 11) and Tickets (Phase 12) remain deferred
+ * on the dashboard too; only the two Phase-10-owned columns moved.
  */
 export type DeferredColumn = { kind: "deferred"; phase: 9 | 10 | 11 | 12 };
 

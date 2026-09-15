@@ -17,6 +17,18 @@
  * `tests/boundary.test.ts` walks. A type-only import never enters that
  * closure (the walk skips `isTypeOnly` clauses).
  *
+ * Plan 10-15 — `assessmentObligations` and `results` WIDENED (DD-32
+ * precedent). Each is now `DeferredColumn | { kind: "tracked"; ... }`
+ * (`AssessmentObligationsColumn` / `ResultsColumn` below), populated from
+ * `learner-results-service.ts`'s `getOwnAssessmentObligations`/`getOwnResults`
+ * — a real runtime import this time, injected as `deps.learnerResults` so
+ * `tests/enrolment-dashboard-service.test.ts` can keep proving this module
+ * with in-memory fakes only, no Prisma. The deferred inhabitant is still
+ * reachable for a card with no pinned course structure (mirrors Progress's
+ * own `"unpinned"` branch — no computable obligation set is a named gap, not
+ * a fake empty list). `tickets` and `certificate` are UNTOUCHED — Phase 11
+ * and Phase 12's own gaps to close.
+ *
  * ─────────────────────────────────────────────────────────────────────────────
  * DD-19 — THE "UPCOMING SESSIONS" CARD NEVER READS THE PRIVATE JOIN-LINK
  * COLUMN, AT ALL, EVER.
@@ -80,6 +92,18 @@ import { parseCompletionRule } from "@/server/services/completion-rule";
 // would be wrong. This is deliberately the first mention of the imported
 // identifier's name anywhere in this file.
 import type { DeferredColumn } from "@/server/services/roster-service";
+// Plan 10-15 — a real (non-type-only) import: this module now CALLS
+// `getOwnAssessmentObligations`/`getOwnResults` to populate the two widened
+// columns, unlike the roster-service.ts import above which is deliberately
+// type-only. `learner-results-service.ts` itself imports no permission
+// choke point (DD-15, its own header) so this stays a narrow addition to
+// the runtime closure, not the wide one DD-18 warned against.
+import {
+  getOwnAssessmentObligations,
+  getOwnResults,
+  type AssessmentObligation,
+  type LearnerResultCard,
+} from "@/server/services/learner-results-service";
 
 // ---------------------------------------------------------------------------
 // Named-gap constants (DD-18) — phase numbers match this plan's ruling.
@@ -90,11 +114,25 @@ const RESULTS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
 const TICKETS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 12 };
 const CERTIFICATE_DEFERRED: DeferredColumn = { kind: "deferred", phase: 11 };
 
+/**
+ * Plan 10-15 — DD-32-precedent second inhabitant for the two columns Phase
+ * 10 owns. `DeferredColumn` itself is unchanged (roster-service.ts); these
+ * unions live here because the tracked shape is specific to what this
+ * dashboard card renders, not to the roster.
+ */
+export type AssessmentObligationsColumn =
+  | DeferredColumn
+  | { kind: "tracked"; items: AssessmentObligation[] };
+export type ResultsColumn = DeferredColumn | { kind: "tracked"; recent: LearnerResultCard[] };
+
 /** A window closing within this many days surfaces the "ending" notice. */
 const ACCESS_ENDING_SOON_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** "Upcoming sessions" shows at most this many rows per card. */
 const MAX_UPCOMING_SESSIONS = 3;
+
+/** The dashboard "Results" slot shows at most this many, most-recent-first (§6.1). */
+const MAX_RECENT_RESULTS = 3;
 
 // ---------------------------------------------------------------------------
 // The narrow store slice (injected — unit-testable without a real Postgres)
@@ -147,9 +185,24 @@ export type EnrolmentDashboardLearnerAccess = {
   assertLessonOpenable(path: LearnerPath, lessonId: string): LessonOpenResult;
 };
 
+/**
+ * Plan 10-15 — the two `learner-results-service.ts` reads this module
+ * composes, bundled the same way `EnrolmentDashboardLearnerAccess` is, so
+ * `tests/enrolment-dashboard-service.test.ts` can hand in an in-memory fake
+ * instead of the real Prisma-backed singleton.
+ */
+export type EnrolmentDashboardLearnerResults = {
+  getOwnAssessmentObligations(
+    actor: Actor,
+    input: { enrolmentId: string },
+  ): Promise<AssessmentObligation[]>;
+  getOwnResults(actor: Actor, input: { enrolmentId?: string }): Promise<LearnerResultCard[]>;
+};
+
 export type EnrolmentDashboardDeps = {
   store: EnrolmentDashboardStore;
   learnerAccess: EnrolmentDashboardLearnerAccess;
+  learnerResults: EnrolmentDashboardLearnerResults;
   /** Explicit clock — no caller may read a client-controlled value (T-09-10). */
   now?: () => Date;
 };
@@ -211,8 +264,8 @@ export type LearnerDashboardCard = {
    *  rather than the server's local zone (matches
    *  `scheduled-session-service.ts`'s existing convention). */
   timezone: string;
-  assessmentObligations: DeferredColumn;
-  results: DeferredColumn;
+  assessmentObligations: AssessmentObligationsColumn;
+  results: ResultsColumn;
   tickets: DeferredColumn;
   certificate: DeferredColumn;
   progress: LearnerDashboardProgress;
@@ -447,8 +500,18 @@ type EnrolmentCardContext = {
 // ---------------------------------------------------------------------------
 
 export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
-  const { store, learnerAccess } = deps;
+  const { store, learnerAccess, learnerResults } = deps;
   const now = deps.now ?? (() => new Date());
+
+  /** Most-recent-first by the result's own latest history entry (§6.1's
+   *  "most-recent released results" — `LearnerResultCard` carries no
+   *  top-level `releasedAt`, so the latest attempt/submission timestamp in
+   *  its own `history[0]` is the recency signal). */
+  function mostRecentFirst(cards: LearnerResultCard[]): LearnerResultCard[] {
+    return cards
+      .slice()
+      .sort((a, b) => (b.history[0]?.at.getTime() ?? 0) - (a.history[0]?.at.getTime() ?? 0));
+  }
 
   function unpinnedProgress(attendance: AttendanceComponent): LearnerDashboardProgress {
     return {
@@ -570,9 +633,21 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       verdict,
     });
 
+    // Plan 10-15 — tracked only once a course structure is pinned (`path`
+    // resolved above), mirroring Progress's own unpinned/pinned split: an
+    // unpinned cohort has no computable obligation set, so it falls through
+    // to `base`'s deferred inhabitants instead (returned by the two earlier
+    // branches above, never reaching here).
+    const [obligations, results] = await Promise.all([
+      learnerResults.getOwnAssessmentObligations(actor, { enrolmentId: enrolment.id }),
+      learnerResults.getOwnResults(actor, { enrolmentId: enrolment.id }),
+    ]);
+
     return {
       card: {
         ...base,
+        assessmentObligations: { kind: "tracked", items: obligations },
+        results: { kind: "tracked", recent: mostRecentFirst(results).slice(0, MAX_RECENT_RESULTS) },
         progress: {
           requiredLessonsComplete,
           requiredLessonsTotal: requiredLessonIds.length,
@@ -620,6 +695,7 @@ const built = createEnrolmentDashboardService({
     loadPinnedCompletionRuleSource,
     assertLessonOpenable,
   },
+  learnerResults: { getOwnAssessmentObligations, getOwnResults },
 });
 
 export const loadLearnerDashboard = built.loadLearnerDashboard;
