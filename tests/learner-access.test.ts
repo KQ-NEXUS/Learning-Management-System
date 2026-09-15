@@ -672,6 +672,54 @@ describe("loadLearnerPath", () => {
     expect(course2Lesson1.locked).toBe(true);
     expect(course2Lesson1.blockingLessonTitle).toBe("Course 1 Last Lesson");
   });
+
+  it("locks module 2's first lesson on module 1's incomplete required lesson, even though both are module-local position 0", async () => {
+    // Regression for a real production bug found during the 09-14 human
+    // walkthrough: `lesson.position` is module-LOCAL (each module's own
+    // lessons start again at 0), but the old flattening only offset by
+    // course index, never by module — so a two-module course collided
+    // module-1-position-0 with module-2-position-0 in the global sequencing
+    // walk. `evaluateLessonSequencing` tiebreaks equal positions by lesson
+    // id string, so this only manifests when the id ordering contradicts
+    // module order — real cuids collide this way; sequential test ids like
+    // "lesson-1"/"lesson-2" coincidentally sort correctly and hide the bug
+    // (confirmed: this exact test passed against the buggy code until the
+    // ids below were chosen to sort the WRONG way, matching production).
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      courses: [course()],
+      coursePublications: {
+        "pub-1": {
+          payload: coursePayload({
+            modules: [
+              {
+                id: "module-1",
+                position: 0,
+                lessons: [{ id: "z-module-1-lesson", position: 0, required: true, type: "TEXT", assessmentId: null }],
+              },
+              {
+                id: "module-2",
+                position: 1,
+                lessons: [{ id: "a-module-2-lesson", position: 0, required: true, type: "TEXT", assessmentId: null }],
+              },
+            ],
+          }),
+        },
+      },
+      modules: [moduleRow(), moduleRow({ id: "module-2", position: 1, title: "Module Two" })],
+      lessons: [
+        lessonRow({ id: "z-module-1-lesson", title: "Module 1 Lesson" }),
+        lessonRow({ id: "a-module-2-lesson", moduleId: "module-2", title: "Module 2 Lesson" }),
+      ],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+
+    const module2Lesson = path!.courses[0].modules[1].lessons[0];
+    expect(module2Lesson.locked).toBe(true);
+    expect(module2Lesson.blockingLessonTitle).toBe("Module 1 Lesson");
+  });
 });
 
 describe("assertLessonOpenable", () => {
