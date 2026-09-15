@@ -80,3 +80,11 @@ Final full Node regression result: 128 files passed / 3 failed; 2101 tests passe
 - An explicit unit-file run subsequently passed all 117 files / 1,943 tests. Final main-workspace focused regression passed 136 tests before adding one exhausted-attempt refusal-copy regression; the corrected action suite passed 11/11 afterward. All three new component suites passed 20/20, and the final main Turbopack build passed after the correction.
 - Existing tests/components/cohort-pages.test.tsx still expects "$500.00" where this locale returns "US$500.00". The price formatter and expectation are unchanged by Wave 4; adding the new GradingTab sibling mock allows the existing suite to run (8/9 pass). No currency behavior was changed to satisfy the locale-dependent assertion.
 - Real PostgreSQL/MinIO proof for override, batch and released-results boundaries remains plan 10-16; the human visual/keyboard walkthrough remains plan 10-17.
+
+
+## 2026-09-16 Wave 5 closeout
+
+- The integrated 25-case PostgreSQL/MinIO run passed; the upload suite also passed 11/11 after fixture fixes. This supersedes Docker-blocked notes for these three Phase 10 suites, without clearing unrelated older infrastructure findings.
+- Broad unit regression: 119 files and 1,986 tests passed; two checkout source scans timed out at the default 5-second limit under parallel build/Docker load. Isolated rerun passed all 10 checkout invariants at 30 seconds.
+- Initial assessment component run suffered four fork-worker startup timeouts and a transient pending-label assertion. The assertion now waits for the submit control; the five-suite rerun using one thread passed 41/41. LessonContent stale placeholder assertions were updated and passed 14/14. No global runner configuration was changed.
+- Final integrated Turbopack build, TypeScript and changed-file lint passed. Other historical component failures were not reclassified as passing; the plan 10-17 human walkthrough remains outstanding.

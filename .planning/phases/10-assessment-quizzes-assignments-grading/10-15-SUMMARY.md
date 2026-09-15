@@ -116,3 +116,14 @@ None - no external service configuration required.
 - FOUND: commit 9a58edc (Task 1)
 - FOUND: commit 886d15c (Task 2)
 - FOUND: commit 0e978e6 (Task 3)
+
+
+## Integrated Wave 5 closeout (2026-09-16)
+
+All four Wave 5 branches are integrated into Khaliddev. The final Turbopack production build and its TypeScript check passed after closeout fixes. Changed production files passed lint.
+
+Verification: 157 focused server tests; 25 real PostgreSQL/MinIO integration cases; 41 assessment UI component cases plus 14 LessonContent cases. The broad unit run passed 119 files / 1,986 tests, with two checkout source-scan cases hitting the default 5-second timeout; the isolated checkout invariant rerun passed 10/10 at 30 seconds. No assertion failure remained in the affected suites. Full historical component/infrastructure limitations are retained in deferred-items.md.
+
+The merged results route and dashboard widening passed the final production build and focused server regression. The two owned dashboard columns are populated with real data; certificate/ticket dependencies remain separate.
+
+Only plan 10-17 remains: phase invariant gates, validation contract and human walkthrough.

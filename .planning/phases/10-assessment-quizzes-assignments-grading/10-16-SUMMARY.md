@@ -114,3 +114,14 @@ None - no external service configuration required. The real Postgres/MinIO/ClamA
 ---
 *Phase: 10-assessment-quizzes-assignments-grading*
 *Completed: 2026-09-15*
+
+
+## Integrated Wave 5 closeout (2026-09-16)
+
+All four Wave 5 branches are integrated into Khaliddev. The final Turbopack production build and its TypeScript check passed after closeout fixes. Changed production files passed lint.
+
+Verification: 157 focused server tests; 25 real PostgreSQL/MinIO integration cases; 41 assessment UI component cases plus 14 LessonContent cases. The broad unit run passed 119 files / 1,986 tests, with two checkout source-scan cases hitting the default 5-second timeout; the isolated checkout invariant rerun passed 10/10 at 30 seconds. No assertion failure remained in the affected suites. Full historical component/infrastructure limitations are retained in deferred-items.md.
+
+Closeout fixed three fixture compilation issues: explicit draft ID array typing, an optional audit target ID, and a Uint8Array fetch body. Fix commit: 422e018. The changed real upload suite was rerun against PostgreSQL/MinIO and passed 11/11 after these fixes. The original completion summary is committed on the worker branch and merged.
+
+Only plan 10-17 remains: phase invariant gates, validation contract and human walkthrough.

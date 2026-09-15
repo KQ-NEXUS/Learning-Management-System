@@ -169,3 +169,14 @@ None — no external service configuration required (reuses the existing MinIO/S
 - FOUND commit e02c64b (Task 1)
 - FOUND commit a000821 (Task 2)
 - FOUND commit 1eaa1de (Task 3)
+
+
+## Integrated Wave 5 closeout (2026-09-16)
+
+All four Wave 5 branches are integrated into Khaliddev. The final Turbopack production build and its TypeScript check passed after closeout fixes. Changed production files passed lint.
+
+Verification: 157 focused server tests; 25 real PostgreSQL/MinIO integration cases; 41 assessment UI component cases plus 14 LessonContent cases. The broad unit run passed 119 files / 1,986 tests, with two checkout source-scan cases hitting the default 5-second timeout; the isolated checkout invariant rerun passed 10/10 at 30 seconds. No assertion failure remained in the affected suites. Full historical component/infrastructure limitations are retained in deferred-items.md.
+
+The merged assignment delivery route passed the normal production build. Stale LessonContent placeholder expectations were replaced with prose/delivery composition assertions; all 14 LessonContent cases passed.
+
+Only plan 10-17 remains: phase invariant gates, validation contract and human walkthrough.
