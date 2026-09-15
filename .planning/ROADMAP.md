@@ -378,7 +378,19 @@ Plans:
   3. Staff can export CSV datasets with stable columns, applied filters, and generation time; large exports run asynchronously with queued/processing/succeeded/failed/retry states and short-lived authorized download links. (RPT-03, RPT-04)
   4. Authorized reviewers can filter and export an audit view of security and sensitive business actions without exposing secrets. (RPT-05)
 
-**Plans**: TBD
+**Plans**: 10 plans in 6 waves
+
+Plans:
+- [ ] 08-01-PLAN.md — Reconciliation case-ledger tracer and live schema proof
+- [ ] 08-02-PLAN.md — Complete exceptions-first reconciliation workflow
+- [ ] 08-03-PLAN.md — Collection scope, report registry, and Reports hub
+- [ ] 08-04-PLAN.md — Ten fixed operational dashboards and drill-down parity
+- [ ] 08-05-PLAN.md — Immutable export snapshots, stable CSV, and request lifecycle
+- [ ] 08-06-PLAN.md — Managed-upload package legitimacy checkpoint
+- [ ] 08-07-PLAN.md — Background export processing, private storage, and expiry
+- [ ] 08-08-PLAN.md — Export History and authorized short-lived downloads
+- [ ] 08-09-PLAN.md — Filtered redacted audit export
+- [ ] 08-10-PLAN.md — Navigation, UI backstops, and phase-wide verification
 **UI hint**: yes
 
 ---
