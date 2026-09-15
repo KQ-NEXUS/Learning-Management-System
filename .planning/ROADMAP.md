@@ -479,13 +479,13 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 10-09-PLAN.md — Grade-override service (D-07 RELEASED-only, reason mandatory) and learner released-only results service
-- [ ] 10-10-PLAN.md — Quiz question builder UI — nested question/option authoring with keyboard reorder
-- [ ] 10-11-PLAN.md — Learner quiz attempt UI — single-page form, immediate scored result, attempt history
+- [x] 10-09-PLAN.md — Grade-override service (D-07 RELEASED-only, reason mandatory) and learner released-only results service
+- [x] 10-10-PLAN.md — Quiz question builder UI — nested question/option authoring with keyboard reorder
+- [x] 10-11-PLAN.md — Learner quiz attempt UI — single-page form, immediate scored result, attempt history
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 10-12-PLAN.md — Staff grading queue UI — Cohort Grading tab, submission queue, first real bulk-select batch release
+- [x] 10-12-PLAN.md — Staff grading queue UI — Cohort Grading tab, submission queue, first real bulk-select batch release
 - [ ] 10-13-PLAN.md — Staff grade-entry UI — draft save, explicit release, RELEASED-only override with mandatory reason
 - [ ] 10-14-PLAN.md — Learner assignment submission UI — presigned upload, verified receipt, lateness, cutoff, resubmission history
 - [ ] 10-15-PLAN.md — Learner results page and the two Phase 9 dashboard named gaps filled with real data
@@ -600,7 +600,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
-| 10. Assessment — Quizzes, Assignments & Grading | 5/17 | In Progress|  |
+| 10. Assessment — Quizzes, Assignments & Grading | 12/17 | In Progress|  |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
