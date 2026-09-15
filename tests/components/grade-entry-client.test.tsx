@@ -42,6 +42,22 @@ function setup(overrides: Partial<GradeEntryClientProps> = {}) {
 }
 
 describe("GradeEntryClient — DRAFT / no grade yet", () => {
+  it("does not release an existing draft when saving its edits fails", async () => {
+    const saveDraft = vi.fn(async () => ({ ok: false as const, message: "Draft could not be saved" }));
+    const { release } = setup({ status: "DRAFT", gradeId: "g1", score: 8, saveDraft });
+    fireEvent.click(screen.getByRole("button", { name: "Release" }));
+    await screen.findByText("Draft could not be saved");
+    expect(release).not.toHaveBeenCalled();
+  });
+  it("saves edits to an existing draft before releasing it", async () => {
+    const { saveDraft, release } = setup({ status: "DRAFT", gradeId: "g1", score: 8, feedback: "Old feedback" });
+    fireEvent.change(screen.getByLabelText("Score"), { target: { value: "15" } });
+    fireEvent.change(screen.getByLabelText("Feedback"), { target: { value: "Updated feedback" } });
+    fireEvent.click(screen.getByRole("button", { name: "Release" }));
+    await waitFor(() => expect(release).toHaveBeenCalledTimes(1));
+    expect(saveDraft).toHaveBeenCalledExactlyOnceWith({ cohortId: "c1", assessmentId: "a1", submissionId: "s1", score: 15, feedback: "Updated feedback" });
+    expect(saveDraft.mock.invocationCallOrder[0]).toBeLessThan(release.mock.invocationCallOrder[0]);
+  });
   it("renders Score and Feedback fields, 'Save draft', and no Override control anywhere", () => {
     setup();
     expect(screen.getByLabelText("Score")).toBeTruthy();

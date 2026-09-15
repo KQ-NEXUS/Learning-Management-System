@@ -87,7 +87,6 @@ export function GradeEntryClient({
 
   const [scoreInput, setScoreInput] = useState(score !== null ? String(score) : "");
   const [feedbackInput, setFeedbackInput] = useState(feedback ?? "");
-  const [currentGradeId, setCurrentGradeId] = useState(gradeId);
   const [errors, setErrors] = useState<string[]>([]);
   const [draftStatus, setDraftStatus] = useState<string | undefined>(undefined);
   const [pending, startTransition] = useTransition();
@@ -117,7 +116,6 @@ export function GradeEntryClient({
         setErrors([result.message]);
         return;
       }
-      setCurrentGradeId(result.grade.id);
       setDraftStatus(`Draft saved ${formatTimestamp(new Date(result.grade.gradedAt))}`);
     });
   }
@@ -129,22 +127,19 @@ export function GradeEntryClient({
       return;
     }
     startTransition(async () => {
-      let id = currentGradeId;
-      if (!id) {
-        const saveResult = await saveDraft({
-          cohortId,
-          assessmentId,
-          submissionId,
-          score: parsedScore,
-          feedback: feedbackInput.trim() ? feedbackInput : null,
-        });
-        if (!saveResult.ok) {
-          setErrors([saveResult.message]);
-          return;
-        }
-        id = saveResult.grade.id;
-        setCurrentGradeId(id);
+      // Release the values currently displayed, including edits to an existing draft.
+      const saveResult = await saveDraft({
+        cohortId,
+        assessmentId,
+        submissionId,
+        score: parsedScore,
+        feedback: feedbackInput.trim() ? feedbackInput : null,
+      });
+      if (!saveResult.ok) {
+        setErrors([saveResult.message]);
+        return;
       }
+      const id = saveResult.grade.id;
       const result = await release({ cohortId, assessmentId, submissionId, gradeId: id });
       if (!result.ok) {
         setErrors([result.message]);
