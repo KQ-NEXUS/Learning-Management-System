@@ -372,27 +372,18 @@ LIMIT $1;
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | Persisting request-time row projections is acceptable storage overhead and can complete within the synchronous request budget for bounded export sizes. | Architecture Pattern 4 | Very large snapshots may require chunked snapshot capture rather than one request transaction. |
+| A1 | Request-time snapshot capture is hard-bounded at 25,000 rows and 25 MiB of serialized snapshot data, whichever is reached first; the request is rejected safely before job creation when either bound is exceeded. A repeatable load test must prove the configured bounds complete inside a 10-second application budget before release. | Architecture Pattern 4 / Resolved Question 1 | The bound is explicit, measurable, and prevents an unbounded request transaction while preserving exact immutable request-time rows. |
 | A2 | A static operational-availability registry will remain the activation authority for later Phase 9–12 report datasets. | Pitfall 6 | Premature activation could display misleading zeros; delayed activation could hide valid data. |
-| A3 | Sensitive learner identity columns should require the dataset permission plus matching `users.view`; no new permission key is needed. | Security / Open Questions | Product may require a dedicated sensitive-export permission. |
-| A4 | Netlify Background Functions are the intended production execution environment for export generation. | Summary / Architecture | Another deployment target would need a different dispatcher while retaining the DB job contract. |
+| A3 | Sensitive learner identity columns require the dataset permission plus matching-scope `users.view`, a nonblank operational reason, and an audit record; audit exports require global `users.view` because audit visibility itself is global. No new permission key is introduced. | Security / Resolved Question 2 | This is the Phase 8 policy decision and is enforced at request and download time. |
+| A4 | Netlify Background Functions are invoked only by a one-minute Netlify Scheduled Function dispatcher using a deployment-managed shared secret and an empty/constant request shape. The dispatcher never accepts dataset, filters, rows, job IDs, or object keys; the database queue is authoritative. | Summary / Resolved Question 3 | Another deployment target would need a different trusted dispatcher while retaining the DB job contract. |
 
-## Open Questions
+## Resolved Design Questions
 
-1. **What maximum row count/size may be snapshotted synchronously?**
-   - What we know: generation must always be async, and the request-time dataset must be exact.
-   - What's unclear: the expected largest dataset and acceptable export-request latency.
-   - Recommendation: plan a load-test checkpoint and a hard safe bound; if the bound is exceeded, snapshot in a database-side chunk protocol that keeps a fixed cutoff/version rather than silently requerying mutable rows.
+1. **Snapshot bound — RESOLVED.** Snapshot capture is limited to 25,000 rows and 25 MiB of serialized snapshot data, whichever comes first. The service counts/estimates inside the authorized normalized request and fails safely before creating a job when the bound is exceeded. A repeatable load test must demonstrate the maximum permitted request completes within 10 seconds against PostgreSQL; release configuration may only lower a measured bound, never raise it without rerunning the test. Generation remains asynchronous and workers serialize only the immutable request-time snapshot.
 
-2. **Which existing permission is the additional sensitive-column gate?**
-   - What we know: `reports.view`, `reports.export`, `audit.view`, `audit.export`, and `users.view` exist. [VERIFIED: `src/server/auth/permissions/catalogue.ts:1-109`]
-   - What's unclear: whether product policy accepts `users.view` or requires a new explicit permission.
-   - Recommendation: use `users.view` with matching scope unless product owners explicitly add a dedicated permission; always require and audit the operational reason.
+2. **Sensitive-column permission — RESOLVED.** Report and reconciliation exports require the dataset's view/export permissions plus matching-scope `users.view` for learner identity columns, a nonblank operational reason, and audit evidence. Audit export requires global `audit.view`, `audit.export`, and global `users.view` for sensitive actor identity because the audit boundary is global. No new permission key is added in Phase 8.
 
-3. **How is a Background Function invoked in the deployed Netlify topology?**
-   - What we know: Background Functions return 202 and may run 15 minutes; current project scheduled work is a Scheduled Function.
-   - What's unclear: whether dispatch should be HTTP invocation from a scheduled dispatcher or another deploy hook.
-   - Recommendation: keep DB `ExportJob` authoritative, add a thin scheduled dispatcher and deployment smoke test, and ensure invocation cannot accept arbitrary dataset instructions from the public network.
+3. **Background invocation topology — RESOLVED.** A one-minute Netlify Scheduled Function dispatcher makes a server-to-server POST to the Background Function with a deployment-managed `EXPORT_DISPATCH_SECRET` and an empty/constant body. The Background Function rejects missing/invalid secrets and any body containing export instructions. It only invokes the database-authoritative bounded queue processor. The dashboard Server Action commits the QUEUED job and returns; it never invokes the worker directly.
 
 ## Environment Availability
 
