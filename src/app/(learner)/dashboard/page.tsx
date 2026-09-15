@@ -142,12 +142,84 @@ function AccessNoticeBanner({ card }: { card: LearnerDashboardCard }) {
   return null;
 }
 
-const DEFERRED_SLOTS: { title: string; copy: string }[] = [
-  { title: "Assignments & quizzes", copy: "Assignments and quizzes — arriving in a future update" },
-  { title: "Results", copy: "Results — arriving in a future update" },
-  { title: "Support tickets", copy: "Support tickets — arriving in a future update" },
-  { title: "Certificate", copy: "Certificate — arriving in a future update" },
-];
+/**
+ * 10-15 — Phase 9's "Assessments" and "Results" named gaps, widened. Each
+ * renders one of three states: still `deferred` (identical `DeferredSlot`
+ * treatment Phase 9 shipped, unchanged), `tracked`-but-empty, or
+ * `tracked`-and-populated. `tickets` and `certificate` stay pure
+ * `DeferredSlot`s below — Phase 11/12's own gaps to close.
+ */
+function AssessmentsCard({ card }: { card: LearnerDashboardCard }) {
+  const col = card.assessmentObligations;
+
+  if (col.kind === "deferred") {
+    return <DeferredSlot title="Assessments" copy="Assignments and quizzes — arriving in a future update" />;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs">
+      <p className="text-sm font-semibold text-foreground">Assessments</p>
+      {col.items.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">Nothing due right now</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {col.items.map((item) => (
+            <li key={item.assessmentId} className="text-[11px] text-muted-foreground">
+              {item.lessonId ? (
+                <Link
+                  href={`/learn/${card.enrolmentId}/lessons/${item.lessonId}`}
+                  className="text-accent underline underline-offset-2"
+                >
+                  {item.title}
+                </Link>
+              ) : (
+                item.title
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ResultsCard({ card }: { card: LearnerDashboardCard }) {
+  const col = card.results;
+
+  if (col.kind === "deferred") {
+    return <DeferredSlot title="Results" copy="Results — arriving in a future update" />;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground">Results</p>
+        {col.recent.length > 0 && (
+          <Link
+            href={`/learn/${card.enrolmentId}/results`}
+            className="text-[11px] font-semibold text-accent underline underline-offset-2"
+          >
+            View all
+          </Link>
+        )}
+      </div>
+      {col.recent.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">No results yet</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {col.recent.map((result) => (
+            <li key={result.assessmentId} className="text-[11px] text-muted-foreground">
+              {result.title}
+              {result.effectiveScore !== null && result.maxScore !== null
+                ? ` — ${result.effectiveScore} / ${result.maxScore}`
+                : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function EnrolmentSection({ card }: { card: LearnerDashboardCard }) {
   return (
@@ -166,9 +238,10 @@ function EnrolmentSection({ card }: { card: LearnerDashboardCard }) {
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {DEFERRED_SLOTS.map((slot) => (
-          <DeferredSlot key={slot.title} title={slot.title} copy={slot.copy} />
-        ))}
+        <AssessmentsCard card={card} />
+        <ResultsCard card={card} />
+        <DeferredSlot title="Support tickets" copy="Support tickets — arriving in a future update" />
+        <DeferredSlot title="Certificate" copy="Certificate — arriving in a future update" />
       </div>
     </section>
   );

@@ -38,6 +38,11 @@ import type { Actor } from "@/server/permissions/with-permission";
 import type { CourseObligationPayload } from "@/server/services/publication";
 import type { AccessWindow } from "@/server/services/access-window";
 import type { CompletionVerdict } from "@/server/services/completion-engine";
+import type {
+  AssessmentObligation,
+  LearnerResultCard,
+} from "@/server/services/learner-results-service";
+import type { EnrolmentDashboardLearnerResults } from "@/server/services/enrolment-dashboard-service";
 
 // ---------------------------------------------------------------------------
 // Fixtures + fake stores
@@ -136,6 +141,52 @@ function session(overrides: Partial<DashboardSessionStoreRow> = {}): DashboardSe
   };
 }
 
+function assessmentObligation(overrides: Partial<AssessmentObligation> = {}): AssessmentObligation {
+  return {
+    assessmentId: "assessment-1",
+    title: "Module Quiz",
+    type: "QUIZ",
+    lessonId: "lesson-1",
+    dueAt: null,
+    state: "not-started",
+    ...overrides,
+  };
+}
+
+function resultCard(overrides: Partial<LearnerResultCard> = {}): LearnerResultCard {
+  return {
+    assessmentId: "assessment-1",
+    title: "Module Quiz",
+    type: "QUIZ",
+    effectiveScore: 8,
+    maxScore: 10,
+    passed: true,
+    passMark: 6,
+    feedback: null,
+    attemptsRemaining: null,
+    history: [
+      { kind: "attempt", ref: "attempt-1", number: 1, at: new Date("2026-09-01T10:00:00.000Z"), status: "SUBMITTED", score: 8 },
+    ],
+    overrides: [],
+    ...overrides,
+  };
+}
+
+/** Plan 10-15 — the `learner-results-service.ts` fake, keyed by enrolmentId,
+ *  mirroring `makeDashboardStore`'s own shape so a test only supplies the
+ *  fixtures it actually varies. */
+function makeLearnerResultsFake(opts: {
+  assessmentObligationsByEnrolment?: Record<string, AssessmentObligation[]>;
+  resultsByEnrolment?: Record<string, LearnerResultCard[]>;
+}): EnrolmentDashboardLearnerResults {
+  const obligations = opts.assessmentObligationsByEnrolment ?? {};
+  const results = opts.resultsByEnrolment ?? {};
+  return {
+    getOwnAssessmentObligations: async (_actor, input) => obligations[input.enrolmentId] ?? [],
+    getOwnResults: async (_actor, input) => (input.enrolmentId ? (results[input.enrolmentId] ?? []) : []),
+  };
+}
+
 /** Builds a `LearnerAccessStore` fake from simple fixture arrays. */
 function makeLearnerAccessStore(opts: {
   enrolments?: EnrolmentStoreRow[];
@@ -222,14 +273,18 @@ function makeService(opts: {
   lessonProgress?: LessonProgressStoreRow[];
   sessionsByCohort?: Record<string, DashboardSessionStoreRow[]>;
   attendanceByEnrolment?: Record<string, DashboardAttendanceRecordStoreRow[]>;
+  assessmentObligationsByEnrolment?: Record<string, AssessmentObligation[]>;
+  resultsByEnrolment?: Record<string, LearnerResultCard[]>;
   now?: () => Date;
 }) {
   const learnerAccessStore = makeLearnerAccessStore(opts);
   const learnerAccess = createLearnerAccessService({ store: learnerAccessStore, now: opts.now ?? (() => NOW) });
   const dashboardStore = makeDashboardStore(opts);
+  const learnerResults = makeLearnerResultsFake(opts);
   return createEnrolmentDashboardService({
     store: dashboardStore,
     learnerAccess,
+    learnerResults,
     now: opts.now ?? (() => NOW),
   });
 }
@@ -296,7 +351,7 @@ describe("loadLearnerDashboard", () => {
     expect(dashboard.cards.map((c) => c.enrolmentId)).toEqual(["enrolment-new", "enrolment-old"]);
   });
 
-  it("carries all four deferred fields with their pinned phase numbers", async () => {
+  it("keeps tickets and certificate deferred — Phase 12's and Phase 11's own named gaps, untouched by plan 10-15", async () => {
     const svc = makeService({
       enrolments: [enrolment()],
       cohorts: [cohort()],
@@ -307,10 +362,105 @@ describe("loadLearnerDashboard", () => {
     });
 
     const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
-    expect(card.assessmentObligations).toEqual({ kind: "deferred", phase: 10 });
-    expect(card.results).toEqual({ kind: "deferred", phase: 10 });
     expect(card.tickets).toEqual({ kind: "deferred", phase: 12 });
     expect(card.certificate).toEqual({ kind: "deferred", phase: 11 });
+  });
+
+  it("assessmentObligations returns a tracked inhabitant, in the order learner-results-service returned it, when the learner has outstanding assessments", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+      assessmentObligationsByEnrolment: {
+        "enrolment-1": [
+          assessmentObligation({ assessmentId: "a-1", title: "First Quiz" }),
+          assessmentObligation({ assessmentId: "a-2", title: "Second Assignment", type: "ASSIGNMENT" }),
+        ],
+      },
+    });
+
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.assessmentObligations).toEqual({
+      kind: "tracked",
+      items: [
+        assessmentObligation({ assessmentId: "a-1", title: "First Quiz" }),
+        assessmentObligation({ assessmentId: "a-2", title: "Second Assignment", type: "ASSIGNMENT" }),
+      ],
+    });
+  });
+
+  it("assessmentObligations returns a tracked-but-empty inhabitant, not a deferred one, when nothing is due", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+    });
+
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.assessmentObligations).toEqual({ kind: "tracked", items: [] });
+  });
+
+  it("results caps recent at 3 even when more released results exist, most-recent first", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+      resultsByEnrolment: {
+        "enrolment-1": [
+          resultCard({ assessmentId: "r-1", title: "Oldest", history: [{ kind: "attempt", ref: "x1", number: 1, at: new Date("2026-01-01T00:00:00.000Z"), status: "SUBMITTED", score: 8 }] }),
+          resultCard({ assessmentId: "r-2", title: "Newest", history: [{ kind: "attempt", ref: "x2", number: 1, at: new Date("2026-09-01T00:00:00.000Z"), status: "SUBMITTED", score: 8 }] }),
+          resultCard({ assessmentId: "r-3", title: "Middle-old", history: [{ kind: "attempt", ref: "x3", number: 1, at: new Date("2026-03-01T00:00:00.000Z"), status: "SUBMITTED", score: 8 }] }),
+          resultCard({ assessmentId: "r-4", title: "Middle-new", history: [{ kind: "attempt", ref: "x4", number: 1, at: new Date("2026-06-01T00:00:00.000Z"), status: "SUBMITTED", score: 8 }] }),
+        ],
+      },
+    });
+
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.results.kind).toBe("tracked");
+    const recent = card.results.kind === "tracked" ? card.results.recent : [];
+    expect(recent).toHaveLength(3);
+    expect(recent.map((r) => r.assessmentId)).toEqual(["r-2", "r-4", "r-3"]);
+  });
+
+  it("results returns a tracked-empty inhabitant, not a deferred one, when the learner has no released results", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+    });
+
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.results).toEqual({ kind: "tracked", recent: [] });
+  });
+
+  it("falls back to the deferred inhabitant for both columns when the cohort is unpinned (no computable obligation set)", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: null })],
+      courses: [course()],
+      assessmentObligationsByEnrolment: {
+        "enrolment-1": [assessmentObligation()],
+      },
+      resultsByEnrolment: {
+        "enrolment-1": [resultCard()],
+      },
+    });
+
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.assessmentObligations).toEqual({ kind: "deferred", phase: 10 });
+    expect(card.results).toEqual({ kind: "deferred", phase: 10 });
   });
 
   it("computes requiredLessonsComplete/Total from live LessonProgress", async () => {
