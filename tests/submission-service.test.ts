@@ -70,6 +70,8 @@ function makeAssessment(overrides: Partial<SubmissionAssessmentContext> = {}): S
     type: "ASSIGNMENT",
     status: "PUBLISHED",
     version: 1,
+    title: "Assignment 1",
+    instructions: null,
     dueAt: null,
     availableUntil: null,
     allowedFileTypes: ["pdf"],

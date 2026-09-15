@@ -309,6 +309,10 @@ export type LearnerLessonContent = {
   embedUrl: string | null;
   linkUrl: string | null;
   withdrawnAt: Date | null;
+  /** `null` for every non-QUIZ/ASSIGNMENT lesson type — carried through so
+   *  the page can conditionally load the assignment submission view without
+   *  a second lesson lookup (10-14 Task 2). */
+  assessmentId: string | null;
 };
 
 export async function getLessonContentForLearner(
@@ -325,6 +329,7 @@ export async function getLessonContentForLearner(
       embedUrl: true,
       linkUrl: true,
       withdrawnAt: true,
+      assessmentId: true,
       module: { select: { courseId: true } },
     },
   });
@@ -341,6 +346,7 @@ export async function getLessonContentForLearner(
     embedUrl: row.embedUrl,
     linkUrl: row.linkUrl,
     withdrawnAt: row.withdrawnAt,
+    assessmentId: row.assessmentId,
   };
 }
 

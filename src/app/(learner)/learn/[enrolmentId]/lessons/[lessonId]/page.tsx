@@ -17,7 +17,9 @@ import { LessonContent } from "@/components/catalogue/LessonContent";
 import { LessonCompleteControl } from "@/components/learner/LessonCompleteControl";
 import { VideoWatchTracker } from "@/components/learner/VideoWatchTracker";
 import { QuizAttemptPanel } from "@/components/learner/QuizAttemptPanel";
+import { AssignmentSubmissionPanel } from "@/components/learner/AssignmentSubmissionPanel";
 import { loadLearnerQuiz } from "@/server/services/learner-quiz-service";
+import { loadAssignmentSubmissionView } from "./submission-actions";
 
 /**
  * `/learn/[enrolmentId]/lessons/[lessonId]` (LRN-03/04/05, 09-11 Task 1) —
@@ -128,6 +130,10 @@ export default async function LessonReadingPage({
 
   const relockCount = countLessonsRelockedBy(path, lessonId);
   const quiz = content.type === "QUIZ" ? await loadLearnerQuiz(actor, { enrolmentId, lessonId }) : null;
+  const assignment =
+    content.type === "ASSIGNMENT" && content.assessmentId
+      ? await loadAssignmentSubmissionView({ assessmentId: content.assessmentId, enrolmentId })
+      : null;
 
   const isVideoLesson = content.type === "VIDEO";
   const initialSecondsWatched = isVideoLesson
@@ -179,6 +185,7 @@ export default async function LessonReadingPage({
       )}
 
       {quiz && <QuizAttemptPanel {...quiz} enrolmentId={enrolmentId} lessonId={lessonId} />}
+      {assignment && <AssignmentSubmissionPanel {...assignment} />}
       <LessonCompleteControl
         enrolmentId={enrolmentId}
         lessonId={lessonId}

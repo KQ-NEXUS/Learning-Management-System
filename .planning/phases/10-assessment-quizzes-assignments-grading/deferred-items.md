@@ -51,6 +51,29 @@ task's changes are auto-fixed).
 
 Final full Node regression result: 128 files passed / 3 failed; 2101 tests passed / 17 failed; exit 1, 755.61 seconds. Failures: ten enrolment integration cases and six cohort lifecycle cases using the existing global cohort-scope client without DATABASE_URL, plus one payment-invariant timeout (isolated rerun passed 10/10 at a 15-second timeout). No assessment Wave 3 tests failed in the full run.
 
+## 10-14: `npx next build` unavailable in this parallel worktree (no local `node_modules`)
+
+- **Found during:** Plan 10-14, Task 2 verification (`npx tsc --noEmit && npx next build`).
+- **Error:** `Could not find the Next.js package (next/package.json)` — Turbopack's hermetic build
+  sandboxes resolution to the worktree's own filesystem root and refuses to traverse into the
+  parent repository's `node_modules`, which this worktree does not have its own copy of (`ls
+  node_modules` reports "No such file or directory"; confirmed pre-existing, not caused by this
+  plan's edits).
+- **Scope:** `npx tsc --noEmit` (Node's own upward `node_modules` resolution, unaffected by
+  Turbopack's sandboxing) passes clean except the pre-existing, already-logged `src/app/layout.tsx`
+  `LayoutProps` gap (see the 10-02 entry above — untouched by this plan).
+  `npx eslint` on every file this plan touched (`AssignmentSubmissionPanel.tsx`,
+  `submission-actions.ts`, `LessonContent.tsx`, `page.tsx`) exits clean with zero errors. Attempting
+  to work around the missing `node_modules` (a directory junction to the parent repo, or an `npm
+  install` inside this worktree) was not attempted — a junction attempt was blocked by this
+  sandbox's git-safety wrapper (any `cmd.exe` invocation is refused as unverifiable), and an `npm
+  install` here risks resource contention with the other concurrent worktree-agent processes noted
+  in the 10-05 and Wave 4 entries above.
+- **Action:** Not fixed — infra-level gate, not a code defect. `npx next build` should be re-run
+  once this worktree is merged into an environment with `node_modules` present (the orchestrator's
+  consolidated build pass, matching how Wave 4's entry below records a passing Turbopack build in
+  that fuller environment).
+
 ## 2026-09-15 Wave 4 verification limits
 
 - The sandboxed broad Node run reached 116 passing files / 1,975 passing tests, but 21 files failed Docker initialization (22 failing suite groups); 181 cases were skipped after setup failed. Docker configuration/runtime access was denied. This is not a passing integration run.
