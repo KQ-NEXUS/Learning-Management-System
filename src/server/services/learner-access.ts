@@ -56,7 +56,15 @@ export type EnrolmentStoreRow = {
   accessStartsAt: Date | null;
   accessEndsAt: Date | null;
   activatedAt: Date | null;
+  /**
+   * Optional — only read by `getOwnPendingEnrolmentOrderHref` (09-09, DD-22).
+   * Optional (not required) so every existing fake `LearnerAccessStore` row
+   * built before this field existed keeps compiling unchanged.
+   */
+  orderId?: string | null;
 };
+
+export type OrderStoreRow = { reference: string };
 
 export type CohortStoreRow = {
   id: string;
@@ -142,6 +150,15 @@ export type LearnerAccessStore = {
   };
   lessonProgress: {
     findMany(args: { where: { enrolmentId: string } }): Promise<LessonProgressStoreRow[]>;
+  };
+  /**
+   * Optional — only present so `getOwnPendingEnrolmentOrderHref` (09-09,
+   * DD-22) can resolve the one PENDING_PAYMENT order/receipt link the
+   * lesson-list access gate is allowed to show. Every other function in
+   * this file never reads it.
+   */
+  order?: {
+    findUnique(args: { where: { id: string } }): Promise<OrderStoreRow | null>;
   };
 };
 
@@ -390,6 +407,32 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
       },
       accessWindow,
     };
+  }
+
+  /**
+   * DD-22 — the ONE actionable question the D-07 denial path may ask
+   * beyond the identical `null` `getOwnActiveEnrolment` returns for every
+   * other denial cause. Returns an order/receipt href ONLY when an
+   * enrolment with this id exists, belongs to `actor.userId`, AND is
+   * currently `PENDING_PAYMENT`; `null` in every other case — including a
+   * stranger's enrolment id, which must resolve identically to "does not
+   * exist" (T-09-01's denial parity, applied here a second time so this
+   * narrow extra lookup cannot become its own IDOR).
+   */
+  async function getOwnPendingEnrolmentOrderHref(
+    actor: Actor,
+    enrolmentId: string,
+  ): Promise<string | null> {
+    const enrolment = await store.enrolment.findUnique({ where: { id: enrolmentId } });
+    if (!enrolment || enrolment.userId !== actor.userId || enrolment.status !== "PENDING_PAYMENT") {
+      return null;
+    }
+    if (!enrolment.orderId || !store.order) return null;
+
+    const order = await store.order.findUnique({ where: { id: enrolment.orderId } });
+    if (!order) return null;
+
+    return `/orders/${order.reference}`;
   }
 
   /** Every ACTIVE enrolment for `actor.userId`, most-recently-activated first. */
@@ -683,6 +726,7 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
 
   return {
     getOwnActiveEnrolment,
+    getOwnPendingEnrolmentOrderHref,
     listOwnActiveEnrolments,
     hasActiveEnrolmentCoveringCourse,
     loadLearnerCourseStructure,
@@ -710,6 +754,7 @@ const liveStore = prisma as unknown as LearnerAccessStore;
 const built = createLearnerAccessService({ store: liveStore });
 
 export const getOwnActiveEnrolment = built.getOwnActiveEnrolment;
+export const getOwnPendingEnrolmentOrderHref = built.getOwnPendingEnrolmentOrderHref;
 export const listOwnActiveEnrolments = built.listOwnActiveEnrolments;
 export const hasActiveEnrolmentCoveringCourse = built.hasActiveEnrolmentCoveringCourse;
 export const loadLearnerCourseStructure = built.loadLearnerCourseStructure;
