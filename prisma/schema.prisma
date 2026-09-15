@@ -118,6 +118,14 @@ enum GradeStatus {
   RELEASED
 }
 
+// D-02 — which Attempt's score is the learner-visible, pass/fail-deciding
+// one when an Assessment's maxAttempts > 1.
+enum AttemptGradingMethod {
+  HIGHEST
+  LATEST
+  AVERAGE
+}
+
 enum CompletionScope {
   COURSE
   PROGRAMME
@@ -1063,6 +1071,9 @@ model Assessment {
   maxAttempts Int?
   passMark    Int?
   totalMarks  Int?
+  // D-02 — selects which Attempt's score is the learner-visible,
+  // pass/fail-deciding one when maxAttempts > 1.
+  attemptGradingMethod AttemptGradingMethod @default(HIGHEST)
 
   // Assignment settings — ASM-03
   allowedFileTypes  String[]
