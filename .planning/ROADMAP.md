@@ -27,7 +27,7 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement. (completed 2026-09-12)
 - [x] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
 - [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
-- [ ] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion.
+- [x] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion. (completed 2026-09-15)
 - [ ] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides.
 - [ ] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly.
 - [ ] **Phase 12: Support Tickets** *(Track B, depends on Phase 2)* - Learners raise tickets; staff (including a non-Administrator Support role) triage, reply, escalate, and report.
@@ -438,7 +438,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 09-14-PLAN.md — Phase invariants test, real-Postgres learner journey, human walkthrough checkpoint
+- [x] 09-14-PLAN.md — Phase invariants test, real-Postgres learner journey, human walkthrough checkpoint
 
 **UI hint**: yes
 
@@ -562,7 +562,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
-| 9. Learning Delivery & Progress Tracking | 13/14 | In Progress|  |
+| 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
