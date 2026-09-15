@@ -110,6 +110,60 @@ task's own changes).
   1987 passing tests or 27 pre-existing failures touch any file this plan
   modified or created.
 
+## 09-14 (execution date: 2026-09-15, Task 1 + Task 2 only)
+
+- **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Same
+  class of errors as 09-01/09-04/09-07/09-13 — `src/app/layout.tsx`'s
+  `LayoutProps`, `Cannot find module 'stripe'` across
+  `src/server/payments/providers/stripe/*` and two Stripe integration test
+  files, plus `Cannot find module '@aws-sdk/client-s3'` in
+  `src/server/services/storage-service.ts` and
+  `tests/storage-upload-service.test.ts` — all pre-existing missing
+  `node_modules` installs, not caused by this plan. Confirmed none reference
+  `tests/learning-phase-invariants.test.ts`, `tests/import-graph.ts`,
+  `tests/boundary.test.ts`, or `tests/learner-journey.integration.test.ts`.
+  Not fixed (Rule 3 excludes package installs from auto-fix).
+- **Docker WAS available in this execution sandbox**, unlike the Phase 6
+  gate `.planning/STATE.md`'s "Blockers/Concerns" documents. `docker ps`
+  showed a running `postgres:16-alpine`/`minio`/`clamav`/worker stack, and
+  `tests/attendance-service.integration.test.ts` and the new
+  `tests/learner-journey.integration.test.ts` both ran to completion against
+  a real Testcontainers Postgres. Task 2 is therefore NOT reported BLOCKED —
+  it passed for real. Recorded here only so a future reader does not assume
+  every sandbox in this project inherits the Phase 6 Docker-unavailable gate.
+- **`@aws-sdk/client-s3` is declared in `package.json` but absent from
+  `node_modules`** in this worktree (same class of gap as the `stripe`
+  package). This blocked dynamically importing
+  `src/server/services/lesson-resource-service.ts` (which imports
+  `storage-service.ts`, which imports that package at module load) from
+  `tests/learner-journey.integration.test.ts`. Routed around it by proving
+  LRN-03 directly against `learner-access.ts`'s `hasActiveEnrolmentCoveringCourse`
+  — the exact ownership predicate `getDownloadableResourceForLearner` calls
+  before ever touching a resource row — rather than the wrapping service
+  export itself. Not fixed (Rule 3 excludes package installs from auto-fix);
+  the underlying LRN-03 authorization logic is still proved against a real
+  Postgres, just not through the storage-dependent wrapper.
+- **Discovered, not fixed (pre-existing, out of this plan's file scope):**
+  `learner-access.ts`'s `loadLearnerPath` flattens a course's modules for
+  D-05's "single global sequencing path" using `courseIndex * COURSE_POSITION_STRIDE
+  + lesson.position` — it never adds a module-position offset. Because
+  `Lesson.position` is only unique per `(moduleId, position)` (confirmed in
+  `prisma/schema.prisma` and `lesson-service.ts`'s sibling-position
+  computation, which is scoped to `moduleId`), two modules in the same
+  course whose lessons both start at local position 0 would tie in the
+  cross-module sort and fall back to an `id` tiebreak — not necessarily the
+  intended module order. `tests/learner-access.test.ts`'s own fixtures never
+  exercise two modules with overlapping lesson positions in one course
+  (confirmed by grep), so this corner case has no existing unit coverage
+  either. `tests/learner-journey.integration.test.ts`'s fixture sidesteps it
+  deliberately by giving its two modules' lessons globally-increasing
+  pinned-payload positions (0,1 then 2,3) rather than exercising the
+  ambiguous case — out of scope for this plan's Task 2 (which proves the
+  behavior this plan specified, not a pre-existing multi-module authoring
+  gap in an earlier phase's file). Flagged here for a future phase to
+  decide whether `Module.position` needs incorporating into the sequencing
+  sort.
+
 ## 09-02
 
 - **`npx tsc --noEmit` pre-existing failures unrelated to this plan.** Running the full-repo
