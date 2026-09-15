@@ -104,8 +104,8 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 - [x] **ASM-02**: Supported objective Quiz questions are scored automatically with reproducible calculation; attempts store start/submit time, answers, version, result, status.
 - [ ] **ASM-03**: Assignments are created with instructions, due date, permitted file types/size, grading scale, and resubmission policy; published constraints apply consistently to server validation.
 - [ ] **ASM-04**: Assignment submissions are accepted and issue a durable receipt; a successful submission stores file metadata/reference, learner, assessment version, time, attempt, receipt ID; failures never display false success.
-- [ ] **ASM-05**: Authorized graders can view in-scope submissions, record grades/feedback, save drafts, and release results; learners cannot see draft grades; release is explicit and attributed.
-- [ ] **ASM-06**: An authorized grade override/correction requires a mandatory reason; original/revised value, actor, reason, time, and completion/certificate impact are preserved.
+- [x] **ASM-05**: Authorized graders can view in-scope submissions, record grades/feedback, save drafts, and release results; learners cannot see draft grades; release is explicit and attributed.
+- [x] **ASM-06**: An authorized grade override/correction requires a mandatory reason; original/revised value, actor, reason, time, and completion/certificate impact are preserved.
 - [ ] **ASM-07**: Learners see released results, feedback, attempt history, and unmet pass requirements; only released/permitted details appear.
 
 ### Certificates and Verification (CRD)
@@ -263,8 +263,8 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | ASM-02 | Phase 10 | Complete |
 | ASM-03 | Phase 10 | Pending |
 | ASM-04 | Phase 10 | Pending |
-| ASM-05 | Phase 10 | Pending |
-| ASM-06 | Phase 10 | Pending |
+| ASM-05 | Phase 10 | Complete |
+| ASM-06 | Phase 10 | Complete |
 | ASM-07 | Phase 10 | Pending |
 | CRD-01 | Phase 11 | Pending |
 | CRD-02 | Phase 11 | Pending |
