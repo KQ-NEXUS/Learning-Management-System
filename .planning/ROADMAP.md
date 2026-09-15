@@ -467,9 +467,9 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 10-03-PLAN.md — Assessment draft-validation evaluator and authoring service (CRUD, nested question writes, readiness-gated publish)
-- [ ] 10-04-PLAN.md — Attempt service part 1 — start/resume/save with the D-08 frozen question snapshot
-- [ ] 10-05-PLAN.md — Submission service — verified two-step upload, durable receipt, lateness flag, resubmission rows
+- [x] 10-03-PLAN.md — Assessment draft-validation evaluator and authoring service (CRUD, nested question writes, readiness-gated publish)
+- [x] 10-04-PLAN.md — Attempt service part 1 — start/resume/save with the D-08 frozen question snapshot
+- [x] 10-05-PLAN.md — Submission service — verified two-step upload, durable receipt, lateness flag, resubmission rows
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -600,7 +600,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
-| 10. Assessment — Quizzes, Assignments & Grading | 2/17 | In Progress|  |
+| 10. Assessment — Quizzes, Assignments & Grading | 5/17 | In Progress|  |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
