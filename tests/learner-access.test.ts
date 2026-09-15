@@ -720,6 +720,55 @@ describe("loadLearnerPath", () => {
     expect(module2Lesson.locked).toBe(true);
     expect(module2Lesson.blockingLessonTitle).toBe("Module 1 Lesson");
   });
+
+  it("locks module 2's first lesson on module 1's 1001st lesson, past any fixed per-module stride", async () => {
+    // A stride-based fix (moduleIndex * FIXED_STRIDE + lesson.position) only
+    // moves the collision boundary — it does not remove it. A module with
+    // >= FIXED_STRIDE lessons still collides with the next module's early
+    // positions. This test uses 1001 lessons in module 1 (position 1000 is
+    // the 1001st) specifically to break a stride of 1000, proving the fix
+    // is collision-free by construction (a running index), not by an
+    // assumed — and unenforced — per-module lesson-count bound.
+    const module1Lessons = Array.from({ length: 1001 }, (_, i) => ({
+      id: `m1-lesson-${String(i).padStart(4, "0")}`,
+      position: i,
+      required: i === 1000, // only the last lesson is required and incomplete
+      type: "TEXT" as const,
+      assessmentId: null,
+    }));
+    const store = makeStore({
+      enrolments: [enrolment()],
+      cohorts: [cohort({ coursePublicationId: "pub-1" })],
+      courses: [course()],
+      coursePublications: {
+        "pub-1": {
+          payload: coursePayload({
+            modules: [
+              { id: "module-1", position: 0, lessons: module1Lessons },
+              {
+                id: "module-2",
+                position: 1,
+                lessons: [{ id: "a-module-2-lesson", position: 0, required: true, type: "TEXT", assessmentId: null }],
+              },
+            ],
+          }),
+        },
+      },
+      modules: [moduleRow(), moduleRow({ id: "module-2", position: 1, title: "Module Two" })],
+      lessons: [
+        ...module1Lessons.map((l) =>
+          lessonRow({ id: l.id, title: l.id === "m1-lesson-1000" ? "Module 1 Last Lesson" : `Filler ${l.id}` }),
+        ),
+        lessonRow({ id: "a-module-2-lesson", moduleId: "module-2", title: "Module 2 Lesson" }),
+      ],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1");
+
+    const module2Lesson = path!.courses[0].modules[1].lessons[0];
+    expect(module2Lesson.locked).toBe(true);
+    expect(module2Lesson.blockingLessonTitle).toBe("Module 1 Last Lesson");
+  });
 });
 
 describe("assertLessonOpenable", () => {

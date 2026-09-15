@@ -279,28 +279,33 @@ function findLessonInPath(path: LearnerPath, lessonId: string): DecoratedLesson 
 /**
  * Flattens a `LearnerPath`'s decorated courses back into the flat
  * `SequencingLesson[]` shape `evaluateLessonSequencing` consumes — the same
- * course-position-stride convention `learner-access.ts`'s
- * `COURSE_POSITION_STRIDE` documents, duplicated here (rather than imported)
- * because that constant is private to its module.
+ * running-global-index convention `learner-access.ts`'s `loadLearnerPath`
+ * uses, duplicated here (rather than imported) because that logic is
+ * private to its module. `path.courses`, each course's `modules`, and each
+ * module's `lessons` are already in correct reading order (set by
+ * `loadCourseEntryFromPin`), so a plain counter over the nested walk is the
+ * correct global order and is collision-free by construction — a
+ * synthesised `index * STRIDE + lesson.position` scheme was tried first and
+ * found to still collide once any level's real count reached the stride
+ * (see `tests/learner-access.test.ts`).
  */
-const COURSE_POSITION_STRIDE = 1_000_000;
-
 function flattenSequencingLessons(path: LearnerPath): SequencingLesson[] {
   const flat: SequencingLesson[] = [];
-  path.courses.forEach((course, courseIndex) => {
+  let globalPosition = 0;
+  for (const course of path.courses) {
     for (const mod of course.modules) {
       for (const lesson of mod.lessons) {
         flat.push({
           id: lesson.id,
           title: lesson.title,
           required: lesson.required,
-          position: courseIndex * COURSE_POSITION_STRIDE + lesson.position,
+          position: globalPosition++,
           moduleId: mod.id,
           withdrawnAt: lesson.withdrawnAt,
         });
       }
     }
-  });
+  }
   return flat;
 }
 

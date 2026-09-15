@@ -576,6 +576,63 @@ describe("countLessonsRelockedBy", () => {
     });
     expect(countLessonsRelockedBy(path, "les-1")).toBe(0);
   });
+
+  it("counts a re-lock in module 2 caused by un-completing module 1's lesson, across module-local position resets", () => {
+    // Regression: `flattenSequencingLessons` (this file) duplicates
+    // `learner-access.ts`'s flattening and once had the identical
+    // module-position-collision bug — position resets to 0 per module, so
+    // a naive courseIndex-only offset let module 2's position-0 lesson
+    // sort ahead of module 1's, undercounting (or missing entirely) the
+    // re-lock this function exists to report. Two modules, each starting
+    // at position 0, with ids chosen so a collision would sort them wrong.
+    const path: LearnerPath = {
+      enrolment: {
+        id: "enr-1",
+        cohortId: "cohort-1",
+        status: "ACTIVE",
+        activatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        accessStartsAt: null,
+        accessEndsAt: null,
+        cohort: {
+          id: "cohort-1",
+          title: "Cohort",
+          deliveryMode: "SELF_PACED",
+          timezone: "UTC",
+          startsAt: new Date("2026-01-01T00:00:00.000Z"),
+          endsAt: new Date("2026-12-31T00:00:00.000Z"),
+          attendanceThresholdPct: null,
+          courseId: "course-1",
+          programmeId: null,
+        },
+        accessWindow: { kind: "unlimited", readOnly: false, endsAt: null },
+      },
+      courses: [
+        {
+          courseId: "course-1",
+          courseTitle: "Course",
+          modules: [
+            {
+              id: "mod-1",
+              title: "Module 1",
+              position: 0,
+              lessons: [makeLesson({ id: "z-mod1-lesson", position: 0, required: true, completed: true })],
+            },
+            {
+              id: "mod-2",
+              title: "Module 2",
+              position: 1,
+              lessons: [makeLesson({ id: "a-mod2-lesson", position: 0, required: true, completed: false })],
+            },
+          ],
+        },
+      ],
+      progress: new Set(["z-mod1-lesson"]),
+      sequencing: [],
+    };
+
+    // Un-completing module 1's lesson must re-lock module 2's lesson too.
+    expect(countLessonsRelockedBy(path, "z-mod1-lesson")).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

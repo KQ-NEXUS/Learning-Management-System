@@ -99,18 +99,20 @@ const LESSON_1_TITLE =
 /**
  * One published Course with two modules and four lessons (three required,
  * one optional, one of the required ones VIDEO) — the exact shape this
- * plan's fixture behavior bullet describes. The pinned obligation payload's
- * lesson `position` values are deliberately GLOBALLY increasing across both
- * modules (0,1 then 2,3), not reset to 0 per module: `learner-access.ts`'s
- * `loadLearnerPath` flattens every module's lessons and sorts the WHOLE
- * course purely by each lesson's own `position` field (D-05's "one global
- * path"), never adding a module-position offset. Two modules whose lessons
- * both start at local position 0 would tie and sort by id instead of by
- * intended module order — a live authoring gap outside this test's scope
- * (see `deferred-items.md`). Choosing globally-increasing positions up front
- * sidesteps that ambiguity entirely and exercises the D-05 "single global
- * path" guarantee this plan actually specified, rather than the untested
- * corner case.
+ * plan's fixture behavior bullet describes. Lesson `position` values are
+ * MODULE-LOCAL and reset to 0 in module B (0,1 in module A; 0,1 again in
+ * module B) — this is how every real published course is authored (module
+ * position and lesson-within-module position are independent columns; see
+ * `prisma/seed.ts`), not an edge case to avoid. `learner-access.ts`'s
+ * `loadLearnerPath` (and `lesson-progress-service.ts`'s duplicate walk)
+ * once collided these module-local resets into the same synthesised global
+ * position — found via the 09-14 human walkthrough against real seed data,
+ * fixed by replacing the synthesised position with a running index over
+ * the already-correctly-ordered course/module/lesson walk. Keeping this
+ * fixture's positions module-local (rather than the globally-increasing
+ * 0,1,2,3 an earlier version of this file used) is what makes this
+ * real-Postgres suite independently exercise that exact defect class,
+ * rather than only the unit-level regression in `tests/learner-access.test.ts`.
  */
 async function seedLearnerJourneyCourse(prisma: PrismaLike) {
   const courseId = uid("course");
@@ -133,10 +135,10 @@ async function seedLearnerJourneyCourse(prisma: PrismaLike) {
     data: { id: lesson2Id, moduleId: moduleAId, title: "Required Lesson Two", type: "TEXT", position: 1, required: true, allowManualComplete: true },
   });
   await prisma.lesson.create({
-    data: { id: lesson3Id, moduleId: moduleBId, title: "Required Video Lesson", type: "VIDEO", position: 2, required: true, allowManualComplete: true },
+    data: { id: lesson3Id, moduleId: moduleBId, title: "Required Video Lesson", type: "VIDEO", position: 0, required: true, allowManualComplete: true },
   });
   await prisma.lesson.create({
-    data: { id: lesson4Id, moduleId: moduleBId, title: "Optional Wrap-up", type: "TEXT", position: 3, required: false, allowManualComplete: true },
+    data: { id: lesson4Id, moduleId: moduleBId, title: "Optional Wrap-up", type: "TEXT", position: 1, required: false, allowManualComplete: true },
   });
 
   const publisher = await prisma.user.create({
@@ -162,8 +164,8 @@ async function seedLearnerJourneyCourse(prisma: PrismaLike) {
         id: moduleBId,
         position: 1,
         lessons: [
-          { id: lesson3Id, position: 2, required: true, type: "VIDEO", assessmentId: null },
-          { id: lesson4Id, position: 3, required: false, type: "TEXT", assessmentId: null },
+          { id: lesson3Id, position: 0, required: true, type: "VIDEO", assessmentId: null },
+          { id: lesson4Id, position: 1, required: false, type: "TEXT", assessmentId: null },
         ],
       },
     ],

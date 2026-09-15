@@ -262,26 +262,6 @@ export type LessonOpenResult =
   | { ok: true; lesson: DecoratedLesson }
   | { ok: false; reason: "not-found" | "locked" | "access-window-closed" };
 
-/**
- * Flattened course/module-index strides used to synthesise a globally
- * increasing `position` across a programme cohort's ordered member courses
- * before handing the flat list to the pure sequencing evaluator (which
- * sorts by `position`, tiebreaking equal values by lesson id — so any
- * unintended collision is order-fragile, not merely cosmetic). Pinned
- * lesson positions are only unique WITHIN their own MODULE (each module's
- * lessons restart at 0) — courses with more than one module need a module
- * offset too, not just a course offset (found via the 09-14 human
- * walkthrough: a two-module course collided module-1-position-0 with
- * module-2-position-0, and the id tiebreak happened to sort the wrong
- * module first). `courseIndex * COURSE_POSITION_STRIDE + moduleIndex *
- * MODULE_POSITION_STRIDE + lesson.position` is used instead. 1,000,000 and
- * 1,000 comfortably exceed any real course's module/lesson counts while
- * staying well clear of the schema's own negative `WITHDRAWN_PARK_BASE`
- * (-1,000,000) convention, so a synthesised position can never collide with
- * that band.
- */
-const COURSE_POSITION_STRIDE = 1_000_000;
-const MODULE_POSITION_STRIDE = 1_000;
 
 function findDecoratedLesson(path: LearnerPath, lessonId: string): DecoratedLesson | null {
   for (const course of path.courses) {
@@ -659,28 +639,35 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     const progressByLesson = new Map(progressRows.map((p) => [p.lessonId, p]));
     const completedIds = new Set(progressRows.map((p) => p.lessonId));
 
-    // D-05 extended across a programme cohort (see COURSE_POSITION_STRIDE /
-    // MODULE_POSITION_STRIDE): flatten ALL lessons of ALL member courses,
-    // course-position then module-position then lesson-position, before
-    // handing to the pure evaluator — one global path, not one per course.
+    // D-05 extended across a programme cohort: flatten ALL lessons of ALL
+    // member courses into one global path, not one per course. `courses`,
+    // each course's `modules`, and each module's `lessons` are already
+    // sorted into the correct reading order by `loadCourseEntryFromPin`
+    // (course order from CohortCourse.position, module/lesson order from
+    // the pinned payload's own position). A plain running counter over
+    // this nested walk is therefore ALREADY the correct global order and
+    // is collision-free by construction — unlike a synthesised
+    // `index * STRIDE + lesson.position` scheme, which only pushes the
+    // collision boundary out to whatever lesson/module count the stride
+    // was sized for (found twice: once at position 0 across modules, then
+    // again at position 1000 once a fixed 1,000-lesson-per-module stride
+    // was tried — see tests/learner-access.test.ts for both regressions).
     const flatLessons: SequencingLesson[] = [];
-    courses.forEach((courseEntry, courseIndex) => {
-      courseEntry.modules.forEach((mod, moduleIndex) => {
+    let globalPosition = 0;
+    for (const courseEntry of courses) {
+      for (const mod of courseEntry.modules) {
         for (const lesson of mod.lessons) {
           flatLessons.push({
             id: lesson.id,
             title: lesson.title,
             required: lesson.required,
-            position:
-              courseIndex * COURSE_POSITION_STRIDE +
-              moduleIndex * MODULE_POSITION_STRIDE +
-              lesson.position,
+            position: globalPosition++,
             moduleId: mod.id,
             withdrawnAt: lesson.withdrawnAt,
           });
         }
-      });
-    });
+      }
+    }
 
     const sequencing = evaluateLessonSequencing(flatLessons, completedIds);
     const sequencingByLesson = new Map(sequencing.map((s) => [s.lessonId, s]));
