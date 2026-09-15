@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
-import { assessmentService, type AssessmentRecord } from "@/server/services/assessment-service";
+import { loadAssessmentForAuthoring } from "@/server/services/assessment-service";
+import { QuestionBuilder } from "@/components/catalogue/QuestionBuilder";
+import { UnsavedOrderProvider } from "@/components/catalogue/UnsavedOrderGuard";
+import { saveQuizQuestionsAction } from "../question-actions";
 import { evaluateAssessmentReadiness } from "@/server/services/assessment-readiness";
 import {
   AssessmentFormFields,
@@ -20,10 +23,7 @@ function toDatetimeLocal(value: Date | null): string | null {
  * driven by the SAME evaluator the publish refusal checks (T-10-14), and
  * publish/archive controls.
  *
- * No question-authoring UI exists yet (plan 10-10) — a freshly created Quiz
- * can never have a `QuizQuestion` row through this product today, so
- * `questions: []` is the honest current state fed into the evaluator here,
- * not a stand-in for data this route failed to load.
+ * The permission-gated aggregate supplies both readiness and authored questions.
  */
 export default async function EditAssessmentPage({
   params,
@@ -32,9 +32,9 @@ export default async function EditAssessmentPage({
 }) {
   const { id: courseId, assessmentId } = await params;
 
-  let assessment: AssessmentRecord | null;
+  let assessment: Awaited<ReturnType<typeof loadAssessmentForAuthoring>>;
   try {
-    assessment = (await assessmentService.get(assessmentId)) as unknown as AssessmentRecord | null;
+    assessment = await loadAssessmentForAuthoring({ assessmentId });
   } catch (error) {
     // A denial must not confirm existence — same response as "not found".
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
@@ -77,10 +77,11 @@ export default async function EditAssessmentPage({
     allowedFileTypes: initialValues.allowedFileTypes,
     maxFileSizeBytes: initialValues.maxFileSizeBytes,
     allowResubmission: initialValues.allowResubmission,
-    questions: [],
+    questions: assessment.questions,
   });
 
   return (
+    <UnsavedOrderProvider>
     <AssessmentFormFields
       mode="edit"
       courseId={courseId}
@@ -90,5 +91,17 @@ export default async function EditAssessmentPage({
       readinessItems={readinessItems}
       initialValues={initialValues}
     />
+    {assessment.type === "QUIZ" && assessment.status !== "ARCHIVED" && (
+      <QuestionBuilder
+        assessmentId={assessment.id}
+        initialQuestions={assessment.questions.map(question => ({
+          prompt: question.prompt, type: question.type, marks: question.marks,
+          explanation: question.explanation ?? null,
+          options: question.options.map(option => ({ label: option.label, isCorrect: option.isCorrect })),
+        }))}
+        onSubmit={saveQuizQuestionsAction}
+      />
+    )}
+    </UnsavedOrderProvider>
   );
 }

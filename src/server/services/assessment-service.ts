@@ -110,6 +110,7 @@ export type PublishAssessmentInput = { assessmentId: string };
 
 /** The nested tree `publishAssessment` reads to build an `AssessmentReadinessInput`. */
 export type AssessmentAggregateQuestion = {
+  explanation?: string | null;
   position: number;
   prompt: string;
   type: string;
@@ -432,7 +433,16 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     return after;
   });
 
-  return { assessmentCourseScope, assessmentService, saveQuizQuestions, publishAssessment };
+  const loadAssessmentForAuthoring = deps.withPermission<{ assessmentId: string }>(
+    "courses.view", input => assessmentCourseScope(input.assessmentId),
+  )(async input => {
+    const [record, aggregate] = await Promise.all([
+      deps.delegate.findUnique({ where: { id: input.assessmentId } }),
+      deps.aggregate.findUnique({ where: { id: input.assessmentId } }),
+    ]);
+    return record && aggregate ? { ...record, ...aggregate } : null;
+  });
+  return { assessmentCourseScope, assessmentService, saveQuizQuestions, publishAssessment, loadAssessmentForAuthoring };
 }
 
 const built = createAssessmentService({
@@ -472,3 +482,4 @@ const built = createAssessmentService({
 export const assessmentService = built.assessmentService;
 export const saveQuizQuestions = built.saveQuizQuestions;
 export const publishAssessment = built.publishAssessment;
+export const loadAssessmentForAuthoring = built.loadAssessmentForAuthoring;

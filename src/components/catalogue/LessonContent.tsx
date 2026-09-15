@@ -219,6 +219,8 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
     }
 
     case "QUIZ":
+      body = <BodyProse html={lesson.body ?? ""} />;
+      break;
     case "ASSIGNMENT": {
       body = <Placeholder type={lesson.type} />;
       break;

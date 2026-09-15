@@ -8,16 +8,16 @@
  * `startAttempt`, `saveAttemptAnswers`, `getOwnAttempt` and `listOwnAttempts`
  * are ownership-scoped — like `lesson-progress-service.ts` and
  * `checkout-service.ts`'s `getOwnOrder`, authorization here is an ownership
- * comparison (the enrolment is re-derived from `actor.userId`, never accepted
- * from the caller), not a permission check. This file imports no permission
+ * comparison (the enrolment is re-derived from `actor.userId`), not a
+ * permission check. This file imports no permission
  * wrapper — that is deliberate, not an oversight. The closed 36-identifier
  * permission catalogue has no attempt-specific entry, and importing one here
  * would pull the permission choke point onto the
  * learner request closure — exactly what `tests/learning-phase-invariants.test.ts`
  * already gates for `lesson-progress-service.ts` and plan 10-17 will gate for
- * this file. No exported function's INPUT type ever carries an
- * `enrolmentId` — the enrolment is always resolved server-side from
- * `actor.userId`, which is what closes the T-10-02 IDOR surface.
+ * this file. An optional enrolmentId disambiguates multiple owned enrolments;
+ * it is matched only within actor.userId's ACTIVE enrolments, never trusted
+ * as proof of ownership (T-10-02).
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * D-08 — THE FROZEN SNAPSHOT, NOT THE LIVE ROWS, IS THE SOURCE OF TRUTH.
@@ -233,6 +233,7 @@ export type AttemptResultView = {
     awarded: number;
     correct: boolean;
     selectedOptionIds: string[];
+    optionLabels?: Record<string, string>;
     correctOptionIds: string[];
     explanation: string | null;
   }>;
@@ -389,6 +390,7 @@ function buildAttemptResultView(
       awarded: item.awarded,
       correct: item.correct,
       selectedOptionIds: response?.selectedOptionIds ?? [],
+      optionLabels: Object.fromEntries((question?.options ?? []).map(o => [o.id, o.label])),
       correctOptionIds: question ? question.options.filter((o) => o.isCorrect).map((o) => o.id) : [],
       explanation: question?.explanation ?? null,
     };
@@ -415,20 +417,22 @@ export function createAttemptService(deps: AttemptServiceDeps) {
   const now = deps.now ?? (() => new Date());
 
   /**
-   * Re-derives the actor's own ACTIVE enrolment covering `courseId` — never
-   * accepts a caller-supplied enrolment id (T-10-02). Mirrors
+   * Re-derives the actor's own ACTIVE enrolment covering `courseId`;
+   * any requested ID must match that owned set (T-10-02). Mirrors
    * `learner-access.ts`'s `hasActiveEnrolmentCoveringCourse` boolean check,
    * but returns the actual row this file needs to attach an Attempt to.
    */
   async function resolveOwnEnrolmentForCourse(
     actor: Actor,
     courseId: string,
+    enrolmentId?: string,
   ): Promise<EnrolmentRow | null> {
     const activeEnrolments = await deps.store.enrolment.findMany({
       where: { userId: actor.userId, status: "ACTIVE" },
     });
 
     for (const enrolment of activeEnrolments) {
+      if (enrolmentId && enrolment.id !== enrolmentId) continue;
       const cohort = await deps.store.cohort.findUnique({ where: { id: enrolment.cohortId } });
       if (!cohort) continue;
       if (cohort.courseId === courseId) return enrolment;
@@ -448,7 +452,7 @@ export function createAttemptService(deps: AttemptServiceDeps) {
 
   async function startAttempt(
     actor: Actor,
-    input: { assessmentId: string; startNew?: boolean },
+    input: { assessmentId: string; startNew?: boolean; enrolmentId?: string },
   ): Promise<AttemptRow> {
     const assessment = await deps.store.assessment.findUnique({
       where: { id: input.assessmentId },
@@ -461,7 +465,7 @@ export function createAttemptService(deps: AttemptServiceDeps) {
     // The identical "not-found" refusal for a non-existent assessment and for
     // an assessment this actor's enrolment doesn't reach keeps a guessed
     // assessment id from confirming whether it exists.
-    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId);
+    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId, input.enrolmentId);
     if (!enrolment) {
       throw new AttemptNotStartableError(input.assessmentId, "not-found");
     }
@@ -914,7 +918,7 @@ export function createAttemptService(deps: AttemptServiceDeps) {
 
   async function getOwnAssessmentResult(
     actor: Actor,
-    input: { assessmentId: string },
+    input: { assessmentId: string; enrolmentId?: string },
   ): Promise<{
     effective: EffectiveAttemptResult | null;
     attempts: AttemptResultView[];
@@ -923,7 +927,7 @@ export function createAttemptService(deps: AttemptServiceDeps) {
     const assessment = await deps.store.assessment.findUnique({ where: { id: input.assessmentId } });
     if (!assessment) return null;
 
-    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId);
+    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId, input.enrolmentId);
     if (!enrolment) return null;
 
     const rawAttempts = await deps.store.attempt.findMany({

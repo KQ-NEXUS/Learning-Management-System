@@ -16,8 +16,8 @@
  * Every export here is ownership-scoped, exactly like `checkout-service.ts`'s
  * `getOwnOrder` and `lesson-progress-service.ts`'s learner-facing exports:
  * the enrolment is re-derived from `actor.userId` against the Assessment's
- * course, never accepted as caller input. No exported input type carries an
- * `enrolmentId` field, and this file imports no value from
+ * course. Read callers may disambiguate with an enrolmentId, which is matched
+ * only within that actor's ACTIVE enrolments. This file imports no value from
  * `@/server/permissions` — only a type-only `Actor` import, which never
  * enters the module's runtime closure.
  *
@@ -310,10 +310,11 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
    * `hasActiveEnrolmentCoveringCourse` walk, but returns the enrolment id
    * itself (the boolean-only helper cannot scope a Submission row).
    */
-  async function resolveOwnEnrolmentForCourse(userId: string, courseId: string): Promise<string | null> {
+  async function resolveOwnEnrolmentForCourse(userId: string, courseId: string, requestedEnrolmentId?: string): Promise<string | null> {
     const activeEnrolments = await deps.store.enrolment.findMany({ where: { userId, status: "ACTIVE" } });
 
     for (const enrolment of activeEnrolments) {
+      if (requestedEnrolmentId && enrolment.id !== requestedEnrolmentId) continue;
       const cohort = await deps.store.cohort.findUnique({ where: { id: enrolment.cohortId } });
       if (!cohort) continue;
       if (cohort.courseId === courseId) return enrolment.id;
@@ -556,11 +557,11 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
   }
 
   /** This enrolment's submissions for one assessment, newest attempt first — the full history, not just the latest (D-04). */
-  async function getOwnSubmissions(actor: Actor, input: { assessmentId: string }): Promise<SubmissionReceipt[]> {
+  async function getOwnSubmissions(actor: Actor, input: { assessmentId: string; enrolmentId?: string }): Promise<SubmissionReceipt[]> {
     const assessment = await deps.resolveAssessment(input.assessmentId);
     if (!assessment) return [];
 
-    const enrolmentId = await resolveOwnEnrolmentForCourse(actor.userId, assessment.courseId);
+    const enrolmentId = await resolveOwnEnrolmentForCourse(actor.userId, assessment.courseId, input.enrolmentId);
     if (!enrolmentId) return [];
 
     const rows = await deps.delegate.findMany({ where: { assessmentId: assessment.id, enrolmentId } });

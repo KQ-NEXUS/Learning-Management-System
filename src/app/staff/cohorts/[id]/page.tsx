@@ -23,6 +23,7 @@ import { SessionsTab, type SessionRow } from "./SessionsTab";
 import { RosterTab, type RosterRowView } from "./RosterTab";
 import { ExceptionsTab, type AttendanceExceptionView } from "./ExceptionsTab";
 import { InstructorsPanel, type InstructorRow } from "./InstructorsPanel";
+import { GradingTab } from "./GradingTab";
 
 export const metadata = { title: "Cohort" };
 
@@ -369,6 +370,7 @@ export default async function CohortDetailPage({
           ),
           error: exceptionsErrorMessage ? { message: exceptionsErrorMessage } : undefined,
         },
+        { id: "grading", label: "Grading", content: <GradingTab cohortId={cohortId} /> },
       ]}
     />
   );

@@ -321,17 +321,6 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
         </div>
       )}
 
-      {mode === "edit" && type === "QUIZ" && (
-        <div className="rounded-xl border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted-foreground">
-          {/* Question builder mounts here — plan 10-10. Intentionally not a
-              stub question list: rendering "0 questions" here would
-              misrepresent a capability this plan does not build (no
-              QuizQuestion can be authored through the product yet). */}
-          The question builder for adding and reordering quiz questions arrives in a future
-          update.
-        </div>
-      )}
-
       {mode === "edit" && !archived && (
         <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-4 py-4 shadow-card">
           <p className="text-sm font-semibold">Archive this assessment</p>

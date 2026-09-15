@@ -20,6 +20,7 @@ vi.mock("@/app/staff/cohorts/[id]/SessionsTab", () => ({ SessionsTab: () => null
 vi.mock("@/app/staff/cohorts/[id]/RosterTab", () => ({ RosterTab: () => null }));
 vi.mock("@/app/staff/cohorts/[id]/ExceptionsTab", () => ({ ExceptionsTab: () => null }));
 vi.mock("@/app/staff/cohorts/[id]/InstructorsPanel", () => ({ InstructorsPanel: () => null }));
+vi.mock("@/app/staff/cohorts/[id]/GradingTab", () => ({ GradingTab: () => null }));
 import DetailPage from "@/app/staff/cohorts/[id]/page";
 import EditPage from "@/app/staff/cohorts/[id]/edit/page";
 

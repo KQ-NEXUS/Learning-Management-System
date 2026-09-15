@@ -28,3 +28,4 @@ export type { LessonFormFieldsProps, LessonFieldValues } from "./LessonFormField
 
 export { AssessmentFormFields } from "./AssessmentFormFields";
 export type { AssessmentFieldValues } from "./AssessmentFormFields";
+export { QuestionBuilder } from "./QuestionBuilder";
