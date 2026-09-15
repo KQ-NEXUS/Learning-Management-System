@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getCurrentActor } from "@/server/auth/current-actor";
+import { sanitizeLessonBody } from "@/lib/sanitize";
 import {
   beginSubmissionUpload,
   completeSubmissionUpload,
@@ -122,14 +123,69 @@ export async function failSubmissionUploadAction(input: unknown) {
 }
 
 /**
+ * The client-safe shape of `SubmissionAssignmentView` — dates converted to
+ * ISO strings before crossing into `AssignmentSubmissionPanel`'s props,
+ * matching `learner-quiz-service.ts`'s `availableFrom`/`availableUntil`
+ * convention rather than relying on Flight's own Date passthrough.
+ */
+export type AssignmentSubmissionClientView = {
+  assessmentId: string;
+  title: string;
+  instructions: string | null;
+  dueAt: string | null;
+  availableUntil: string | null;
+  allowedFileTypes: string[];
+  maxFileSizeBytes: number | null;
+  allowResubmission: boolean;
+  submissions: Array<{
+    submissionId: string;
+    receiptId: string;
+    attemptNumber: number;
+    filename: string;
+    sizeBytes: number;
+    submittedAt: string;
+    isLate: boolean;
+    uploadStatus: "UPLOADING" | "READY" | "ERROR";
+  }>;
+};
+
+/**
  * The panel's pre-submit view-builder (ASM-03) — a plain async function, not
  * an action, called directly from the Server Component page the same way
  * `loadLearnerQuiz` is. Returns `null` for a signed-out caller, an
  * unpublished/non-Assignment assessment, or an actor with no covering
  * enrolment — the page must not render the panel at all in that case.
  */
-export async function loadAssignmentSubmissionView(input: { assessmentId: string; enrolmentId: string }) {
+export async function loadAssignmentSubmissionView(
+  input: { assessmentId: string; enrolmentId: string },
+): Promise<AssignmentSubmissionClientView | null> {
   const actor = await getCurrentActor();
   if (!actor) return null;
-  return getOwnAssignmentView(actor, input);
+
+  const view = await getOwnAssignmentView(actor, input);
+  if (!view) return null;
+
+  return {
+    assessmentId: view.assessmentId,
+    title: view.title,
+    // Sanitised here, server-side, with the SAME allow-list `LessonContent`'s
+    // `BodyProse` uses (T-10-34) — the client panel renders this string
+    // as-is, never re-sanitising (and never bundling `sanitize-html`) client-side.
+    instructions: view.instructions ? sanitizeLessonBody(view.instructions) : null,
+    dueAt: view.dueAt?.toISOString() ?? null,
+    availableUntil: view.availableUntil?.toISOString() ?? null,
+    allowedFileTypes: view.allowedFileTypes,
+    maxFileSizeBytes: view.maxFileSizeBytes,
+    allowResubmission: view.allowResubmission,
+    submissions: view.submissions.map((s) => ({
+      submissionId: s.submissionId,
+      receiptId: s.receiptId,
+      attemptNumber: s.attemptNumber,
+      filename: s.filename,
+      sizeBytes: s.sizeBytes,
+      submittedAt: s.submittedAt.toISOString(),
+      isLate: s.isLate,
+      uploadStatus: s.uploadStatus,
+    })),
+  };
 }
