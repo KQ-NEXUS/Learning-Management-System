@@ -215,6 +215,21 @@ export type GradingDetail = {
   /** Every prior `Submission` row for this enrolment+assessment, newest attempt first (D-04). */
   priorSubmissions: SubmissionRow[];
   overrides: GradeOverrideRow[];
+  /**
+   * The submission's OWN cohort (read from its enrolment row, never a
+   * caller-supplied value) — plan 10-13's grade-entry route cross-checks
+   * this against its `[id]` route param so a submission id that resolves
+   * under a broader grant (PROGRAMME/GLOBAL) can never render under the
+   * WRONG Cohort's D-05 scope banner, mirroring the same
+   * row-proves-membership pattern `learners/[enrolmentId]/page.tsx` already
+   * uses for `enrolmentId`.
+   */
+  cohortId: string;
+  /** The score scale and title the grade-entry screen's read-only zone and
+   * Score field hint need — resolved here (`submissions.view` scope, the
+   * SAME grant already gating this whole read) rather than via a second
+   * `courses.view`-gated call the grader may not hold. */
+  assessment: { id: string; title: string; totalMarks: number | null; passMark: number | null };
 };
 
 /**
@@ -461,6 +476,9 @@ export function createGradingService(deps: GradingServiceDeps) {
     const submission = await deps.submission.findUnique({ where: { id: input.submissionId } });
     if (!submission) throw new SubmissionNotFoundError(input.submissionId);
 
+    const assessment = await deps.assessment.findUnique({ where: { id: submission.assessmentId } });
+    if (!assessment) throw new SubmissionNotFoundError(input.submissionId);
+
     const enrolment = await deps.enrolment.findUnique({ where: { id: submission.enrolmentId } });
     const user = enrolment ? await deps.user.findUnique({ where: { id: enrolment.userId } }) : null;
 
@@ -485,6 +503,13 @@ export function createGradingService(deps: GradingServiceDeps) {
       grade,
       priorSubmissions,
       overrides,
+      cohortId: enrolment?.cohortId ?? "",
+      assessment: {
+        id: assessment.id,
+        title: assessment.title,
+        totalMarks: assessment.totalMarks,
+        passMark: assessment.passMark,
+      },
     };
   });
 
@@ -747,3 +772,20 @@ export const getGradingDetail = built.getGradingDetail;
 export const saveDraftGrade = built.saveDraftGrade;
 export const releaseGrade = built.releaseGrade;
 export const releaseGradesBatch = built.releaseGradesBatch;
+
+/**
+ * Best-effort actor-name lookup for the grade-entry screen's override
+ * history (`10-UI-SPEC.md` §6.1's "by {actorName}" copy) — supplementary
+ * display data, not an authorization gate, mirroring
+ * `payment-read-service.ts`'s own refund-actor-name lookup and
+ * `learner-results-service.ts`'s identical override-actor resolution.
+ * Not routed through `withPermission`: the caller already proved
+ * `submissions.view`/`grades.manage` scope over the grade whose overrides
+ * these ids came from, and a staff member's own name is not sensitive.
+ */
+export async function resolveActorNames(actorIds: string[]): Promise<Map<string, string | null>> {
+  const ids = [...new Set(actorIds)];
+  if (ids.length === 0) return new Map();
+  const users = await prisma.user.findMany({ where: { id: { in: ids } } });
+  return new Map(users.map((u) => [u.id, u.name]));
+}
