@@ -457,7 +457,44 @@ Plans:
   4. Graders see only in-scope submissions, can save draft grades invisibly to learners, and must explicitly release results; overrides require a mandatory reason and are fully audited. (ASM-05, ASM-06)
   5. Learners see only released results, feedback, attempt history, and unmet pass requirements. (ASM-07)
 
-**Plans**: TBD
+**Plans**: 17 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 10-01-PLAN.md — Schema migration for attemptGradingMethod, four domain-event types, assessment scope resolver, Submission storage keys
+- [ ] 10-02-PLAN.md — Pure quiz-scoring module — per-QuestionType scoring with D-09 partial credit, effective-attempt selection, purity gate
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 10-03-PLAN.md — Assessment draft-validation evaluator and authoring service (CRUD, nested question writes, readiness-gated publish)
+- [ ] 10-04-PLAN.md — Attempt service part 1 — start/resume/save with the D-08 frozen question snapshot
+- [ ] 10-05-PLAN.md — Submission service — verified two-step upload, durable receipt, lateness flag, resubmission rows
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 10-06-PLAN.md — Attempt service part 2 — submit, server-side scoring, auto-released Grade, lazy expiry, real-Postgres evidence suite
+- [ ] 10-07-PLAN.md — Grading service — Cohort-scoped queue, draft save, single release, D-06 batch release in one transaction
+- [ ] 10-08-PLAN.md — Staff assessment authoring UI — Course-scoped list, create/edit form, readiness-gated publish
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 10-09-PLAN.md — Grade-override service (D-07 RELEASED-only, reason mandatory) and learner released-only results service
+- [ ] 10-10-PLAN.md — Quiz question builder UI — nested question/option authoring with keyboard reorder
+- [ ] 10-11-PLAN.md — Learner quiz attempt UI — single-page form, immediate scored result, attempt history
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 10-12-PLAN.md — Staff grading queue UI — Cohort Grading tab, submission queue, first real bulk-select batch release
+- [ ] 10-13-PLAN.md — Staff grade-entry UI — draft save, explicit release, RELEASED-only override with mandatory reason
+- [ ] 10-14-PLAN.md — Learner assignment submission UI — presigned upload, verified receipt, lateness, cutoff, resubmission history
+- [ ] 10-15-PLAN.md — Learner results page and the two Phase 9 dashboard named gaps filled with real data
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 10-16-PLAN.md — Real-Postgres and MinIO integration suites — receipt invariant, Cohort scoping, batch atomicity, released-only read
+- [ ] 10-17-PLAN.md — Phase invariants test, validation contract, and the 30-step human walkthrough
+
 **UI hint**: yes
 
 ---
