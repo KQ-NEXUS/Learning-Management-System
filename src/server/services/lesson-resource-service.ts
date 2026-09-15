@@ -284,18 +284,52 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     });
   });
 
+  /**
+   * The shared find-filter-sort body behind BOTH `listLessonResources`
+   * (staff, `courses.view`) and `listLessonResourcesForLearner` (DD-26,
+   * ownership) — factored once so the ordering rule cannot drift between
+   * the two entry points, mirroring `shapeDownloadable`'s identical reason
+   * for existing.
+   */
+  async function sortedLessonResources(lessonId: string): Promise<LessonResourceRecord[]> {
+    const rows = await delegate.findMany({ where: { lessonId } });
+    return rows
+      .filter((row) => row.lessonId === lessonId)
+      .sort((left, right) => left.position - right.position);
+  }
+
   const listLessonResources = deps.withPermission<string>(
     "courses.view",
     async (lessonId) => {
       const context = await resolveLessonContext(lessonId);
       return { courseIds: context ? [context.courseId] : [] };
     },
-  )(async (lessonId) => {
-    const rows = await delegate.findMany({ where: { lessonId } });
-    return rows
-      .filter((row) => row.lessonId === lessonId)
-      .sort((left, right) => left.position - right.position);
-  });
+  )((lessonId) => sortedLessonResources(lessonId));
+
+  /**
+   * DD-26 — the ownership-scoped sibling read `listLessonResources` cannot
+   * serve: `listLessonResources` is `courses.view`-wrapped, and a learner
+   * has no such grant (nor should be given one — a matched grant is not
+   * action-scoped once matched, so widening it would hand a learner every
+   * other course-scoped staff action). Deliberately NOT wrapped in
+   * `withPermission`, same reasoning as `getDownloadableResourceForLearner`
+   * above. Returns `[]` (never throws) for a non-enrolled actor or an
+   * unknown lesson id — both cases indistinguishable to the caller by
+   * design — and otherwise the SAME ordered rows the staff path returns via
+   * the shared `sortedLessonResources` helper.
+   */
+  async function listLessonResourcesForLearner(
+    actor: Actor,
+    lessonId: string,
+  ): Promise<LessonResourceRecord[]> {
+    const context = await resolveLessonContext(lessonId);
+    if (!context) return [];
+
+    const authorized = await deps.hasActiveEnrolmentCoveringCourse(actor.userId, context.courseId);
+    if (!authorized) return [];
+
+    return sortedLessonResources(lessonId);
+  }
 
   /**
    * The shared shaping step behind BOTH `getDownloadableResource` (staff,
@@ -360,6 +394,7 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     completeLessonResourceUpload,
     removeLessonResource,
     listLessonResources,
+    listLessonResourcesForLearner,
     getDownloadableResource,
     getDownloadableResourceForLearner,
   };
@@ -402,5 +437,6 @@ export const beginLessonResourceUpload = built.beginLessonResourceUpload;
 export const completeLessonResourceUpload = built.completeLessonResourceUpload;
 export const removeLessonResource = built.removeLessonResource;
 export const listLessonResources = built.listLessonResources;
+export const listLessonResourcesForLearner = built.listLessonResourcesForLearner;
 export const getDownloadableResource = built.getDownloadableResource;
 export const getDownloadableResourceForLearner = built.getDownloadableResourceForLearner;
