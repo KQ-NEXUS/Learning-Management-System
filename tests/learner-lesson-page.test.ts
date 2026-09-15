@@ -76,6 +76,7 @@ vi.mock("@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions", () => 
 }));
 
 import Page from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/page";
+import { undoRelockNotice } from "@/components/learner/LessonCompleteControl";
 
 type Over = Record<string, unknown>;
 
@@ -323,5 +324,143 @@ describe("/learn/[enrolmentId]/lessons/[lessonId]", () => {
     const html = await renderPage();
 
     expect(html).toMatch(/<a href="\/learn\/enrolment-1"[^>]*>← Course One<\/a>/);
+  });
+});
+
+describe("LessonCompleteControl, rendered inside the reading pane (09-11 Task 3)", () => {
+  it("renders a single 38px 'Mark complete' submit button when not completed and allowManualComplete is true", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [lessonFixture({ allowManualComplete: true, completed: false })],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const html = await renderPage();
+
+    expect(html).toContain("Mark complete");
+    expect((html.match(/<button/g) ?? []).length).toBe(1);
+  });
+
+  it("renders no button element at all when not completed and allowManualComplete is false", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [lessonFixture({ allowManualComplete: false, completed: false })],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("Mark complete");
+  });
+
+  it("renders the Completed label plus exactly one Undo control and zero Mark complete controls", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [
+                  lessonFixture({ completed: true, completedSource: "MANUAL" }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const html = await renderPage();
+
+    expect(html).toContain("Completed");
+    expect((html.match(/Undo/g) ?? []).length).toBe(1);
+    expect(html).not.toContain("Mark complete");
+  });
+
+  it("renders the automatic-completion caption only for an AUTO_VIDEO source", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [lessonFixture({ completed: true, completedSource: "AUTO_VIDEO" })],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const html = await renderPage();
+
+    expect(html).toContain("Marked complete automatically");
+  });
+
+  it("does not render the automatic-completion caption for a MANUAL source", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [lessonFixture({ completed: true, completedSource: "MANUAL" })],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("Marked complete automatically");
+  });
+
+  it("does not show the D-16 relock disclosure before the undo affordance is engaged, even when relockCount > 0", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [lessonFixture({ completed: true, completedSource: "MANUAL" })],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    mocks.countLessonsRelockedBy.mockReturnValue(3);
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("re-lock");
+    // The confirm step itself renders as a plain button, not the real submit —
+    // this file runs under Vitest's "node" project (no jsdom), so the actual
+    // click-through to the engaged disclosure is proven via `undoRelockNotice`
+    // directly below rather than a simulated click.
+  });
+
+  it("undoRelockNotice renders DD-27's exact copy, singular and plural", () => {
+    expect(undoRelockNotice(3)).toBe("Undoing this will also re-lock 3 lessons after it");
+    expect(undoRelockNotice(1)).toBe("Undoing this will also re-lock 1 lesson after it");
   });
 });
