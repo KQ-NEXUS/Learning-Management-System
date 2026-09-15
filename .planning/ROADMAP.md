@@ -473,9 +473,9 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 10-06-PLAN.md — Attempt service part 2 — submit, server-side scoring, auto-released Grade, lazy expiry, real-Postgres evidence suite
-- [ ] 10-07-PLAN.md — Grading service — Cohort-scoped queue, draft save, single release, D-06 batch release in one transaction
-- [ ] 10-08-PLAN.md — Staff assessment authoring UI — Course-scoped list, create/edit form, readiness-gated publish
+- [x] 10-06-PLAN.md — Attempt service part 2 — submit, server-side scoring, auto-released Grade, lazy expiry, real-Postgres evidence suite
+- [x] 10-07-PLAN.md — Grading service — Cohort-scoped queue, draft save, single release, D-06 batch release in one transaction
+- [x] 10-08-PLAN.md — Staff assessment authoring UI — Course-scoped list, create/edit form, readiness-gated publish
 
 **Wave 4** *(blocked on Wave 3 completion)*
 

@@ -42,3 +42,11 @@ task's changes are auto-fixed).
   `npx eslint src/server/services/submission-service.ts` reports zero errors — the plan's own
   `<verification>` block is fully green. Re-run the full suite once uncontended (no concurrent
   worktree-agent DB writers) to confirm this integration file is unaffected.
+
+## 2026-09-15 Wave 3 integration regression findings
+
+- The full Node regression run reports enrolment-service.integration.test.ts failures because the existing global cohort-scope Prisma client has no DATABASE_URL, despite the fixture having a container-bound client. The terminal WITHDRAWN case was reproduced on worktree-agent-a15db908ac159067d at pre-Wave 3 HEAD 0b0b2b3; the test, enrolment service, and cohort-scope source are unchanged from that base. This is pre-existing and outside assessment Wave 3.
+- checkout-phase-invariants.test.ts hit the default 5-second timeout during the loaded full-suite run. An isolated rerun with --testTimeout=15000 passed all 10 tests. No source or runner configuration changed.
+- cohort-lifecycle-security.integration.test.ts also reports six timeout failures after the same missing DATABASE_URL errors in unchanged cohort-scope.ts. The concurrent-test barrier waits for a read that the global client cannot perform. These paths and tests are unchanged by Wave 3.
+
+Final full Node regression result: 128 files passed / 3 failed; 2101 tests passed / 17 failed; exit 1, 755.61 seconds. Failures: ten enrolment integration cases and six cohort lifecycle cases using the existing global cohort-scope client without DATABASE_URL, plus one payment-invariant timeout (isolated rerun passed 10/10 at a 15-second timeout). No assessment Wave 3 tests failed in the full run.
