@@ -74,6 +74,11 @@ function throws(root: ts.Node, error: string) {
     node.expression.expression.text === error);
 }
 
+function isActorUserId(node: ts.Node | undefined): boolean {
+  return !!node && ts.isPropertyAccessExpression(node) && node.name.text === "userId" &&
+    ts.isIdentifier(node.expression) && node.expression.text === "actor";
+}
+
 describe("Phase 10 assessment architecture", () => {
   it("keeps quiz scoring free of runtime imports", () => {
     expect(runtimeImports(service("quiz-scoring.ts"))).toEqual([]);
@@ -116,9 +121,9 @@ describe("Phase 10 assessment architecture", () => {
         const invocations = nodes(parse(service(name)), ts.isCallExpression).filter(node =>
           ts.isIdentifier(node.expression) && node.expression.text === resolver);
         expect(invocations.length).toBeGreaterThan(0);
-        for (const call of invocations) expect(call.arguments[0].getText()).toBe("actor.userId");
+        for (const call of invocations) expect(isActorUserId(call.arguments[0])).toBe(true);
       } else {
-        expect(owner?.initializer.getText()).toBe("actor.userId");
+        expect(isActorUserId(owner?.initializer)).toBe(true);
       }
       if (resolver !== "contexts") {
         expect(nodes(body, ts.isContinueStatement).some(node => {
