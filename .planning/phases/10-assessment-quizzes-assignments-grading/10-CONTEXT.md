@@ -80,11 +80,22 @@ see only what's been released.
   completion/certificate-relevant) grade needs correcting — matching ASM-06's "resulting
   completion/certificate impact" wording.
 
+### Versioning & scoring (resolved post-research, 2026-09-15)
+- **D-08:** ASM-01's "learner attempts use the assigned version" is enforced by **snapshotting the
+  live `QuizQuestion`/`QuizOption` set into `Attempt.answers` JSON at attempt start** — no new
+  `AssessmentPublication` freeze table, no migration beyond D-02's `attemptGradingMethod`. Grading
+  and later review always read from the frozen snapshot on the `Attempt`, never from the live
+  `Assessment`/`QuizQuestion` rows, so edits to a question after an attempt starts never retroactively
+  change that attempt's scoring.
+- **D-09:** `MULTI_CHOICE` questions use **partial credit**: for a question worth `M` marks with `C`
+  correct options total, `S` correct options selected, and `W` incorrect options selected, the score
+  is `M × max(0, (S − W) / C)`. Selecting extra wrong options actively reduces the score; the result
+  never goes below zero. This is `quiz-scoring.ts`'s core formula for `MULTI_CHOICE`.
+- **Resolved:** `Assessment.availableUntil` serves as the (optional) hard submission/attempt cutoff
+  for **both** Quiz and Assignment — no separate `Assignment.cutoffAt` field. `dueAt` remains D-03's
+  soft/informational marker only. (No competing cutoff concept exists elsewhere in the codebase.)
+
 ### Claude's Discretion
-- Whether `Assessment` needs a separate hard cutoff-date field distinct from `dueAt`/
-  `availableUntil` for assignments, or whether `availableUntil` already serves that purpose for both
-  Quiz and Assignment — surfaced during discussion but not resolved; research/planning should
-  propose based on how `availableUntil` is actually used elsewhere.
 - Exact validation rules for `attemptGradingMethod` in ASM-01's draft validation (e.g., is it
   required at publish time, does it apply meaninglessly when `maxAttempts = 1`).
 - Batch-release (D-06) exact interaction pattern — checkbox selection + confirm dialog, following
