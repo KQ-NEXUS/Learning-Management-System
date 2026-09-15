@@ -18,8 +18,9 @@
 import { prisma } from "@/server/db";
 import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
-import type { createWithPermission } from "@/server/permissions/with-permission";
+import type { createWithPermission, Actor } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { hasActiveEnrolmentCoveringCourse } from "@/server/services/learner-access";
 import { nextAppendPosition, parkedWithdrawnPosition } from "@/lib/positions";
 import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
 import {
@@ -278,6 +279,70 @@ export const createLesson = built.createLesson;
 export const updateLesson = built.updateLesson;
 export const listActiveLessons = built.listActiveLessons;
 export const listWithdrawnLessons = built.listWithdrawnLessons;
+
+/**
+ * Full lesson content (`body`/`embedUrl`/`linkUrl`, plus `title`/`type`/
+ * `withdrawnAt`) for the learner-side reading pane (09-11 Task 1).
+ * `lessonService.get` is `courses.view`-wrapped staff RBAC and cannot serve
+ * a learner — granting a learner `courses.view` would hand them every other
+ * course-scoped staff action, the same reasoning `lesson-resource-service.ts`
+ * documents for `listLessonResourcesForLearner`. Deliberately unwrapped, in
+ * the same no-permission-wrapper spirit as `getLessonTypeById` and
+ * `resolveCourseIdForLesson` above.
+ *
+ * `learner-access.ts`'s decorated lesson intentionally excludes `body`/
+ * `embedUrl`/`linkUrl` (DD-11's obligations/prose split concerns itself with
+ * sequencing, not content), so the reading pane resolves them here instead,
+ * from the LIVE row — content is not frozen by a publication pin, only the
+ * obligation surface (`required`/`position`) is.
+ *
+ * Returns `null` (never throws) for both an unknown lesson id and a
+ * signed-in caller with no ACTIVE enrolment covering the lesson's parent
+ * course — the two cases are indistinguishable to the caller by design
+ * (T-09-01's denial parity, applied here a second time).
+ */
+export type LearnerLessonContent = {
+  id: string;
+  title: string;
+  type: string;
+  body: string | null;
+  embedUrl: string | null;
+  linkUrl: string | null;
+  withdrawnAt: Date | null;
+};
+
+export async function getLessonContentForLearner(
+  actor: Actor,
+  lessonId: string,
+): Promise<LearnerLessonContent | null> {
+  const row = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      body: true,
+      embedUrl: true,
+      linkUrl: true,
+      withdrawnAt: true,
+      module: { select: { courseId: true } },
+    },
+  });
+  if (!row) return null;
+
+  const authorized = await hasActiveEnrolmentCoveringCourse(actor.userId, row.module.courseId);
+  if (!authorized) return null;
+
+  return {
+    id: row.id,
+    title: row.title,
+    type: row.type,
+    body: row.body,
+    embedUrl: row.embedUrl,
+    linkUrl: row.linkUrl,
+    withdrawnAt: row.withdrawnAt,
+  };
+}
 
 /**
  * The aggregate plans 04-06, 04-08, 04-09 and 04-12 all load: a Course with

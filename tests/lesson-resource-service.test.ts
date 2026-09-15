@@ -333,6 +333,50 @@ describe("listLessonResources", () => {
   });
 });
 
+describe("listLessonResourcesForLearner", () => {
+  const learner = { userId: "learner-1" };
+
+  it("returns [] (not a thrown error) for a non-enrolled actor", async () => {
+    const { service, hasActiveEnrolmentCoveringCourse } = buildService(
+      [{ id: "res1", lessonId: "lesson1" }],
+      [],
+      { enrolledCourseIds: [] },
+    );
+    await expect(service.listLessonResourcesForLearner(learner, "lesson1")).resolves.toEqual([]);
+    expect(hasActiveEnrolmentCoveringCourse).toHaveBeenCalledWith("learner-1", "c1");
+  });
+
+  it("returns [] for an unknown lesson id", async () => {
+    const { service } = buildService([], [], { enrolledCourseIds: ["c1"] });
+    await expect(service.listLessonResourcesForLearner(learner, "missing")).resolves.toEqual([]);
+  });
+
+  it("returns the same ordered rows the staff path returns for an enrolled learner", async () => {
+    const { service } = buildService(
+      [
+        { id: "second", lessonId: "lesson1", position: 2 },
+        { id: "other", lessonId: "lesson2", position: 0 },
+        { id: "first", lessonId: "lesson1", position: 1 },
+      ],
+      [],
+      { enrolledCourseIds: ["c1"] },
+    );
+    await expect(service.listLessonResourcesForLearner(learner, "lesson1")).resolves.toMatchObject([
+      { id: "first" },
+      { id: "second" },
+    ]);
+  });
+
+  it("never consults a grant — an actor with zero grants still succeeds when enrolled", async () => {
+    const { service } = buildService([{ id: "res1", lessonId: "lesson1" }], [], {
+      enrolledCourseIds: ["c1"],
+    });
+    await expect(service.listLessonResourcesForLearner(learner, "lesson1")).resolves.toMatchObject([
+      { id: "res1" },
+    ]);
+  });
+});
+
 describe("removeLessonResource", () => {
   it("removes an authorized resource from storage and the database", async () => {
     const { service, rows, storage, audits } = buildService(
