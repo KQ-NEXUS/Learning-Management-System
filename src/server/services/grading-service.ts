@@ -250,7 +250,7 @@ export type GradingServiceDeps = {
     findFirst(args: { where: { submissionId: string } }): Promise<GradeRow | null>;
     findMany(args: { where: Record<string, unknown> }): Promise<GradeRow[]>;
     create(args: { data: Record<string, unknown> }): Promise<GradeRow>;
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<GradeRow>;
+    update(args: { where: { id: string; status?: "DRAFT" }; data: Record<string, unknown> }): Promise<GradeRow>;
   };
   submission: {
     findUnique(args: { where: { id: string } }): Promise<SubmissionRow | null>;
@@ -557,9 +557,20 @@ export function createGradingService(deps: GradingServiceDeps) {
         releasedAt: null,
       };
 
-      const after = existing
-        ? await deps.grade.update({ where: { id: existing.id }, data })
-        : await deps.grade.create({
+      let after: GradeRow;
+      if (existing) {
+        try {
+          // Atomic predicate closes the read/write race with a staff release.
+          // A released row cannot be rewritten or downgraded to a draft.
+          after = await deps.grade.update({ where: { id: existing.id, status: "DRAFT" }, data });
+        } catch (error) {
+          if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") {
+            throw new GradeAlreadyReleasedError(existing.id);
+          }
+          throw error;
+        }
+      } else {
+        after = await deps.grade.create({
             data: {
               ...data,
               assessmentId: submission.assessmentId,
@@ -567,6 +578,7 @@ export function createGradingService(deps: GradingServiceDeps) {
               submissionId: submission.id,
             },
           });
+      }
 
       // No domain event — a draft grade is not a lifecycle event; nothing
       // downstream may act on it (T-10-04). A learner-facing notification

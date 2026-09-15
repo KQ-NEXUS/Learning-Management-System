@@ -107,12 +107,12 @@ async function auditSink(entry: {
   });
 }
 
-function buildGradingService(grants: RawGrant[], opts?: { userId?: string }) {
+function buildGradingService(grants: RawGrant[], opts?: { userId?: string; grade?: GradingServiceDeps["grade"] }) {
   const { withPermission } = createTestWithPermission(grants, opts);
   const { enrolmentCohortScope, cohortResourceScope } = scopeResolvers();
 
   return createGradingService({
-    grade: testDb.prisma.grade as unknown as GradingServiceDeps["grade"],
+    grade: opts?.grade ?? testDb.prisma.grade as unknown as GradingServiceDeps["grade"],
     submission: testDb.prisma.submission as unknown as GradingServiceDeps["submission"],
     assessment: testDb.prisma.assessment as unknown as GradingServiceDeps["assessment"],
     enrolment: testDb.prisma.enrolment as unknown as GradingServiceDeps["enrolment"],
@@ -299,6 +299,29 @@ async function seedGrader(name: string) {
 // ---------------------------------------------------------------------------
 
 describe("listGradingQueue / saveDraftGrade — COHORT scoping (T-10-03)", () => {
+  it("refuses a stale draft save when release wins between the read and write", async () => {
+    const f = await seedBatchFixture(1);
+    const graderId = await seedGrader("Concurrent release grader");
+    const grants = [grant("grades.manage")];
+    const releaseService = buildGradingService(grants, { userId: graderId });
+    const draft = await releaseService.saveDraftGrade({ submissionId: f.submissions[0].id, score: 75, feedback: "Original feedback" });
+    const delegate = testDb.prisma.grade as unknown as GradingServiceDeps["grade"];
+    const staleSave = buildGradingService(grants, { userId: graderId, grade: {
+      findUnique: args => delegate.findUnique(args),
+      findFirst: args => delegate.findFirst(args),
+      findMany: args => delegate.findMany(args),
+      create: args => delegate.create(args),
+      update: async args => {
+        await releaseService.releaseGrade({ gradeId: draft.id });
+        return delegate.update(args);
+      },
+    } });
+    await expect(staleSave.saveDraftGrade({ submissionId: f.submissions[0].id, score: 10, feedback: "Stale feedback" }))
+      .rejects.toBeInstanceOf(GradeAlreadyReleasedError);
+    const persisted = await testDb.prisma.grade.findUniqueOrThrow({ where: { id: draft.id } });
+    expect(persisted).toMatchObject({ status: "RELEASED", score: 75, feedback: "Original feedback" });
+    expect(persisted.releasedAt).not.toBeNull();
+  });
   it("a COHORT-scoped submissions.view grant for Cohort A returns only Cohort A's rows and throws AuthorizationError for Cohort B", async () => {
     const f = await seedTwoCohortFixture();
     const graderId = await seedGrader("Grader Cohort A");
