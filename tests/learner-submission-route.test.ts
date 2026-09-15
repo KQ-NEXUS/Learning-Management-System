@@ -90,8 +90,8 @@ describe("beginSubmissionUploadAction", () => {
     expect(mocks.beginSubmissionUpload).not.toHaveBeenCalled();
   });
 
-  it("rejects a payload containing enrolmentId at the zod boundary", async () => {
-    const result = await beginSubmissionUploadAction({ ...validBegin, enrolmentId: "enr1" });
+  it("rejects a payload containing actorId at the zod boundary", async () => {
+    const result = await beginSubmissionUploadAction({ ...validBegin, actorId: "someone-else" });
     expect(result.ok).toBe(false);
     expect(mocks.beginSubmissionUpload).not.toHaveBeenCalled();
   });

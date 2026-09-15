@@ -16,7 +16,7 @@
  * Every export here is ownership-scoped, exactly like `checkout-service.ts`'s
  * `getOwnOrder` and `lesson-progress-service.ts`'s learner-facing exports:
  * the enrolment is re-derived from `actor.userId` against the Assessment's
- * course. Read callers may disambiguate with an enrolmentId, which is matched
+ * course. Callers may disambiguate with an enrolmentId, which is matched
  * only within that actor's ACTIVE enrolments. This file imports no value from
  * `@/server/permissions` — only a type-only `Actor` import, which never
  * enters the module's runtime closure.
@@ -245,6 +245,8 @@ export type CreateSubmissionServiceDeps = {
 
 export type BeginSubmissionUploadInput = {
   assessmentId: string;
+  /** Disambiguation only; resolved within actor.userId's ACTIVE owned set. */
+  enrolmentId?: string;
   filename: string;
   mimeType: string;
   sizeBytes: number;
@@ -366,7 +368,7 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
     input: BeginSubmissionUploadInput,
   ): Promise<BeginSubmissionUploadResult> {
     const assessment = await deps.resolveAssessment(input.assessmentId);
-    const enrolmentId = assessment ? await resolveOwnEnrolmentForCourse(actor.userId, assessment.courseId) : null;
+    const enrolmentId = assessment ? await resolveOwnEnrolmentForCourse(actor.userId, assessment.courseId, input.enrolmentId) : null;
     if (!assessment || !enrolmentId) {
       throw new SubmissionNotAllowedError("not-found");
     }

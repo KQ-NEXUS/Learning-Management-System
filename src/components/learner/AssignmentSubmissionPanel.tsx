@@ -142,6 +142,7 @@ export function AssignmentSubmissionPanel(props: Props) {
     transition(async () => {
       const begin = await (props.onBegin ?? beginSubmissionUploadAction)({
         assessmentId: props.assessmentId,
+        enrolmentId: props.enrolmentId,
         filename: selectedFile.name,
         mimeType: selectedFile.type,
         sizeBytes: selectedFile.size,

@@ -52,6 +52,7 @@ function receiptFixture(overrides: Partial<SubmissionReceipt> = {}): SubmissionR
 
 const base: AssignmentSubmissionClientView = {
   assessmentId: "a1",
+  enrolmentId: "enr1",
   title: "Essay",
   instructions: "<p>Write an essay.</p>",
   dueAt: null,
@@ -154,8 +155,9 @@ describe("AssignmentSubmissionPanel", () => {
     fireEvent.click(screen.getByText("Submit assignment"));
 
     await waitFor(() => expect(onBegin).toHaveBeenCalledTimes(1));
-    expect(onBegin).toHaveBeenCalledWith({
-      assessmentId: "a1",
+      expect(onBegin).toHaveBeenCalledWith({
+        assessmentId: "a1",
+        enrolmentId: "enr1",
       filename: "essay.pdf",
       mimeType: "application/pdf",
       sizeBytes: file.size,

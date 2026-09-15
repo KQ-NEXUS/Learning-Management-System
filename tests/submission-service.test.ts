@@ -227,6 +227,23 @@ describe("beginSubmissionUpload — D-03 lateness and the hard cutoff", () => {
 });
 
 describe("beginSubmissionUpload — ownership and reachability", () => {
+  it("uses the selected owned enrolment rather than another cohort covering the same course", async () => {
+    const { service, rows } = buildService({ enrolments: [
+      { id: "enr1", userId: "learner-1", cohortId: "cohort1", status: "ACTIVE" },
+      { id: "enr2", userId: "learner-1", cohortId: "cohort2", status: "ACTIVE" },
+    ], cohorts: [
+      { id: "cohort1", courseId: "c1" },
+      { id: "cohort2", courseId: "c1" },
+    ] });
+    await service.beginSubmissionUpload(learner, { ...uploadInput, enrolmentId: "enr2" });
+    expect(rows[0].enrolmentId).toBe("enr2");
+  });
+  it("refuses an upload selector outside the actor's owned active enrolments", async () => {
+    const { service, rows } = buildService();
+    await expect(service.beginSubmissionUpload(learner, { ...uploadInput, enrolmentId: "someone-elses-enrolment" }))
+      .rejects.toBeInstanceOf(SubmissionNotAllowedError);
+    expect(rows).toHaveLength(0);
+  });
   it("throws not-an-assignment for a QUIZ-type assessment", async () => {
     const { service } = buildService({ assessment: { type: "QUIZ" } });
     const error = await service.beginSubmissionUpload(learner, uploadInput).catch((e) => e);

@@ -54,6 +54,7 @@ const UPLOAD_FAILURE = {
 const beginSchema = z
   .object({
     assessmentId: z.string().min(1),
+    enrolmentId: z.string().min(1).optional(),
     filename: z.string().trim().min(1),
     mimeType: z.string().trim().min(1),
     sizeBytes: z.number().int().positive(),
@@ -130,6 +131,7 @@ export async function failSubmissionUploadAction(input: unknown) {
  */
 export type AssignmentSubmissionClientView = {
   assessmentId: string;
+  enrolmentId: string;
   title: string;
   instructions: string | null;
   dueAt: string | null;
@@ -167,6 +169,7 @@ export async function loadAssignmentSubmissionView(
 
   return {
     assessmentId: view.assessmentId,
+    enrolmentId: input.enrolmentId,
     title: view.title,
     // Sanitised here, server-side, with the SAME allow-list `LessonContent`'s
     // `BodyProse` uses (T-10-34) — the client panel renders this string
