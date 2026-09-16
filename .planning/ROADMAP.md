@@ -511,7 +511,54 @@ Plans:
   3. Authorized staff can revoke and reissue a certificate with reason, linking old and new versions while preserving history. (CRD-05)
   4. A later grade, attendance, or completion correction flags affected certificates for review without silently altering or destroying the original record. (CRD-06)
 
-**Plans**: TBD
+**Plans**: 16 plans across 6 waves (foundation-first: the schema/migration, the human package + permission gates, and the pure primitives all land in wave 1 so every later plan builds on settled ground; the public verification surface ships in wave 2, before issuance exists, so its disclosure contract is tested in isolation)
+
+Plans:
+**Wave 1**
+
+- [ ] 11-01-PLAN.md — Additive schema, migration, the `certificate_one_active_per_enrolment_scope` partial unique index, and the reversible `COMPLETED -> ACTIVE` transition (CRD-01, CRD-02, CRD-05, CRD-06)
+- [ ] 11-02-PLAN.md — Blocking human gates: PDF-library legitimacy approval + install + render probe, and the template-authoring permission decision (CRD-03)
+- [ ] 11-03-PLAN.md — Pure primitives: versioned layout parser, high-entropy `verificationRef`, and the storage-service certificate/template-asset function group (CRD-03, CRD-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 11-04-PLAN.md — `certificate-pdf-renderer.ts`: the single PDF-construction surface in the repository (CRD-03)
+- [ ] 11-05-PLAN.md — `CertificateTemplate` CRUD on the resource factory, layout validation at the write boundary, single-default invariant, seeded default template (CRD-03)
+- [ ] 11-06-PLAN.md — Public verification: the closed three-outcome lookup and the standalone `/verify` route group (CRD-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 11-07-PLAN.md — `certificate-issuance-service.ts`: AUTOMATIC issuance, the D-01 Programme-cohort exclusion, D-05 completion, P2002 idempotency, and the superseded review-flag branch (CRD-01, CRD-02, CRD-03, CRD-06)
+- [ ] 11-08-PLAN.md — Course/Programme certificate settings: issuance mode and template picker (CRD-01, CRD-02, CRD-03)
+- [ ] 11-09-PLAN.md — Template library list and the editor shell: header bar, three-panel frame, click-to-add palette, dirty-state save (CRD-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 11-10-PLAN.md — CRD-06's two hooks: the composition-root dependency swap, the grade-override hook, and the import-closure guard (CRD-01, CRD-02, CRD-06)
+- [ ] 11-11-PLAN.md — `certificate-service.ts`: scoped read model, pending-issuance evaluator, manual issue, revoke, reissue (CRD-01, CRD-02, CRD-03, CRD-05, CRD-06)
+- [ ] 11-12-PLAN.md — Template editor canvas and property inspector, keyboard-accessible positioning, image-asset upload (CRD-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 11-13-PLAN.md — Download route with denial parity, and the learner dashboard certificate slot closing Phase 9's named gap (CRD-03, CRD-06)
+- [ ] 11-14-PLAN.md — Certificates nav entry and the MANUAL-mode pending-issuance queue (CRD-01, CRD-02)
+- [ ] 11-15-PLAN.md — Issued list, certificate detail with the flagged/revoked banners and supersede chain, revoke and reissue actions (CRD-03, CRD-05, CRD-06)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 11-16-PLAN.md — Phase close: real-Postgres/MinIO integration suites, seven executable phase invariants, validation reconciliation, and the ten-step browser walkthrough (all six requirements)
+
+**Cross-cutting constraints:**
+
+- A Programme-cohort enrolment issues exactly one PROGRAMME certificate and never a Course certificate for a member course, even though the completion engine records member-course evidence internally (D-01, enforced by two independent guards in 11-07).
+- `Enrolment.status = "COMPLETED"` is written by exactly one module, `certificate-issuance-service.ts`, and only after a `Certificate` row exists (D-05, invariant 7 in 11-16).
+- A correction flags a certificate for review and reverts the enrolment to ACTIVE; it never alters, revokes or destroys the credential (D-06, CRD-06).
+- The PDF library is imported by exactly one file and no browser-automation package appears in `src/` (D-08, invariants 1-2 in 11-16).
+- `verificationRef` carries at least 128 bits of entropy, diverging from `generateOrderReference()`'s 32-bit convention, because the public verify route is unauthenticated and no rate-limiting infrastructure exists anywhere in this codebase (RESEARCH Pitfall 1/2).
+- The public verification page discloses exactly four fields and its not-found branch shares no DOM structure with a real result (CRD-04, RESEARCH Pitfall 3).
+- No route under `src/app/verify/` or `src/app/api/certificates/` may export `dynamic`, `revalidate` or `fetchCache`, or wrap its lookup in `'use cache'` — Next 16 Cache Components would otherwise freeze a revocation verdict or a presigned URL (RESEARCH Pitfall 6).
+- Certificates are never hard-deleted; revoke flips status and reissue links via `supersedesId` (CAT-08, CRD-05).
+
 **UI hint**: yes
 
 ---
@@ -601,7 +648,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
+| 11. Certificates & Completion Lifecycle | 0/16 | Planned | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
