@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-09-16T16:31:00.486Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-09-16T17:11:04.272Z"
 last_activity: 2026-09-16
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 137
-  percent: 90
+  completed_plans: 138
+  percent: 91
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) â€” EXECUTING
-Plan: 2 of 16
+Plan: 3 of 16
 Status: Ready to execute
 Last activity: 2026-09-16
 
-Progress: Phase 11 1/16 plans complete; milestone 137/152 planned plans complete; 10/16 phases complete.
+Progress: Phase 11 2/16 plans complete; milestone 138/152 planned plans complete; 10/16 phases complete.
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice â€
 | Phase 06 P08 | ~50min | 3 tasks | 7 files |
 | Phase 06 P09 | ~45min | 3 tasks | 7 files |
 | Phase 11 P01 | 1h 12m | 3 tasks | 5 files |
+| Phase 11 P02 | 37min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: Certificate issuance mode defaults to MANUAL for Courses and Programmes so existing rows never auto-issue.
 - [Phase 11]: One ACTIVE certificate per enrolment and scope is enforced with a PostgreSQL partial unique index.
 - [Phase 11]: Only COMPLETED may reopen to ACTIVE; WITHDRAWN, TRANSFERRED, and CANCELLED remain closed.
+- [Phase 11]: pdf-lib 1.17.1 and @pdf-lib/fontkit 1.1.1 are the human-vetted, exact-pinned PDF construction stack; the server-side probe proves positioned text, shapes, PNG, and custom-font rendering.
+- [Phase 11]: Certificate-template authoring uses a dedicated certificates.manage permission; Plan 11-05 must add it to the closed catalogue and default-role seed.
 
 ### Pending Todos
 
@@ -181,6 +184,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-16T16:31:00.444Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-09-16T17:11:04.272Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None

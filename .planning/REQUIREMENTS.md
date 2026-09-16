@@ -112,7 +112,7 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 - [x] **CRD-01**: A Course certificate issues only when standalone Course completion rules pass and issuance is enabled; the event is idempotent and references the rule/version and enrolment.
 - [x] **CRD-02**: One Programme certificate issues after all required Programme Courses and Programme-level rules pass; partial completion does not issue the credential.
-- [ ] **CRD-03**: A downloadable certificate with a unique verification reference and minimum approved learner/award fields is generated; readable, access-controlled, stable for the credential version.
+- [x] **CRD-03**: A downloadable certificate with a unique verification reference and minimum approved learner/award fields is generated; readable, access-controlled, stable for the credential version.
 - [ ] **CRD-04**: Public certificate verification returns active/revoked status and approved award facts for a valid reference; unknown references reveal no user-account data.
 - [x] **CRD-05**: Authorized revocation and reissue with reason and audit history is supported; revocation changes public status promptly; reissue links old/new credential versions.
 - [x] **CRD-06**: Certificate status is re-evaluated after an authorized grade, attendance, or completion correction; affected credentials are flagged for review, never silently destroyed.
@@ -268,7 +268,7 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | ASM-07 | Phase 10 | Complete |
 | CRD-01 | Phase 11 | Complete |
 | CRD-02 | Phase 11 | Complete |
-| CRD-03 | Phase 11 | Pending |
+| CRD-03 | Phase 11 | Complete |
 | CRD-04 | Phase 11 | Pending |
 | CRD-05 | Phase 11 | Complete |
 | CRD-06 | Phase 11 | Complete |
