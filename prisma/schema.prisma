@@ -137,6 +137,13 @@ enum CertificateStatus {
   SUPERSEDED
 }
 
+// D-02 / CRD-01 — certificate enablement and issuance timing are separate
+// staff choices. MANUAL is the fail-closed default for existing providers.
+enum CertificateIssuanceMode {
+  AUTOMATIC
+  MANUAL
+}
+
 // PRD §19 — Paystack and Stripe are providers within one deployment, not
 // separate commercial models. MANUAL is the offline-payment exception.
 enum PaymentProvider {
@@ -471,7 +478,10 @@ model Programme {
   completionRule        Json?
   completionRuleVersion Int   @default(1)
 
-  certificateEnabled Boolean @default(true)
+  certificateEnabled      Boolean                 @default(true)
+  certificateIssuanceMode CertificateIssuanceMode @default(MANUAL)
+  certificateTemplateId   String?
+  certificateTemplate     CertificateTemplate?    @relation(fields: [certificateTemplateId], references: [id])
 
   // CAT-05 — incremented on publish, mirroring Course.contentVersion so the
   // shared publish operation (plan 04-08) behaves identically for both.
@@ -558,7 +568,10 @@ model Course {
   contentVersion Int @default(1)
 
   // CRD-01 — Course certificates issue only where the provider enables them.
-  certificateEnabled Boolean @default(false)
+  certificateEnabled      Boolean                 @default(false)
+  certificateIssuanceMode CertificateIssuanceMode @default(MANUAL)
+  certificateTemplateId   String?
+  certificateTemplate     CertificateTemplate?    @relation(fields: [certificateTemplateId], references: [id])
 
   completionRule        Json?
   completionRuleVersion Int   @default(1)
@@ -1068,9 +1081,9 @@ model Assessment {
   dueAt          DateTime?
 
   // Quiz settings
-  maxAttempts Int?
-  passMark    Int?
-  totalMarks  Int?
+  maxAttempts          Int?
+  passMark             Int?
+  totalMarks           Int?
   // D-02 — selects which Attempt's score is the learner-visible,
   // pass/fail-deciding one when maxAttempts > 1.
   attemptGradingMethod AttemptGradingMethod @default(HIGHEST)
@@ -1225,6 +1238,24 @@ model GradeOverride {
 // ---------------------------------------------------------------------------
 // Certificates — CRD-01 to CRD-06
 // ---------------------------------------------------------------------------
+
+// D-10 / CRD-01 — reusable, versioned certificate layouts. Archived
+// templates remain referencable by Course and Programme configuration.
+model CertificateTemplate {
+  id                  String    @id @default(cuid())
+  name                String
+  layout              Json
+  layoutSchemaVersion Int       @default(1)
+  isDefault           Boolean   @default(false)
+  archivedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  courses    Course[]
+  programmes Programme[]
+
+  @@index([archivedAt])
+}
 
 model Certificate {
   id String @id @default(cuid())
