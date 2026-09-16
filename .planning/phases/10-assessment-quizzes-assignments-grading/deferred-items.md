@@ -88,3 +88,9 @@ Final full Node regression result: 128 files passed / 3 failed; 2101 tests passe
 - Broad unit regression: 119 files and 1,986 tests passed; two checkout source scans timed out at the default 5-second limit under parallel build/Docker load. Isolated rerun passed all 10 checkout invariants at 30 seconds.
 - Initial assessment component run suffered four fork-worker startup timeouts and a transient pending-label assertion. The assertion now waits for the submit control; the five-suite rerun using one thread passed 41/41. LessonContent stale placeholder assertions were updated and passed 14/14. No global runner configuration was changed.
 - Final integrated Turbopack build, TypeScript and changed-file lint passed. Other historical component failures were not reclassified as passing; the plan 10-17 human walkthrough remains outstanding.
+
+## Plan 10-17 final automated gate (2026-09-16)
+
+The complete two-project regression run passed 188 files / 2,614 tests, zero failures, with one existing skipped audit-table 360 px reflow manual gate; runtime 953.36 seconds. This supersedes historical missing-DATABASE_URL and stale currency/readiness assertion failures. The enrolment factory now uses its injected database for scope reads. Node integration tests retain process isolation; component tests use threads to avoid Windows fork startup delays. A prior mixed-thread attempt exited without a report and is not counted as successful.
+
+Final TypeScript, repository lint (zero errors, twelve warnings), and Turbopack production build passed. Source fixes include the reproduced released-grade save race, assignment upload enrolment disambiguation, and fixed True/False drag-handle errors; eleven AST gates protect the phase. The only Phase 10 completion checkpoint remaining is the explicit thirty-step human walkthrough and four UI observations, prepared against separate local seed data. Certificate-impact evaluation remains the named Phase 11 consumer gap.
