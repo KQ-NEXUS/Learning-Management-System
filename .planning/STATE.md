@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 11 UI-SPEC approved
-last_updated: "2026-09-16T16:09:19.920Z"
-last_activity: 2026-09-16 -- Phase 11 planning complete
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-09-16T16:31:00.486Z"
+last_activity: 2026-09-16
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 136
-  percent: 56
+  completed_plans: 137
+  percent: 90
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 11 — certificates & completion lifecycle
+**Current focus:** Phase 11 — certificates-completion-lifecycle
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
+Phase: 11 (certificates-completion-lifecycle) — EXECUTING
+Plan: 2 of 16
 Status: Ready to execute
-Last activity: 2026-09-16 -- Phase 11 planning complete
+Last activity: 2026-09-16
 
-Progress: Phase 10 17/17 plans complete; milestone 136/136 planned plans complete; 10/16 phases complete.
+Progress: Phase 11 1/16 plans complete; milestone 137/152 planned plans complete; 10/16 phases complete.
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 06 P07 | ~95min | 3 tasks | 9 files |
 | Phase 06 P08 | ~50min | 3 tasks | 7 files |
 | Phase 06 P09 | ~45min | 3 tasks | 7 files |
+| Phase 11 P01 | 1h 12m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 06]: [Phase 6 P08]: SUPPORT_CONTACT_EMAIL sourced as a documented .env.example placeholder (support@example.com, must-override-before-launch) since no real support contact value exists anywhere in the codebase or docs and no deployment config is reachable from this sandbox -- mirrors EMAIL_SENDER_ADDRESS's existing dev-fallback convention
 - [Phase 06]: [Phase 6]: [Phase 6 P09]: checkout-phase-invariants.test.ts (TypeScript-compiler-API, directory-prefix exemption) immediately caught two real pre-existing PAY-09 violations -- checkout-service.ts and the Stripe webhook route both named Stripe SDK types outside providers/stripe/ -- fixed as Rule 1 auto-fixes before the test's first real-tree run
 - [Phase 06]: [Phase 6]: [Phase 6 P09]: Task 2's environment prep and twelve-step Stripe walkthrough were not attempted (Docker unavailable, and per this plan's objective no browser is available either) -- recorded as outstanding human verification rather than fabricated, consolidated with 06-03/06-05/06-07/06-08's own outstanding walkthroughs in 06-09-SUMMARY.md
+- [Phase 11]: Certificate issuance mode defaults to MANUAL for Courses and Programmes so existing rows never auto-issue.
+- [Phase 11]: One ACTIVE certificate per enrolment and scope is enforced with a PostgreSQL partial unique index.
+- [Phase 11]: Only COMPLETED may reopen to ACTIVE; WITHDRAWN, TRANSFERRED, and CANCELLED remain closed.
 
 ### Pending Todos
 
@@ -177,6 +181,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-16T15:23:10.738Z
-Stopped at: Phase 11 UI-SPEC approved
-Resume file: .planning/phases/11-certificates-completion-lifecycle/11-UI-SPEC.md
+Last session: 2026-09-16T16:31:00.444Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None
