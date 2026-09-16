@@ -201,4 +201,17 @@ describe("/learn/[enrolmentId]/results", () => {
     expect(html).toContain("Overridden from 5 to 8 by Jordan Lee");
     expect(html).toContain("Rechecked working");
   });
+
+  it("uses deterministic timestamps and bounds long learner feedback", async () => {
+    mocks.getOwnResults.mockResolvedValue([
+      resultCard({ feedback: "Long feedback ".repeat(200) }),
+    ]);
+
+    const html = await renderPage();
+
+    expect(html).toContain("01/09/2026, 10:00:00");
+    expect(html).toContain("max-h-48");
+    expect(html).toContain("overflow-y-auto");
+    expect(html).toContain("break-words");
+  });
 });

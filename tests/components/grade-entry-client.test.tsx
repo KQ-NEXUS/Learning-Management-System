@@ -112,6 +112,15 @@ describe("GradeEntryClient — RELEASED", () => {
     expect(screen.queryByLabelText("Feedback")).toBeNull();
   });
 
+  it("bounds long released feedback inside a wrapping scroll region", () => {
+    setup({ ...releasedProps, feedback: "Long feedback ".repeat(200) });
+    const feedback = screen.getByText(/Long feedback Long feedback/);
+    expect(feedback.className).toContain("max-h-48");
+    expect(feedback.className).toContain("overflow-y-auto");
+    expect(feedback.className).toContain("whitespace-pre-wrap");
+    expect(feedback.className).toContain("break-words");
+  });
+
   it("renders the certificate-impact named-gap placeholder verbatim", () => {
     setup(releasedProps);
     expect(

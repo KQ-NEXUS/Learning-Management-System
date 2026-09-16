@@ -10,12 +10,42 @@ const active: SafeQuizAttempt = { id: "a", attemptNumber: 1, responses: [], ques
 ] };
 const base: LearnerQuizView = { assessmentId: "quiz", title: "Quiz title", instructions: null, availableFrom: null, availableUntil: null, maxAttempts: 2, passMark: 1, attemptsRemaining: 2, feedbackBehaviour: "IMMEDIATE", active: null, history: [], result: null };
 function setup(overrides: Partial<LearnerQuizView> = {}) {
-  const onStart = vi.fn(async () => ({ ok: true as const, attempt: active }));
+  const onStart = vi.fn(async () => ({ ok: true as const, attempt: active, history: [], attemptsRemaining: 1 }));
   const onSubmit = vi.fn(async () => ({ ok: true as const, result: { attemptId: "a", attemptNumber: 1, status: "SUBMITTED" as const, score: 2, maxScore: 2, passed: true, submittedAt: new Date(), perQuestion: [], expired: false } }));
   const view = render(<QuizAttemptPanel {...base} {...overrides} enrolmentId="e" lessonId="l" onStart={onStart} onSubmit={onSubmit} />);
   return { ...view, onStart, onSubmit };
 }
 describe("QuizAttemptPanel", () => {
+  it("shows an abandoned attempt immediately from the start-new action reply", async () => {
+    const abandoned = {
+      attemptId: "old", attemptNumber: 1, status: "ABANDONED" as const,
+      score: null, maxScore: null, passed: null, submittedAt: null,
+      perQuestion: [], expired: false,
+    };
+    const onStart = vi.fn(async () => ({
+      ok: true as const,
+      attempt: { ...active, id: "new", attemptNumber: 2 },
+      history: [abandoned],
+      attemptsRemaining: 1,
+    }));
+    render(<QuizAttemptPanel {...base} active={active} enrolmentId="e" lessonId="l" onStart={onStart as never} />);
+
+    fireEvent.click(screen.getByText("Start new attempt"));
+    fireEvent.click(screen.getByText("Continue with new attempt"));
+
+    await screen.findByText("Attempt 1");
+    expect(screen.getByText("Abandoned")).toBeTruthy();
+    expect(screen.getByText("Remaining").parentElement?.querySelector("dd")?.textContent).toBe("1");
+  });
+
+  it("renders timestamps with the deterministic shared formatter", () => {
+    setup({
+      availableFrom: "2026-01-01T00:00:00.000Z",
+      history: [{ attemptId: "a", attemptNumber: 1, status: "SUBMITTED", score: 1, maxScore: 2, passed: false, submittedAt: new Date("2026-01-01T00:00:00.000Z"), perQuestion: [], expired: false }],
+    });
+    expect(screen.getAllByText("01/01/2026, 00:00:00")).toHaveLength(2);
+  });
+
   it("offers a first start and a resume without an abandon notice", () => {
     const view = setup(); expect(screen.getByText("Start quiz")).toBeTruthy(); view.unmount();
     setup({ active }); expect(screen.getByText("Resume attempt")).toBeTruthy(); expect(screen.queryByText(/will abandon/)).toBeNull();
@@ -42,7 +72,7 @@ describe("QuizAttemptPanel", () => {
     expect(screen.getByText("Abandoned").className).toContain("pill-grey"); expect(screen.getAllByText("—").length).toBe(2);
   });
   it("keeps the form on submit failure and offers retry", async () => {
-    render(<QuizAttemptPanel {...base} enrolmentId="e" lessonId="l" onStart={async () => ({ ok: true, attempt: active })} onSubmit={async () => ({ ok: false, message: "Your quiz couldn't be submitted", body: "Your answers are saved — try submitting again." })} />);
+    render(<QuizAttemptPanel {...base} enrolmentId="e" lessonId="l" onStart={async () => ({ ok: true, attempt: active, history: [], attemptsRemaining: 1 })} onSubmit={async () => ({ ok: false, message: "Your quiz couldn't be submitted", body: "Your answers are saved — try submitting again." })} />);
     fireEvent.click(screen.getByText("Start quiz")); await screen.findByText("1. One?"); fireEvent.click(screen.getByLabelText("First option")); fireEvent.click(screen.getByLabelText("Third option")); fireEvent.click(screen.getByText("Submit quiz"));
     await waitFor(() => expect(screen.getByText("Try again")).toBeTruthy()); expect(screen.getByText(/answers are saved/)).toBeTruthy(); expect(screen.getByLabelText("First option")).toBeTruthy();
   });

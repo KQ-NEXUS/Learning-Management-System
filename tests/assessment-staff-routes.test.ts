@@ -72,7 +72,7 @@ vi.mock("@/server/services/assessment-service", () => ({
 const { default: AssessmentsListPage } = await import(
   "@/app/staff/courses/[id]/assessments/page"
 );
-const { createAssessmentAction, publishAssessmentAction } = await import(
+const { createAssessmentAction, updateAssessmentAction, publishAssessmentAction } = await import(
   "@/app/staff/courses/[id]/assessments/actions"
 );
 
@@ -92,6 +92,25 @@ function quizFormData(overrides: Record<string, string> = {}) {
   for (const [key, value] of Object.entries(fields)) {
     data.set(key, value);
   }
+  return data;
+}
+
+function assignmentFormData(overrides: Record<string, string> = {}) {
+  const data = new FormData();
+  const fields: Record<string, string> = {
+    courseId: "course-1",
+    type: "ASSIGNMENT",
+    title: "Site hazard report",
+    feedbackBehaviour: "ON_RELEASE",
+    availableUntil: "2026-09-15T00:00",
+    dueAt: "2026-09-14T23:39",
+    maxFileSizeBytes: "10485760",
+    totalMarks: "100",
+    allowResubmission: "on",
+    ...overrides,
+  };
+  for (const [key, value] of Object.entries(fields)) data.set(key, value);
+  data.append("allowedFileTypes", ".pdf");
   return data;
 }
 
@@ -202,6 +221,36 @@ describe("createAssessmentAction", () => {
       expect.objectContaining({ courseId: "course-1", type: "QUIZ", title: "Module 1 Quiz" }),
     );
     expect(mocks.revalidatePath).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("updateAssessmentAction", () => {
+  it("coerces datetime-local assessment fields to Dates before the Prisma-backed service", async () => {
+    mocks.assessmentUpdate.mockResolvedValue({ id: "a1" });
+
+    expect(await updateAssessmentAction("a1", PREVIOUS_STATE, assignmentFormData())).toEqual({
+      ok: true,
+      errors: [],
+      message: null,
+    });
+
+    const data = mocks.assessmentUpdate.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(data.availableUntil).toEqual(new Date("2026-09-14T23:00:00.000Z"));
+    expect(data.dueAt).toEqual(new Date("2026-09-14T22:39:00.000Z"));
+  });
+
+  it("rejects an invalid datetime-local value before the service is called", async () => {
+    const result = await updateAssessmentAction(
+      "a1",
+      PREVIOUS_STATE,
+      assignmentFormData({ availableUntil: "not-a-date" }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      errors: expect.arrayContaining([expect.objectContaining({ name: "availableUntil" })]),
+    });
+    expect(mocks.assessmentUpdate).not.toHaveBeenCalled();
   });
 });
 

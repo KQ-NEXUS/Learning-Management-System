@@ -30,7 +30,14 @@ export async function startAttemptAction(input: unknown) {
     const quiz = await loadLearnerQuiz(actor, parsed.data);
     if (!quiz || quiz.assessmentId !== parsed.data.assessmentId) return { ok: false as const, message: "This quiz could not be opened." };
     const attempt = await startAttempt(actor, parsed.data);
-    return { ok: true as const, attempt: toSafeQuizAttempt(attempt) };
+    const refreshed = await loadLearnerQuiz(actor, parsed.data);
+    revalidatePath(`/learn/${parsed.data.enrolmentId}/lessons/${parsed.data.lessonId}`);
+    return {
+      ok: true as const,
+      attempt: toSafeQuizAttempt(attempt),
+      history: refreshed?.history ?? quiz.history,
+      attemptsRemaining: refreshed?.attemptsRemaining ?? quiz.attemptsRemaining,
+    };
   } catch (error) { return { ok: false as const, message: refusal(error) }; }
 }
 

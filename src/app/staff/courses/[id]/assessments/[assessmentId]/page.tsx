@@ -9,13 +9,14 @@ import {
   AssessmentFormFields,
   type AssessmentFieldValues,
 } from "@/components/catalogue/AssessmentFormFields";
+import { formatCohortDateTime } from "@/lib/cohort-datetime";
 
 export const metadata = { title: "Edit assessment" };
 
 /** `Date` -> the `datetime-local` input value shape ("YYYY-MM-DDTHH:mm"), or `null`. */
 function toDatetimeLocal(value: Date | null): string | null {
   if (!value) return null;
-  return value.toISOString().slice(0, 16);
+  return formatCohortDateTime(value, "Africa/Lagos");
 }
 
 /**

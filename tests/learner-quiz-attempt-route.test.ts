@@ -16,6 +16,18 @@ describe("quiz action boundary", () => {
   it.each(["score", "maxScore", "passed"])("rejects client verdict %s", async key => { expect((await submitAttemptAction({ ...input, [key]: 100 })).ok).toBe(false); expect(m.submit).not.toHaveBeenCalled(); });
   it("rejects nested verdicts on save", async () => { expect((await saveAttemptAnswersAction({ ...input, responses: [{ ...input.responses[0], score: 1 }] })).ok).toBe(false); expect(m.save).not.toHaveBeenCalled(); });
   it("checks the lesson's actual assessment before starting", async () => { expect((await startAttemptAction({ enrolmentId: "e", lessonId: "l", assessmentId: "foreign" })).ok).toBe(false); expect(m.start).not.toHaveBeenCalled(); });
+  it("returns refreshed history and remaining attempts after abandoning an unfinished attempt", async () => {
+    const abandoned = { attemptId: "old", attemptNumber: 1, status: "ABANDONED" };
+    m.load
+      .mockResolvedValueOnce({ assessmentId: "quiz", feedbackBehaviour: "IMMEDIATE", history: [], attemptsRemaining: 2 })
+      .mockResolvedValueOnce({ assessmentId: "quiz", feedbackBehaviour: "IMMEDIATE", history: [abandoned], attemptsRemaining: 2 });
+
+    const result = await startAttemptAction({ enrolmentId: "e", lessonId: "l", assessmentId: "quiz", startNew: true });
+
+    expect(result).toMatchObject({ ok: true, history: [abandoned], attemptsRemaining: 2 });
+    expect(m.load).toHaveBeenCalledTimes(2);
+    expect(m.revalidate).toHaveBeenCalledExactlyOnceWith("/learn/e/lessons/l");
+  });
   it("rejects another enrolment before saving or scoring", async () => { m.get.mockResolvedValue({ enrolmentId: "foreign", assessmentId: "quiz" }); expect((await submitAttemptAction(input)).ok).toBe(false); expect(m.save).not.toHaveBeenCalled(); expect(m.submit).not.toHaveBeenCalled(); });
   it("saves the selections before scoring and revalidates in the same response", async () => { expect((await submitAttemptAction(input)).ok).toBe(true); expect(m.save).toHaveBeenCalledExactlyOnceWith({ userId: "u" }, input); expect(m.submit).toHaveBeenCalledExactlyOnceWith({ userId: "u" }, input); expect(m.save.mock.invocationCallOrder[0]).toBeLessThan(m.submit.mock.invocationCallOrder[0]); expect(m.revalidate).toHaveBeenCalledExactlyOnceWith("/learn/e/lessons/l"); });
   it("can honestly report saved answers after scoring fails", async () => { m.submit.mockRejectedValue(new Error("db")); expect(await submitAttemptAction(input)).toMatchObject({ ok: false, body: "Something went wrong scoring your attempt. Your answers are saved — try submitting again." }); });

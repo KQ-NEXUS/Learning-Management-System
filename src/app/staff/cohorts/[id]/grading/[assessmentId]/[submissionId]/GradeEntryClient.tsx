@@ -250,7 +250,7 @@ export function GradeEntryClient({
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
               <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Feedback</dt>
-              <dd className="text-sm text-foreground">{feedback || "—"}</dd>
+              <dd className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground">{feedback || "—"}</dd>
             </div>
           </dl>
 

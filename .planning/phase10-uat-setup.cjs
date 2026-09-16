@@ -21,7 +21,33 @@ const env = { ...process.env,
   S3_ACCESS_KEY_ID: minio.MINIO_ROOT_USER, S3_SECRET_ACCESS_KEY: minio.MINIO_ROOT_PASSWORD,
   S3_FORCE_PATH_STYLE: 'true',
 };
-if (process.argv.includes('--verify')) {
+if (process.argv.includes('--activate-batch')) {
+  Object.assign(process.env, env);
+  const { PrismaClient } = require('@prisma/client');
+  const db = new PrismaClient();
+  (async () => {
+    const completionRule = { version: 1, requireAllRequiredLessons: true };
+    const result = await db.user.updateMany({ where: { email: { startsWith: 'phase10-batch-', endsWith: '@kqnexus.test' } },
+      data: { status: 'ACTIVE', emailVerified: new Date() } });
+    await db.assessment.updateMany({ where: { type: 'ASSIGNMENT', title: 'Site hazard report' },
+      data: { allowedFileTypes: ['.pdf'] } });
+    await db.course.updateMany({ data: { completionRule } });
+    await db.programme.updateMany({ data: { completionRule } });
+    const repairPublications = async (model) => {
+      let repaired = 0;
+      for (const publication of await model.findMany({ select: { id: true, payload: true } })) {
+        if (!publication.payload || typeof publication.payload !== 'object' || Array.isArray(publication.payload)) continue;
+        await model.update({ where: { id: publication.id }, data: { payload: { ...publication.payload, completionRule } } });
+        repaired += 1;
+      }
+      return repaired;
+    };
+    const repairedCoursePublications = await repairPublications(db.coursePublication);
+    const repairedProgrammePublications = await repairPublications(db.programmePublication);
+    console.log(JSON.stringify({ activatedLocalBatchUsers: result.count, repairedAssignmentExtension: '.pdf',
+      repairedCoursePublications, repairedProgrammePublications }));
+  })().finally(() => db.$disconnect());
+} else if (process.argv.includes('--verify')) {
   Object.assign(process.env, env);
   require('tsx/cjs');
   const { prisma } = require('../src/server/db.ts');
@@ -111,8 +137,8 @@ if (process.argv.includes('--verify')) {
     catch (error) { if (error.$metadata?.httpStatusCode !== 404) throw error; await storage.send(new CreateBucketCommand({ Bucket: bucket })); }
     const body = Buffer.from('%PDF-1.4\n% Phase 10 local batch fixture\n%%EOF\n');
     for (let index = 1; index <= 20; index++) {
-      const user = await db.user.upsert({ where: { email: `phase10-batch-${index}@kqnexus.test` }, update: {},
-        create: { email: `phase10-batch-${index}@kqnexus.test`, name: `Batch learner ${index}`, passwordHash: admin.passwordHash, emailVerified: new Date() } });
+      const user = await db.user.upsert({ where: { email: `phase10-batch-${index}@kqnexus.test` }, update: { status: 'ACTIVE' },
+        create: { email: `phase10-batch-${index}@kqnexus.test`, name: `Batch learner ${index}`, passwordHash: admin.passwordHash, status: 'ACTIVE', emailVerified: new Date() } });
       let enrolment = await db.enrolment.findFirst({ where: { cohortId: batchCohort.id, userId: user.id } });
       if (!enrolment) enrolment = await db.enrolment.create({ data: { cohortId: batchCohort.id, userId: user.id, status: 'ACTIVE', activatedAt: new Date(), reason: 'Local batch walkthrough fixture' } });
       let submission = await db.submission.findFirst({ where: { assessmentId: assignment.id, enrolmentId: enrolment.id } });

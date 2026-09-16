@@ -1,5 +1,6 @@
 import { ListChecks, ClipboardList } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
+import { formatTimestamp } from "@/lib/format-timestamp";
 import type { LearnerResultCard } from "@/server/services/learner-results-service";
 
 /**
@@ -72,7 +73,7 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
         </div>
       )}
 
-      {result.feedback && <p className="whitespace-pre-wrap text-sm text-muted-foreground">{result.feedback}</p>}
+      {result.feedback && <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-sm text-muted-foreground">{result.feedback}</p>}
 
       {/* Unmet pass requirement (ASM-07, §6.1) — only meaningful for a quiz,
           the only type an attempt-limited "remaining" count applies to; never
@@ -95,7 +96,7 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
             {result.overrides.map((override, index) => (
               <li key={index} className="text-sm text-muted-foreground">
                 Overridden from {override.previousScore} to {override.newScore} by{" "}
-                {override.actorName ?? "a staff member"}, {new Date(override.at).toLocaleDateString()} — &quot;
+                {override.actorName ?? "a staff member"}, {formatTimestamp(new Date(override.at)).slice(0, 10)} — &quot;
                 {override.reason}&quot;
               </li>
             ))}
@@ -112,7 +113,7 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
         <ul className="mt-2 flex flex-col gap-2">
           {result.history.map((entry) => (
             <li key={entry.ref} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-mono text-muted-foreground">{new Date(entry.at).toLocaleString()}</span>
+              <span className="font-mono text-muted-foreground">{formatTimestamp(new Date(entry.at))}</span>
               <HistoryStatus entry={entry} passMark={result.passMark} />
               <span className="font-mono">{entry.score ?? "—"}</span>
               {entry.isLate && <StatusPill tone="warning" label="Late" />}

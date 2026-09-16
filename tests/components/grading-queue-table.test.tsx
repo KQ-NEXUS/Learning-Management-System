@@ -17,6 +17,7 @@ describe("grading queue", () => {
   it("renders late only where needed, mono timestamps, status and an ungraded dash", () => {
     const { container } = setup(); expect(screen.getAllByText("Late").length).toBeGreaterThan(0); expect(screen.getAllByText("Ada").length).toBeGreaterThan(0);
     expect(screen.getAllByText("—").length).toBeGreaterThan(0); expect(container.querySelector("td.font-mono")).toBeTruthy();
+    expect(screen.getAllByText("01/01/2026, 00:00:00").length).toBeGreaterThan(0);
   });
   it("enables release only when at least one selected grade is draft", () => {
     setup(); select("Grace"); expect((screen.getByText("Release selected") as HTMLButtonElement).disabled).toBe(true);

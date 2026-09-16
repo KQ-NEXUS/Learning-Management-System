@@ -1,8 +1,8 @@
 ---
 phase: 10
 slug: assessment-quizzes-assignments-grading
-status: awaiting-human
-nyquist_compliant: false
+status: complete
+nyquist_compliant: true
 wave_0_complete: true
 created: 2026-09-15
 updated: 2026-09-16
@@ -82,7 +82,7 @@ updated: 2026-09-16
 | 10-16-3 | 16 | 5 | ASM-04, ASM-05, ASM-06, ASM-07 | T-10-19, T-10-03, T-10-09, T-10-04, T-10-05 | Real PostgreSQL/MinIO persistence and security regressions | PostgreSQL / MinIO integration | `npx vitest run tests/learner-results.integration.test.ts` | Yes | Passed; final tests/type/lint/build green |
 | 10-17-1 | 17 | 6 | ASM-01, ASM-02, ASM-03, ASM-04, ASM-05, ASM-06, ASM-07 | T-10-17, T-10-05, T-10-02, T-10-07, T-10-36, T-10-37 | Executable architecture boundaries; complete gates; explicit human evidence | unit / AST | `npx vitest run tests/assessment-phase-invariants.test.ts` | Yes | Passed: 11/11 |
 | 10-17-2 | 17 | 6 | ASM-01, ASM-02, ASM-03, ASM-04, ASM-05, ASM-06, ASM-07 | T-10-17, T-10-05, T-10-02, T-10-07, T-10-36, T-10-37 | Executable architecture boundaries; complete gates; explicit human evidence | schema / type / lint / build | `npm test` | N/A (tool gate) | Passed automated gates |
-| 10-17-3 | 17 | 6 | ASM-01, ASM-02, ASM-03, ASM-04, ASM-05, ASM-06, ASM-07 | T-10-17, T-10-05, T-10-02, T-10-07, T-10-36, T-10-37 | Executable architecture boundaries; complete gates; explicit human evidence | human | `Manual: walkthrough steps 1-30` | N/A (human) | Pending observations |
+| 10-17-3 | 17 | 6 | ASM-01, ASM-02, ASM-03, ASM-04, ASM-05, ASM-06, ASM-07 | T-10-17, T-10-05, T-10-02, T-10-07, T-10-36, T-10-37 | Executable architecture boundaries; complete gates; explicit human evidence | human | `Manual: walkthrough steps 1-30` | N/A (human) | Passed; 30/30 Chrome observations recorded |
 
 ## Wave 0 Requirements
 
@@ -105,7 +105,7 @@ updated: 2026-09-16
 | Large batch pending state | ASM-05 | Perceived responsiveness over a real transaction | Step 30: select many draft grades; confirm pending feedback lasts throughout the transaction and every selected row resolves. |
 | Real-world MULTI_CHOICE labels and file-type chips | ASM-01, ASM-03 | Real content length and viewport fit | During steps 3 and 12, use long option labels and several allowed types; check keyboard focus, wrapping and readability on a narrow viewport. |
 
-All four remain pending explicit human observations. Task 10-17-3 requires observations for all thirty walkthrough steps, including security steps 8, 20 and 25.
+All four were observed in Chrome. Long assessment content wrapped without horizontal overflow; long feedback scrolled inside 192px regions on staff and learner pages; sixteen grades released through one pending transaction; and long option/file-type content remained readable in the narrow layout. Detailed evidence is in 10-17-CHROME-REPORT.md.
 
 ## Automated Gate Results
 
@@ -115,6 +115,8 @@ All four remain pending explicit human observations. Task 10-17-3 requires obser
 - Full tests: 188/188 files passed; 2,614 tests passed, zero failures, one existing skipped audit-table 360 px reflow manual gate; 953.36 seconds. Report: .planning/phase10-final-tests.json. An earlier mixed-thread run exited before producing a report and is not counted as passing. Its upload happy-path case also exceeded the default five-second budget; the fresh full run passed all eleven upload cases (happy path 755 ms). The fresh run preserves node process isolation and allows 30 seconds per external-system case.
 - Repository lint: 0 errors, 12 warnings across 495 files.
 - Final production build: passed; Turbopack compiled in 25.2 seconds, TypeScript finished in 59 seconds, and all 29 static pages generated.
+- Walkthrough regression gate: final combined run passed 115/115 tests across nine affected files after the authoritative-history fix.
+- Fresh post-walkthrough gate: `npx tsc --noEmit` exited 0; repository lint exited 0 with the same 12 warnings; `npx next build` compiled successfully, completed TypeScript, and generated all 29 static pages.
 
 ### Recorded implementation adjustments
 
@@ -130,10 +132,10 @@ The final gate also exposed regressions: currency assertions assumed a US locale
 - [x] No watch-mode commands.
 - [x] Full feedback latency measured and recorded: 953.36 seconds.
 - [x] Full suite, TypeScript, lint and build green.
-- [ ] Human walkthrough and all four UI observations recorded.
-- [ ] nyquist_compliant may be set true only after the outstanding evidence is resolved.
+- [x] Human walkthrough and all four UI observations recorded.
+- [x] nyquist_compliant is true after all outstanding evidence was resolved.
 
-**Approval:** Automated gates passed 2026-09-16; human observations pending.
+**Approval:** Automated gates and the delegated 30-step Chrome walkthrough passed 2026-09-16.
 
 ### Additional defects reproduced and fixed
 
@@ -145,4 +147,4 @@ The final gate also exposed regressions: currency assertions assumed a US locale
 
 The separate local lms_phase10_uat database has all three quiz question types, a PDF-only assignment with past due date and open hard cutoff, linked assessment lessons, pinned course/programme publications, open learner access windows, an Administrator with all required permissions, two named enrolled learners, and twenty extra local-file-backed draft grades. The real learner-access and owner-scoped assignment services confirmed both lesson links are open and the draft count is 20. The remote development database was inspected read-only and was not changed.
 
-The thirty-step instructions and observation table are in 10-17-WALKTHROUGH.md. No walkthrough step or visual backstop is counted as passed; nyquist_compliant remains false while that evidence is outstanding.
+The thirty-step instructions are in 10-17-WALKTHROUGH.md and the completed observation record is in 10-17-CHROME-REPORT.md. All steps and visual backstops passed after the documented defects were fixed and retested.

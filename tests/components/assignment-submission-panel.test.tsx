@@ -100,6 +100,18 @@ function beginOk() {
 }
 
 describe("AssignmentSubmissionPanel", () => {
+  it("contains the native file input within the narrow submission card", () => {
+    const { container } = setup();
+    const input = container.querySelector('input[type="file"]');
+    expect(input?.className).toContain("max-w-full");
+    expect(input?.closest("label")?.className).toContain("max-w-full");
+  });
+
+  it("renders due and submission timestamps with the deterministic shared formatter", () => {
+    setup({ dueAt: "2026-01-01T00:00:00.000Z", submissions: [submission()] });
+    expect(screen.getAllByText("01/01/2026, 00:00:00")).toHaveLength(2);
+  });
+
   it("renders the pre-submit instructions, file constraints and a muted (not danger) due date", () => {
     const { container } = setup({ dueAt: "2020-01-01T00:00:00.000Z" });
 

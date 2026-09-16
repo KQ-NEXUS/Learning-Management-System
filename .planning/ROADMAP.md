@@ -493,7 +493,7 @@ Plans:
 **Wave 6** *(blocked on Wave 5 completion)*
 
 - [x] 10-16-PLAN.md — Real-Postgres and MinIO integration suites — receipt invariant, Cohort scoping, batch atomicity, released-only read
-- [ ] 10-17-PLAN.md — Phase invariants test, validation contract, and the 30-step human walkthrough
+- [x] 10-17-PLAN.md — Phase invariants test, validation contract, and the 30-step human walkthrough
 
 **UI hint**: yes
 
@@ -600,7 +600,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
-| 10. Assessment — Quizzes, Assignments & Grading | 16/17 | In Progress|  |
+| 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |

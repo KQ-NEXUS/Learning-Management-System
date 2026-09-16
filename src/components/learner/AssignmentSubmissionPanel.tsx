@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { AlertTriangle, ClipboardList, Clock, FileCheck, Upload } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
+import { formatTimestamp } from "@/lib/format-timestamp";
 import type { AssignmentSubmissionClientView } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
 import {
   beginSubmissionUploadAction,
@@ -73,7 +74,7 @@ function SubmissionHistoryRow({ submission }: { submission: SubmissionRow }) {
       <span className="text-muted-foreground">{submission.filename}</span>
       <span className="font-mono text-muted-foreground">{humanSize(submission.sizeBytes)}</span>
       <span className="font-mono text-muted-foreground">
-        {new Date(submission.submittedAt).toLocaleString()}
+        {formatTimestamp(new Date(submission.submittedAt))}
       </span>
     </li>
   );
@@ -235,7 +236,7 @@ export function AssignmentSubmissionPanel(props: Props) {
               <Clock aria-hidden size={16} />
               Due
             </dt>
-            <dd className="font-mono">{new Date(props.dueAt).toLocaleString()}</dd>
+            <dd className="font-mono">{formatTimestamp(new Date(props.dueAt))}</dd>
           </div>
         )}
         <div>
@@ -269,7 +270,7 @@ export function AssignmentSubmissionPanel(props: Props) {
         </p>
       ) : showPicker ? (
         <div className="flex flex-col items-start gap-3">
-          <label className="flex flex-col gap-2 rounded-md border border-dashed border-input-border bg-surface-2 p-4 text-sm font-semibold text-foreground">
+          <label className="flex max-w-full flex-col gap-2 rounded-md border border-dashed border-input-border bg-surface-2 p-4 text-sm font-semibold text-foreground">
             <span className="flex items-center gap-2">
               <Upload aria-hidden className="size-4 text-accent" />
               Choose file
@@ -278,7 +279,7 @@ export function AssignmentSubmissionPanel(props: Props) {
               ref={inputRef}
               type="file"
               onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
-              className="text-sm file:mr-4 file:rounded-md file:border file:border-input-border file:bg-surface file:px-4 file:py-2 file:text-sm file:font-semibold"
+              className="max-w-full min-w-0 text-sm file:mr-4 file:rounded-md file:border file:border-input-border file:bg-surface file:px-4 file:py-2 file:text-sm file:font-semibold"
             />
           </label>
           {isLateSelection && (

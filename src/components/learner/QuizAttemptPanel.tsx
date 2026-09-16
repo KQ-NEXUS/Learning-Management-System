@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Clock, ListChecks } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
+import { formatTimestamp } from "@/lib/format-timestamp";
 import type { LearnerQuizView, SafeQuizAttempt } from "@/server/services/learner-quiz-service";
 import type { AttemptResultView } from "@/server/services/attempt-service";
 import { startAttemptAction, submitAttemptAction, saveAttemptAnswersAction } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions";
@@ -39,6 +40,8 @@ export function QuizAttemptPanel(props: Props) {
         const reply = await (props.onStart ?? startAttemptAction)({ ...route, assessmentId: props.assessmentId, startNew });
         if (!reply.ok) { setError(reply); return; }
         setActive(reply.attempt); setResult(null); setSaved(false);
+        setHistory(reply.history);
+        setRemaining(reply.attemptsRemaining);
         setAnswers(Object.fromEntries(reply.attempt.responses.map(r => [r.questionId, r.selectedOptionIds])));
       } catch { setError({ message: "This quiz could not be opened. Try again." }); }
     });
@@ -74,8 +77,8 @@ export function QuizAttemptPanel(props: Props) {
       <div><dt>Attempts</dt><dd>{props.maxAttempts ?? "Unlimited"}</dd></div>
       <div><dt>Remaining</dt><dd>{remaining ?? "Unlimited"}</dd></div>
       <div><dt>Pass mark</dt><dd>{props.passMark ?? "No threshold"}</dd></div>
-      {props.availableFrom && <div><dt>Opens</dt><dd className="font-mono">{new Date(props.availableFrom).toLocaleString()}</dd></div>}
-      {props.availableUntil && <div><dt className="flex items-center gap-1"><Clock aria-hidden size={16} />Closes</dt><dd className="font-mono">{new Date(props.availableUntil).toLocaleString()}</dd></div>}
+      {props.availableFrom && <div><dt>Opens</dt><dd className="font-mono">{formatTimestamp(new Date(props.availableFrom))}</dd></div>}
+      {props.availableUntil && <div><dt className="flex items-center gap-1"><Clock aria-hidden size={16} />Closes</dt><dd className="font-mono">{formatTimestamp(new Date(props.availableUntil))}</dd></div>}
     </dl>
 
     {active ? <form onSubmit={e => { e.preventDefault(); submit(); }} className="flex flex-col gap-6">
@@ -122,7 +125,7 @@ export function QuizAttemptPanel(props: Props) {
     </>}
     {error && <div role="alert" className="flex flex-col gap-2 text-sm text-danger"><p>{error.message}</p>{error.body && <p>{error.body}</p>}{active && <button disabled={pending} onClick={submit} className={BUTTON}>Try again</button>}</div>}
     {history.length > 0 && <div className="flex flex-col gap-2"><h3 className="text-sm font-semibold">Attempt history</h3><ul className="flex flex-col gap-2">{history.map(a => <li key={a.attemptId} className="flex flex-wrap items-center gap-2 text-sm">
-      <span>Attempt {a.attemptNumber}</span><span className="font-mono">{a.submittedAt ? new Date(a.submittedAt).toLocaleString() : "—"}</span>
+      <span>Attempt {a.attemptNumber}</span><span className="font-mono">{a.submittedAt ? formatTimestamp(new Date(a.submittedAt)) : "—"}</span>
       <StatusPill tone={a.status === "ABANDONED" ? "neutral" : a.passed ? "success" : "warning"} label={a.status === "ABANDONED" ? "Abandoned" : a.passed ? "Passed" : "Not yet passed"} />
       <span className="font-mono">{a.status === "ABANDONED" ? "—" : `${a.score} / ${a.maxScore}`}</span>
     </li>)}</ul></div>}

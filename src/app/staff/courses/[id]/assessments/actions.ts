@@ -37,9 +37,25 @@ import {
   type AssessmentRecord,
 } from "@/server/services/assessment-service";
 import { ALLOWED_ASSIGNMENT_FILE_TYPES } from "@/lib/assignment-file-types";
+import { parseCohortDateTime } from "@/lib/cohort-datetime";
 
 const ASSESSMENT_TYPES = ["QUIZ", "ASSIGNMENT"] as const;
 const ATTEMPT_GRADING_METHODS = ["HIGHEST", "LATEST", "AVERAGE"] as const;
+const ASSESSMENT_TIMEZONE = "Africa/Lagos";
+
+const optionalDateTime = z
+  .string()
+  .trim()
+  .min(1)
+  .transform((value, context) => {
+    const parsed = parseCohortDateTime(value, ASSESSMENT_TIMEZONE);
+    if (!parsed) {
+      context.addIssue({ code: "custom", message: "Enter a valid date and time." });
+      return z.NEVER;
+    }
+    return parsed;
+  })
+  .optional();
 
 // ---------------------------------------------------------------------------
 // Field extraction — FormData -> raw strings/arrays, blank -> undefined.
@@ -91,8 +107,8 @@ function rawFields(form: FormData, type: (typeof ASSESSMENT_TYPES)[number]) {
 const commonEditable = {
   title: z.string().trim().min(1, "Enter an assessment title.").max(200),
   instructions: z.string().trim().max(10_000).optional(),
-  availableFrom: z.string().trim().min(1).optional(),
-  availableUntil: z.string().trim().min(1).optional(),
+  availableFrom: optionalDateTime,
+  availableUntil: optionalDateTime,
   feedbackBehaviour: z.enum([...FEEDBACK_BEHAVIOURS], {
     message: "Choose a valid feedback behaviour.",
   }),
@@ -107,7 +123,7 @@ const quizEditable = {
 };
 
 const assignmentEditable = {
-  dueAt: z.string().trim().min(1).optional(),
+  dueAt: optionalDateTime,
   allowedFileTypes: z
     .array(z.enum(ALLOWED_ASSIGNMENT_FILE_TYPES))
     .min(1, "Select at least one allowed file type."),

@@ -215,7 +215,7 @@ async function main() {
         status: "PUBLISHED",
         contentVersion: 1,
         publishedAt: new Date(),
-        completionRule: { requiredLessons: "all", passAssessments: true } as Prisma.InputJsonValue,
+        completionRule: { version: 1, requireAllRequiredLessons: true } as Prisma.InputJsonValue,
       },
     });
     courses.set(c.slug, saved.id);
@@ -273,7 +273,7 @@ async function main() {
       sequential: true,
       certificateEnabled: true,
       publishedAt: new Date(),
-      completionRule: { allCourses: true } as Prisma.InputJsonValue,
+      completionRule: { version: 1, requireAllRequiredLessons: true } as Prisma.InputJsonValue,
     },
   });
 
@@ -728,7 +728,7 @@ async function main() {
           "Submit a hazard report for your own site using the provided template. PDF only, 10MB maximum.",
         status: "PUBLISHED",
         dueAt: daysFromNow(45),
-        allowedFileTypes: ["application/pdf"],
+        allowedFileTypes: [".pdf"],
         maxFileSizeBytes: 10 * 1024 * 1024,
         allowResubmission: true,
         totalMarks: 100,
