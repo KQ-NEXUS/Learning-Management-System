@@ -7,8 +7,8 @@ import {
 } from "@/server/permissions/catalogue";
 
 describe("permission catalogue", () => {
-  it("contains exactly 36 identifiers", () => {
-    expect(PERMISSIONS).toHaveLength(36);
+  it("contains exactly 37 identifiers", () => {
+    expect(PERMISSIONS).toHaveLength(37);
   });
 
   it("contains no duplicates", () => {

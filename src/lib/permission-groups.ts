@@ -72,7 +72,12 @@ export const PERMISSION_GROUPS: readonly PermissionGroup[] = [
     id: "certificates",
     label: "Certificates",
     noun: "certificates",
-    permissions: ["certificates.view", "certificates.issue", "certificates.revoke"],
+    permissions: [
+      "certificates.view",
+      "certificates.issue",
+      "certificates.revoke",
+      "certificates.manage",
+    ],
   },
   {
     id: "support",

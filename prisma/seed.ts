@@ -27,6 +27,10 @@ const DEFAULT_ROLES = [
     name: "Administrator",
     description:
       "Administer identities, permissions, roles, catalogue, operations, and audit evidence.",
+    // certificates.manage (D-09/CRD-03 template authoring) is granted here
+    // via the full PERMISSIONS spread below — Administrator is the only
+    // default role that already holds certificates.issue, so it is the only
+    // one that should receive certificates.manage too (11-DECISIONS.md).
     permissions: [...PERMISSIONS],
   },
   {

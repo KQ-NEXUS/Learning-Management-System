@@ -60,6 +60,11 @@ export const PERMISSIONS = Object.freeze([
   "certificates.view",
   "certificates.issue",
   "certificates.revoke",
+  // Authorizes certificate-template authoring (D-09), independently
+  // grantable from manual issuance/revocation. Human-approved addition —
+  // see .planning/phases/11-certificates-completion-lifecycle/11-DECISIONS.md
+  // ("Certificate-template authoring permission" row, "new-manage" chosen).
+  "certificates.manage",
 
   // Support — PRD §17.2. SUP-03 requires ticket handling without
   // Administrator status.
