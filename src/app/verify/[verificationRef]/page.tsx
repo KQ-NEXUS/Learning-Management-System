@@ -1,5 +1,6 @@
 import { ShieldCheck, ShieldQuestion, ShieldX } from "lucide-react";
 import { verifyCertificateByRef } from "@/server/services/certificate-verification-service";
+import { VerifyReferenceForm } from "../VerifyReferenceForm";
 
 /**
  * The public verification result page (CRD-04, UI-SPEC §7.5).
@@ -39,84 +40,103 @@ export default async function VerifyResultPage({
   const result = await verifyCertificateByRef(verificationRef);
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-card">
-      {result.status === "active" && (
-        <>
-          <ShieldCheck aria-hidden className="size-8 text-success" />
-          <h2 className="text-base font-semibold text-foreground">
-            This certificate is valid.
-          </h2>
-          <dl className="flex flex-col gap-3">
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Learner name
-              </dt>
-              <dd className="text-sm text-foreground">{result.learnerName}</dd>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Award title
-              </dt>
-              <dd className="text-sm text-foreground">{result.awardTitle}</dd>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Issued date
-              </dt>
-              <dd className="font-mono text-sm text-foreground">
-                {formatIssuedDate(result.issuedAt)}
-              </dd>
-            </div>
-          </dl>
-        </>
-      )}
+    <>
+      <div className="flex w-full max-w-md flex-col gap-1 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Verify a certificate
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Enter the verification reference from a certificate to check whether
+          it&apos;s valid.
+        </p>
+      </div>
+      <VerifyReferenceForm />
+      <div className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-card">
+        {result.status === "active" && (
+          <>
+            <ShieldCheck aria-hidden className="size-8 text-success" />
+            <h2 className="text-base font-semibold text-foreground">
+              This certificate is valid.
+            </h2>
+            <dl className="flex flex-col gap-3">
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Learner name
+                </dt>
+                <dd className="text-sm text-foreground">
+                  {result.learnerName}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Award title
+                </dt>
+                <dd className="text-sm text-foreground">{result.awardTitle}</dd>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Issued date
+                </dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {formatIssuedDate(result.issuedAt)}
+                </dd>
+              </div>
+            </dl>
+          </>
+        )}
 
-      {result.status === "revoked" && (
-        <>
-          <ShieldX aria-hidden className="size-8 text-danger" />
-          <h2 className="text-base font-semibold text-foreground">
-            This certificate has been revoked and is no longer valid.
-          </h2>
-          <dl className="flex flex-col gap-3">
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Learner name
-              </dt>
-              <dd className="text-sm text-foreground">{result.learnerName}</dd>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Award title
-              </dt>
-              <dd className="text-sm text-foreground">{result.awardTitle}</dd>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Issued date
-              </dt>
-              <dd className="font-mono text-sm text-foreground">
-                {formatIssuedDate(result.issuedAt)}
-              </dd>
-            </div>
-          </dl>
-        </>
-      )}
+        {result.status === "revoked" && (
+          <>
+            <ShieldX aria-hidden className="size-8 text-danger" />
+            <h2 className="text-base font-semibold text-foreground">
+              This certificate has been revoked and is no longer valid.
+            </h2>
+            <dl className="flex flex-col gap-3">
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Learner name
+                </dt>
+                <dd className="text-sm text-foreground">
+                  {result.learnerName}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Award title
+                </dt>
+                <dd className="text-sm text-foreground">{result.awardTitle}</dd>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Issued date
+                </dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {formatIssuedDate(result.issuedAt)}
+                </dd>
+              </div>
+            </dl>
+          </>
+        )}
 
-      {result.status === "not_found" && (
-        <>
-          <ShieldQuestion aria-hidden className="size-8 text-muted-foreground" />
-          <h2 className="text-base font-semibold text-foreground">
-            We couldn&apos;t find a certificate with this reference.
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Double-check the reference and try again.
-          </p>
-        </>
-      )}
+        {result.status === "not_found" && (
+          <>
+            <ShieldQuestion
+              aria-hidden
+              className="size-8 text-muted-foreground"
+            />
+            <h2 className="text-base font-semibold text-foreground">
+              We couldn&apos;t find a certificate with this reference.
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Double-check the reference and try again.
+            </p>
+          </>
+        )}
 
-      <p className="break-all font-mono text-[11px] text-muted-foreground">
-        Reference: {verificationRef}
-      </p>
-    </div>
+        <p className="break-all font-mono text-[11px] text-muted-foreground">
+          Reference: {verificationRef}
+        </p>
+      </div>
+    </>
   );
 }
