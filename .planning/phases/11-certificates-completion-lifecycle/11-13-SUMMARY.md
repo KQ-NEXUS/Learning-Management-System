@@ -113,6 +113,10 @@ None — no external service configuration required. No packages were installed 
 - Phase 9's `CERTIFICATE_DEFERRED` named gap is fully closed; Phase 12's `TICKETS_DEFERRED` gap is untouched and still renders via `DeferredSlot`, ready for that phase's own plan.
 - Full-repo `npm test` (`vitest run --no-file-parallelism`) was kicked off for final confirmation but did not finish within this session's window (large repo, sequential file execution). All plan-scoped verification is independently green and was run directly: the four plan test files (`tests/certificate-download-route.test.ts`, `tests/certificate-slot.test.ts`, `tests/components/certificate-slot.test.tsx`, `tests/enrolment-dashboard-service.test.ts` — 71+ tests combined), `tests/boundary.test.ts` (closure/boundary invariants, 17 tests), `npx tsc --noEmit` (clean), `npx eslint` on every changed file (clean), and `npx next build` (clean; `/api/certificates/[id]/download` listed as dynamic `ƒ`, not static). Recommend a follow-up full-suite confirmation before the phase's own UAT/verification gate, consistent with how prior plans in this phase have flagged long-running full-suite runs.
 
+## Self-Check: PASSED
+
+All 6 created files confirmed present on disk; all 7 referenced commit hashes confirmed present in `git log --oneline --all`.
+
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
