@@ -1,6 +1,6 @@
 /**
- * Plan 11-07 Task 1: certificate-issuance-service.ts's
- * `issueCertificateForEnrolment` (CRD-01, CRD-02, CRD-06's issuance half).
+ * Plan 11-07: certificate-issuance-service.ts (CRD-01, CRD-02, CRD-06 —
+ * attendance/lesson half).
  *
  * Driven by an in-memory staged-commit fake `tx` (mirroring
  * `tests/attendance-service.test.ts`'s `makeTx`/`runInTransaction` shape) so
@@ -13,12 +13,30 @@
 import { describe, expect, it } from "vitest";
 import {
   issueCertificateForEnrolment,
+  reactToCompletionResults,
+  recalculateCompletionAndIssue,
+  flagCertificateForReview,
   type CertificateIssuanceTxClient,
   type IssueCertificateDeps,
   type IssueCertificateActor,
 } from "@/server/services/certificate-issuance-service";
+import type { CompletionScopeResult, CompletionRecalculationResult } from "@/server/services/completion-service";
+import type { LessonProgressServiceDeps } from "@/server/services/lesson-progress-service";
+import type { AttendanceServiceDeps } from "@/server/services/attendance-service";
 import { EMPTY_LAYOUT_V1 } from "@/server/services/certificate-template-layout";
 import { SYSTEM_ACTOR_TYPE } from "@/server/services/checkout-webhook-system-service";
+
+// ---------------------------------------------------------------------------
+// Compile-time assignability — a signature drift here fails `tsc`, not a
+// later runtime call (11-07 Task 2 acceptance criteria).
+// ---------------------------------------------------------------------------
+
+const _asLessonProgressDep: LessonProgressServiceDeps["recalculateCompletion"] =
+  recalculateCompletionAndIssue;
+const _asAttendanceDep: AttendanceServiceDeps["recalculateCompletion"] =
+  recalculateCompletionAndIssue;
+void _asLessonProgressDep;
+void _asAttendanceDep;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -502,5 +520,239 @@ describe("issueCertificateForEnrolment", () => {
 
     expect(outcome).toEqual({ kind: "not-enabled" });
     expect(renderCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 — reactToCompletionResults / recalculateCompletionAndIssue
+// ---------------------------------------------------------------------------
+
+function scopeResult(over: Partial<CompletionScopeResult> = {}): CompletionScopeResult {
+  return {
+    scope: over.scope ?? "COURSE",
+    courseId: over.courseId ?? "course-1",
+    verdict: over.verdict ?? { items: [], satisfied: true },
+    action: over.action ?? "created",
+  };
+}
+
+describe("reactToCompletionResults", () => {
+  it("issues a Course certificate when action is created, scope COURSE, mode AUTOMATIC, and issuance is enabled", async () => {
+    const h = harness();
+    const { deps, renderCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] }, deps),
+    );
+
+    expect(renderCalls).toHaveLength(1);
+    expect(h.certificates.size).toBe(1);
+    expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
+  });
+
+  it("programme-cohort COURSE-scope results are skipped entirely (D-01), zero issuance calls", async () => {
+    const h = harness({
+      enrolments: [enr({ cohortId: "cohort-programme" })],
+      cohorts: [programmeCohort()],
+      programmes: [award({ id: "programme-1", title: "Full Stack" })],
+    });
+    const { deps, renderCalls, putObjectCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [scopeResult({ scope: "COURSE", courseId: "course-a", action: "created" })],
+        },
+        deps,
+      ),
+    );
+
+    expect(renderCalls).toHaveLength(0);
+    expect(putObjectCalls).toHaveLength(0);
+    expect(h.certificates.size).toBe(0);
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+  });
+
+  it("programme completion issues exactly one Programme certificate, never a Course certificate", async () => {
+    const h = harness({
+      enrolments: [enr({ cohortId: "cohort-programme" })],
+      cohorts: [programmeCohort()],
+      programmes: [award({ id: "programme-1", title: "Full Stack" })],
+    });
+    const { deps, renderCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [
+            scopeResult({ scope: "COURSE", courseId: "course-a", action: "created" }),
+            scopeResult({ scope: "COURSE", courseId: "course-b", action: "created" }),
+            scopeResult({ scope: "PROGRAMME", courseId: null, action: "created" }),
+          ],
+        },
+        deps,
+      ),
+    );
+
+    expect(renderCalls).toHaveLength(1);
+    expect(h.certificates.size).toBe(1);
+    const cert = [...h.certificates.values()][0];
+    expect(cert.scope).toBe("PROGRAMME");
+    expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
+  });
+
+  it("MANUAL issuance mode leaves the completion eligible but unissued (D-04)", async () => {
+    const h = harness({ courses: [award({ certificateIssuanceMode: "MANUAL" })] });
+    const { deps, renderCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] }, deps),
+    );
+
+    expect(renderCalls).toHaveLength(0);
+    expect(h.certificates.size).toBe(0);
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+  });
+
+  it("no certificate issues when certificateEnabled is false regardless of issuance mode", async () => {
+    const h = harness({ courses: [award({ certificateEnabled: false, certificateIssuanceMode: "AUTOMATIC" })] });
+    const { deps, renderCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] }, deps),
+    );
+
+    expect(renderCalls).toHaveLength(0);
+    expect(h.certificates.size).toBe(0);
+  });
+
+  it("unchanged completion results write nothing", async () => {
+    const h = harness();
+    const { deps, renderCalls, auditCalls, writeEventCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "unchanged" })] }, deps),
+    );
+
+    expect(renderCalls).toHaveLength(0);
+    expect(auditCalls).toHaveLength(0);
+    expect(writeEventCalls).toHaveLength(0);
+    expect(h.certificates.size).toBe(0);
+  });
+
+  it("superseded completion flags the certificate for review and reverts the enrolment to ACTIVE", async () => {
+    const existing: CertRow = {
+      id: "cert-1",
+      enrolmentId: "enr-1",
+      userId: "user-1",
+      scope: "COURSE",
+      courseId: "course-1",
+      programmeId: null,
+      awardTitle: "Intro to Testing",
+      learnerName: "Jane Learner",
+      issuedAt: NOW,
+      status: "ACTIVE",
+      verificationRef: "CERT-ORIGINAL",
+      storageKey: "certificates/cert-1/key",
+      reviewFlaggedAt: null,
+    };
+    const h = harness({
+      enrolments: [enr({ status: "COMPLETED" })],
+      certificates: [existing],
+    });
+    const { deps } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "superseded" })] }, deps),
+    );
+
+    const cert = h.certificates.get("cert-1");
+    expect(cert?.reviewFlaggedAt).toEqual(NOW);
+    expect(cert?.status).toBe("ACTIVE");
+    expect(cert?.verificationRef).toBe("CERT-ORIGINAL");
+    expect(cert?.storageKey).toBe("certificates/cert-1/key");
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+  });
+
+  it("superseded with no existing certificate leaves the enrolment alone and raises no error", async () => {
+    const h = harness({ enrolments: [enr({ status: "ACTIVE" })] });
+    const { deps } = makeDeps();
+
+    await expect(
+      h.runInTransaction((tx) =>
+        reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "superseded" })] }, deps),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+  });
+});
+
+describe("recalculateCompletionAndIssue", () => {
+  it("passes through a not-evaluable result unchanged and reacts to nothing", async () => {
+    const notEvaluable: CompletionRecalculationResult = { kind: "not-evaluable", reason: "unpinned" };
+    const tx = {
+      enrolment: { findUnique: async () => null },
+      cohort: { findUnique: async () => null },
+      cohortCourse: { findMany: async () => [] },
+      coursePublication: { findUnique: async () => null },
+      programmePublication: { findUnique: async () => null },
+      module: { findMany: async () => [] },
+      lesson: { findMany: async () => [] },
+      lessonProgress: { findMany: async () => [] },
+      scheduledSession: { findMany: async () => [] },
+      attendanceRecord: { findMany: async () => [] },
+      completionRecord: {
+        findFirst: async () => null,
+        create: async () => ({}),
+        update: async () => ({}),
+      },
+      domainEvent: { create: async () => ({}) },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const result = await recalculateCompletionAndIssue(tx, { enrolmentId: "enr-missing", now: NOW });
+
+    expect(result).toEqual(notEvaluable);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// flagCertificateForReview — the shared helper both this plan's superseded
+// branch and plan 11-10's grade-correction hook reuse.
+// ---------------------------------------------------------------------------
+
+describe("flagCertificateForReview", () => {
+  it("is a no-op when the enrolment already holds a REVOKED certificate (nothing ACTIVE to flag)", async () => {
+    const revoked: CertRow = {
+      id: "cert-1",
+      enrolmentId: "enr-1",
+      userId: "user-1",
+      scope: "COURSE",
+      courseId: "course-1",
+      programmeId: null,
+      awardTitle: "Intro to Testing",
+      learnerName: "Jane Learner",
+      issuedAt: NOW,
+      status: "REVOKED",
+      verificationRef: "CERT-REVOKED",
+      storageKey: "certificates/cert-1/key",
+      reviewFlaggedAt: null,
+    };
+    const h = harness({ certificates: [revoked] });
+    const { deps, auditCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      flagCertificateForReview(tx, { enrolmentId: "enr-1", now: NOW, reason: "grade corrected", actorId: "staff-1" }, deps),
+    );
+
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toBeNull();
+    expect(auditCalls).toHaveLength(0);
   });
 });

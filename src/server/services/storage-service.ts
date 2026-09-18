@@ -327,6 +327,26 @@ export async function presignCertificateObjectUrl(input: {
 }
 
 /**
+ * Fetches a private object's full bytes directly, server-side only. Added for
+ * `certificate-issuance-service.ts`'s live `resolveTemplateAsset` binding
+ * (plan 11-07) — the PDF renderer never touches object storage itself
+ * (T-11-14, `certificate-pdf-renderer.ts`'s header); this is the one call
+ * site that resolves a template's image `assetKey` into bytes on its behalf
+ * so a logo/signature/background can be embedded into the rendered PDF. Not
+ * part of any browser-reachable flow — a browser only ever receives a
+ * presigned URL (`presignTemplateAssetUploadUrl`, `presignLessonObjectUrl`).
+ */
+export async function getObjectBytes(key: string): Promise<Uint8Array> {
+  const result = await s3.send(
+    new GetObjectCommand({ Bucket: bucketName(), Key: key }),
+  );
+  if (!result.Body) {
+    throw new Error(`No object body for key ${key}.`);
+  }
+  return result.Body.transformToByteArray();
+}
+
+/**
  * Presigns a template image upload after applying the shared IMAGE MIME and
  * size rules. The asset stays staged until the existing generic inspect and
  * promote operations verify it.

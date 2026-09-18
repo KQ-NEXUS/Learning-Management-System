@@ -32,21 +32,22 @@
  * oversight — Phase 11 owns the `COMPLETED` transition (D-05) and the
  * reversal that makes a terminal status safe (D-06). This module declares
  * its OWN, wider `CertificateIssuanceTxClient` below rather than extending
- * `completion-service.ts`'s type. Plan 11-07 Task 2 adds the
- * `recalculateCompletionAndIssue` wrapper that narrows a
- * `CompletionServiceTxClient` into this wider type via a structural cast —
- * the same "cast via unknown" idiom `enrolment-transitions.ts`'s
- * `applyEnrolmentActivation` uses for its own tx-client narrowing — never by
- * widening `CompletionServiceTxClient` itself.
+ * `completion-service.ts`'s type, and never imports
+ * `CompletionServiceTxClient` for anything but the outer wrapper's public
+ * signature (`recalculateCompletionAndIssue`), which narrows to it via a
+ * structural cast — the same "cast via unknown" idiom
+ * `enrolment-transitions.ts`'s `applyEnrolmentActivation` uses for its own
+ * tx-client narrowing.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHY NOTHING HERE IS REACHABLE FROM A ROUTE HANDLER WITH A CALLER-SUPPLIED
  * ENROLMENT ID (RESEARCH Pattern 3).
  * ─────────────────────────────────────────────────────────────────────────────
- * `issueCertificateForEnrolment` is consumed only by `reactToCompletionResults`
- * (Task 2, installed at the lesson-progress/attendance composition roots via
- * `recalculateCompletionAndIssue`, plan 11-10) and by `certificate-service.ts`'s
- * staff-triggered manual-issue path (plan 11-11), which applies its own
+ * `issueCertificateForEnrolment` and `reactToCompletionResults` are consumed
+ * only by `recalculateCompletionAndIssue` (installed at the
+ * lesson-progress/attendance composition roots, plan 11-10) and by
+ * `certificate-service.ts`'s staff-triggered manual-issue path (plan 11-11),
+ * which applies its own
  * `withPermission` gate. Automatic issuance runs inside a transaction already
  * opened by an authenticated actor's permitted write (a learner completing
  * their own lesson, staff marking attendance); the certificate itself is a
@@ -62,16 +63,29 @@ import {
   type DomainEventTxClient,
 } from "@/server/services/domain-event-service";
 import {
+  recalculateCompletion,
+  type CompletionServiceTxClient,
+  type CompletionRecalculationResult,
+  type CompletionScopeResult,
+} from "@/server/services/completion-service";
+import {
   assertTransition,
   type EnrolmentStatusValue,
 } from "@/server/services/enrolment-transitions";
 import { SYSTEM_ACTOR_TYPE } from "@/server/services/checkout-webhook-system-service";
-import type { BusinessAuditEvent } from "@/server/services/audit-service";
+import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
+import { generateVerificationRef } from "@/server/services/certificate-reference";
 import {
   renderCertificatePdf,
   type CertificateAssetResolver,
 } from "@/server/services/certificate-pdf-renderer";
 import { parseCertificateTemplateLayout } from "@/server/services/certificate-template-layout";
+import {
+  buildCertificateStorageKey,
+  putGeneratedCertificateObject,
+  getObjectBytes,
+} from "@/server/services/storage-service";
+import { prisma } from "@/server/db";
 
 // ---------------------------------------------------------------------------
 // Row shapes — the narrow structural slice this module needs, mirroring the
@@ -425,4 +439,235 @@ export async function issueCertificateForEnrolment(
   });
 
   return { kind: "issued", certificateId, verificationRef };
+}
+
+// ---------------------------------------------------------------------------
+// flagCertificateForReview — the shared CRD-06 flag-write, reused by both
+// this file's own superseded branch and plan 11-10's grade-correction hook
+// (`flagCertificatesForGradeCorrection`), per that plan's explicit
+// "share, do not duplicate" instruction.
+// ---------------------------------------------------------------------------
+
+export type FlagCertificateForReviewArgs = {
+  enrolmentId: string;
+  now: Date;
+  reason: string;
+  actorId: string | null;
+  actorType?: string;
+};
+
+/**
+ * Looks up the ONE `ACTIVE` certificate for `enrolmentId` (no scope
+ * disambiguation — D-01 guarantees at most one certificate type is ever
+ * certificate-eligible per enrolment, per RESEARCH's Open Question 1), sets
+ * `reviewFlaggedAt` only, and — if the enrolment is currently `COMPLETED` —
+ * reverts it to `ACTIVE` through `assertTransition` (D-06). Never touches
+ * `status`, `verificationRef`, `issuedAt`, or `storageKey`: CRD-06 flags for
+ * review, it never silently alters or destroys the credential. A no-op, not
+ * an error, when there is no `ACTIVE` certificate to flag.
+ */
+export async function flagCertificateForReview(
+  tx: CertificateIssuanceTxClient,
+  args: FlagCertificateForReviewArgs,
+  deps: IssueCertificateDeps,
+): Promise<void> {
+  const { enrolmentId, now, reason, actorId, actorType } = args;
+
+  const certificate = await tx.certificate.findFirst({
+    where: { enrolmentId, status: "ACTIVE" },
+  });
+  if (!certificate) return;
+
+  await tx.certificate.update({
+    where: { id: certificate.id },
+    data: { reviewFlaggedAt: now },
+  });
+
+  const enrolment = await tx.enrolment.findUnique({ where: { id: enrolmentId } });
+  if (enrolment && (enrolment.status as EnrolmentStatusValue) === "COMPLETED") {
+    assertTransition("COMPLETED", "ACTIVE", enrolmentId);
+    await tx.enrolment.update({ where: { id: enrolmentId }, data: { status: "ACTIVE" } });
+  }
+
+  await deps.audit({
+    actorId,
+    actorType,
+    action: "certificate.review_flagged",
+    targetType: "Certificate",
+    targetId: certificate.id,
+    outcome: "SUCCESS",
+    reason,
+  });
+
+  await deps.writeEvent(tx, {
+    type: "certificate.review_flagged",
+    payload: { certificateId: certificate.id, enrolmentId, reason },
+    occurredAt: now,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// reactToCompletionResults
+// ---------------------------------------------------------------------------
+
+export type ReactToCompletionResultsArgs = {
+  enrolmentId: string;
+  results: CompletionScopeResult[];
+  now: Date;
+};
+
+/**
+ * Iterates `recalculateCompletion`'s results array and applies the state
+ * table below. Reads the enrolment's cohort exactly once, up front, and
+ * derives `isProgrammeCohort` from whether it carries a `programmeId` — that
+ * single boolean enforces D-01 across every `COURSE`-scope result in the
+ * array, including the Programme-cohort case where `completion-service.ts`
+ * emits one `COURSE`-scope entry per member course plus one `PROGRAMME`-
+ * scope entry.
+ *
+ * | `action`      | condition                                             | effect                                    |
+ * |---------------|--------------------------------------------------------|--------------------------------------------|
+ * | `created`     | `COURSE` scope on a Programme cohort                    | skipped — D-01, zero issuance calls        |
+ * | `created`     | award `certificateEnabled: false`                        | skipped                                    |
+ * | `created`     | award `certificateIssuanceMode: "MANUAL"`                | skipped — eligible, not issued (D-04)      |
+ * | `created`     | award `certificateEnabled: true`, mode `"AUTOMATIC"`      | `issueCertificateForEnrolment` (system)    |
+ * | `unchanged`   | —                                                         | no write of any kind                       |
+ * | `superseded`  | —                                                         | `flagCertificateForReview` (system, "completion superseded") |
+ */
+export async function reactToCompletionResults(
+  tx: CertificateIssuanceTxClient,
+  args: ReactToCompletionResultsArgs,
+  deps: IssueCertificateDeps,
+): Promise<void> {
+  const { enrolmentId, results, now } = args;
+
+  const enrolment = await tx.enrolment.findUnique({ where: { id: enrolmentId } });
+  if (!enrolment) return;
+
+  const cohort = await tx.cohort.findUnique({ where: { id: enrolment.cohortId } });
+  if (!cohort) return;
+
+  const isProgrammeCohort = cohort.programmeId != null;
+
+  for (const result of results) {
+    if (result.action === "unchanged") continue;
+
+    if (result.action === "created") {
+      // D-01 — a Programme cohort's member-course completion never triggers
+      // Course-certificate issuance, even though the completion engine
+      // creates the internal COURSE-scope record. Zero calls to the
+      // issuance dependency for this branch, not merely "no row created."
+      if (result.scope === "COURSE" && isProgrammeCohort) continue;
+
+      const award =
+        result.scope === "COURSE"
+          ? cohort.courseId
+            ? await tx.course.findUnique({ where: { id: cohort.courseId } })
+            : null
+          : cohort.programmeId
+            ? await tx.programme.findUnique({ where: { id: cohort.programmeId } })
+            : null;
+
+      // Eligibility under MANUAL mode is a read-time fact (D-04) — no flag
+      // column is written, and the issuance dependency is never called.
+      if (!award || !award.certificateEnabled || award.certificateIssuanceMode !== "AUTOMATIC") {
+        continue;
+      }
+
+      await issueCertificateForEnrolment(
+        tx,
+        { enrolmentId, scope: result.scope, now, actor: null },
+        deps,
+      );
+      continue;
+    }
+
+    // action === "superseded"
+    await flagCertificateForReview(
+      tx,
+      {
+        enrolmentId,
+        now,
+        reason: "completion superseded",
+        actorId: null,
+        actorType: SYSTEM_ACTOR_TYPE,
+      },
+      deps,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// recalculateCompletionAndIssue — the drop-in replacement for the bare
+// `recalculateCompletion` dependency slot on lesson-progress-service.ts /
+// attendance-service.ts (plan 11-10 installs it; zero lines of business
+// logic change in either consumer).
+// ---------------------------------------------------------------------------
+
+const liveIssuanceDeps: IssueCertificateDeps = {
+  renderPdf: renderCertificatePdf,
+  putObject: putGeneratedCertificateObject,
+  buildKey: buildCertificateStorageKey,
+  generateRef: generateVerificationRef,
+  audit: (event) => recordAudit(event),
+  writeEvent: writeDomainEvent,
+  resolveTemplateAsset: (assetKey) => getObjectBytes(assetKey),
+};
+
+/**
+ * Calls `recalculateCompletion` unchanged, then — on `kind: "evaluated"` —
+ * reacts to its results via `reactToCompletionResults`, and returns the
+ * ORIGINAL result unchanged. Its signature is deliberately identical to
+ * `recalculateCompletion`'s own
+ * (`(tx: CompletionServiceTxClient, args) => Promise<CompletionRecalculationResult>`)
+ * so it is assignable to `LessonProgressServiceDeps["recalculateCompletion"]`
+ * and the equivalent slot on `AttendanceServiceDeps` with no other change at
+ * either composition root (plan 11-10).
+ *
+ * `tx` is narrowed to `CertificateIssuanceTxClient` via a structural cast
+ * through `unknown` — the same idiom `enrolment-transitions.ts`'s
+ * `applyEnrolmentActivation` uses for `SeatTxClient` — never by widening
+ * `CompletionServiceTxClient` itself (see header).
+ */
+export async function recalculateCompletionAndIssue(
+  tx: CompletionServiceTxClient,
+  args: { enrolmentId: string; now: Date },
+): Promise<CompletionRecalculationResult> {
+  const result = await recalculateCompletion(tx, args);
+
+  if (result.kind === "evaluated") {
+    await reactToCompletionResults(
+      tx as unknown as CertificateIssuanceTxClient,
+      { enrolmentId: args.enrolmentId, results: result.results, now: args.now },
+      liveIssuanceDeps,
+    );
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Prisma-backed binding — exported for plan 11-11's staff-triggered manual
+// issue path, which supplies its own actor and its own withPermission gate.
+// ---------------------------------------------------------------------------
+
+/** The live-bound `issueCertificateForEnrolment`, ready for a caller that already has an open `tx`. */
+export function issueCertificateForEnrolmentLive(
+  tx: CertificateIssuanceTxClient,
+  input: IssueCertificateInput,
+): Promise<IssueCertificateOutcome> {
+  return issueCertificateForEnrolment(tx, input, liveIssuanceDeps);
+}
+
+/**
+ * Exposed so `prisma`'s import stays confined to this file's bottom, matching
+ * every other `*-system-service.ts` module's "Prisma-backed binding" section
+ * — not currently called from this file itself (`recalculateCompletionAndIssue`
+ * receives its `tx` from the caller's own transaction), kept for symmetry and
+ * for a future composition root that wants to open its own transaction here.
+ */
+export function withCertificateIssuanceTransaction<R>(
+  fn: (tx: CertificateIssuanceTxClient) => Promise<R>,
+): Promise<R> {
+  return prisma.$transaction((tx: unknown) => fn(tx as CertificateIssuanceTxClient));
 }
