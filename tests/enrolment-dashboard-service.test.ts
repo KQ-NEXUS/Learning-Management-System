@@ -20,6 +20,8 @@ import {
   type EnrolmentDashboardStore,
   type DashboardSessionStoreRow,
   type DashboardAttendanceRecordStoreRow,
+  type DashboardCompletionRecordStoreRow,
+  type DashboardCertificateStoreRow,
 } from "@/server/services/enrolment-dashboard-service";
 import {
   createLearnerAccessService,
@@ -247,15 +249,34 @@ function makeLearnerAccessStore(opts: {
 function makeDashboardStore(opts: {
   sessionsByCohort?: Record<string, DashboardSessionStoreRow[]>;
   attendanceByEnrolment?: Record<string, DashboardAttendanceRecordStoreRow[]>;
+  completionRecords?: DashboardCompletionRecordStoreRow[];
+  certificates?: DashboardCertificateStoreRow[];
 }): EnrolmentDashboardStore {
   const sessionsByCohort = opts.sessionsByCohort ?? {};
   const attendanceByEnrolment = opts.attendanceByEnrolment ?? {};
+  const completionRecords = opts.completionRecords ?? [];
+  const certificates = opts.certificates ?? [];
   return {
     scheduledSession: {
       findMany: async ({ where }) => sessionsByCohort[where.cohortId] ?? [],
     },
     attendanceRecord: {
       findMany: async ({ where }) => attendanceByEnrolment[where.enrolmentId] ?? [],
+    },
+    // Plan 11-13 — both filter honestly by the `in` clause and the extra
+    // predicate a real Prisma call would apply, so a query that forgot to
+    // scope by enrolment id would be caught here too.
+    completionRecord: {
+      findMany: async ({ where }) =>
+        completionRecords.filter(
+          (r) => where.enrolmentId.in.includes(r.enrolmentId) && where.supersededAt === null,
+        ),
+    },
+    certificate: {
+      findMany: async ({ where }) =>
+        certificates.filter(
+          (c) => where.enrolmentId.in.includes(c.enrolmentId) && c.status !== "SUPERSEDED",
+        ),
     },
   };
 }
@@ -275,6 +296,8 @@ function makeService(opts: {
   attendanceByEnrolment?: Record<string, DashboardAttendanceRecordStoreRow[]>;
   assessmentObligationsByEnrolment?: Record<string, AssessmentObligation[]>;
   resultsByEnrolment?: Record<string, LearnerResultCard[]>;
+  completionRecords?: DashboardCompletionRecordStoreRow[];
+  certificates?: DashboardCertificateStoreRow[];
   now?: () => Date;
 }) {
   const learnerAccessStore = makeLearnerAccessStore(opts);
@@ -351,7 +374,7 @@ describe("loadLearnerDashboard", () => {
     expect(dashboard.cards.map((c) => c.enrolmentId)).toEqual(["enrolment-new", "enrolment-old"]);
   });
 
-  it("keeps tickets and certificate deferred — Phase 12's and Phase 11's own named gaps, untouched by plan 10-15", async () => {
+  it("keeps tickets deferred — Phase 12's own named gap, untouched by plan 11-13", async () => {
     const svc = makeService({
       enrolments: [enrolment()],
       cohorts: [cohort()],
@@ -363,7 +386,51 @@ describe("loadLearnerDashboard", () => {
 
     const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
     expect(card.tickets).toEqual({ kind: "deferred", phase: 12 });
-    expect(card.certificate).toEqual({ kind: "deferred", phase: 11 });
+  });
+
+  it("plan 11-13 — certificate is not-complete with no unsuperseded completion record, never a deferred placeholder", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+    });
+
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.certificate).toEqual({ kind: "not-complete" });
+  });
+
+  it("plan 11-13 — certificate is issued when an unsuperseded completion record and an ACTIVE certificate both exist", async () => {
+    const svc = makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+      completionRecords: [{ enrolmentId: "enrolment-1", scope: "COURSE" }],
+      certificates: [
+        {
+          enrolmentId: "enrolment-1",
+          scope: "COURSE",
+          id: "cert-1",
+          status: "ACTIVE",
+          reviewFlaggedAt: null,
+          verificationRef: "VERIF-REF-1",
+          issuedAt: new Date("2026-09-01T00:00:00.000Z"),
+        },
+      ],
+    });
+
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.certificate).toEqual({
+      kind: "issued",
+      certificateId: "cert-1",
+      verificationRef: "VERIF-REF-1",
+      issuedAt: new Date("2026-09-01T00:00:00.000Z"),
+    });
   });
 
   it("assessmentObligations returns a tracked inhabitant, in the order learner-results-service returned it, when the learner has outstanding assessments", async () => {

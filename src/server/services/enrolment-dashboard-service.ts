@@ -638,6 +638,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     actor: Actor,
     enrolment: OwnEnrolmentSnapshot,
     nowDate: Date,
+    certificateContext: { hasCompletionRecord: boolean; certificate: DashboardCertificateStoreRow | null },
   ): Promise<EnrolmentCardContext> {
     const [sessions, records, structure] = await Promise.all([
       store.scheduledSession.findMany({ where: { cohortId: enrolment.cohortId } }),
@@ -659,7 +660,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       assessmentObligations: ASSESSMENT_OBLIGATIONS_DEFERRED,
       results: RESULTS_DEFERRED,
       tickets: TICKETS_DEFERRED,
-      certificate: CERTIFICATE_DEFERRED,
+      certificate: deriveCertificateColumn(certificateContext),
       accessNotice,
       upcomingSessions,
       hasMoreSessions,
@@ -781,8 +782,40 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
   async function loadLearnerDashboard(actor: Actor): Promise<LearnerDashboard> {
     const enrolments = await learnerAccess.listOwnActiveEnrolments(actor);
     const nowDate = now();
+
+    // Plan 11-13 — batched ONCE across every enrolment id (never per card):
+    // a 3-enrolment dashboard issues the exact same two extra queries a
+    // 1-enrolment dashboard does. `enrolmentIds` is already ownership-scoped
+    // (it comes straight from `listOwnActiveEnrolments`), so this can never
+    // surface another learner's certificate (T-11-61).
+    const enrolmentIds = enrolments.map((e) => e.id);
+    const [completionRecords, certificates] = enrolmentIds.length
+      ? await Promise.all([
+          store.completionRecord.findMany({
+            where: { enrolmentId: { in: enrolmentIds }, supersededAt: null },
+          }),
+          store.certificate.findMany({
+            where: { enrolmentId: { in: enrolmentIds }, status: { not: "SUPERSEDED" } },
+          }),
+        ])
+      : [[], []];
+
+    // Keyed by `${enrolmentId}:${scope}` — a Programme-cohort enrolment also
+    // owns internal per-member-course COURSE-scope `CompletionRecord` rows
+    // (D-01); only the record matching the enrolment's OWN cohort scope may
+    // ever drive this card's certificate column.
+    const completionKeys = new Set(completionRecords.map((r) => `${r.enrolmentId}:${r.scope}`));
+    const certificateByKey = new Map(certificates.map((c) => [`${c.enrolmentId}:${c.scope}`, c]));
+
     const contexts = await Promise.all(
-      enrolments.map((enrolment) => buildCardContext(actor, enrolment, nowDate)),
+      enrolments.map((enrolment) => {
+        const scope = enrolment.cohort.programmeId ? "PROGRAMME" : "COURSE";
+        const key = `${enrolment.id}:${scope}`;
+        return buildCardContext(actor, enrolment, nowDate, {
+          hasCompletionRecord: completionKeys.has(key),
+          certificate: certificateByKey.get(key) ?? null,
+        });
+      }),
     );
     return { cards: contexts.map((c) => c.card) };
   }
