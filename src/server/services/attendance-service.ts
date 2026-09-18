@@ -62,10 +62,10 @@ import {
 } from "@/server/services/domain-event-service";
 import { createCohortScopeResolvers } from "@/server/services/cohort-scope";
 import {
-  recalculateCompletion,
   type CompletionServiceTxClient,
   type CompletionRecalculationResult,
 } from "@/server/services/completion-service";
+import { recalculateCompletionAndIssue as recalculateCompletion } from "@/server/services/certificate-issuance-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 type Audit = (entry: ResourceAuditEntry) => Promise<void>;
@@ -748,6 +748,9 @@ export function createPrismaBackedAttendanceService(
   client: AnyPrisma,
   withPermission: WithPermission,
   audit: Audit = liveAudit,
+  // D-03/CRD-06: swapped from the bare completion engine to the certificate-aware
+  // wrapper so an attendance correction issues/re-evaluates a certificate,
+  // without this file knowing certificates exist (plan 11-10).
   recalculateCompletionDep: AttendanceServiceDeps["recalculateCompletion"] = recalculateCompletion,
 ) {
   const scopeResolvers = createCohortScopeResolvers({

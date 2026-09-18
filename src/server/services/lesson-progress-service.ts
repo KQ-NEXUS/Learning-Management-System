@@ -62,10 +62,10 @@ import {
 } from "@/server/services/domain-event-service";
 import { enrolmentCohortScope } from "@/server/services/cohort-scope";
 import {
-  recalculateCompletion,
   type CompletionServiceTxClient,
   type CompletionRecalculationResult,
 } from "@/server/services/completion-service";
+import { recalculateCompletionAndIssue as recalculateCompletion } from "@/server/services/certificate-issuance-service";
 import {
   loadLearnerPath as liveLoadLearnerPath,
   assertLessonOpenable,
@@ -775,6 +775,9 @@ export function createPrismaBackedLessonProgressService(
   client: AnyPrisma,
   withPermission: WithPermission,
   audit: Audit = liveAudit,
+  // D-03/CRD-06: swapped from the bare completion engine to the certificate-aware
+  // wrapper so completing the last required lesson issues/re-evaluates a
+  // certificate, without this file knowing certificates exist (plan 11-10).
   recalculateCompletionDep: LessonProgressServiceDeps["recalculateCompletion"] = recalculateCompletion,
   loadLearnerPathDep: LessonProgressServiceDeps["loadLearnerPath"] = liveLoadLearnerPath,
 ) {
