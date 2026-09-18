@@ -62,6 +62,29 @@
  * functions it composes (both unit-testable without Postgres), and a live
  * singleton is built at the bottom of the file from `prisma` and the real
  * `learner-access.ts` exports.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * PLAN 11-13 — `certificate` WIDENED FROM `DeferredColumn` TO A REAL
+ * `CertificateColumn`, PHASE 9'S NAMED GAP CLOSED.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Same DD-32 precedent Plan 10-15 used for `assessmentObligations`/`results`:
+ * the deferred inhabitant is gone from this column entirely (not widened to a
+ * union with it), replaced by a five-branch `CertificateColumn` derived by
+ * the pure, independently-tested `deriveCertificateColumn`. The branch
+ * precedence for an existing certificate is NEVER reimplemented here — it
+ * delegates to `certificate-service.ts`'s own `certificateDisplayStatus`
+ * (the single owner of "flagged beats active, revoked beats everything") so
+ * this card and the staff-facing certificate surfaces can never disagree.
+ *
+ * Both new reads (`completionRecord.findMany`, `certificate.findMany`) are
+ * batched ONCE per `loadLearnerDashboard` call across every enrolment id —
+ * not once per card inside `buildCardContext` — so a 3-enrolment dashboard
+ * issues exactly the same two additional queries a 1-enrolment dashboard
+ * does, never N+1. Results are looked up per enrolment by an
+ * `${enrolmentId}:${scope}` key, matching the enrolment's OWN cohort scope
+ * (COURSE vs PROGRAMME) so a programme-cohort's internal per-member-course
+ * `CompletionRecord` rows (D-01, the same distinction `listPendingIssuance`
+ * applies) are never mistaken for the card's own completion signal.
  */
 
 import { prisma } from "@/server/db";
@@ -104,6 +127,12 @@ import {
   type AssessmentObligation,
   type LearnerResultCard,
 } from "@/server/services/learner-results-service";
+// Plan 11-13 — a real (non-type-only) import for the SAME reason the
+// learner-results import above is real, not type-only: this module now
+// CALLS `certificateDisplayStatus` to derive the certificate column's
+// existing-certificate branches, rather than re-implementing its
+// revoked-beats-flagged-beats-active precedence a second time.
+import { certificateDisplayStatus } from "@/server/services/certificate-service";
 
 // ---------------------------------------------------------------------------
 // Named-gap constants (DD-18) — phase numbers match this plan's ruling.
@@ -112,7 +141,6 @@ import {
 const ASSESSMENT_OBLIGATIONS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
 const RESULTS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
 const TICKETS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 12 };
-const CERTIFICATE_DEFERRED: DeferredColumn = { kind: "deferred", phase: 11 };
 
 /**
  * Plan 10-15 — DD-32-precedent second inhabitant for the two columns Phase
@@ -124,6 +152,27 @@ export type AssessmentObligationsColumn =
   | DeferredColumn
   | { kind: "tracked"; items: AssessmentObligation[] };
 export type ResultsColumn = DeferredColumn | { kind: "tracked"; recent: LearnerResultCard[] };
+
+/**
+ * Plan 11-13 — UI-SPEC §7.6's five branches, first match wins: (1)
+ * `not-complete` — no unsuperseded `CompletionRecord` for the enrolment's own
+ * scope; (2) `pending-issuance` — a completion record exists but no
+ * certificate has been issued yet (MANUAL-mode's D-04 queue, or an
+ * AUTOMATIC-mode issuance not yet reflected); (3) `issued` — an
+ * unflagged, current certificate; (4) `flagged` — a flagged-but-current
+ * certificate, STILL carrying `certificateId` because the download stays
+ * available (branch 4 — a flag never withdraws earned access); (5)
+ * `revoked` — carries NO certificate id, because there is no download
+ * affordance to build. Unlike `AssessmentObligationsColumn`/`ResultsColumn`,
+ * this is NOT `DeferredColumn | …` — Phase 9's named gap is closed outright,
+ * not widened to keep a still-reachable deferred inhabitant.
+ */
+export type CertificateColumn =
+  | { kind: "not-complete" }
+  | { kind: "pending-issuance" }
+  | { kind: "issued"; certificateId: string; verificationRef: string; issuedAt: Date }
+  | { kind: "flagged"; certificateId: string; verificationRef: string; issuedAt: Date }
+  | { kind: "revoked" };
 
 /** A window closing within this many days surfaces the "ending" notice. */
 const ACCESS_ENDING_SOON_MS = 14 * 24 * 60 * 60 * 1000;
@@ -159,12 +208,47 @@ export type DashboardAttendanceRecordStoreRow = {
   state: AttendanceStateValue;
 };
 
+/** Plan 11-13 — the narrow slice of `CompletionRecord` the certificate
+ *  column needs: only whether an unsuperseded record exists for a given
+ *  enrolment+scope pair. */
+export type DashboardCompletionRecordStoreRow = {
+  enrolmentId: string;
+  scope: "COURSE" | "PROGRAMME";
+};
+
+/** Plan 11-13 — the narrow slice of `Certificate` the certificate column
+ *  needs, structurally compatible with `certificate-service.ts`'s
+ *  `certificateDisplayStatus` input so this module never re-derives that
+ *  precedence itself. */
+export type DashboardCertificateStoreRow = {
+  enrolmentId: string;
+  scope: "COURSE" | "PROGRAMME";
+  id: string;
+  status: "ACTIVE" | "REVOKED" | "SUPERSEDED";
+  reviewFlaggedAt: Date | null;
+  verificationRef: string;
+  issuedAt: Date;
+};
+
 export type EnrolmentDashboardStore = {
   scheduledSession: {
     findMany(args: { where: { cohortId: string } }): Promise<DashboardSessionStoreRow[]>;
   };
   attendanceRecord: {
     findMany(args: { where: { enrolmentId: string } }): Promise<DashboardAttendanceRecordStoreRow[]>;
+  };
+  /** Plan 11-13 — batched ONCE per `loadLearnerDashboard` call across every
+   *  enrolment id (never per card) so the certificate column cannot regress
+   *  the dashboard into an N+1. */
+  completionRecord: {
+    findMany(args: {
+      where: { enrolmentId: { in: string[] }; supersededAt: null };
+    }): Promise<DashboardCompletionRecordStoreRow[]>;
+  };
+  certificate: {
+    findMany(args: {
+      where: { enrolmentId: { in: string[] }; status: { not: "SUPERSEDED" } };
+    }): Promise<DashboardCertificateStoreRow[]>;
   };
 };
 
@@ -267,7 +351,7 @@ export type LearnerDashboardCard = {
   assessmentObligations: AssessmentObligationsColumn;
   results: ResultsColumn;
   tickets: DeferredColumn;
-  certificate: DeferredColumn;
+  certificate: CertificateColumn;
   progress: LearnerDashboardProgress;
   accessNotice: AccessNotice;
   upcomingSessions: UpcomingSessionCard[];
@@ -350,6 +434,34 @@ export function buildUpcomingSessions(
     hasMoreSessions: futureNonCancelled.length > MAX_UPCOMING_SESSIONS,
     futureNonCancelled,
   };
+}
+
+/**
+ * Plan 11-13 — pure and total, unit-testable with no store fake at all
+ * (mirrors `deriveNextAction`'s own standalone-testability). Delegates the
+ * existing-certificate precedence to `certificateDisplayStatus` rather than
+ * re-deriving "revoked beats flagged beats active" a second time.
+ */
+export function deriveCertificateColumn(input: {
+  hasCompletionRecord: boolean;
+  certificate: DashboardCertificateStoreRow | null;
+}): CertificateColumn {
+  if (!input.hasCompletionRecord) return { kind: "not-complete" };
+  if (!input.certificate) return { kind: "pending-issuance" };
+
+  const displayStatus = certificateDisplayStatus(input.certificate);
+  if (displayStatus === "revoked") return { kind: "revoked" };
+
+  const shared = {
+    certificateId: input.certificate.id,
+    verificationRef: input.certificate.verificationRef,
+    issuedAt: input.certificate.issuedAt,
+  };
+  if (displayStatus === "flagged") return { kind: "flagged", ...shared };
+  // "active" (the normal case) and the defensive "superseded" fallback (the
+  // batched query already excludes SUPERSEDED rows, so this never actually
+  // occurs) both render as the plain issued branch.
+  return { kind: "issued", ...shared };
 }
 
 function computeAttendanceComponentForCard(
