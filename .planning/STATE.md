@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-11-PLAN.md
-last_updated: "2026-09-18T18:06:23.497Z"
+stopped_at: Completed 11-12-PLAN.md
+last_updated: "2026-09-18T19:15:03.130Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 147
+  completed_plans: 148
   percent: 56
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11 of 16
+Plan: 13 of 16
 Status: Ready to execute
 Last activity: 2026-09-18
 
@@ -94,6 +94,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P09 | 50min | 2 tasks | 7 files |
 | Phase 11 P10 | 40min | 3 tasks | 9 files |
 | Phase 11 P11 | 50min | 3 tasks | 5 files |
+| Phase 11 P12 | ~2h | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -170,6 +171,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: [Phase 11 P10]: lesson-progress-service.ts and attendance-service.ts import certificate-issuance-service.ts's recalculateCompletionAndIssue aliased to the original recalculateCompletion local name, so the composition-root default-parameter swap touches only the import line and the default value, zero call-site changes in either file
 - [Phase 11]: [Phase 11 P10]: GradeOverrideDeps.reactToGradeOverride carries a required actorId beyond the plan's literal 3-field args shape (Rule 2) -- the certificate-review audit row must attribute the overriding staff member, never SYSTEM (T-11-42); flagCertificateForReview grew an optional context field so flagCertificatesForGradeCorrection reuses it instead of a second flag-write implementation
 - [Phase 11]: [Phase 11 P11]: Rule 1 bug fix -- issueCertificateForEnrolment's COMPLETED transition is now idempotent when the enrolment is already COMPLETED, so reissuing directly from an ACTIVE certificate (or a second reissue in the same supersede chain) no longer throws IllegalTransitionError on a COMPLETED -> COMPLETED no-op
+- [Phase 11]: Phase 11 P12: role="group" (not "button") on canvas element boxes since a selected box nests a real delete <button> — Avoids an invalid interactive-in-interactive ARIA pattern while staying queryable by role+accessible name
+- [Phase 11]: Phase 11 P12: ElementInspector onChange takes a whole replacement element, not a partial patch — Switching a text element off literal must delete that key, not set it undefined, which parseCertificateTemplateLayout's "literal" in record check would still reject
+- [Phase 11]: Phase 11 P12: template-asset-actions.ts calls withPermission directly rather than through a service-layer function — No TemplateAsset Prisma model exists to gate through -- assetKey lives only inside the template's JSON layout, matching upload-intent/route.ts's precedent
 
 ### Pending Todos
 
@@ -207,6 +211,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T18:06:23.322Z
-Stopped at: Completed 11-11-PLAN.md
+Last session: 2026-09-18T19:15:02.850Z
+Stopped at: Completed 11-12-PLAN.md
 Resume file: None
