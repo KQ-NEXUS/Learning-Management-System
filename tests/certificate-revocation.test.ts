@@ -131,6 +131,7 @@ function harness(opts?: {
   ];
   const events: Array<Record<string, unknown>> = [];
   const issuanceAuditCalls: Array<Record<string, unknown>> = [];
+  const callOrder: string[] = [];
   let certSeq = 0;
 
   function makeTx(
@@ -154,6 +155,7 @@ function harness(opts?: {
           return rows[0] ? { ...rows[0] } : null;
         },
         create: async ({ data }: { data: Record<string, unknown> }) => {
+          callOrder.push("certificate.create");
           certSeq += 1;
           const id = `new-cert-${certSeq}`;
           certStaged.set(id, { ...(data as unknown as CertificateRow), id, reviewFlaggedAt: null });
@@ -173,6 +175,7 @@ function harness(opts?: {
           where: Record<string, unknown>;
           data: Record<string, unknown>;
         }) => {
+          callOrder.push("certificate.updateMany");
           const matches = [...certStaged.values()].filter((c) => {
             if (where.id !== undefined && c.id !== where.id) return false;
             if (where.status !== undefined) {
@@ -343,6 +346,7 @@ function harness(opts?: {
     events,
     audits,
     issuanceAuditCalls,
+    callOrder,
   };
 }
 
@@ -485,5 +489,146 @@ describe("revokeCertificate", () => {
     const payload = event.payload as Record<string, unknown>;
     expect(payload.verificationRef).toBe("VERIF-EVT");
     expect(Object.keys(payload)).not.toContain("revocationReason");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reissueCertificate (Plan 11-11 Task 3)
+// ---------------------------------------------------------------------------
+
+describe("reissueCertificate", () => {
+  it("is denied without certificates.issue", async () => {
+    const h = harness({
+      certificates: [cert({ status: "REVOKED" })],
+      grants: [grant("certificates.view", "GLOBAL")],
+    });
+    await expect(
+      h.service.reissueCertificate({ certificateId: "cert-1", reason: "Appeal upheld, reissuing credential" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it.each(["", "   ", "Too short"])("throws for reason %j and writes nothing", async (reason) => {
+    const h = harness({ certificates: [cert({ status: "REVOKED" })] });
+    await expect(h.service.reissueCertificate({ certificateId: "cert-1", reason })).rejects.toThrow();
+    expect(h.certificates.get("cert-1")?.status).toBe("REVOKED");
+    expect(h.certificates.size).toBe(1);
+  });
+
+  it("reissuing a REVOKED certificate creates a new ACTIVE row linked via supersedesId, with a fresh reference and storage key", async () => {
+    const h = harness({
+      certificates: [
+        cert({
+          id: "cert-1",
+          status: "REVOKED",
+          verificationRef: "VERIF-OLD",
+          storageKey: "certificates/old",
+          issuedAt: new Date("2026-01-01T00:00:00.000Z"),
+          learnerName: "Preserved Learner",
+          awardTitle: "Preserved Award",
+          revocationReason: "Prior misconduct finding",
+        }),
+      ],
+    });
+
+    const after = await h.service.reissueCertificate({
+      certificateId: "cert-1",
+      reason: "Appeal upheld, reissuing credential",
+    });
+
+    expect(after.status).toBe("ACTIVE");
+    expect(after.supersedesId).toBe("cert-1");
+    expect(after.verificationRef).not.toBe("VERIF-OLD");
+    expect(after.storageKey).not.toBe("certificates/old");
+    expect(after.reviewFlaggedAt).toBeNull();
+
+    const old = h.certificates.get("cert-1")!;
+    expect(old.status).toBe("SUPERSEDED");
+    // Old-row preservation — the six fields by name.
+    expect(old.verificationRef).toBe("VERIF-OLD");
+    expect(old.issuedAt).toEqual(new Date("2026-01-01T00:00:00.000Z"));
+    expect(old.learnerName).toBe("Preserved Learner");
+    expect(old.awardTitle).toBe("Preserved Award");
+    expect(old.revocationReason).toBe("Prior misconduct finding");
+    expect(old.storageKey).toBe("certificates/old");
+  });
+
+  it("reissuing directly from an ACTIVE certificate moves the old row ACTIVE -> SUPERSEDED", async () => {
+    const h = harness({ certificates: [cert({ id: "cert-1", status: "ACTIVE" })] });
+    const after = await h.service.reissueCertificate({
+      certificateId: "cert-1",
+      reason: "Correcting a clerical award-title error",
+    });
+    expect(after.status).toBe("ACTIVE");
+    expect(h.certificates.get("cert-1")?.status).toBe("SUPERSEDED");
+  });
+
+  it("moves the enrolment to COMPLETED", async () => {
+    const h = harness({
+      enrolments: [enr({ status: "ACTIVE" })],
+      certificates: [cert({ status: "REVOKED" })],
+    });
+    await h.service.reissueCertificate({ certificateId: "cert-1", reason: "Appeal upheld, reissuing credential" });
+    expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
+  });
+
+  it("the new certificate's reviewFlaggedAt is null even when the old one was flagged", async () => {
+    const h = harness({
+      certificates: [cert({ id: "cert-1", status: "REVOKED", reviewFlaggedAt: new Date("2026-02-01T00:00:00.000Z") })],
+    });
+    const after = await h.service.reissueCertificate({
+      certificateId: "cert-1",
+      reason: "Appeal upheld, reissuing credential",
+    });
+    expect(after.reviewFlaggedAt).toBeNull();
+  });
+
+  it("asserts the old row leaves ACTIVE before the new row is created (ordering guard)", async () => {
+    const h = harness({ certificates: [cert({ id: "cert-1", status: "ACTIVE" })] });
+    await h.service.reissueCertificate({ certificateId: "cert-1", reason: "Correcting a clerical error found" });
+    const updateManyIndex = h.callOrder.indexOf("certificate.updateMany");
+    const createIndex = h.callOrder.indexOf("certificate.create");
+    expect(updateManyIndex).toBeGreaterThanOrEqual(0);
+    expect(createIndex).toBeGreaterThan(updateManyIndex);
+  });
+
+  it("reissuing twice produces a two-hop chain, each link recorded once", async () => {
+    const h = harness({ certificates: [cert({ id: "cert-1", status: "REVOKED" })] });
+    const c2 = await h.service.reissueCertificate({
+      certificateId: "cert-1",
+      reason: "First reissue after appeal upheld",
+    });
+    expect(c2.supersedesId).toBe("cert-1");
+
+    const c3 = await h.service.reissueCertificate({
+      certificateId: c2.id,
+      reason: "Second reissue for corrected award title",
+    });
+    expect(c3.supersedesId).toBe(c2.id);
+
+    const c1Final = h.certificates.get("cert-1")!;
+    const c2Final = h.certificates.get(c2.id)!;
+    expect(c1Final.status).toBe("SUPERSEDED");
+    expect(c2Final.status).toBe("SUPERSEDED");
+    expect(c2Final.supersedesId).toBe("cert-1");
+    expect(h.certificates.get(c3.id)?.supersedesId).toBe(c2.id);
+  });
+
+  it("writes a certificate.reissued domain event with both ids/references and no reason text", async () => {
+    const h = harness({ certificates: [cert({ id: "cert-1", status: "REVOKED", verificationRef: "VERIF-OLD" })] });
+    const after = await h.service.reissueCertificate({
+      certificateId: "cert-1",
+      reason: "Appeal upheld, reissuing credential",
+    });
+
+    const reissueEvent = h.events.find((e) => e.type === "certificate.reissued");
+    expect(reissueEvent).toBeDefined();
+    const payload = reissueEvent!.payload as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      oldCertificateId: "cert-1",
+      newCertificateId: after.id,
+      oldVerificationRef: "VERIF-OLD",
+      newVerificationRef: after.verificationRef,
+    });
+    expect(Object.keys(payload)).not.toContain("reason");
   });
 });

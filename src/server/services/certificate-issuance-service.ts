@@ -417,9 +417,17 @@ export async function issueCertificateForEnrolment(
   await tx.certificate.update({ where: { id: certificateId }, data: { storageKey } });
 
   // D-05 — the COMPLETED transition fires ON ISSUANCE, through the state
-  // machine, never a bare update.
-  assertTransition(enrolment.status as EnrolmentStatusValue, "COMPLETED", enrolmentId);
-  await tx.enrolment.update({ where: { id: enrolmentId }, data: { status: "COMPLETED" } });
+  // machine, never a bare update. Idempotent when the enrolment is ALREADY
+  // COMPLETED (plan 11-11's reissue path: reissuing a certificate whose
+  // enrolment never left COMPLETED — e.g. reissuing directly from an ACTIVE
+  // certificate, or a second reissue in the same chain — must not re-assert
+  // a COMPLETED -> COMPLETED "transition", which `VALID_TRANSITIONS` has no
+  // entry for and would throw `IllegalTransitionError` on what is actually a
+  // no-op, not an illegal move).
+  if ((enrolment.status as EnrolmentStatusValue) !== "COMPLETED") {
+    assertTransition(enrolment.status as EnrolmentStatusValue, "COMPLETED", enrolmentId);
+    await tx.enrolment.update({ where: { id: enrolmentId }, data: { status: "COMPLETED" } });
+  }
 
   const isSystem = actor === null;
   await deps.audit({

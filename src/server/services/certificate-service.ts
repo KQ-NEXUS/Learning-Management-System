@@ -491,12 +491,99 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     return result.after;
   });
 
+  // -------------------------------------------------------------------------
+  // 4c. reissueCertificate — mandatory reason, ordered compare-and-set,
+  //     delegates to the single issuance implementation, links via
+  //     supersedesId.
+  // -------------------------------------------------------------------------
+
+  const reissueCertificate = deps.withPermission<{ certificateId: string; reason: string }>(
+    "certificates.issue",
+    (input) => toScope(input.certificateId),
+  )(async (input, ctx) => {
+    const reason = input.reason.trim();
+    if (reason.length < 10) throw new RevocationReasonRequiredError();
+
+    const stamp = now();
+
+    const result = await deps.runInTransaction(async (tx) => {
+      const before = await tx.certificate.findUnique({ where: { id: input.certificateId } });
+      if (!before) throw new Error("Certificate not found.");
+
+      // STEP 1 — FIRST: move the old row out of ACTIVE/REVOKED into
+      // SUPERSEDED. Ordering is load-bearing (T-11-52): the partial unique
+      // index `certificate_one_active_per_enrolment_scope` must never see
+      // two ACTIVE rows for the same (enrolmentId, scope) even
+      // momentarily, so the old row must leave ACTIVE BEFORE the new row
+      // is created in step 2.
+      const supersede = await tx.certificate.updateMany({
+        where: { id: before.id, status: { in: ["ACTIVE", "REVOKED"] } },
+        data: { status: "SUPERSEDED" },
+      });
+      if (supersede.count !== 1) throw new CertificateChangedError();
+
+      // STEP 2 — SECOND: issue the replacement through the single
+      // issuance implementation — fresh verificationRef, freshly rendered
+      // PDF, new storageKey. Never reuses the old file (D-07).
+      const outcome = await issueCertificateForEnrolment(
+        tx,
+        {
+          enrolmentId: before.enrolmentId,
+          scope: before.scope,
+          now: stamp,
+          actor: { userId: ctx.actor.userId },
+        },
+        deps.issuanceDeps,
+      );
+      if (outcome.kind !== "issued") {
+        throw new Error(`Reissue could not produce a new certificate (outcome: ${outcome.kind}).`);
+      }
+
+      // STEP 3 — link the new row back to the preserved old one.
+      await tx.certificate.update({
+        where: { id: outcome.certificateId },
+        data: { supersedesId: before.id },
+      });
+
+      const after = await tx.certificate.findUnique({ where: { id: outcome.certificateId } });
+      if (!after) throw new Error("Reissue could not read back the new certificate.");
+
+      // STEP 4 — never a reason, only ids and both references.
+      await deps.writeEvent(tx, {
+        type: "certificate.reissued",
+        payload: {
+          oldCertificateId: before.id,
+          newCertificateId: outcome.certificateId,
+          oldVerificationRef: before.verificationRef,
+          newVerificationRef: outcome.verificationRef,
+        },
+        occurredAt: stamp,
+      });
+
+      return { before, after };
+    });
+
+    await deps.audit({
+      action: "certificate.reissued",
+      targetType: "Certificate",
+      targetId: result.after.id,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason,
+      before: result.before,
+      after: result.after,
+    });
+
+    return result.after;
+  });
+
   return {
     certificateService,
     listPendingIssuance,
     getOwnCertificateForDownload,
     issueCertificateManually,
     revokeCertificate,
+    reissueCertificate,
   };
 }
 
@@ -524,3 +611,4 @@ export const listPendingIssuance = built.listPendingIssuance;
 export const getOwnCertificateForDownload = built.getOwnCertificateForDownload;
 export const issueCertificateManually = built.issueCertificateManually;
 export const revokeCertificate = built.revokeCertificate;
+export const reissueCertificate = built.reissueCertificate;
