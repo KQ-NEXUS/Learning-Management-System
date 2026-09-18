@@ -9,6 +9,7 @@
  * transaction and every denial case are all provable against fakes.
  */
 
+import { Buffer } from "node:buffer";
 import { describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
 import {
@@ -19,6 +20,11 @@ import {
   type CertificateTemplateTx,
 } from "@/server/services/certificate-template-service";
 import { UnsupportedCertificateLayoutError, EMPTY_LAYOUT_V1 } from "@/server/services/certificate-template-layout";
+import {
+  DEFAULT_CERTIFICATE_TEMPLATE_NAME,
+  defaultCertificateTemplateLayout,
+} from "@/server/services/certificate-default-template-layout";
+import { renderCertificatePdf } from "@/server/services/certificate-pdf-renderer";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import { type Delegate } from "@/server/services/resource-service";
 import type { RawGrant } from "@/server/permissions/with-permission";
@@ -332,5 +338,38 @@ describe("listSelectableTemplates", () => {
 
     const all = await certificateTemplateService.list();
     expect(all.map((row) => row.id).sort()).toEqual(["tpl-1", "tpl-2"]);
+  });
+});
+
+describe("the seeded default certificate template (plan 11-05 Task 3)", () => {
+  it(`is named "${DEFAULT_CERTIFICATE_TEMPLATE_NAME}"`, () => {
+    expect(DEFAULT_CERTIFICATE_TEMPLATE_NAME).toBe("Default certificate");
+  });
+
+  it("passes parseCertificateTemplateLayout (imported already parsed, proving no throw at import time)", () => {
+    expect(defaultCertificateTemplateLayout.schema).toBe(1);
+    expect(defaultCertificateTemplateLayout.elements.length).toBeGreaterThan(0);
+  });
+
+  it("contains no kind: \"image\" element", () => {
+    const kinds = defaultCertificateTemplateLayout.elements.map((element) => element.kind);
+    expect(kinds).not.toContain("image");
+  });
+
+  it("renders to a PDF starting with the %PDF magic header", async () => {
+    const bytes = await renderCertificatePdf({
+      layout: defaultCertificateTemplateLayout,
+      fields: {
+        learnerName: "Amara Okafor",
+        awardTitle: "Certificate in Applied Data Science",
+        issuedAt: new Date("2026-03-14T00:00:00.000Z"),
+        verificationRef: "CERT-9K2X7QF4",
+      },
+      resolveAsset: async () => {
+        throw new Error("The default seeded template must never reference an asset.");
+      },
+    });
+
+    expect(Buffer.from(bytes.subarray(0, 4)).toString("ascii")).toBe("%PDF");
   });
 });

@@ -15,6 +15,10 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { hashPassword } from "../src/server/auth/password";
 import { PERMISSIONS } from "../src/server/permissions/catalogue";
+import {
+  DEFAULT_CERTIFICATE_TEMPLATE_NAME,
+  defaultCertificateTemplateLayout,
+} from "../src/server/services/certificate-default-template-layout";
 
 const prisma = new PrismaClient();
 
@@ -178,6 +182,36 @@ async function main() {
         },
       });
     }
+  }
+
+  // --- Certificate templates -------------------------------------------
+  // D-10 — a fresh deployment must have exactly one default, renderable
+  // template, or the first automatic issuance has nothing to render.
+  // Upsert-safe on the template name (CertificateTemplate has no unique
+  // constraint to key a real Prisma `upsert` on) so re-running the seed
+  // neither duplicates the row nor produces a second `isDefault: true` row.
+  const existingDefaultTemplate = await prisma.certificateTemplate.findFirst({
+    where: { name: DEFAULT_CERTIFICATE_TEMPLATE_NAME },
+  });
+  if (existingDefaultTemplate) {
+    await prisma.certificateTemplate.update({
+      where: { id: existingDefaultTemplate.id },
+      data: {
+        layout: defaultCertificateTemplateLayout as unknown as Prisma.InputJsonValue,
+        layoutSchemaVersion: defaultCertificateTemplateLayout.schema,
+        isDefault: true,
+        archivedAt: null,
+      },
+    });
+  } else {
+    await prisma.certificateTemplate.create({
+      data: {
+        name: DEFAULT_CERTIFICATE_TEMPLATE_NAME,
+        layout: defaultCertificateTemplateLayout as unknown as Prisma.InputJsonValue,
+        layoutSchemaVersion: defaultCertificateTemplateLayout.schema,
+        isDefault: true,
+      },
+    });
   }
 
   // --- Catalogue -----------------------------------------------------------
@@ -806,6 +840,7 @@ async function main() {
     attendanceRecords: await prisma.attendanceRecord.count(),
     assessments: await prisma.assessment.count(),
     gatewayFeeSchedules: await prisma.gatewayFeeSchedule.count(),
+    certificateTemplates: await prisma.certificateTemplate.count(),
   };
 
   console.log("Seed complete:");
