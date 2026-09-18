@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-14-PLAN.md
-last_updated: "2026-09-18T21:24:22.144Z"
+stopped_at: Completed 11-15-PLAN.md
+last_updated: "2026-09-18T22:50:05.537Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 150
+  completed_plans: 151
   percent: 56
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 15 of 16
+Plan: 16 of 16
 Status: Ready to execute
 Last activity: 2026-09-18
 
@@ -97,6 +97,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P12 | ~2h | 3 tasks | 5 files |
 | Phase 11 P13 | 56min | 3 tasks | 8 files |
 | Phase 11 P14 | 35min | 2 tasks | 5 files |
+| Phase 11 P15 | 55min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -181,6 +182,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11 P13]: pending-issuance fires on any unsuperseded CompletionRecord with no certificate yet, not gated on certificateIssuanceMode -- under AUTOMATIC mode the reactive issuer creates the certificate in the same transaction as the CompletionRecord, so this is effectively the MANUAL-mode case in practice
 - [Phase 11]: Phase 11 P14: isActiveNavItem's existing prefix match already highlights Certificates on /staff/certificates/templates, no StaffShell change needed
 - [Phase 11]: Phase 11 P14: reused formatTimestamp (mono full timestamp) for the pending-issuance queue's Eligible since column rather than adding a new date-only formatter
+- [Phase 11]: Phase 11 P15: Extracted certificateDisplayStatus into src/lib/certificate-display-status.ts (Rule 3) so a client table can call it without pulling Prisma/withPermission/next-headers into the browser bundle
+- [Phase 11]: Phase 11 P15: Added getCertificateIssuer to certificate-service.ts (Rule 2), resolving the detail page's Issued-by actor from the certificate's own issuance AuditEvent row, gated by certificates.view (not the GLOBAL-only audit.view), mirroring roster-service.ts's own-record AuditEvent read
+- [Phase 11]: Phase 11 P15: certificate-record-actions.ts's revoke/reissue zod schemas stay module-private (a use-server file may only export async functions); exported async validateRevokeCertificateInput/validateReissueCertificateInput wrappers let tests assert schema rejection directly
 
 ### Pending Todos
 
@@ -207,6 +211,8 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 6/06-09]: Phase 6 code is complete across all nine plans but three real-Postgres integration test files (checkout-webhook.integration.test.ts, checkout-hold-race.integration.test.ts, checkout-intent.integration.test.ts) have never run to completion in any sandboxed execution of this phase (Docker unavailable throughout), and the consolidated five-part human UAT walkthrough (06-03/06-05/06-07/06-08/06-09) is still outstanding -- both needed before Phase 6's UAT can close. See 06-09-SUMMARY.md.
 - [Phase 9/09-14]: All 14 plans executed, all automated gates green (including a real production bug found, fixed, then further hardened after code review — see 09-14-SUMMARY.md deviations 2-3). The developer independently ran the final fix's test suite themselves (186 focused tests + both real-Postgres integration tests + tsc/eslint) and confirmed steps 1, 6, 8, 9 of the walkthrough in the browser. Still open: three UI-SPEC backstops (long-title wrap, video auto-completion/offline resilience, one long-form-text wrapping item) blocked by seed-data gaps (no long lesson titles, no real uploaded video, no realistic long-form copy) — not code defects. Also open: live browser confirmation of a session's meeting-link opening transition (a throwaway test session was seeded 2026-09-15 to make this checkable; delete `ScheduledSession` id `cmu2iy9mr0001ulxwgbg7na3z` after use if it wasn't already removed). Amara's cohort (cohort `cmtn3eo6j001huliwsyaw1sw4`, March) was never offered by either course's staff migration dialog and remains unpinned to any publication — a data-health gap worth investigating if that migration-dialog eligibility logic is ever touched.
 - [Phase 9/09-08]: `ProgressMeter.tsx`'s caption renders BELOW the progress bar with only an "N of M lessons complete" string — `09-UI-SPEC.md` §5's token rules for `--teal-fill`/`--teal-text` and §7.1's copy table both specify the caption sits BESIDE the bar, and §5's token rule additionally names an actual percentage figure ("62% complete") that the current implementation never renders at all. Found during the 09-14 human walkthrough (not part of that plan's own scope to fix), deferred by explicit user decision on 2026-09-15 rather than fixed in-session. Note the UI-SPEC itself is internally inconsistent about the caption's exact text format ("62% complete" in §5 vs "{N} of {M} required lessons complete" in §7.1) — resolve that ambiguity with the user before implementing either the layout or content fix.
+- [Phase 11 P15, informational] tests/boundary.test.ts's importersOf-based closure/importer-scan tests (checkout-webhook-system-service.ts closure, pdf-lib single-importer check) intermittently exceed the default 5000ms Vitest timeout in this sandbox when run alongside the full suite or in isolation -- a different sub-test times out each run, consistent with a slow full-src-tree scan under this sandbox's I/O, not a regression from plan 11-15's changes (unrelated files). Not fixed here (out of this plan's scope); worth a longer per-test timeout if it recurs.
+- [Tooling, Phase 11 P15] Same gap as the Phase 11 P05 entry above recurred: after state.advance-plan (15->16 of 16), the frontmatter's percent field was still stuck at 56 even though state.update-progress reported percent:99 (151/152) -- hand-corrected in STATE.md's frontmatter this session, same as before.
 
 ## Deferred Items
 
@@ -218,6 +224,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T21:24:20.068Z
-Stopped at: Completed 11-14-PLAN.md
+Last session: 2026-09-18T22:47:11.644Z
+Stopped at: Completed 11-15-PLAN.md
 Resume file: None

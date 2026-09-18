@@ -153,3 +153,7 @@ None - no external service configuration required.
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
+
+## Self-Check: PASSED
+
+All 8 created files found on disk; all 4 commits (`86a3dd1`, `c106a5c`, `0800e72`, `d9ba0f2`) found in git history.
