@@ -9,6 +9,7 @@ import type {
 } from "@/server/services/enrolment-dashboard-service";
 import { ProgressMeter } from "@/components/learner/ProgressMeter";
 import { DeferredSlot } from "@/components/learner/DeferredSlot";
+import { CertificateSlot } from "@/components/learner/CertificateSlot";
 import { NextUpCard } from "@/components/learner/NextUpCard";
 import { utcToWallParts } from "@/lib/timezone";
 
@@ -146,8 +147,9 @@ function AccessNoticeBanner({ card }: { card: LearnerDashboardCard }) {
  * 10-15 — Phase 9's "Assessments" and "Results" named gaps, widened. Each
  * renders one of three states: still `deferred` (identical `DeferredSlot`
  * treatment Phase 9 shipped, unchanged), `tracked`-but-empty, or
- * `tracked`-and-populated. `tickets` and `certificate` stay pure
- * `DeferredSlot`s below — Phase 11/12's own gaps to close.
+ * `tracked`-and-populated. `tickets` stays a pure `DeferredSlot` below —
+ * Phase 12's own gap to close. `certificate` is now filled by
+ * `CertificateSlot` (plan 11-13) — Phase 9's own named gap, closed.
  */
 function AssessmentsCard({ card }: { card: LearnerDashboardCard }) {
   const col = card.assessmentObligations;
@@ -241,7 +243,7 @@ function EnrolmentSection({ card }: { card: LearnerDashboardCard }) {
         <AssessmentsCard card={card} />
         <ResultsCard card={card} />
         <DeferredSlot title="Support tickets" copy="Support tickets — arriving in a future update" />
-        <DeferredSlot title="Certificate" copy="Certificate — arriving in a future update" />
+        <CertificateSlot certificate={card.certificate} />
       </div>
     </section>
   );

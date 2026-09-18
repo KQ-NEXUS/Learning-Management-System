@@ -117,7 +117,7 @@ function snapshot(overrides: Partial<OwnEnrolmentSnapshot> = {}): OwnEnrolmentSn
 }
 
 function neverCalled(name: string) {
-  return (..._args: unknown[]) => {
+  return () => {
     throw new Error(`${name} must not be called for an unpinned-structure card`);
   };
 }
