@@ -518,11 +518,11 @@ Plans:
 
 - [x] 11-01-PLAN.md — Additive schema, migration, the `certificate_one_active_per_enrolment_scope` partial unique index, and the reversible `COMPLETED -> ACTIVE` transition (CRD-01, CRD-02, CRD-05, CRD-06)
 - [x] 11-02-PLAN.md — Blocking human gates: PDF-library legitimacy approval + install + render probe, and the template-authoring permission decision (CRD-03)
-- [ ] 11-03-PLAN.md — Pure primitives: versioned layout parser, high-entropy `verificationRef`, and the storage-service certificate/template-asset function group (CRD-03, CRD-04)
+- [x] 11-03-PLAN.md — Pure primitives: versioned layout parser, high-entropy `verificationRef`, and the storage-service certificate/template-asset function group (CRD-03, CRD-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 11-04-PLAN.md — `certificate-pdf-renderer.ts`: the single PDF-construction surface in the repository (CRD-03)
+- [x] 11-04-PLAN.md — `certificate-pdf-renderer.ts`: the single PDF-construction surface in the repository (CRD-03)
 - [ ] 11-05-PLAN.md — `CertificateTemplate` CRUD on the resource factory, layout validation at the write boundary, single-default invariant, seeded default template (CRD-03)
 - [ ] 11-06-PLAN.md — Public verification: the closed three-outcome lookup and the standalone `/verify` route group (CRD-04)
 
@@ -648,7 +648,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 2/16 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 4/16 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
