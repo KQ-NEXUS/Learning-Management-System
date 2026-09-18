@@ -72,7 +72,11 @@ function card(over: Over = {}) {
     assessmentObligations: { kind: "deferred", phase: 10 },
     results: { kind: "deferred", phase: 10 },
     tickets: { kind: "deferred", phase: 12 },
-    certificate: { kind: "deferred", phase: 11 },
+    // Plan 11-13 — certificate is no longer a DeferredColumn; "not-complete"
+    // is the new no-certificate-yet state, and CertificateSlot renders it
+    // with the same DeferredSlot/"arriving in a future update" copy Phase 9
+    // originally shipped for this column (kept verbatim by plan 11-13).
+    certificate: { kind: "not-complete" },
     progress: progress(),
     accessNotice: accessNotice(),
     upcomingSessions: [],
