@@ -524,7 +524,7 @@ Plans:
 
 - [x] 11-04-PLAN.md — `certificate-pdf-renderer.ts`: the single PDF-construction surface in the repository (CRD-03)
 - [x] 11-05-PLAN.md — `CertificateTemplate` CRUD on the resource factory, layout validation at the write boundary, single-default invariant, seeded default template (CRD-03)
-- [ ] 11-06-PLAN.md — Public verification: the closed three-outcome lookup and the standalone `/verify` route group (CRD-04)
+- [x] 11-06-PLAN.md — Public verification: the closed three-outcome lookup and the standalone `/verify` route group (CRD-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -648,7 +648,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 5/16 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 6/16 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |

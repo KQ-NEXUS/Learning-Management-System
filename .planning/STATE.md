@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-05-PLAN.md
-last_updated: "2026-09-18T07:11:56.567Z"
+stopped_at: Completed 11-06-PLAN.md
+last_updated: "2026-09-18T07:39:25.616Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 141
+  completed_plans: 142
   percent: 93
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 5 of 16
-Status: Executing Phase 11
-Last activity: 2026-09-18 -- Completed 11-05-PLAN.md
+Plan: 6 of 16
+Status: Ready to execute
+Last activity: 2026-09-18
 
-Progress: [█████████░] 93% -- Phase 11 5/16 plans complete; milestone 141/152 planned plans complete; 9/16 phases complete.
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -88,6 +88,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P01 | 1h 12m | 3 tasks | 5 files |
 | Phase 11 P02 | 37min | 3 tasks | 4 files |
 | Phase 11 P05 | 25min | 3 tasks | 8 files |
+| Phase 11 P06 | 35min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase ?]: [Phase 11 P05]: certificates.manage is the template-authoring permission (new-manage, human-recorded 11-DECISIONS.md); Administrator is the only default role that already held certificates.issue, so it is the only role granted certificates.manage, inherited automatically via its existing full-PERMISSIONS spread
 - [Phase ?]: [Phase 11 P05]: certificate-template-service.ts's update() only re-validates/re-stamps layout when the caller supplies a layout key -- a rename-only edit leaves the stored layout untouched rather than overwriting it with EMPTY_LAYOUT_V1
 - [Phase ?]: [Phase 11 P05]: Introduced certificate-default-template-layout.ts (plan-unlisted, Rule 3) as a pure shared fixture so seed.ts and its test never keep two independently-drifting copies of the seeded default template's layout -- seed.ts cannot be safely imported into a test since its bottom-of-file main() runs against a real database
+- [Phase 11]: [Phase 11 P06]: Dropped the planner's discretionary bare /verify landing page (Rule 4) -- (auth)/verify/page.tsx already owns that exact path for IAM-02 email verification (?token=), live and linked from already-dispatched transactional emails; kept /verify/[verificationRef] (CRD-04's literal requirement) and wired the reference-entry form onto that result page instead
 
 ### Pending Todos
 
@@ -189,6 +191,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T07:11:56.540Z
-Stopped at: Completed 11-05-PLAN.md
+Last session: 2026-09-18T07:38:46.583Z
+Stopped at: Completed 11-06-PLAN.md
 Resume file: None
