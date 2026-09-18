@@ -16,6 +16,7 @@ import {
   reactToCompletionResults,
   recalculateCompletionAndIssue,
   flagCertificateForReview,
+  flagCertificatesForGradeCorrection,
   type CertificateIssuanceTxClient,
   type IssueCertificateDeps,
   type IssueCertificateActor,
@@ -754,5 +755,234 @@ describe("flagCertificateForReview", () => {
 
     expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toBeNull();
     expect(auditCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// flagCertificatesForGradeCorrection — CRD-06's grade half (plan 11-10).
+// Reuses flagCertificateForReview; never calls recalculateCompletion (grades
+// carry no completionRule v1 key, so there is no verdict to re-derive).
+// ---------------------------------------------------------------------------
+
+function activeCert(over: Partial<CertRow> = {}): CertRow {
+  return {
+    id: over.id ?? "cert-1",
+    enrolmentId: over.enrolmentId ?? "enr-1",
+    userId: over.userId ?? "user-1",
+    scope: over.scope ?? "COURSE",
+    courseId: over.courseId ?? "course-1",
+    programmeId: over.programmeId ?? null,
+    awardTitle: over.awardTitle ?? "Intro to Testing",
+    learnerName: over.learnerName ?? "Jane Learner",
+    issuedAt: over.issuedAt ?? NOW,
+    status: over.status ?? "ACTIVE",
+    verificationRef: over.verificationRef ?? "CERT-ORIGINAL",
+    storageKey: over.storageKey ?? "certificates/cert-1/key",
+    reviewFlaggedAt: over.reviewFlaggedAt ?? null,
+  };
+}
+
+describe("grade correction", () => {
+  it("1. sets reviewFlaggedAt on the enrolment's ACTIVE certificate", async () => {
+    const h = harness({ certificates: [activeCert()] });
+    const { deps } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      flagCertificatesForGradeCorrection(
+        tx,
+        { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+        deps,
+      ),
+    );
+
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toEqual(NOW);
+  });
+
+  it("2. leaves status, verificationRef, issuedAt and storageKey unchanged", async () => {
+    const h = harness({ certificates: [activeCert()] });
+    const { deps } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      flagCertificatesForGradeCorrection(
+        tx,
+        { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: false, now: NOW, actorId: "staff-1" },
+        deps,
+      ),
+    );
+
+    const cert = h.certificates.get("cert-1");
+    expect(cert?.status).toBe("ACTIVE");
+    expect(cert?.verificationRef).toBe("CERT-ORIGINAL");
+    expect(cert?.issuedAt).toEqual(NOW);
+    expect(cert?.storageKey).toBe("certificates/cert-1/key");
+  });
+
+  it("3. reverts a COMPLETED enrolment to ACTIVE via assertTransition", async () => {
+    const h = harness({
+      enrolments: [enr({ status: "COMPLETED" })],
+      certificates: [activeCert()],
+    });
+    const { deps } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      flagCertificatesForGradeCorrection(
+        tx,
+        { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+        deps,
+      ),
+    );
+
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+  });
+
+  it("3b. leaves a WITHDRAWN enrolment's status untouched and throws nothing", async () => {
+    const h = harness({
+      enrolments: [enr({ status: "WITHDRAWN" })],
+      certificates: [activeCert()],
+    });
+    const { deps } = makeDeps();
+
+    await expect(
+      h.runInTransaction((tx) =>
+        flagCertificatesForGradeCorrection(
+          tx,
+          { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+          deps,
+        ),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(h.enrolments.get("enr-1")?.status).toBe("WITHDRAWN");
+  });
+
+  it("4. the certificate is not revoked and stays publicly verifiable as active while flagged", async () => {
+    const h = harness({ certificates: [activeCert()] });
+    const { deps } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      flagCertificatesForGradeCorrection(
+        tx,
+        { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+        deps,
+      ),
+    );
+
+    const cert = h.certificates.get("cert-1");
+    expect(cert?.status).toBe("ACTIVE");
+    expect(cert?.reviewFlaggedAt).toEqual(NOW);
+  });
+
+  it("5. no CompletionRecord is created or superseded by this path", async () => {
+    let completionRecordTouched = false;
+    const tx: CertificateIssuanceTxClient = {
+      certificate: {
+        findFirst: async () => ({ ...activeCert() }),
+        create: async () => {
+          throw new Error("must not create a certificate");
+        },
+        update: async ({ data }) => data,
+      },
+      enrolment: {
+        findUnique: async () => enr({ status: "ACTIVE" }),
+        update: async () => {
+          throw new Error("must not touch a non-COMPLETED enrolment");
+        },
+      },
+      cohort: { findUnique: async () => courseCohort() },
+      course: { findUnique: async () => award() },
+      programme: { findUnique: async () => null },
+      certificateTemplate: { findUnique: async () => template(), findFirst: async () => template() },
+      completionRecord: {
+        findFirst: async () => {
+          completionRecordTouched = true;
+          return null;
+        },
+      },
+      user: { findUnique: async () => user() },
+      domainEvent: { create: async () => ({}) },
+    };
+    const { deps } = makeDeps();
+
+    await flagCertificatesForGradeCorrection(
+      tx,
+      { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+      deps,
+    );
+
+    expect(completionRecordTouched).toBe(false);
+  });
+
+  it("6. an enrolment with no certificate is a no-op that does not throw", async () => {
+    const h = harness({ certificates: [] });
+    const { deps, auditCalls } = makeDeps();
+
+    await expect(
+      h.runInTransaction((tx) =>
+        flagCertificatesForGradeCorrection(
+          tx,
+          { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+          deps,
+        ),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(auditCalls).toHaveLength(0);
+  });
+
+  it("7. an enrolment whose certificate is already REVOKED is not flagged", async () => {
+    const h = harness({ certificates: [activeCert({ status: "REVOKED", reviewFlaggedAt: null })] });
+    const { deps, auditCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      flagCertificatesForGradeCorrection(
+        tx,
+        { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+        deps,
+      ),
+    );
+
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toBeNull();
+    expect(auditCalls).toHaveLength(0);
+  });
+
+  it("8. writes a certificate.review_flagged event and audit row carrying reason 'grade corrected' and the overriding actor's id, not SYSTEM", async () => {
+    const h = harness({ certificates: [activeCert()] });
+    const { deps, auditCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      flagCertificatesForGradeCorrection(
+        tx,
+        { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+        deps,
+      ),
+    );
+
+    const flagEvent = h.events.find((e) => e.type === "certificate.review_flagged");
+    expect(flagEvent).toBeDefined();
+    const flagAudit = auditCalls.find((a) => a.action === "certificate.review_flagged");
+    expect(flagAudit?.reason).toBe("grade corrected");
+    expect(flagAudit?.actorId).toBe("staff-1");
+    expect(flagAudit?.actorType).toBeUndefined();
+  });
+
+  it("9. the flag write rolls back with the rest of the transaction on failure", async () => {
+    const h = harness({ certificates: [activeCert()] });
+    const { deps } = makeDeps({
+      audit: async () => {
+        throw new Error("audit sink unavailable");
+      },
+    });
+
+    await expect(
+      h.runInTransaction((tx) =>
+        flagCertificatesForGradeCorrection(
+          tx,
+          { enrolmentId: "enr-1", assessmentId: "a1", passedChanged: true, now: NOW, actorId: "staff-1" },
+          deps,
+        ),
+      ),
+    ).rejects.toThrow("audit sink unavailable");
+
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toBeNull();
   });
 });

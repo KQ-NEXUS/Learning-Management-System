@@ -454,6 +454,12 @@ export type FlagCertificateForReviewArgs = {
   reason: string;
   actorId: string | null;
   actorType?: string;
+  /**
+   * Extra fields folded into the audit row's `after` and the domain event's
+   * payload — e.g. grade-correction's `{ assessmentId, passedChanged }`
+   * (plan 11-10). Context only: never used to gate the flag write itself.
+   */
+  context?: Record<string, unknown>;
 };
 
 /**
@@ -471,7 +477,7 @@ export async function flagCertificateForReview(
   args: FlagCertificateForReviewArgs,
   deps: IssueCertificateDeps,
 ): Promise<void> {
-  const { enrolmentId, now, reason, actorId, actorType } = args;
+  const { enrolmentId, now, reason, actorId, actorType, context } = args;
 
   const certificate = await tx.certificate.findFirst({
     where: { enrolmentId, status: "ACTIVE" },
@@ -497,13 +503,56 @@ export async function flagCertificateForReview(
     targetId: certificate.id,
     outcome: "SUCCESS",
     reason,
+    after: context,
   });
 
   await deps.writeEvent(tx, {
     type: "certificate.review_flagged",
-    payload: { certificateId: certificate.id, enrolmentId, reason },
+    payload: { certificateId: certificate.id, enrolmentId, reason, ...(context ?? {}) },
     occurredAt: now,
   });
+}
+
+// ---------------------------------------------------------------------------
+// flagCertificatesForGradeCorrection — CRD-06's grade half (plan 11-10).
+// Grades never flow through `completionRule` v1 (`RECOGNISED_V1_KEYS` carries
+// no assessment key), so there is no verdict to re-derive here — this only
+// flags, reusing `flagCertificateForReview` above rather than a second
+// flag-write implementation. Differs from the "completion superseded" branch
+// only in actor (the overriding staff member, never SYSTEM — a human
+// requested the correction) and reason ("grade corrected"). Flags regardless
+// of `passedChanged`: CRD-06 says "re-evaluated after an authorized grade...
+// correction", not "after a pass/fail flip" — a score change that does not
+// cross the threshold can still be the evidence a reviewer needs.
+// `assessmentId`/`passedChanged` ride along as audit/event context only,
+// never as a gate on whether the flag is written.
+// ---------------------------------------------------------------------------
+
+export type FlagCertificatesForGradeCorrectionArgs = {
+  enrolmentId: string;
+  assessmentId: string;
+  passedChanged: boolean;
+  now: Date;
+  actorId: string;
+};
+
+export async function flagCertificatesForGradeCorrection(
+  tx: CertificateIssuanceTxClient,
+  args: FlagCertificatesForGradeCorrectionArgs,
+  deps: IssueCertificateDeps,
+): Promise<void> {
+  const { enrolmentId, assessmentId, passedChanged, now, actorId } = args;
+  await flagCertificateForReview(
+    tx,
+    {
+      enrolmentId,
+      now,
+      reason: "grade corrected",
+      actorId,
+      context: { assessmentId, passedChanged },
+    },
+    deps,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +653,12 @@ export async function reactToCompletionResults(
 // logic change in either consumer).
 // ---------------------------------------------------------------------------
 
-const liveIssuanceDeps: IssueCertificateDeps = {
+/**
+ * Exported so `grade-override-service.ts`'s composition root (plan 11-10) can
+ * bind `flagCertificatesForGradeCorrection` to the same live audit/event
+ * writers instead of constructing a second, independently-drifting copy.
+ */
+export const liveIssuanceDeps: IssueCertificateDeps = {
   renderPdf: renderCertificatePdf,
   putObject: putGeneratedCertificateObject,
   buildKey: buildCertificateStorageKey,

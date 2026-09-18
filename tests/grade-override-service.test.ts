@@ -10,6 +10,7 @@ function harness(status = "RELEASED", scope = "cohort-1") {
   const updateMany = vi.fn(async ({ data }) => { grade = { ...grade, ...data }; return { count: 1 }; });
   const events = vi.fn(async () => {});
   const audit = vi.fn(async () => {});
+  const reactToGradeOverride = vi.fn(async () => {});
   const service = createGradeOverrideService({
     grade: { findUnique: async () => grade },
     enrolmentScope: async () => ({ cohortId: "cohort-1" }),
@@ -20,20 +21,21 @@ function harness(status = "RELEASED", scope = "cohort-1") {
       gradeOverride: { create, findMany: async () => history },
     } as never),
     writeEvent: events as never, audit,
+    reactToGradeOverride,
   });
-  return { service, create, updateMany, events, audit, history, get grade() { return grade; } };
+  return { service, create, updateMany, events, audit, reactToGradeOverride, history, get grade() { return grade; } };
 }
 
 describe("released grade override", () => {
   it("refuses a draft without any writes", async () => {
     const h = harness("DRAFT");
     await expect(h.service.overrideGrade({ gradeId: "g1", newScore: 60, reason: "Correct grading mistake" })).rejects.toBeInstanceOf(GradeNotReleasedError);
-    for (const write of [h.create, h.updateMany, h.events, h.audit]) expect(write).not.toHaveBeenCalled();
+    for (const write of [h.create, h.updateMany, h.events, h.audit, h.reactToGradeOverride]) expect(write).not.toHaveBeenCalled();
   });
   it.each(["", "   ", "Too short"])("refuses reason %j before writes", async (reason) => {
     const h = harness();
     await expect(h.service.overrideGrade({ gradeId: "g1", newScore: 60, reason })).rejects.toBeInstanceOf(OverrideReasonRequiredError);
-    for (const write of [h.create, h.updateMany, h.events, h.audit]) expect(write).not.toHaveBeenCalled();
+    for (const write of [h.create, h.updateMany, h.events, h.audit, h.reactToGradeOverride]) expect(write).not.toHaveBeenCalled();
   });
   it.each([-1, 101, 1.5, NaN])("refuses invalid score %s without writes", async (newScore) => {
     const h = harness();
@@ -53,6 +55,15 @@ describe("released grade override", () => {
     expect(h.history[1]).toMatchObject({ previousScore: 60, newScore: 70 });
     expect(h.events).toHaveBeenCalledTimes(2); expect(h.audit).toHaveBeenCalledTimes(2);
   });
+  it("calls reactToGradeOverride inside the transaction with the enrolment/assessment/passedChanged/actor context", async () => {
+    const h = harness();
+    await h.service.overrideGrade({ gradeId: "g1", newScore: 60, reason: "Correct grading mistake" });
+    expect(h.reactToGradeOverride).toHaveBeenCalledTimes(1);
+    expect(h.reactToGradeOverride).toHaveBeenCalledWith(
+      expect.anything(),
+      { enrolmentId: "e1", assessmentId: "a1", passedChanged: true, actorId: "user-1" },
+    );
+  });
   it("denies another cohort's grant", async () => {
     const h = harness("RELEASED", "other-cohort");
     await expect(h.service.overrideGrade({ gradeId: "g1", newScore: 60, reason: "Correct grading mistake" })).rejects.toBeInstanceOf(AuthorizationError);
@@ -62,5 +73,6 @@ describe("released grade override", () => {
     const h = harness(); h.updateMany.mockResolvedValueOnce({ count: 0 });
     await expect(h.service.overrideGrade({ gradeId: "g1", newScore: 60, reason: "Correct grading mistake" })).rejects.toThrow("changed");
     expect(h.create).not.toHaveBeenCalled(); expect(h.events).not.toHaveBeenCalled(); expect(h.audit).not.toHaveBeenCalled();
+    expect(h.reactToGradeOverride).not.toHaveBeenCalled();
   });
 });
