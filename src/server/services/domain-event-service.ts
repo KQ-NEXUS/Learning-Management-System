@@ -81,7 +81,11 @@ export type DomainEventType =
   | "attempt.submitted"
   | "submission.created"
   | "grade.released"
-  | "grade.overridden";
+  | "grade.overridden"
+  // Phase 11 (CRD-01) — certificate-issuance-service.ts. Fires once, inside
+  // the same transaction as the Certificate row create, carrying only
+  // ids/scope/verificationRef — never PDF bytes (T-11-32).
+  | "certificate.issued";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction
