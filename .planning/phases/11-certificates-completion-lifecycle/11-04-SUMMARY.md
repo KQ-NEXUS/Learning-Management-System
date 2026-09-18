@@ -116,3 +116,13 @@ None — no external service configuration required. `pdf-lib`/`@pdf-lib/fontkit
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
+
+## Self-Check: PASSED
+
+- FOUND: `src/server/services/certificate-pdf-renderer.ts`
+- FOUND: `tests/certificate-pdf-renderer.test.ts`
+- FOUND: `.planning/phases/11-certificates-completion-lifecycle/11-04-SUMMARY.md`
+- FOUND commit: `46d8864` (test — RED)
+- FOUND commit: `8c874c6` (feat — GREEN)
+- FOUND commit: `ad5f04b` (test — golden fixture)
+- FOUND commit: `246262f` (docs — this summary)
