@@ -329,6 +329,7 @@ function harness(opts?: {
     },
     enrolmentScope: async () => ({ cohortId: "cohort-course" }),
     pendingStore,
+    auditStore: { auditEvent: { findFirst: async () => null } },
     runInTransaction: runInTransaction as CertificateServiceDeps["runInTransaction"],
     issuanceDeps,
     writeEvent: async (tx, event) => {

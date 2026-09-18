@@ -103,6 +103,7 @@ function harness(opts?: {
     audit: vi.fn(async () => {}),
     enrolmentScope: async (enrolmentId: string) => ({ cohortId: cohortByEnrolment[enrolmentId] }),
     pendingStore,
+    auditStore: { auditEvent: { findFirst: async () => null } },
     runInTransaction: unusedRunInTransaction(),
     issuanceDeps: {} as never,
     writeEvent: (async () => {}) as never,

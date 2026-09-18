@@ -104,29 +104,17 @@ export type CertificateRow = {
 };
 
 // ---------------------------------------------------------------------------
-// certificateDisplayStatus — UI-SPEC §5's four-branch tone precedence, owned
-// in exactly one place so the queue, the issued list, the detail page and
-// the dashboard slot can never disagree on what a certificate "looks like".
+// certificateDisplayStatus — UI-SPEC §5's four-branch tone precedence.
+//
+// Re-exported from the pure `src/lib/certificate-display-status.ts` module
+// (plan 11-15) rather than defined here, so a `"use client"` table component
+// can import the helper directly without pulling this file's server-only
+// import graph (Prisma, `withPermission`, `next/headers`) into the browser
+// bundle. Every existing `from "@/server/services/certificate-service"`
+// import of this helper keeps working unchanged.
 // ---------------------------------------------------------------------------
 
-export type CertificateDisplayStatus = "revoked" | "flagged" | "superseded" | "active";
-
-/**
- * First match wins, in this exact order (UI-SPEC §5, load-bearing): (1)
- * `status === "REVOKED"` -> "revoked"; (2) `reviewFlaggedAt !== null` ->
- * "flagged" — EVEN IF `status === "ACTIVE"`, so a flagged-but-technically-
- * active certificate never renders as a plain green "Active"; (3) `status
- * === "SUPERSEDED"` -> "superseded"; (4) otherwise -> "active".
- */
-export function certificateDisplayStatus(certificate: {
-  status: "ACTIVE" | "REVOKED" | "SUPERSEDED";
-  reviewFlaggedAt: Date | null;
-}): CertificateDisplayStatus {
-  if (certificate.status === "REVOKED") return "revoked";
-  if (certificate.reviewFlaggedAt !== null) return "flagged";
-  if (certificate.status === "SUPERSEDED") return "superseded";
-  return "active";
-}
+export { certificateDisplayStatus, type CertificateDisplayStatus } from "@/lib/certificate-display-status";
 
 // ---------------------------------------------------------------------------
 // Pending-issuance queue (D-04) — read-time evaluator, no denormalized flag.
@@ -232,12 +220,30 @@ export type CertificateServiceTxClient = CertificateIssuanceTxClient & {
 // Service deps
 // ---------------------------------------------------------------------------
 
+/** The narrow read surface `getCertificateIssuer` needs (plan 11-15) — the
+ *  `Certificate`'s own `targetType`/`targetId`-keyed issuance audit row,
+ *  same "read a record's own history straight off `AuditEvent`" shape
+ *  `roster-service.ts` already uses for `Enrolment`, gated by
+ *  `certificates.view` rather than the GLOBAL-only `audit.view`. */
+export type CertificateAuditStore = {
+  auditEvent: {
+    findFirst(args: {
+      where: Record<string, unknown>;
+      orderBy?: Record<string, unknown>;
+      select?: Record<string, unknown>;
+    }): Promise<{ actorId: string | null; actor: { name: string } | null } | null>;
+  };
+};
+
+export type CertificateIssuerRow = { actorId: string | null; actorName: string | null } | null;
+
 export type CertificateServiceDeps = {
   delegate: Delegate<CertificateRow>;
   withPermission: WithPermission;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
   enrolmentScope: (enrolmentId: string) => Promise<ResourceScope>;
   pendingStore: PendingIssuanceStore;
+  auditStore: CertificateAuditStore;
   runInTransaction: <R>(fn: (tx: CertificateServiceTxClient) => Promise<R>) => Promise<R>;
   issuanceDeps: IssueCertificateDeps;
   writeEvent: typeof writeDomainEvent;
@@ -382,6 +388,33 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     if (row.status === "REVOKED") return null;
     return row;
   }
+
+  // -------------------------------------------------------------------------
+  // 3b. getCertificateIssuer (plan 11-15) — resolves the "Issued by" fact
+  //     from the issuance audit row rather than a new Certificate column.
+  //     Gated by `certificates.view` at the same scope as `get`, mirroring
+  //     `roster-service.ts`'s own-record `AuditEvent` read — never
+  //     `audit.view` (GLOBAL-only, a different and much broader grant).
+  //     Returns `null` when no issuance row is found; the caller falls back
+  //     to "System (automatic issuance)" rather than fabricating a name.
+  // -------------------------------------------------------------------------
+
+  const getCertificateIssuer = deps.withPermission<string>(
+    "certificates.view",
+    (id) => toScope(id),
+  )(async (id): Promise<CertificateIssuerRow> => {
+    const row = await deps.auditStore.auditEvent.findFirst({
+      where: {
+        targetType: "Certificate",
+        targetId: id,
+        action: { in: ["certificate.issued", "certificate.issued_auto"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { actorId: true, actor: { select: { name: true } } },
+    });
+    if (!row) return null;
+    return { actorId: row.actorId, actorName: row.actor?.name ?? null };
+  });
 
   // -------------------------------------------------------------------------
   // 4a. issueCertificateManually — D-04, no reason, delegates to the single
@@ -581,6 +614,7 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     certificateService,
     listPendingIssuance,
     getOwnCertificateForDownload,
+    getCertificateIssuer,
     issueCertificateManually,
     revokeCertificate,
     reissueCertificate,
@@ -600,6 +634,9 @@ const built = createCertificateService({
     completionRecord: prisma.completionRecord as unknown as PendingIssuanceStore["completionRecord"],
     certificate: prisma.certificate as unknown as PendingIssuanceStore["certificate"],
   },
+  auditStore: {
+    auditEvent: prisma.auditEvent as unknown as CertificateAuditStore["auditEvent"],
+  },
   runInTransaction: (fn) =>
     prisma.$transaction((tx: unknown) => fn(tx as CertificateServiceTxClient)),
   issuanceDeps: liveIssuanceDeps,
@@ -609,6 +646,7 @@ const built = createCertificateService({
 export const certificateService = built.certificateService;
 export const listPendingIssuance = built.listPendingIssuance;
 export const getOwnCertificateForDownload = built.getOwnCertificateForDownload;
+export const getCertificateIssuer = built.getCertificateIssuer;
 export const issueCertificateManually = built.issueCertificateManually;
 export const revokeCertificate = built.revokeCertificate;
 export const reissueCertificate = built.reissueCertificate;
