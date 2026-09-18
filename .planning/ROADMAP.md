@@ -540,7 +540,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 11-13-PLAN.md — Download route with denial parity, and the learner dashboard certificate slot closing Phase 9's named gap (CRD-03, CRD-06)
+- [x] 11-13-PLAN.md — Download route with denial parity, and the learner dashboard certificate slot closing Phase 9's named gap (CRD-03, CRD-06)
 - [ ] 11-14-PLAN.md — Certificates nav entry and the MANUAL-mode pending-issuance queue (CRD-01, CRD-02)
 - [ ] 11-15-PLAN.md — Issued list, certificate detail with the flagged/revoked banners and supersede chain, revoke and reissue actions (CRD-03, CRD-05, CRD-06)
 
@@ -648,7 +648,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 12/16 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 13/16 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
