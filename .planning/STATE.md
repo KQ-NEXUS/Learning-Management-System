@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-13-PLAN.md
-last_updated: "2026-09-18T20:40:24.228Z"
+stopped_at: Completed 11-14-PLAN.md
+last_updated: "2026-09-18T21:24:22.144Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 149
+  completed_plans: 150
   percent: 56
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 14 of 16
+Plan: 15 of 16
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [██████████] 98%
+Progress: [██████████] 99%
 
 ## Performance Metrics
 
@@ -96,6 +96,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P11 | 50min | 3 tasks | 5 files |
 | Phase 11 P12 | ~2h | 3 tasks | 5 files |
 | Phase 11 P13 | 56min | 3 tasks | 8 files |
+| Phase 11 P14 | 35min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -178,6 +179,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11 P13]: deriveCertificateColumn delegates existing-certificate precedence to certificateDisplayStatus rather than re-deriving revoked>flagged>active a second time
 - [Phase 11 P13]: certificate/completionRecord reads batched once per loadLearnerDashboard call (2 extra queries total, not per enrolment) -- verified for a 3-enrolment dashboard
 - [Phase 11 P13]: pending-issuance fires on any unsuperseded CompletionRecord with no certificate yet, not gated on certificateIssuanceMode -- under AUTOMATIC mode the reactive issuer creates the certificate in the same transaction as the CompletionRecord, so this is effectively the MANUAL-mode case in practice
+- [Phase 11]: Phase 11 P14: isActiveNavItem's existing prefix match already highlights Certificates on /staff/certificates/templates, no StaffShell change needed
+- [Phase 11]: Phase 11 P14: reused formatTimestamp (mono full timestamp) for the pending-issuance queue's Eligible since column rather than adding a new date-only formatter
 
 ### Pending Todos
 
@@ -215,6 +218,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T20:40:22.483Z
-Stopped at: Completed 11-13-PLAN.md
+Last session: 2026-09-18T21:24:20.068Z
+Stopped at: Completed 11-14-PLAN.md
 Resume file: None
