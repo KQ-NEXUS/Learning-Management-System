@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-06-PLAN.md
-last_updated: "2026-09-18T07:39:25.616Z"
+stopped_at: Completed 11-07-PLAN.md
+last_updated: "2026-09-18T08:11:32.319Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 142
-  percent: 93
+  completed_plans: 143
+  percent: 94
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 6 of 16
+Plan: 7 of 16
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [█████████░] 93%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P02 | 37min | 3 tasks | 4 files |
 | Phase 11 P05 | 25min | 3 tasks | 8 files |
 | Phase 11 P06 | 35min | 3 tasks | 5 files |
+| Phase 11 P07 | 50min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase ?]: [Phase 11 P05]: certificate-template-service.ts's update() only re-validates/re-stamps layout when the caller supplies a layout key -- a rename-only edit leaves the stored layout untouched rather than overwriting it with EMPTY_LAYOUT_V1
 - [Phase ?]: [Phase 11 P05]: Introduced certificate-default-template-layout.ts (plan-unlisted, Rule 3) as a pure shared fixture so seed.ts and its test never keep two independently-drifting copies of the seeded default template's layout -- seed.ts cannot be safely imported into a test since its bottom-of-file main() runs against a real database
 - [Phase 11]: [Phase 11 P06]: Dropped the planner's discretionary bare /verify landing page (Rule 4) -- (auth)/verify/page.tsx already owns that exact path for IAM-02 email verification (?token=), live and linked from already-dispatched transactional emails; kept /verify/[verificationRef] (CRD-04's literal requirement) and wired the reference-entry form onto that result page instead
+- [Phase 11]: certificate-issuance-service.ts declares its own wider CertificateIssuanceTxClient rather than widening CompletionServiceTxClient (DD-6 omits enrolment.update on purpose) — Preserves Phase 9's structural guarantee that completion-service.ts cannot touch Enrolment.status even by accident; Phase 11 owns the COMPLETED transition and its D-06 reversal
+- [Phase 11]: reactToCompletionResults, not issueCertificateForEnrolment, gates MANUAL issuance mode so the issuance dependency is never called at all under MANUAL — Upholds D-04's read-time-only eligibility invariant structurally, not merely by omitting a write
+- [Phase 11]: Added storage-service.ts's getObjectBytes (Rule 2 auto-fix, plan 11-07) — no prior function fetched raw object bytes server-side, only presigned URLs — Required for the live resolveTemplateAsset binding recalculateCompletionAndIssue needs to actually embed template images at PDF-render time
 
 ### Pending Todos
 
@@ -191,6 +195,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T07:38:46.583Z
-Stopped at: Completed 11-06-PLAN.md
+Last session: 2026-09-18T08:10:48.757Z
+Stopped at: Completed 11-07-PLAN.md
 Resume file: None

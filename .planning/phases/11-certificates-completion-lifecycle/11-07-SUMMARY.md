@@ -131,3 +131,12 @@ None - no external service configuration required.
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
+
+## Self-Check: PASSED
+
+- FOUND: `src/server/services/certificate-issuance-service.ts`
+- FOUND: `tests/certificate-issuance-service.test.ts`
+- FOUND: `.planning/phases/11-certificates-completion-lifecycle/11-07-SUMMARY.md`
+- FOUND commit: `250bd46`
+- FOUND commit: `c786e4c`
+- FOUND commit: `cabb299`
