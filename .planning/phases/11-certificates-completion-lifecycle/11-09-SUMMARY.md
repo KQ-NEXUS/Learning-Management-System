@@ -128,3 +128,7 @@ None - no external service configuration required.
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
+
+## Self-Check: PASSED
+
+All 7 created files and both task commit hashes (`b2995ab`, `fb5cfe0`) verified present on disk / in `git log --oneline --all`.

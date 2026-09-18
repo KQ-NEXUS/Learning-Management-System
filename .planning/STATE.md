@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-08-PLAN.md
-last_updated: "2026-09-18T13:43:17.506Z"
+stopped_at: Completed 11-09-PLAN.md
+last_updated: "2026-09-18T14:25:15.422Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 144
+  completed_plans: 145
   percent: 95
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 8 of 16
+Plan: 9 of 16
 Status: Ready to execute
 Last activity: 2026-09-18
 
@@ -91,6 +91,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P06 | 35min | 3 tasks | 5 files |
 | Phase 11 P07 | 50min | 2 tasks | 4 files |
 | Phase 11 P08 | resumed session | 2 tasks | 12 files |
+| Phase 11 P09 | 50min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,10 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: reactToCompletionResults, not issueCertificateForEnrolment, gates MANUAL issuance mode so the issuance dependency is never called at all under MANUAL — Upholds D-04's read-time-only eligibility invariant structurally, not merely by omitting a write
 - [Phase 11]: Added storage-service.ts's getObjectBytes (Rule 2 auto-fix, plan 11-07) — no prior function fetched raw object bytes server-side, only presigned URLs — Required for the live resolveTemplateAsset binding recalculateCompletionAndIssue needs to actually embed template images at PDF-render time
 - [Phase 11]: P08: Both certificateIssuanceMode/certificateTemplateId are optional in Course and Programme action schemas (a disabled control is never submitted); a shared assertTemplateSelectable guard rejects archived templates server-side on both actions (T-11-33); course-service.ts/programme-service.ts needed no allow-list change since both forward data wholesale via the resource-service factory.
+- [Phase ?]: [Phase 11 P09]: Certificate template elements are keyed by array index, not a synthetic client id -- CertificateElementV1 has no id field in the persisted schema and this plan only ever appends
+- [Phase ?]: [Phase 11 P09]: Image element's default assetKey is a documented 'pending-upload' placeholder (valid non-empty string), not empty -- the layout parser rejects empty assetKey and 11-12 wires the real upload/asset picker
+- [Phase ?]: [Phase 11 P09]: Property inspector renders only the static 'Select an element to edit its properties.' placeholder this plan regardless of selection -- the real per-element editable fields are plan 11-12's interior
+- [Phase ?]: [Phase 11 P09]: Unsaved-changes guard on the template editor is a small, self-contained ConfirmModal + beforeunload pair local to TemplateEditorShell, not UnsavedOrderGuard.tsx's context/provider pair, since this route needs its own exact UI-SPEC 6.1 copy and no UnsavedOrderProvider is mounted here
 
 ### Pending Todos
 
@@ -197,6 +202,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T13:42:39.124Z
-Stopped at: Completed 11-08-PLAN.md
+Last session: 2026-09-18T14:24:26.173Z
+Stopped at: Completed 11-09-PLAN.md
 Resume file: None
