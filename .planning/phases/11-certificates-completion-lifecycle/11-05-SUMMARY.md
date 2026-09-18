@@ -131,3 +131,7 @@ None - no external service configuration required.
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
+
+## Self-Check: PASSED
+
+All 8 claimed files found on disk; all 4 claimed commit hashes (`05ba665`, `8e8d44c`, `94d4fdd`, `5de969e`) found in `git log --oneline --all`.
