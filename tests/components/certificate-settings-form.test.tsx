@@ -7,23 +7,25 @@
  * under tests/ matches neither project's include glob and would silently
  * never run (Rule 3 auto-fix — see 11-08-SUMMARY.md).
  *
- * Task 1 (Course side) coverage:
+ * Covers:
  *
- *   1. `CertificateSettingsFields` — the shared control the Course/Programme
- *      forms consume — renders both controls with an accessible name,
- *      disables both when `certificateEnabled` is false, offers "Use the
- *      default template" mapped to a null id, and suffixes the default
- *      template's option label.
+ *   1. `CertificateSettingsFields` — the one shared implementation consumed
+ *      by both `CourseForm` and `ProgrammeForm` (plan 11-08 Task 2) —
+ *      renders both controls with an accessible name, disables both when
+ *      `certificateEnabled` is false, offers "Use the default template"
+ *      mapped to a null id, and suffixes the default template's option
+ *      label.
  *   2. `CourseForm` wires the checkbox live (Course's `certificateEnabled`
  *      defaults false and is editable in the same create form) and submits
  *      both new fields through `FormData`.
- *   3. `assertTemplateSelectable` — the exact function the Course action
- *      calls before persisting — rejects an id absent from the live
- *      selectable-template list (T-11-33), never trusting a client-supplied
- *      option list, and is a no-op for "leave unchanged"/"use the default".
- *
- * Task 2 extends this file with `ProgrammeForm` coverage of the same shared
- * component.
+ *   3. `ProgrammeForm` renders the same shared controls, enabled by default
+ *      (Programme's `certificateEnabled` defaults true and this form has no
+ *      editable toggle for it), and submits the loaded values unchanged.
+ *   4. `assertTemplateSelectable` — the exact function both the Course and
+ *      Programme actions call before persisting — rejects an id absent from
+ *      the live selectable-template list (T-11-33), never trusting a
+ *      client-supplied option list, and is a no-op for "leave
+ *      unchanged"/"use the default".
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -34,6 +36,11 @@ import {
 } from "@/components/catalogue/CertificateSettingsFields";
 import { CourseForm } from "@/app/staff/courses/CourseForm";
 import { createCourseAction } from "@/app/staff/courses/actions";
+import { ProgrammeForm } from "@/app/staff/programmes/ProgrammeForm";
+import {
+  createProgrammeAction,
+  updateProgrammeAction,
+} from "@/app/staff/programmes/actions";
 import {
   createTemplateSelectionGuard,
   TemplateNotSelectableError,
@@ -41,6 +48,10 @@ import {
 
 vi.mock("@/app/staff/courses/actions", () => ({
   createCourseAction: vi.fn(),
+}));
+vi.mock("@/app/staff/programmes/actions", () => ({
+  createProgrammeAction: vi.fn(),
+  updateProgrammeAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -189,6 +200,66 @@ describe("CourseForm — certificate settings", () => {
     const form = createAction.mock.calls[0][1] as FormData;
     expect(form.has("certificateIssuanceMode")).toBe(false);
     expect(form.has("certificateTemplateId")).toBe(false);
+  });
+});
+
+describe("ProgrammeForm — certificate settings", () => {
+  const createAction = vi.mocked(createProgrammeAction);
+  const updateAction = vi.mocked(updateProgrammeAction);
+
+  it("renders the shared certificate-settings controls enabled by default (Programme.certificateEnabled defaults true)", () => {
+    render(<ProgrammeForm mode="create" templates={TEMPLATES} />);
+
+    expect(
+      (screen.getByLabelText(
+        "Automatic — issue as soon as the learner completes",
+      ) as HTMLInputElement).disabled,
+    ).toBe(false);
+  });
+
+  it("disables the controls when the loaded Programme has certificates off", () => {
+    render(
+      <ProgrammeForm
+        mode="edit"
+        programmeId="prog-1"
+        templates={TEMPLATES}
+        values={{
+          title: "Ops",
+          slug: "ops",
+          certificateEnabled: false,
+        }}
+      />,
+    );
+
+    expect(
+      (screen.getByLabelText("Certificate template") as HTMLSelectElement).disabled,
+    ).toBe(true);
+  });
+
+  it("submits the stored issuance mode and template unchanged on an edit save", async () => {
+    updateAction.mockResolvedValue({ ok: true, id: "prog-1" });
+    const { container } = render(
+      <ProgrammeForm
+        mode="edit"
+        programmeId="prog-1"
+        templates={TEMPLATES}
+        values={{
+          title: "Ops",
+          slug: "ops",
+          certificateEnabled: true,
+          certificateIssuanceMode: "AUTOMATIC",
+          certificateTemplateId: "tpl-alt",
+        }}
+      />,
+    );
+
+    submit(container);
+
+    await waitFor(() => expect(updateAction).toHaveBeenCalledTimes(1));
+    const form = updateAction.mock.calls[0][1] as FormData;
+    expect(form.get("certificateIssuanceMode")).toBe("AUTOMATIC");
+    expect(form.get("certificateTemplateId")).toBe("tpl-alt");
+    expect(createAction).not.toHaveBeenCalled();
   });
 });
 

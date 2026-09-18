@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ResourceForm, FormField, TextInput } from "@/components/primitives";
+import { CertificateSettingsFields, type SelectableTemplate } from "@/components/catalogue";
 import {
   createProgrammeAction,
   updateProgrammeAction,
@@ -18,15 +19,25 @@ type Values = {
   outcomes?: string | null;
   audience?: string | null;
   sequential?: boolean;
+  /** Defaults true (Prisma column default) — Programme has no editable
+   * `certificateEnabled` control on this form, so this is read-only context
+   * for the issuance-mode/template controls below, not a toggle. */
+  certificateEnabled?: boolean;
+  certificateIssuanceMode?: "AUTOMATIC" | "MANUAL";
+  certificateTemplateId?: string | null;
 };
 
 export function ProgrammeForm(
-  props: { mode: "create" } | { mode: "edit"; programmeId: string; values: Values },
+  props:
+    | { mode: "create"; templates?: SelectableTemplate[] }
+    | { mode: "edit"; programmeId: string; values: Values; templates?: SelectableTemplate[] },
 ) {
   const router = useRouter();
   const action = props.mode === "create" ? createProgrammeAction : updateProgrammeAction;
   const [state, formAction, pending] = useActionState(action, INITIAL);
   const values = props.mode === "edit" ? props.values : {};
+  const templates = props.templates ?? [];
+  const certificateEnabled = values.certificateEnabled ?? true;
   // Controlled so an attempted edit survives React 19's post-action form reset
   // and a rejected submission — a failed save must never discard entered text
   // (CR-09 / NFR-09). The existing action still receives it via FormData.
@@ -129,6 +140,16 @@ export function ProgrammeForm(
             </span>
           </span>
         </label>
+
+        <CertificateSettingsFields
+          certificateEnabled={certificateEnabled}
+          templates={templates}
+          values={{
+            certificateIssuanceMode: values.certificateIssuanceMode,
+            certificateTemplateId: values.certificateTemplateId,
+          }}
+          errors={!state.ok ? state.errors : []}
+        />
       </ResourceForm>
     </>
   );
