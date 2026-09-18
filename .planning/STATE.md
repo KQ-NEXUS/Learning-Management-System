@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-07-PLAN.md
-last_updated: "2026-09-18T08:11:32.319Z"
+stopped_at: Completed 11-08-PLAN.md
+last_updated: "2026-09-18T13:43:17.506Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 143
-  percent: 94
+  completed_plans: 144
+  percent: 95
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 7 of 16
+Plan: 8 of 16
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [█████████░] 94%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -90,6 +90,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P05 | 25min | 3 tasks | 8 files |
 | Phase 11 P06 | 35min | 3 tasks | 5 files |
 | Phase 11 P07 | 50min | 2 tasks | 4 files |
+| Phase 11 P08 | resumed session | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: certificate-issuance-service.ts declares its own wider CertificateIssuanceTxClient rather than widening CompletionServiceTxClient (DD-6 omits enrolment.update on purpose) — Preserves Phase 9's structural guarantee that completion-service.ts cannot touch Enrolment.status even by accident; Phase 11 owns the COMPLETED transition and its D-06 reversal
 - [Phase 11]: reactToCompletionResults, not issueCertificateForEnrolment, gates MANUAL issuance mode so the issuance dependency is never called at all under MANUAL — Upholds D-04's read-time-only eligibility invariant structurally, not merely by omitting a write
 - [Phase 11]: Added storage-service.ts's getObjectBytes (Rule 2 auto-fix, plan 11-07) — no prior function fetched raw object bytes server-side, only presigned URLs — Required for the live resolveTemplateAsset binding recalculateCompletionAndIssue needs to actually embed template images at PDF-render time
+- [Phase 11]: P08: Both certificateIssuanceMode/certificateTemplateId are optional in Course and Programme action schemas (a disabled control is never submitted); a shared assertTemplateSelectable guard rejects archived templates server-side on both actions (T-11-33); course-service.ts/programme-service.ts needed no allow-list change since both forward data wholesale via the resource-service factory.
 
 ### Pending Todos
 
@@ -195,6 +197,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T08:10:48.757Z
-Stopped at: Completed 11-07-PLAN.md
+Last session: 2026-09-18T13:42:39.124Z
+Stopped at: Completed 11-08-PLAN.md
 Resume file: None
