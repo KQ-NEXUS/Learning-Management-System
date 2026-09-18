@@ -120,3 +120,7 @@ None - no external service configuration required.
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
+
+## Self-Check: PASSED
+
+All created/modified files confirmed present on disk (`CertificateSettingsFields.tsx`, `ProgrammeForm.tsx`, `programmes/actions.ts`, this SUMMARY.md). All referenced commits (`4c46715`, `7df69d7`, `2130bc1`) confirmed present in `git log --oneline --all`.
