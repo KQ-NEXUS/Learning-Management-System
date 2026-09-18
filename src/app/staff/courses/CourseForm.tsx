@@ -1,15 +1,26 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ResourceForm, FormField, TextInput } from "@/components/primitives";
+import { CertificateSettingsFields, type SelectableTemplate } from "@/components/catalogue";
 import { createCourseAction, type CourseActionResult } from "./actions";
 
 const INITIAL: CourseActionResult = { ok: false, errors: [], message: null };
 
-export function CourseForm({ mode }: { mode: "create" }) {
+export function CourseForm({
+  mode,
+  templates = [],
+}: {
+  mode: "create";
+  templates?: SelectableTemplate[];
+}) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(createCourseAction, INITIAL);
+  // Lifted so the issuance-mode/template controls below can react live to
+  // the checkbox in the same form session, without a page reload — a
+  // Course with certificates off offers no meaningful issuance choice.
+  const [certificateEnabled, setCertificateEnabled] = useState(false);
   const errorFor = (name: string) =>
     (!state.ok ? state.errors : []).find((error) => error.name === name)?.message;
 
@@ -100,6 +111,8 @@ export function CourseForm({ mode }: { mode: "create" }) {
             id="field-certificateEnabled"
             type="checkbox"
             name="certificateEnabled"
+            checked={certificateEnabled}
+            onChange={(event) => setCertificateEnabled(event.target.checked)}
             aria-describedby="field-certificateEnabled-hint"
             className="mt-1 size-4 rounded-[4px] border-[1.5px] border-input-border accent-accent"
           />
@@ -118,6 +131,12 @@ export function CourseForm({ mode }: { mode: "create" }) {
             </span>
           </span>
         </div>
+
+        <CertificateSettingsFields
+          certificateEnabled={certificateEnabled}
+          templates={templates}
+          errors={!state.ok ? state.errors : []}
+        />
       </ResourceForm>
     </>
   );

@@ -258,3 +258,44 @@ const built = createCertificateTemplateService({
 export const certificateTemplateService = built.certificateTemplateService;
 export const setDefaultTemplate = built.setDefaultTemplate;
 export const listSelectableTemplates = built.listSelectableTemplates;
+
+/**
+ * `certificateTemplateId` naming an archived (or nonexistent) template,
+ * submitted through a Course/Programme edit action (plan 11-08, T-11-33).
+ */
+export class TemplateNotSelectableError extends Error {
+  constructor(
+    message = "Choose a certificate template that is not archived.",
+  ) {
+    super(message);
+    this.name = "TemplateNotSelectableError";
+  }
+}
+
+/**
+ * Builds `assertTemplateSelectable` against an injected
+ * `listSelectableTemplates`-shaped function, so callers (the Course/Programme
+ * edit actions) and tests never have to stand up a real Prisma client just to
+ * exercise T-11-33's rejection path (Pitfall 5) — the same injection pattern
+ * `createCertificateTemplateService` itself uses.
+ *
+ * A `null`/`undefined` id is always allowed — that is "use the default
+ * template", not a selection to validate. The check re-resolves the id
+ * against `listSelectableTemplates()` itself; it never trusts that the
+ * client only offered valid `<option>`s.
+ */
+export function createTemplateSelectionGuard(
+  listSelectableTemplatesFn: () => Promise<Pick<CertificateTemplateRecord, "id">[]>,
+) {
+  return async function assertTemplateSelectable(
+    templateId: string | null | undefined,
+  ): Promise<void> {
+    if (templateId == null) return;
+    const templates = await listSelectableTemplatesFn();
+    if (!templates.some((template) => template.id === templateId)) {
+      throw new TemplateNotSelectableError();
+    }
+  };
+}
+
+export const assertTemplateSelectable = createTemplateSelectionGuard(listSelectableTemplates);
