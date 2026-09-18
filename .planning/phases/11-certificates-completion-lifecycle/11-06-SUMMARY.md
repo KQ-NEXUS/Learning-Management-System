@@ -121,3 +121,7 @@ None - no external service configuration required.
 
 - `verifyCertificateByRef()` and `/verify/[verificationRef]` are ready for `certificate-issuance-service.ts` (a future plan) to point at once issuance exists — nothing here depends on issuance, by design (CRD-04 ships before issuance so its disclosure contract is settled in isolation).
 - **Open item for a future plan/human decision:** if a bare, deep-link-free certificate-verification entry point is still wanted, it needs a path that doesn't collide with `(auth)/verify` — e.g. `/verify-certificate`, or a future decision to relocate IAM-02's link (which would require reissuing the transactional-email template and accepting that already-sent, not-yet-clicked verification emails would 404). Not blocking CRD-04 or any of this phase's remaining plans.
+
+## Self-Check: PASSED
+
+All created files confirmed present on disk; all four task/plan commits (`c3f8397`, `479e1ce`, `9ae9039`, `3e1941b`) confirmed present in `git log --oneline --all`.
