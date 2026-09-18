@@ -91,7 +91,12 @@ export type DomainEventType =
   // correction (plan 11-10) — never on revoke/reissue, which are their own
   // distinct acts.
   | "certificate.issued"
-  | "certificate.review_flagged";
+  | "certificate.review_flagged"
+  // Plan 11-11 Task 2 — the staff-triggered revoke mutation
+  // (certificate-service.ts). Carries ids and the verificationRef only,
+  // never revocationReason (T-11-50 — staff-internal text must not reach
+  // Phase 13's email templates or the public verify page).
+  | "certificate.revoked";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction
