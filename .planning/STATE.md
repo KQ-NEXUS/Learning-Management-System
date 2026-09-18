@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-09-PLAN.md
-last_updated: "2026-09-18T14:25:15.422Z"
+stopped_at: Completed 11-10-PLAN.md
+last_updated: "2026-09-18T15:18:29.936Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 145
-  percent: 95
+  completed_plans: 146
+  percent: 56
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 9 of 16
+Plan: 10 of 16
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [██████████] 95%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -92,6 +92,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P07 | 50min | 2 tasks | 4 files |
 | Phase 11 P08 | resumed session | 2 tasks | 12 files |
 | Phase 11 P09 | 50min | 2 tasks | 7 files |
+| Phase 11 P10 | 40min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase ?]: [Phase 11 P09]: Image element's default assetKey is a documented 'pending-upload' placeholder (valid non-empty string), not empty -- the layout parser rejects empty assetKey and 11-12 wires the real upload/asset picker
 - [Phase ?]: [Phase 11 P09]: Property inspector renders only the static 'Select an element to edit its properties.' placeholder this plan regardless of selection -- the real per-element editable fields are plan 11-12's interior
 - [Phase ?]: [Phase 11 P09]: Unsaved-changes guard on the template editor is a small, self-contained ConfirmModal + beforeunload pair local to TemplateEditorShell, not UnsavedOrderGuard.tsx's context/provider pair, since this route needs its own exact UI-SPEC 6.1 copy and no UnsavedOrderProvider is mounted here
+- [Phase 11]: [Phase 11 P10]: lesson-progress-service.ts and attendance-service.ts import certificate-issuance-service.ts's recalculateCompletionAndIssue aliased to the original recalculateCompletion local name, so the composition-root default-parameter swap touches only the import line and the default value, zero call-site changes in either file
+- [Phase 11]: [Phase 11 P10]: GradeOverrideDeps.reactToGradeOverride carries a required actorId beyond the plan's literal 3-field args shape (Rule 2) -- the certificate-review audit row must attribute the overriding staff member, never SYSTEM (T-11-42); flagCertificateForReview grew an optional context field so flagCertificatesForGradeCorrection reuses it instead of a second flag-write implementation
 
 ### Pending Todos
 
@@ -202,6 +205,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T14:24:26.173Z
-Stopped at: Completed 11-09-PLAN.md
+Last session: 2026-09-18T15:18:29.034Z
+Stopped at: Completed 11-10-PLAN.md
 Resume file: None

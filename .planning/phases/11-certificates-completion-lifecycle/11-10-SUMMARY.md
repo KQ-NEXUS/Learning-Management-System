@@ -135,6 +135,10 @@ None - no external service configuration required.
 - Plan 11-16's real-Postgres integration run is the right place to exercise `tests/grading-service.integration.test.ts` and `tests/learner-results.integration.test.ts` (and every other testcontainers-gated suite) against a live database in a Docker-enabled environment — none of that ran here.
 - No blockers for downstream phases from this plan's own scope.
 
+## Self-Check: PASSED
+
+All key files present on disk and all four commits (`84fd385`, `e24da2c`, `89b738a`, `285ab7b`) found in `git log --oneline --all`.
+
 ---
 *Phase: 11-certificates-completion-lifecycle*
 *Completed: 2026-09-18*
