@@ -32,6 +32,7 @@ key-files:
     - "src/server/services/enrolment-dashboard-service.ts"
     - "src/app/(learner)/dashboard/page.tsx"
     - "tests/enrolment-dashboard-service.test.ts"
+    - "tests/learner-dashboard-page.test.ts"
 
 key-decisions:
   - "deriveCertificateColumn delegates existing-certificate precedence to certificate-service.ts's certificateDisplayStatus rather than re-deriving revoked>flagged>active a second time"
@@ -51,11 +52,11 @@ completed: 2026-09-18
 
 ## Performance
 
-- **Duration:** 56 min
+- **Duration:** 56 min (implementation) + full-suite fix
 - **Started:** 2026-09-18T20:25:32+01:00 (first test commit)
 - **Completed:** 2026-09-18T21:21:15+01:00 (last feature commit)
 - **Tasks:** 3
-- **Files modified:** 8 (5 created, 3 modified)
+- **Files modified:** 9 (5 created, 4 modified)
 
 ## Accomplishments
 
@@ -85,6 +86,7 @@ _Note: Task 3 had no `tdd="true"` attribute in the plan, so it was implemented d
 - `tests/certificate-slot.test.ts` — `deriveCertificateColumn`'s 5 branches (unit) + 5 wiring tests (tickets untouched, cross-learner absence, single-query batching for 3 enrolments, not-complete, D-01 scope matching)
 - `tests/components/certificate-slot.test.tsx` — 6 DOM-rendering tests for `CertificateSlot`
 - `tests/enrolment-dashboard-service.test.ts` — updated dashboard-store fake to add `completionRecord`/`certificate`; replaced the stale "certificate stays deferred" expectation with `not-complete`/`issued` cases
+- `tests/learner-dashboard-page.test.ts` — updated `card()`'s default certificate fixture from the old `DeferredColumn` shape to `{ kind: "not-complete" }` (Rule 1 fix, see Deviations)
 
 ## Decisions Made
 
@@ -96,7 +98,22 @@ _Note: Task 3 had no `tdd="true"` attribute in the plan, so it was implemented d
 
 ## Deviations from Plan
 
-None — plan executed as written. The one non-functional adjustment (deduping a comment-merge artifact in `enrolment-dashboard-service.ts`'s header, commit `05649d5`) is documentation-only and is called out above rather than hidden inside a feature commit.
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Fixed a full-suite regression in `tests/learner-dashboard-page.test.ts`'s certificate fixture**
+- **Found during:** post-Task-3 full-suite (`npm test`) run, not part of this plan's own listed files
+- **Issue:** This page-level integration test's `card()` fixture still set `certificate: { kind: "deferred", phase: 11 }` — the pre-plan `DeferredColumn` shape. `CertificateSlot`'s switch recognizes only the five real `CertificateColumn` branches, so this stale shape fell through to the component's final (`issued`/`flagged`) render path with `certificate.certificateId`/`verificationRef` both `undefined`, producing `href="/api/certificates/undefined/download"` and an empty verification-reference paragraph. That also leaked the `Download` icon's `xmlns="http://www.w3.org/2000/svg"` SVG attribute into an unrelated assertion ("never renders a... bare http(s) URL inside the upcoming-sessions card"), failing it too.
+- **Fix:** Changed the fixture default to `{ kind: "not-complete" }`, which renders via `DeferredSlot` with the exact same "Certificate — arriving in a future update" string the test's existing assertions already expect — no assertion text changed, only the input fixture shape.
+- **Files modified:** `tests/learner-dashboard-page.test.ts`
+- **Verification:** `npx vitest run tests/learner-dashboard-page.test.ts` — 10/10 passing (both previously-failing cases now pass)
+- **Committed in:** `93e72f7`
+
+Also non-functional: a comment-merge artifact (duplicated DD-19 header block) introduced while editing `enrolment-dashboard-service.ts`'s file header for Task 2 was caught on re-read and deduped in commit `05649d5` — documentation-only, no behavior change.
+
+---
+
+**Total deviations:** 1 auto-fixed (Rule 1 — bug), plus 1 non-functional doc fix.
+**Impact on plan:** The Rule 1 fix was necessary for `npm test`'s full-suite green requirement in this plan's own `<verification>` block; it touches only a test fixture, not application code. No scope creep.
 
 ## Issues Encountered
 
@@ -111,11 +128,16 @@ None — no external service configuration required. No packages were installed 
 
 - CRD-03's "downloadable, access-controlled" half and CRD-06's dashboard-visible flagged/revoked state are both closed for the learner-facing surface.
 - Phase 9's `CERTIFICATE_DEFERRED` named gap is fully closed; Phase 12's `TICKETS_DEFERRED` gap is untouched and still renders via `DeferredSlot`, ready for that phase's own plan.
-- Full-repo `npm test` (`vitest run --no-file-parallelism`) was kicked off for final confirmation but did not finish within this session's window (large repo, sequential file execution). All plan-scoped verification is independently green and was run directly: the four plan test files (`tests/certificate-download-route.test.ts`, `tests/certificate-slot.test.ts`, `tests/components/certificate-slot.test.tsx`, `tests/enrolment-dashboard-service.test.ts` — 71+ tests combined), `tests/boundary.test.ts` (closure/boundary invariants, 17 tests), `npx tsc --noEmit` (clean), `npx eslint` on every changed file (clean), and `npx next build` (clean; `/api/certificates/[id]/download` listed as dynamic `ƒ`, not static). Recommend a follow-up full-suite confirmation before the phase's own UAT/verification gate, consistent with how prior plans in this phase have flagged long-running full-suite runs.
+- Full-repo `npm test` (`vitest run --no-file-parallelism`, ~29 min, 2852 tests) ran to completion: 2639 passed, 208 skipped, 5 failed. All 5 failures are pre-existing and environmental, confirmed unrelated to this plan's files:
+  - 4 require infrastructure unavailable in this sandbox: `tests/schema-cohort.test.ts`, `tests/schema-payment-split.test.ts`, `tests/seat-accounting.integration.test.ts`, `tests/submission-service.integration.test.ts` (all `testcontainers`/real-Postgres, "Could not find a working container runtime strategy") and `tests/docker-email-config.test.ts` (shells out to `docker compose`, unavailable here) — the same category of Docker-blocked test STATE.md already tracks for prior phases.
+  - 1 is an unrelated pre-existing flake: `tests/components/rich-text-editor.test.tsx` (Tiptap mount timeout, no certificate/dashboard code in its import path).
+  - 2 additional failures surfaced during this run in `tests/learner-dashboard-page.test.ts` and were fixed (Rule 1, see Deviations) before this summary was finalized; a subsequent single-file rerun confirms 10/10 passing.
+  - None of the 5 remaining failures touch `src/app/api/certificates/**`, `src/components/learner/CertificateSlot.tsx`, or `enrolment-dashboard-service.ts`.
+- Plan-scoped verification, run directly: the four plan test files (`tests/certificate-download-route.test.ts`, `tests/certificate-slot.test.ts`, `tests/components/certificate-slot.test.tsx`, `tests/enrolment-dashboard-service.test.ts` — 71+ tests) plus `tests/learner-dashboard-page.test.ts` (10 tests) and `tests/boundary.test.ts` (17 tests) all green; `npx tsc --noEmit` clean; `npx eslint` clean on every changed file; `npx next build` clean with `/api/certificates/[id]/download` listed as dynamic `ƒ`, not static.
 
 ## Self-Check: PASSED
 
-All 6 created files confirmed present on disk; all 7 referenced commit hashes confirmed present in `git log --oneline --all`.
+All 6 created files confirmed present on disk; all 8 referenced commit hashes (`fea935a`, `825bd88`, `c6be40d`, `18885d0`, `9a56ec5`, `05649d5`, `93e72f7`, plus this summary's own docs commit) confirmed present in `git log --oneline --all`.
 
 ---
 *Phase: 11-certificates-completion-lifecycle*
