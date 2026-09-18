@@ -1,0 +1,334 @@
+/**
+ * Plan 11-11 Task 1: certificate-service.ts's read surface — scoped
+ * list/get, the D-04 pending-issuance evaluator, the learner ownership
+ * predicate, and the UI-SPEC §5 status-tone helper.
+ *
+ * Driven entirely by fake delegates/stores plus a harness-built
+ * `withPermission` (`createTestWithPermission`) — no real Postgres. The
+ * mutation surface (Task 2/3: issue/revoke/reissue) is covered separately by
+ * `tests/certificate-revocation.test.ts`.
+ */
+
+import { describe, expect, it, vi } from "vitest";
+import { createTestWithPermission, grant } from "./support/harness";
+import { AuthorizationError } from "@/server/permissions/with-permission";
+import {
+  createCertificateService,
+  certificateDisplayStatus,
+  type CertificateRow,
+  type CertificateServiceDeps,
+  type PendingIssuanceCompletionRecordRow,
+  type PendingIssuanceStore,
+} from "@/server/services/certificate-service";
+import type { Delegate } from "@/server/services/resource-service";
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+function cert(over: Partial<CertificateRow & { cohortId: string }> = {}): CertificateRow & { cohortId: string } {
+  return {
+    id: over.id ?? "cert-1",
+    enrolmentId: over.enrolmentId ?? "enr-1",
+    userId: over.userId ?? "user-1",
+    scope: over.scope ?? "COURSE",
+    courseId: over.courseId ?? "course-1",
+    programmeId: over.programmeId ?? null,
+    awardTitle: over.awardTitle ?? "Intro to Testing",
+    learnerName: over.learnerName ?? "Jane Learner",
+    issuedAt: over.issuedAt ?? new Date("2026-09-01T00:00:00.000Z"),
+    status: over.status ?? "ACTIVE",
+    storageKey: over.storageKey ?? "certificates/cert-1",
+    verificationRef: over.verificationRef ?? "VERIF-1",
+    revokedAt: over.revokedAt ?? null,
+    revokedById: over.revokedById ?? null,
+    revocationReason: over.revocationReason ?? null,
+    supersedesId: over.supersedesId ?? null,
+    reviewFlaggedAt: over.reviewFlaggedAt ?? null,
+    cohortId: over.cohortId ?? "cohort-1",
+  };
+}
+
+/** A no-op stub for the mutation-only deps this Task-1 test file never exercises. */
+function unusedRunInTransaction(): CertificateServiceDeps["runInTransaction"] {
+  return (async (fn) => fn({} as never)) as CertificateServiceDeps["runInTransaction"];
+}
+
+function harness(opts?: {
+  certs?: Array<CertificateRow & { cohortId: string }>;
+  grants?: ReturnType<typeof grant>[];
+  pendingRecords?: Array<PendingIssuanceCompletionRecordRow & { supersededAt: Date | null }>;
+  activeCertificates?: Array<{ enrolmentId: string; scope: "COURSE" | "PROGRAMME" }>;
+  cohortByEnrolment?: Record<string, string>;
+}) {
+  const certs = opts?.certs ?? [cert()];
+  const cohortByEnrolment = opts?.cohortByEnrolment ?? { "enr-1": "cohort-1" };
+
+  const findManyMock = vi.fn(async ({ where }: { where?: { cohortId?: string } }) =>
+    certs.filter((c) => !where?.cohortId || c.cohortId === where.cohortId),
+  );
+  const findUniqueMock = vi.fn(async ({ where }: { where: { id: string } }) => {
+    const found = certs.find((c) => c.id === where.id);
+    return found ? { ...found } : null;
+  });
+
+  const delegate: Delegate<CertificateRow> = {
+    findMany: findManyMock as unknown as Delegate<CertificateRow>["findMany"],
+    findUnique: findUniqueMock as unknown as Delegate<CertificateRow>["findUnique"],
+    create: vi.fn() as unknown as Delegate<CertificateRow>["create"],
+    update: vi.fn() as unknown as Delegate<CertificateRow>["update"],
+  };
+
+  const pendingRecordsFixture = opts?.pendingRecords ?? [];
+  const activeCertificates = opts?.activeCertificates ?? [];
+
+  const completionRecordFindMany = vi.fn(
+    async ({ where }: { where: { supersededAt: null } }) =>
+      pendingRecordsFixture
+        .filter((r) => r.supersededAt === where.supersededAt)
+        .map((r) => r as unknown as PendingIssuanceCompletionRecordRow),
+  );
+  const certificateFindManyForPending = vi.fn(async () => activeCertificates);
+
+  const pendingStore: PendingIssuanceStore = {
+    completionRecord: { findMany: completionRecordFindMany as unknown as PendingIssuanceStore["completionRecord"]["findMany"] },
+    certificate: { findMany: certificateFindManyForPending as unknown as PendingIssuanceStore["certificate"]["findMany"] },
+  };
+
+  const { withPermission } = createTestWithPermission(opts?.grants ?? [grant("certificates.view", "GLOBAL")]);
+
+  const service = createCertificateService({
+    delegate,
+    withPermission,
+    audit: vi.fn(async () => {}),
+    enrolmentScope: async (enrolmentId: string) => ({ cohortId: cohortByEnrolment[enrolmentId] }),
+    pendingStore,
+    runInTransaction: unusedRunInTransaction(),
+    issuanceDeps: {} as never,
+    writeEvent: (async () => {}) as never,
+  });
+
+  return { service, findManyMock, findUniqueMock, completionRecordFindMany };
+}
+
+// ---------------------------------------------------------------------------
+// list/get scoping
+// ---------------------------------------------------------------------------
+
+describe("certificateService.list/get scoping", () => {
+  it("returns only certificates within the caller's scope — a sibling cohort's certificate is absent", async () => {
+    const h = harness({
+      certs: [
+        cert({ id: "cert-1", cohortId: "cohort-1" }),
+        cert({ id: "cert-2", cohortId: "cohort-2" }),
+      ],
+      grants: [grant("certificates.view", "COHORT", "cohort-1")],
+    });
+
+    const rows = await h.service.certificateService.list({
+      where: { cohortId: "cohort-1" },
+      scope: { cohortId: "cohort-1" },
+    });
+
+    expect(rows.map((r) => r.id)).toEqual(["cert-1"]);
+    expect(rows.some((r) => r.id === "cert-2")).toBe(false);
+  });
+
+  it("denies list for a caller without certificates.view", async () => {
+    const h = harness({ grants: [] });
+    await expect(h.service.certificateService.list({})).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("denies get for a caller without certificates.view", async () => {
+    const h = harness({ grants: [] });
+    await expect(h.service.certificateService.get("cert-1")).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("does not export a generic create/update/archive", () => {
+    // Structural proof, not just the file-level grep gate: the returned
+    // object literal is exactly {list, get}.
+    const h = harness();
+    expect(Object.keys(h.service.certificateService).sort()).toEqual(["get", "list"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listPendingIssuance (D-04)
+// ---------------------------------------------------------------------------
+
+function pendingRecord(
+  over: Partial<PendingIssuanceCompletionRecordRow & { supersededAt: Date | null }> = {},
+): PendingIssuanceCompletionRecordRow & { supersededAt: Date | null } {
+  return {
+    enrolmentId: over.enrolmentId ?? "enr-1",
+    scope: over.scope ?? "COURSE",
+    completedAt: over.completedAt ?? new Date("2026-09-01T00:00:00.000Z"),
+    supersededAt: over.supersededAt ?? null,
+    enrolment: over.enrolment ?? {
+      userId: "user-1",
+      user: { name: "Jane Learner" },
+      cohort: {
+        courseId: "course-1",
+        programmeId: null,
+        course: {
+          id: "course-1",
+          title: "Intro to Testing",
+          certificateEnabled: true,
+          certificateIssuanceMode: "MANUAL",
+        },
+        programme: null,
+      },
+    },
+  };
+}
+
+describe("listPendingIssuance", () => {
+  it("returns an eligible enrolment: unsuperseded record, MANUAL mode, certificateEnabled, no existing certificate", async () => {
+    const h = harness({ pendingRecords: [pendingRecord()] });
+    const rows = await h.service.listPendingIssuance();
+    expect(rows).toEqual([
+      {
+        enrolmentId: "enr-1",
+        learnerName: "Jane Learner",
+        awardTitle: "Intro to Testing",
+        awardType: "Course",
+        eligibleSince: new Date("2026-09-01T00:00:00.000Z"),
+        scope: "COURSE",
+      },
+    ]);
+  });
+
+  it("excludes an enrolment once a certificate already exists for it", async () => {
+    const h = harness({
+      pendingRecords: [pendingRecord()],
+      activeCertificates: [{ enrolmentId: "enr-1", scope: "COURSE" }],
+    });
+    const rows = await h.service.listPendingIssuance();
+    expect(rows).toEqual([]);
+  });
+
+  it("excludes an AUTOMATIC-mode enrolment", async () => {
+    const h = harness({
+      pendingRecords: [
+        pendingRecord({
+          enrolment: {
+            userId: "user-1",
+            user: { name: "Jane Learner" },
+            cohort: {
+              courseId: "course-1",
+              programmeId: null,
+              course: {
+                id: "course-1",
+                title: "Intro to Testing",
+                certificateEnabled: true,
+                certificateIssuanceMode: "AUTOMATIC",
+              },
+              programme: null,
+            },
+          },
+        }),
+      ],
+    });
+    const rows = await h.service.listPendingIssuance();
+    expect(rows).toEqual([]);
+  });
+
+  it("excludes an enrolment whose CompletionRecord has been superseded", async () => {
+    const h = harness({
+      pendingRecords: [pendingRecord({ supersededAt: new Date("2026-09-05T00:00:00.000Z") })],
+    });
+    const rows = await h.service.listPendingIssuance();
+    expect(rows).toEqual([]);
+    // The exclusion happens via the query's where clause, not in-memory —
+    // prove the fake was actually asked for supersededAt: null.
+    expect(h.completionRecordFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ supersededAt: null }) }),
+    );
+  });
+
+  it("yields exactly one row for a Programme cohort — the PROGRAMME-scope entry, never one per member course", async () => {
+    const programmeCohort = {
+      courseId: null,
+      programmeId: "programme-1",
+      course: null,
+      programme: {
+        id: "programme-1",
+        title: "Full Stack Programme",
+        certificateEnabled: true,
+        certificateIssuanceMode: "MANUAL" as const,
+      },
+    };
+    const h = harness({
+      pendingRecords: [
+        pendingRecord({
+          scope: "COURSE",
+          enrolment: { userId: "user-1", user: { name: "Jane Learner" }, cohort: programmeCohort },
+        }),
+        pendingRecord({
+          scope: "PROGRAMME",
+          enrolment: { userId: "user-1", user: { name: "Jane Learner" }, cohort: programmeCohort },
+        }),
+      ],
+    });
+    const rows = await h.service.listPendingIssuance();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ scope: "PROGRAMME", awardType: "Programme", awardTitle: "Full Stack Programme" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getOwnCertificateForDownload
+// ---------------------------------------------------------------------------
+
+describe("getOwnCertificateForDownload", () => {
+  it("returns the certificate for its owning actor", async () => {
+    const h = harness({ certs: [cert({ id: "cert-1", userId: "user-1" })] });
+    const result = await h.service.getOwnCertificateForDownload({ userId: "user-1" }, "cert-1");
+    expect(result?.id).toBe("cert-1");
+  });
+
+  it("returns null for a non-owning actor, including staff without certificates.view", async () => {
+    const h = harness({ certs: [cert({ id: "cert-1", userId: "user-1" })] });
+    expect(await h.service.getOwnCertificateForDownload({ userId: "user-2" }, "cert-1")).toBeNull();
+  });
+
+  it("returns null for an unknown certificate id", async () => {
+    const h = harness({ certs: [cert({ id: "cert-1", userId: "user-1" })] });
+    expect(await h.service.getOwnCertificateForDownload({ userId: "user-1" }, "does-not-exist")).toBeNull();
+  });
+
+  it("returns null for a REVOKED certificate", async () => {
+    const h = harness({ certs: [cert({ id: "cert-1", userId: "user-1", status: "REVOKED" })] });
+    expect(await h.service.getOwnCertificateForDownload({ userId: "user-1" }, "cert-1")).toBeNull();
+  });
+
+  it("returns the certificate for a flagged-but-ACTIVE one", async () => {
+    const h = harness({
+      certs: [cert({ id: "cert-1", userId: "user-1", status: "ACTIVE", reviewFlaggedAt: new Date() })],
+    });
+    const result = await h.service.getOwnCertificateForDownload({ userId: "user-1" }, "cert-1");
+    expect(result?.id).toBe("cert-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// certificateDisplayStatus (UI-SPEC §5)
+// ---------------------------------------------------------------------------
+
+describe("certificateDisplayStatus", () => {
+  it("REVOKED takes precedence over everything", () => {
+    expect(certificateDisplayStatus({ status: "REVOKED", reviewFlaggedAt: new Date() })).toBe("revoked");
+  });
+
+  it("a flagged-but-ACTIVE certificate reads as flagged, never active", () => {
+    expect(certificateDisplayStatus({ status: "ACTIVE", reviewFlaggedAt: new Date() })).toBe("flagged");
+  });
+
+  it("SUPERSEDED reads as superseded when unflagged", () => {
+    expect(certificateDisplayStatus({ status: "SUPERSEDED", reviewFlaggedAt: null })).toBe("superseded");
+  });
+
+  it("an unflagged ACTIVE certificate reads as active", () => {
+    expect(certificateDisplayStatus({ status: "ACTIVE", reviewFlaggedAt: null })).toBe("active");
+  });
+});
