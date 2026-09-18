@@ -10,6 +10,8 @@ import type {
   CertificateTemplateLayoutV1,
 } from "@/server/services/certificate-template-layout";
 import { createTemplateAction, saveTemplateLayoutAction } from "./template-actions";
+import { TemplateCanvas, pageDimensions, PENDING_UPLOAD_ASSET_KEY } from "./TemplateCanvas";
+import { ElementInspector } from "./ElementInspector";
 
 /**
  * The certificate-template editor's chrome (UI-SPEC 7.3.2-7.3.5, D-09).
@@ -17,9 +19,12 @@ import { createTemplateAction, saveTemplateLayoutAction } from "./template-actio
  * Owns the whole editor's client state — name, page size, orientation,
  * elements, which one is selected, and whether anything is unsaved. The
  * canvas's INTERIOR (drag/resize/keyboard-nudge, the property inspector's
- * real editable fields, dynamic-field sample-value rendering) is plan
- * 11-12's job — this plan proves the frame, the click-to-add palette, and
- * the one-write save round trip. This file imports no ordered-list drag
+ * real editable fields, dynamic-field sample-value rendering, image upload)
+ * lives in `TemplateCanvas.tsx` and `ElementInspector.tsx` (plan 11-12) —
+ * this file stays the controller: it owns the one `elements` array and
+ * passes it down, and both children write back through the SAME
+ * `updateSelectedElement`/`onChange` paths so a position edit from either
+ * surface can never diverge. This file imports no ordered-list drag
  * library: free x/y canvas positioning is a different interaction class
  * from the catalogue board's reordering (UI-SPEC 0.4).
  *
@@ -47,24 +52,6 @@ type Props = {
   onCreate?: (input: { name: string; layout: unknown }) => Promise<CreateResult>;
 };
 
-// Point dimensions for the two supported page sizes, in portrait
-// orientation — mirrors `certificate-pdf-renderer.ts`'s own constants so the
-// preview's proportions match the rendered PDF. Duplicated rather than
-// imported: that module pulls in `pdf-lib`, which has no place in a client
-// bundle.
-const PAGE_SIZES_PT: Record<CertificateTemplateLayoutV1["pageSize"], { w: number; h: number }> = {
-  A4: { w: 595, h: 842 },
-  LETTER: { w: 612, h: 792 },
-};
-
-function pageDimensions(
-  pageSize: CertificateTemplateLayoutV1["pageSize"],
-  orientation: CertificateTemplateLayoutV1["orientation"],
-): { w: number; h: number } {
-  const portrait = PAGE_SIZES_PT[pageSize];
-  return orientation === "landscape" ? { w: portrait.h, h: portrait.w } : portrait;
-}
-
 // A new element's default color/style is certificate-CONTENT data (a staff
 // author's starting point, immediately editable in 11-12's color picker),
 // not app chrome — UI-SPEC 5's zero-raw-hex rule scopes itself to chrome and
@@ -91,10 +78,10 @@ function defaultElement(kind: "text" | "image" | "border", w: number, h: number)
   if (kind === "image") {
     return {
       kind: "image",
-      // Placeholder pending 11-12's real upload/asset picker — an Image
+      // Placeholder until Task 3's real upload flow replaces it — an Image
       // element added here is a valid, saveable element, but this key does
-      // not resolve to a real stored object until staff replace it there.
-      assetKey: "pending-upload",
+      // not resolve to a real stored object until staff attach one.
+      assetKey: PENDING_UPLOAD_ASSET_KEY,
       x: Math.max(0, Math.round(w / 2 - 75)),
       y: Math.max(0, Math.round(h / 2 - 50)),
       width: 150,
@@ -129,6 +116,11 @@ export function TemplateEditorShell({
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  // Transient client-only preview URLs (`URL.createObjectURL`) keyed by the
+  // real `assetKey` a just-completed upload returned — never part of the
+  // persisted layout, purely so the canvas can show what was just uploaded
+  // without a template-asset download endpoint.
+  const [assetPreviewUrls, setAssetPreviewUrls] = useState<Record<string, string>>({});
 
   const readOnly = initial.readOnly;
   const { w, h } = pageDimensions(pageSize, orientation);
@@ -147,8 +139,35 @@ export function TemplateEditorShell({
     markDirty();
   }
 
+  /**
+   * The inspector's write path — the SAME `elements` state the canvas's
+   * drag/nudge writes to, so a position edit from either surface can never
+   * diverge. Takes a whole REPLACEMENT element, not a partial patch: the
+   * inspector needs to be able to genuinely remove a key (switching a text
+   * element off `literal` must delete that key, not set it to `undefined` —
+   * a spread-merged patch would leave the key present with an `undefined`
+   * value, which `parseCertificateTemplateLayout`'s `"literal" in record`
+   * check would still see and reject).
+   */
+  function updateSelectedElement(nextElement: CertificateElementV1) {
+    if (selectedIndex === null) return;
+    setElements((prev) => prev.map((element, i) => (i === selectedIndex ? nextElement : element)));
+    markDirty();
+  }
+
   function handleSave() {
     setSaveError(null);
+    // An image element still carrying the placeholder sentinel has no real
+    // asset attached — `parseCertificateTemplateLayout` would only reject an
+    // EMPTY `assetKey`, not this non-empty placeholder, so the save action
+    // would otherwise fail opaquely instead of with an actionable message.
+    const unattachedImage = elements.some(
+      (element) => element.kind === "image" && element.assetKey === PENDING_UPLOAD_ASSET_KEY,
+    );
+    if (unattachedImage) {
+      setSaveError("Attach an image to every image element before saving.");
+      return;
+    }
     const layout: CertificateTemplateLayoutV1 = { schema: 1, pageSize, orientation, elements };
     transition(async () => {
       if (initial.id) {
@@ -192,13 +211,17 @@ export function TemplateEditorShell({
   }
 
   function propertiesPanel() {
-    // Plan 11-12 fills this panel's real editable fields per the selected
-    // element. This plan renders only the "nothing to edit yet" state,
-    // regardless of what is selected — the interior does not exist yet.
     return (
       <div className={PANEL}>
         <h2 className="text-[16px] leading-[1.3] font-semibold text-foreground">Properties</h2>
-        <p className="text-sm text-muted-foreground">Select an element to edit its properties.</p>
+        <ElementInspector
+          element={selectedIndex !== null ? elements[selectedIndex] : null}
+          onChange={updateSelectedElement}
+          templateId={initial.id ?? "draft"}
+          onAssetUploaded={(assetKey, previewUrl) => {
+            setAssetPreviewUrls((prev) => ({ ...prev, [assetKey]: previewUrl }));
+          }}
+        />
       </div>
     );
   }
@@ -336,27 +359,19 @@ export function TemplateEditorShell({
         )}
 
         <div className="flex flex-1 flex-col items-center gap-2 rounded-xl border border-border bg-surface-2 p-6">
-          <div
-            className="relative w-full max-w-2xl border border-border bg-surface"
-            style={{ aspectRatio: `${w} / ${h}` }}
-          >
-            {elements.length === 0 ? (
-              <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                Add an element to begin designing this certificate.
-              </p>
-            ) : (
-              elements.map((element, index) => (
-                <ElementPreview
-                  key={index}
-                  element={element}
-                  pageWidth={w}
-                  pageHeight={h}
-                  selected={selectedIndex === index}
-                  onSelect={readOnly ? undefined : () => setSelectedIndex(index)}
-                />
-              ))
-            )}
-          </div>
+          <TemplateCanvas
+            elements={elements}
+            selectedIndex={selectedIndex}
+            pageSize={pageSize}
+            orientation={orientation}
+            readOnly={readOnly}
+            onChange={(next) => {
+              setElements(next);
+              markDirty();
+            }}
+            onSelect={setSelectedIndex}
+            assetPreviewUrls={assetPreviewUrls}
+          />
         </div>
 
         <details className="rounded-xl border border-border shadow-xs lg:hidden" open>
@@ -384,67 +399,5 @@ export function TemplateEditorShell({
         onCancel={() => setPendingHref(null)}
       />
     </div>
-  );
-}
-
-function ElementPreview({
-  element,
-  pageWidth,
-  pageHeight,
-  selected,
-  onSelect,
-}: {
-  element: CertificateElementV1;
-  pageWidth: number;
-  pageHeight: number;
-  selected: boolean;
-  onSelect?: () => void;
-}) {
-  const ring = selected ? "outline outline-2 outline-accent" : "";
-
-  if (element.kind === "border") {
-    return (
-      <div
-        aria-hidden
-        className={`pointer-events-none absolute inset-3 ${ring}`}
-        style={{
-          borderColor: element.color,
-          borderStyle: element.style === "double" ? "double" : "solid",
-          borderWidth: element.style === "double" ? Math.max(3, element.widthPt) : element.widthPt,
-        }}
-      />
-    );
-  }
-
-  const style = {
-    position: "absolute" as const,
-    left: `${(element.x / pageWidth) * 100}%`,
-    top: `${(element.y / pageHeight) * 100}%`,
-    width: `${(element.width / pageWidth) * 100}%`,
-    height: `${(element.height / pageHeight) * 100}%`,
-  };
-
-  if (element.kind === "image") {
-    return (
-      <button
-        type="button"
-        onClick={onSelect}
-        style={style}
-        className={`flex items-center justify-center border border-dashed border-border bg-surface-2 text-[10px] text-muted-foreground ${ring}`}
-      >
-        Image
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      style={{ ...style, color: element.color, textAlign: element.align }}
-      className={`overflow-hidden text-left text-[10px] leading-tight ${ring}`}
-    >
-      {element.field === "literal" ? element.literal || "Text" : `Sample ${element.field}`}
-    </button>
   );
 }
