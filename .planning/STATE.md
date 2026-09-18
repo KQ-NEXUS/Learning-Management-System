@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-09-18T06:37:43.694Z"
-last_activity: 2026-09-18 -- Phase 11 execution started
+stopped_at: Completed 11-05-PLAN.md
+last_updated: "2026-09-18T07:11:56.567Z"
+last_activity: 2026-09-18
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 152
-  completed_plans: 139
-  percent: 56
+  completed_plans: 141
+  percent: 93
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 1 of 16
+Plan: 5 of 16
 Status: Executing Phase 11
-Last activity: 2026-09-18 -- Phase 11 execution started
+Last activity: 2026-09-18 -- Completed 11-05-PLAN.md
 
-Progress: Phase 11 2/16 plans complete; milestone 138/152 planned plans complete; 10/16 phases complete.
+Progress: [█████████░] 93% -- Phase 11 5/16 plans complete; milestone 141/152 planned plans complete; 9/16 phases complete.
 
 ## Performance Metrics
 
@@ -87,6 +87,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 06 P09 | ~45min | 3 tasks | 7 files |
 | Phase 11 P01 | 1h 12m | 3 tasks | 5 files |
 | Phase 11 P02 | 37min | 3 tasks | 4 files |
+| Phase 11 P05 | 25min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -148,6 +149,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: Only COMPLETED may reopen to ACTIVE; WITHDRAWN, TRANSFERRED, and CANCELLED remain closed.
 - [Phase 11]: pdf-lib 1.17.1 and @pdf-lib/fontkit 1.1.1 are the human-vetted, exact-pinned PDF construction stack; the server-side probe proves positioned text, shapes, PNG, and custom-font rendering.
 - [Phase 11]: Certificate-template authoring uses a dedicated certificates.manage permission; Plan 11-05 must add it to the closed catalogue and default-role seed.
+- [Phase ?]: [Phase 11 P05]: certificates.manage is the template-authoring permission (new-manage, human-recorded 11-DECISIONS.md); Administrator is the only default role that already held certificates.issue, so it is the only role granted certificates.manage, inherited automatically via its existing full-PERMISSIONS spread
+- [Phase ?]: [Phase 11 P05]: certificate-template-service.ts's update() only re-validates/re-stamps layout when the caller supplies a layout key -- a rename-only edit leaves the stored layout untouched rather than overwriting it with EMPTY_LAYOUT_V1
+- [Phase ?]: [Phase 11 P05]: Introduced certificate-default-template-layout.ts (plan-unlisted, Rule 3) as a pure shared fixture so seed.ts and its test never keep two independently-drifting copies of the seeded default template's layout -- seed.ts cannot be safely imported into a test since its bottom-of-file main() runs against a real database
 
 ### Pending Todos
 
@@ -167,6 +171,7 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 5]: `05-REVIEW.md` (2026-09-08) found 3 CRITICAL correctness bugs — CR-01 (attendance markable on cancelled sessions/off-roster enrolments), CR-02 (cohort publish can use stale readiness under a race), CR-03 (enrolment transfer can race past the same-offer invariant). Candidate fixes + regression tests exist uncommitted in the working tree as of 2026-09-09 (attendance-service.ts, cohort-service.ts, enrolment-service.ts + tests) — all pass, tsc clean, no regressions — but await explicit user go-ahead to commit (never auto-commit for this project).
 - [Phase 04.1]: Real video captions/WebVTT support (NFR-09 accessible media alternative) remains unresolved — no schema/upload contract for it exists. `04.1-GAP-COVERAGE.md` documents this as an explicitly open scope decision, not silently closeable by a styling pass. Accepted as a deferred gap by user decision on 2026-09-09 rather than blocking Phase 6; revisit before NFR-09 launch-gate verification (Phase 15).
 - [Tooling] STATE.md's Current Position section has no 'Current Plan'/'Total Plans in Phase' labeled lines, so 'gsd_run query state.advance-plan' errors with a parse failure (pre-existing gap, not caused by Phase 6 Plan 2's changes; state.sync does not add these fields either) — phase-level position tracking still works via progress.completed_plans in frontmatter.
+- [Tooling, Phase 11 P05]: `state.advance-plan` incremented the unlabelled 'Plan: N of 16' line from a stale baseline of 1 (last written after 11-01) rather than the actual 5 plans complete in Phase 11 (11-01..11-05 all have SUMMARY.md on disk); the frontmatter's `percent` field was also stuck at 56 (a stale phase-count coincidence, 9/16≈56%) until `state.update-progress` recalculated it to 93 (141/152 plans) from disk. Both were hand-corrected this session; same underlying gap as the entry above — `advance-plan` trusts the last-written counter instead of counting SUMMARY.md files itself.
 - [Phase 6/06-03]: tests/checkout-webhook.integration.test.ts (6 cases, real-Postgres settlement proof) could not run in this execution sandbox -- Docker unavailable, same gate 06-01/06-02 hit. Needs a Docker-enabled environment to actually execute before REG-03/REG-05/PAY-10's real-Postgres proof is complete.
 - [Phase 6/06-04]: tests/checkout-intent.integration.test.ts (4 cases, real-Postgres register->verify->sign-in->order round trip) could not run in this execution sandbox -- Docker unavailable, same gate 06-01/06-02/06-03 hit. Needs a Docker-enabled environment to actually execute before REG-02's real-Postgres proof is complete.
 - [Phase 6/06-07]: tests/checkout-hold-race.integration.test.ts and tests/checkout-webhook.integration.test.ts were updated to compile against 06-07's extended initiateStripePayment(actor, orderId, consent) signature and new user dep -- both remain Docker-BLOCKED in this sandbox (same gate as above), so the D-13-aware fixture change and the transactional PolicyAcceptance write were proven only at the unit level (tests/checkout-service.test.ts), not against a real Postgres transaction. Needs a Docker-enabled environment to confirm.
@@ -184,6 +189,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-16T17:11:04.272Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-09-18T07:11:56.540Z
+Stopped at: Completed 11-05-PLAN.md
 Resume file: None
