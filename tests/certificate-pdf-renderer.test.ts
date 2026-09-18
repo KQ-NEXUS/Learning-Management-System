@@ -9,6 +9,7 @@ import {
 } from "@/server/services/certificate-pdf-renderer";
 import {
   EMPTY_LAYOUT_V1,
+  parseCertificateTemplateLayout,
   type CertificateTemplateLayoutV1,
 } from "@/server/services/certificate-template-layout";
 
@@ -115,6 +116,89 @@ function textOnlyLayout(
     ],
   };
 }
+
+// A realistic full-coverage template: landscape A4, a border, one image,
+// all four dynamic-field text elements, and one literal text element —
+// every element kind and every dynamic field the system supports, in one
+// document. Built by passing a raw JSON object through
+// `parseCertificateTemplateLayout` so a future layout-schema change that
+// breaks this fixture fails here rather than at issuance time. Exported so
+// plan 11-16's integration tests reuse this exact layout rather than
+// inventing a second one that drifts.
+const rawGoldenLayout = {
+  schema: 1,
+  pageSize: "A4",
+  orientation: "landscape",
+  elements: [
+    { kind: "border", style: "double", color: "#123456", widthPt: 2 },
+    {
+      kind: "image",
+      assetKey: "certificate-template-assets/tpl/logo",
+      x: 40,
+      y: 460,
+      width: 80,
+      height: 80,
+    },
+    {
+      kind: "text",
+      field: "literal",
+      literal: "Certificate of Completion",
+      x: 140,
+      y: 500,
+      width: 500,
+      height: 40,
+      fontSize: 28,
+      color: "#123456",
+      align: "left",
+    },
+    {
+      kind: "text",
+      field: "learnerName",
+      x: 140,
+      y: 440,
+      width: 500,
+      height: 32,
+      fontSize: 22,
+      color: "#000000",
+      align: "left",
+    },
+    {
+      kind: "text",
+      field: "awardTitle",
+      x: 140,
+      y: 400,
+      width: 500,
+      height: 28,
+      fontSize: 18,
+      color: "#000000",
+      align: "left",
+    },
+    {
+      kind: "text",
+      field: "issuedAt",
+      x: 140,
+      y: 360,
+      width: 300,
+      height: 24,
+      fontSize: 14,
+      color: "#000000",
+      align: "left",
+    },
+    {
+      kind: "text",
+      field: "verificationRef",
+      x: 140,
+      y: 330,
+      width: 300,
+      height: 24,
+      fontSize: 12,
+      color: "#000000",
+      align: "left",
+    },
+  ],
+};
+
+export const goldenCertificateLayoutFixture: CertificateTemplateLayoutV1 = parseCertificateTemplateLayout(rawGoldenLayout);
 
 describe("renderCertificatePdf", () => {
   it("substitutes learnerName with the real value, not the field token", async () => {
@@ -240,5 +324,30 @@ describe("renderCertificatePdf", () => {
     await expect(
       renderCertificatePdf({ layout, fields: FIELDS, resolveAsset: resolveKnownAsset }),
     ).rejects.toThrow();
+  });
+});
+
+describe("renderCertificatePdf — golden-layout regression fixture", () => {
+  it("renders every element kind and every dynamic field with real values, and leaks no field token", async () => {
+    const bytes = await renderCertificatePdf({
+      layout: goldenCertificateLayoutFixture,
+      fields: FIELDS,
+      resolveAsset: resolveKnownAsset,
+    });
+    const text = extractPdfText(bytes);
+
+    expect(text).toContain(FIELDS.learnerName);
+    expect(text).toContain(FIELDS.awardTitle);
+    expect(text).toContain(formatCertificateIssuedDate(FIELDS.issuedAt));
+    expect(text).toContain(FIELDS.verificationRef);
+    expect(text).toContain("Certificate of Completion");
+
+    expect(text).not.toContain("learnerName");
+    expect(text).not.toContain("awardTitle");
+    expect(text).not.toContain("issuedAt");
+    expect(text).not.toContain("verificationRef");
+
+    expect(bytes.length).toBeGreaterThan(1024);
+    expect(bytes.length).toBeLessThan(5 * 1024 * 1024);
   });
 });
