@@ -26,8 +26,9 @@
  * with in-memory fakes only, no Prisma. The deferred inhabitant is still
  * reachable for a card with no pinned course structure (mirrors Progress's
  * own `"unpinned"` branch — no computable obligation set is a named gap, not
- * a fake empty list). `tickets` and `certificate` are UNTOUCHED — Phase 11
- * and Phase 12's own gaps to close.
+ * a fake empty list). `tickets` remains untouched — Phase 12's own gap to
+ * close. `certificate` was ALSO untouched through Plan 10-15 but is no
+ * longer a named gap at all — see the Plan 11-13 header block below.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * DD-19 — THE "UPCOMING SESSIONS" CARD NEVER READS THE PRIVATE JOIN-LINK
