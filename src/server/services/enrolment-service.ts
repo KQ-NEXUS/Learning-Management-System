@@ -12,8 +12,9 @@
  * against an explicit table, capture the mandatory reason, write the audit
  * row, emit exactly one domain event for the Phase-13 email, and keep
  * `seatsTaken` exact. It never creates a duplicate active enrolment — the
- * `enrolment_one_active_per_learner_cohort` partial unique index is the guard
- * and `AlreadyEnrolledError` is the translation; there is deliberately no
+ * `enrolment_one_live_per_learner_cohort` partial unique index (ACTIVE and
+ * COMPLETED, so a learner with a COMPLETED enrolment cannot be re-enrolled in
+ * the same cohort) is the guard and `AlreadyEnrolledError` is the translation; there is deliberately no
  * application-level pre-check (which would itself be a race).
  *
  * No refund and no credit is ever produced here by a withdrawal, a
