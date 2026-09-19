@@ -29,6 +29,14 @@ export type CertificateSettingsFieldsProps = {
   templates: SelectableTemplate[];
   values?: CertificateSettingsValues;
   errors?: FieldError[];
+  /**
+   * The stored template when it is no longer selectable (archived). Rendered
+   * as a disabled, selected entry so the picker does not silently show "Use
+   * the default template" and reset the choice on save. A disabled selected
+   * option is left out of FormData, so the stored value stays unchanged
+   * unless staff pick something else (T-11-85).
+   */
+  archivedTemplate?: { id: string; name: string };
 };
 
 const ISSUANCE_OPTIONS = [
@@ -59,6 +67,7 @@ export function CertificateSettingsFields({
   templates,
   values = {},
   errors = [],
+  archivedTemplate,
 }: CertificateSettingsFieldsProps) {
   const errorFor = (name: string) => errors.find((error) => error.name === name)?.message;
   const issuanceMode = values.certificateIssuanceMode ?? "MANUAL";
@@ -121,6 +130,11 @@ export function CertificateSettingsFields({
             className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground disabled:bg-surface-2 disabled:text-muted-foreground aria-[invalid=true]:border-danger"
           >
             <option value="">Use the default template</option>
+            {archivedTemplate && (
+              <option value={archivedTemplate.id} disabled>
+                {archivedTemplate.name} (archived)
+              </option>
+            )}
             {templates.map((template) => (
               <option key={template.id} value={template.id}>
                 {template.name}

@@ -63,9 +63,10 @@ export default async function CourseDetailPage({
 
   const firstLessonId = tree.modules.flatMap((m) => m.lessons)[0]?.id ?? null;
 
-  const [canPublishContent, canManageListing, affectedCohorts] = await Promise.all([
+  const [canPublishContent, canManageListing, canEditCourse, affectedCohorts] = await Promise.all([
     can("courses.publish", { courseIds: [id] }),
     can("programmes.publish", { courseIds: [id] }),
+    can("courses.edit", { courseIds: [id] }),
     blockingCohorts({ courseId: id }),
   ]);
 
@@ -145,6 +146,14 @@ export default async function CourseDetailPage({
             unpublishedChanges={changeSummary.changes}
             affectedCohorts={affectedCohorts}
           />
+          {canEditCourse && (
+            <Link
+              href={`/staff/courses/${id}/edit`}
+              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+            >
+              Edit course
+            </Link>
+          )}
           {/* D-13 preview surfaces (plan 04-14) — staff-gated, no shareable link. */}
           <Link
             href={`/staff/courses/${id}/preview`}
