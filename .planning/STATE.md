@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
 Plan: 34 of 34 executed (second gap pass complete: 11-25..11-34). UAT gaps all resolved; full suite 3189 passed. Phase 11 NOT marked complete: run /gsd:verify-work 11 / verifier first
 Status: All plans executed; awaiting phase verification (gsd-verifier) before marking Phase 11 complete
-Last activity: 2026-09-19
+Last activity: 2026-09-19 - Completed quick task 260919-rxu: Phase 11 mini-pass (WR-06, WR-05, WR-03)
 
 Progress: [██████████] 99%
 
@@ -240,6 +240,12 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 11/11-32]: Real-infrastructure proof executed (Testcontainers Postgres + live MinIO at localhost:9002): tests/certificate-unicode-file.integration.test.ts (12/12) and tests/certificate-lifecycle-guards.integration.test.ts (12/12), plus enrolment-live-index (10), certificate-concurrency (2) and certificate-download (5), all green; no source change. A temporary neutralisation of reissue's supersede-all-REVOKED step failed only the legacy two-REVOKED test, then was restored. Evidence PDFs for the 11-33 visual check (untracked, synthetic names): .planning/phases/11-certificates-completion-lifecycle/11-32-evidence/{yoruba,polish,cjk}-certificate.pdf. Phase 11 stays In Progress until 11-33.
 
 - [Phase 11 second gap pass, plan 11-33 visual check]: The human visual check caught a real defect the automated tests missed: the 11-29 renderer embedded a SUBSET of the certificate font, and fontkit's subsetter dropped glyph outlines, so most letters drew blank in Chrome and pdf.js while ToUnicode text extraction still passed. Fixed by embedding the whole font (about 316 KB per certificate) with outline-asserting tests (commit after 44a87d2, see 11-29-SUMMARY.md). Regenerated Yoruba/Polish/CJK evidence PDFs look correct. Follow-up: trim the font to Latin-only to shrink the files. Still open: plan 11-33 (human sign-off on the PDFs, and applying or deferring the CR-06 migration on Neon).
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260919-rxu | Phase 11 mini-pass: WR-06 certificate copy, WR-05 download predicate, WR-03 asset prefix | 2026-09-19 | 2832cf2 | [260919-rxu-phase-11-mini-pass-wr-06-certificate-cop](./quick/260919-rxu-phase-11-mini-pass-wr-06-certificate-cop/) |
 
 ## Deferred Items
 

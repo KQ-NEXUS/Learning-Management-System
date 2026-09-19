@@ -173,3 +173,7 @@ No blocking gaps. The phase goal is achieved in code: issuance is gated, idempot
 
 _Verified: 2026-09-19_
 _Verifier: Claude (gsd-verifier)_
+
+## Human decisions and follow-up (recorded 2026-09-19 by the orchestrator, after this report)
+
+The five human-verification items were decided by the user: **fix** WR-06 (with the two stale-copy lines), WR-05 and WR-03 — done in quick task 260919-rxu (commits 619e9f4, 4c6ee07, 704f79e; each RED-then-GREEN, real Postgres/MinIO integration case for WR-05); **accept** WR-02; **keep CR-05 deferred**. See 11-HUMAN-UAT.md (5/5 resolved). This verifier-written report is otherwise unchanged; its frontmatter status is left as written by the verifier.
