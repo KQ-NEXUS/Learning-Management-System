@@ -24,7 +24,9 @@
  *      `completion-service.ts` creates an internal COURSE-scope
  *      `CompletionRecord` for every member course. Only enrolments that can
  *      hold a certificate (`CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES`: ACTIVE
- *      or COMPLETED) are listed — a withdrawn or unpaid learner never is.
+ *      or COMPLETED) are listed — a withdrawn or unpaid learner never is. An
+ *      enrolment/scope holding a REVOKED certificate is never listed either:
+ *      staff replace a revoked credential through Reissue (CR-04, CRD-05).
  *
  *   3. `getOwnCertificateForDownload` — the learner-side ownership predicate
  *      the download route needs, mirroring `lesson-resource-service.ts`'s
@@ -326,11 +328,16 @@ export function createCertificateService(deps: CertificateServiceDeps) {
       },
     });
 
-    const activeCertificates = await deps.pendingStore.certificate.findMany({
-      where: { status: "ACTIVE" },
+    // CR-04 — an enrolment/scope that holds a live (ACTIVE) OR revoked
+    // certificate is never queue-eligible: staff replace a revoked credential
+    // through Reissue, not the queue. SUPERSEDED is deliberately absent — a
+    // superseded row means a reissue happened and its replacement is ACTIVE or
+    // REVOKED, which is what keeps the key in this set.
+    const liveOrRevokedCertificates = await deps.pendingStore.certificate.findMany({
+      where: { status: { in: ["ACTIVE", "REVOKED"] } },
     });
     const alreadyIssued = new Set(
-      activeCertificates.map((c) => `${c.enrolmentId}:${c.scope}`),
+      liveOrRevokedCertificates.map((c) => `${c.enrolmentId}:${c.scope}`),
     );
 
     const rows: PendingIssuanceRow[] = [];
@@ -630,6 +637,18 @@ export function createCertificateService(deps: CertificateServiceDeps) {
         data: { status: "SUPERSEDED" },
       });
       if (supersede.count !== 1) throw new CertificateChangedError();
+
+      // STEP 1b (CR-04, T-11-140) — also supersede EVERY other REVOKED row for
+      // this enrolment and scope. Issuance now refuses (`revoked-blocked`) when
+      // ANY REVOKED row exists, and legacy data from the old CR-04 bug can hold
+      // two (revoke A, automation issues B, revoke B); superseding only the
+      // reissued row would leave Reissue dead-ended forever. Zero rows is the
+      // normal case, so no count assertion. ACTIVE rows are deliberately not
+      // touched: an ACTIVE row still yields `already-issued` and rolls back.
+      await tx.certificate.updateMany({
+        where: { enrolmentId: before.enrolmentId, scope: before.scope, status: "REVOKED" },
+        data: { status: "SUPERSEDED" },
+      });
 
       // STEP 2 — SECOND: issue the replacement through the single
       // issuance implementation — fresh verificationRef, freshly rendered

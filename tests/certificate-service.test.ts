@@ -317,6 +317,30 @@ describe("listPendingIssuance", () => {
     },
   );
 
+  it("omits an enrolment/scope that has a REVOKED certificate even though its completion record is still satisfied (CR-04)", async () => {
+    const h = harness({
+      pendingRecords: [pendingRecord()],
+      activeCertificates: [{ enrolmentId: "enr-1", scope: "COURSE", status: "REVOKED" }],
+    });
+    expect(await h.service.listPendingIssuance()).toEqual([]);
+  });
+
+  it("a REVOKED certificate on the other scope does not hide this scope's row", async () => {
+    const h = harness({
+      pendingRecords: [pendingRecord()],
+      activeCertificates: [{ enrolmentId: "enr-1", scope: "PROGRAMME", status: "REVOKED" }],
+    });
+    expect(await h.service.listPendingIssuance()).toHaveLength(1);
+  });
+
+  it("a SUPERSEDED certificate alone does not hide the row (a reissue leaves an ACTIVE or REVOKED replacement)", async () => {
+    const h = harness({
+      pendingRecords: [pendingRecord()],
+      activeCertificates: [{ enrolmentId: "enr-1", scope: "COURSE", status: "SUPERSEDED" }],
+    });
+    expect(await h.service.listPendingIssuance()).toHaveLength(1);
+  });
+
   it.each(["ACTIVE", "COMPLETED"])("still lists a completed MANUAL enrolment whose status is %s", async (status) => {
     const h = harness({ pendingRecords: [pendingRecord({ status })] });
     const rows = await h.service.listPendingIssuance();

@@ -33,6 +33,36 @@ describe("issueCertificateAction outcome messages", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/staff/certificates");
   });
 
+  it("maps revoked-blocked to a fixed 'use Reissue' message, revalidates the queue, and returns ok: false (CR-04)", async () => {
+    mocks.issue.mockResolvedValue({ kind: "revoked-blocked" });
+
+    const result = await issueCertificateAction(input);
+
+    expect(result).toEqual({
+      ok: false,
+      message:
+        "This certificate was revoked. Use Reissue on the certificate's page to replace it; it cannot be issued from the queue.",
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/staff/certificates");
+  });
+
+  it("uses a distinct message for every non-issued outcome", async () => {
+    const messages = new Set<string>();
+    for (const outcome of [
+      { kind: "already-issued", certificateId: "c1" },
+      { kind: "not-enabled" },
+      { kind: "no-template" },
+      { kind: "not-eligible" },
+      { kind: "revoked-blocked" },
+    ]) {
+      mocks.issue.mockResolvedValue(outcome);
+      const result = await issueCertificateAction(input);
+      expect(result.ok).toBe(false);
+      if (!result.ok) messages.add(result.message);
+    }
+    expect(messages.size).toBe(5);
+  });
+
   it("returns an ok result and revalidates for an issued outcome", async () => {
     mocks.issue.mockResolvedValue({ kind: "issued", certificateId: "c1", verificationRef: "R1" });
     expect(await issueCertificateAction(input)).toEqual({ ok: true });

@@ -17,7 +17,9 @@
  * let two concurrent triggers both pay for a full render before either
  * discovers the unique index was already won by the other, and risks two
  * different `storageKey`s both pointing at generated objects for what must
- * be one certificate. The create is an
+ * be one certificate. (Before the create, the function also refuses — CR-03 —
+ * an ineligible enrolment and — CR-04 — an enrolment/scope that already holds
+ * a REVOKED certificate; both are typed outcomes, never writes.) The create is an
  * `INSERT ... ON CONFLICT DO NOTHING` (`createMany` + `skipDuplicates`); a
  * zero-row insert is treated as `{ kind: "already-issued" }` — a lost race
  * is a correct outcome, not a failure to propagate, and (unlike catching a
@@ -221,7 +223,12 @@ export type IssueCertificateOutcome =
   | { kind: "not-enabled" }
   | { kind: "no-template" }
   /** The enrolment's status cannot hold a certificate (CR-03). Nothing was written. */
-  | { kind: "not-eligible" };
+  | { kind: "not-eligible" }
+  /**
+   * A REVOKED certificate exists for this enrolment and scope (CR-04, CRD-05).
+   * Nothing was written; only staff Reissue may replace a revoked credential.
+   */
+  | { kind: "revoked-blocked" };
 
 /**
  * Every I/O boundary `issueCertificateForEnrolment`/`reactToCompletionResults`
@@ -269,6 +276,10 @@ async function resolveTemplate(
  * `CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES`) return `{ kind: "not-eligible" }`
  * before any read of the award or any write — a typed non-error outcome, so
  * a caller's own write is never failed by them (CR-03).
+ *
+ * A REVOKED certificate for the same enrolment and scope returns
+ * `{ kind: "revoked-blocked" }` for every actor (CR-04, CRD-05): only staff
+ * Reissue (which supersedes the revoked rows first) can replace it.
  *
  * Resolution rules (D-01):
  * - `scope: "COURSE"` reads the enrolment's cohort; the award is the
@@ -356,6 +367,22 @@ export async function issueCertificateForEnrolment(
   });
   if (existing) {
     return { kind: "already-issued", certificateId: existing.id };
+  }
+
+  // CR-04 / CRD-05 — a revocation (possibly for misconduct) must never be
+  // undone by automation, including a learner undoing and redoing a lesson,
+  // and never by a stale manual-queue click. This applies to EVERY actor: the
+  // only legitimate path to a replacement is staff Reissue, and
+  // `reissueCertificate` moves every REVOKED row for this enrolment/scope to
+  // SUPERSEDED BEFORE calling this function, so nothing REVOKED remains then.
+  // Evaluated after the ACTIVE pre-check so legacy ACTIVE+REVOKED data still
+  // reads as already-issued. No new audit row: the revocation is already
+  // audited and the outcome is returned to the caller.
+  const revoked = await tx.certificate.findFirst({
+    where: { enrolmentId, scope, status: "REVOKED" },
+  });
+  if (revoked) {
+    return { kind: "revoked-blocked" };
   }
 
   const template = await resolveTemplate(tx, award);

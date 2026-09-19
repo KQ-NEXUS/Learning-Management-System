@@ -185,6 +185,8 @@ function harness(opts?: {
           callOrder.push("certificate.updateMany");
           const matches = [...certStaged.values()].filter((c) => {
             if (where.id !== undefined && c.id !== where.id) return false;
+            if (where.enrolmentId !== undefined && c.enrolmentId !== where.enrolmentId) return false;
+            if (where.scope !== undefined && c.scope !== where.scope) return false;
             if (where.status !== undefined) {
               const wantedStatuses =
                 typeof where.status === "object" && where.status !== null && "in" in (where.status as object)
@@ -391,6 +393,23 @@ describe("issueCertificateManually", () => {
     const outcome = await h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" });
     expect(outcome).toMatchObject({ kind: "already-issued", certificateId: "existing-cert" });
     expect(h.certificates.size).toBe(1);
+  });
+
+  it("returns revoked-blocked and creates nothing when a REVOKED certificate exists for the enrolment and scope (CR-04, T-11-104)", async () => {
+    const h = harness({ certificates: [cert({ id: "revoked-cert", status: "REVOKED" })] });
+    const outcome = await h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" });
+    expect(outcome).toEqual({ kind: "revoked-blocked" });
+    expect(h.certificates.size).toBe(1);
+    expect(h.certificates.get("revoked-cert")?.status).toBe("REVOKED");
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+    expect(h.issuanceAuditCalls).toHaveLength(0);
+  });
+
+  it("returns not-eligible for a WITHDRAWN enrolment instead of throwing (CR-03)", async () => {
+    const h = harness({ enrolments: [enr({ status: "WITHDRAWN" })] });
+    const outcome = await h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" });
+    expect(outcome).toEqual({ kind: "not-eligible" });
+    expect(h.certificates.size).toBe(0);
   });
 
   it("refuses an enrolment with no unsuperseded completion record", async () => {
@@ -619,6 +638,61 @@ describe("reissueCertificate", () => {
     expect(c2Final.status).toBe("SUPERSEDED");
     expect(c2Final.supersedesId).toBe("cert-1");
     expect(h.certificates.get(c3.id)?.supersedesId).toBe(c2.id);
+  });
+
+  it("legacy two-REVOKED rows: reissue supersedes BOTH, links the new row to the reissued one, and does not dead-end in revoked-blocked (CRD-05, T-11-140)", async () => {
+    const h = harness({
+      enrolments: [enr({ status: "ACTIVE" })],
+      certificates: [
+        cert({ id: "cert-A", status: "REVOKED", verificationRef: "VERIF-A" }),
+        cert({ id: "cert-B", status: "REVOKED", verificationRef: "VERIF-B" }),
+      ],
+    });
+
+    const after = await h.service.reissueCertificate({
+      certificateId: "cert-B",
+      reason: "Appeal upheld, reissuing credential",
+    });
+
+    expect(after.status).toBe("ACTIVE");
+    expect(after.supersedesId).toBe("cert-B");
+    expect(h.certificates.get("cert-A")?.status).toBe("SUPERSEDED");
+    expect(h.certificates.get("cert-B")?.status).toBe("SUPERSEDED");
+    expect(h.certificates.size).toBe(3);
+    expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
+  });
+
+  it("reissue leaves REVOKED rows of the OTHER scope and of OTHER enrolments untouched (supersede-all is keyed on enrolment AND scope)", async () => {
+    const h = harness({
+      certificates: [
+        cert({ id: "cert-1", status: "REVOKED" }),
+        cert({ id: "other-scope", scope: "PROGRAMME", courseId: null, programmeId: "programme-1", status: "REVOKED" }),
+        cert({ id: "other-enrolment", enrolmentId: "enr-2", status: "REVOKED" }),
+      ],
+    });
+
+    await h.service.reissueCertificate({ certificateId: "cert-1", reason: "Appeal upheld, reissuing credential" });
+
+    expect(h.certificates.get("cert-1")?.status).toBe("SUPERSEDED");
+    expect(h.certificates.get("other-scope")?.status).toBe("REVOKED");
+    expect(h.certificates.get("other-enrolment")?.status).toBe("REVOKED");
+  });
+
+  it("reissue for an enrolment that is no longer eligible (withdrawn after the revocation) rolls back entirely: the certificate stays REVOKED", async () => {
+    const h = harness({
+      enrolments: [enr({ status: "WITHDRAWN" })],
+      certificates: [cert({ id: "cert-1", status: "REVOKED" })],
+    });
+
+    await expect(
+      h.service.reissueCertificate({ certificateId: "cert-1", reason: "Appeal upheld, reissuing credential" }),
+    ).rejects.toThrow(/not-eligible/);
+
+    expect(h.certificates.get("cert-1")?.status).toBe("REVOKED");
+    expect(h.certificates.size).toBe(1);
+    expect(h.enrolments.get("enr-1")?.status).toBe("WITHDRAWN");
+    expect(h.events).toHaveLength(0);
+    expect(h.audits).toHaveLength(0);
   });
 
   it("writes a certificate.reissued domain event with both ids/references and no reason text", async () => {

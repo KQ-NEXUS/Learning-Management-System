@@ -464,7 +464,10 @@ describe("issueCertificateForEnrolment", () => {
     let findFirstCalls = 0;
     const tx: CertificateIssuanceTxClient = {
       certificate: {
-        findFirst: async () => {
+        findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+          // The REVOKED pre-check (plan 11-25) runs between the ACTIVE
+          // pre-check and the insert; no revoked row exists in this race.
+          if (where.status === "REVOKED") return null;
           findFirstCalls += 1;
           return findFirstCalls === 1 ? null : { ...winner };
         },
@@ -775,6 +778,132 @@ describe("reactToCompletionResults — ineligible enrolment (plan 11-25, CR-03)"
       expect(auditCalls).toHaveLength(0);
     },
   );
+});
+
+describe("a REVOKED certificate blocks every automatic issuance (plan 11-25, CR-04 / CRD-05)", () => {
+  it.each([
+    ["system", null],
+    ["staff", { userId: "staff-1" }],
+  ] as Array<[string, IssueCertificateActor]>)(
+    "returns revoked-blocked and writes nothing for a %s actor when a REVOKED certificate exists",
+    async (_label, actor) => {
+      const h = harness({ certificates: [activeCert({ status: "REVOKED" })] });
+      const { deps, renderCalls, putObjectCalls, auditCalls, writeEventCalls } = makeDeps();
+
+      const outcome = await h.runInTransaction((tx) =>
+        issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor }, deps),
+      );
+
+      expect(outcome).toEqual({ kind: "revoked-blocked" });
+      expect(h.certificates.size).toBe(1);
+      expect([...h.certificates.values()][0].status).toBe("REVOKED");
+      expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+      expect(renderCalls).toHaveLength(0);
+      expect(putObjectCalls).toHaveLength(0);
+      expect(auditCalls).toHaveLength(0);
+      expect(writeEventCalls).toHaveLength(0);
+    },
+  );
+
+  it("undo then redo of a lesson after a revoke does not re-issue: one REVOKED certificate, enrolment stays ACTIVE", async () => {
+    const h = harness({
+      enrolments: [enr({ status: "ACTIVE" })],
+      certificates: [activeCert({ status: "REVOKED" })],
+    });
+    const { deps, renderCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "superseded" })] },
+        deps,
+      ),
+    );
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] },
+        deps,
+      ),
+    );
+
+    expect(h.certificates.size).toBe(1);
+    expect([...h.certificates.values()][0].status).toBe("REVOKED");
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+    expect(renderCalls).toHaveLength(0);
+  });
+
+  it("the same undo/redo sequence on a Programme cohort does not re-issue either, and COURSE-scope results stay skipped (D-01)", async () => {
+    const h = harness({
+      enrolments: [enr({ cohortId: "cohort-programme", status: "ACTIVE" })],
+      cohorts: [programmeCohort()],
+      programmes: [award({ id: "programme-1", title: "Full Stack" })],
+      certificates: [
+        activeCert({ scope: "PROGRAMME", courseId: null, programmeId: "programme-1", status: "REVOKED" }),
+      ],
+    });
+    const { deps, renderCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [scopeResult({ scope: "PROGRAMME", courseId: null, action: "superseded" })],
+        },
+        deps,
+      ),
+    );
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [
+            scopeResult({ scope: "COURSE", courseId: "course-a", action: "created" }),
+            scopeResult({ scope: "PROGRAMME", courseId: null, action: "created" }),
+          ],
+        },
+        deps,
+      ),
+    );
+
+    expect(h.certificates.size).toBe(1);
+    expect([...h.certificates.values()][0].status).toBe("REVOKED");
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+    expect(renderCalls).toHaveLength(0);
+  });
+
+  it("a REVOKED certificate for the OTHER scope does not block the current scope (key is enrolment + scope)", async () => {
+    const h = harness({
+      certificates: [activeCert({ scope: "PROGRAMME", courseId: null, programmeId: "programme-1", status: "REVOKED" })],
+    });
+    const { deps } = makeDeps();
+
+    const outcome = await h.runInTransaction((tx) =>
+      issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
+    );
+
+    expect(outcome.kind).toBe("issued");
+  });
+
+  it("guard: with ACTIVE and REVOKED both present (legacy data) the ACTIVE pre-check wins -> already-issued", async () => {
+    const h = harness({
+      certificates: [
+        activeCert({ id: "cert-revoked", status: "REVOKED", verificationRef: "CERT-R" }),
+        activeCert({ id: "cert-active", status: "ACTIVE", verificationRef: "CERT-A" }),
+      ],
+    });
+    const { deps } = makeDeps();
+
+    const outcome = await h.runInTransaction((tx) =>
+      issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
+    );
+
+    expect(outcome).toEqual({ kind: "already-issued", certificateId: "cert-active" });
+  });
 });
 
 describe("reactToCompletionResults — superseded branch (plan 11-24, UAT test 18)", () => {

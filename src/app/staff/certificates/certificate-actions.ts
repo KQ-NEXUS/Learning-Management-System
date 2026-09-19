@@ -51,6 +51,13 @@ export async function issueCertificateAction(
           ok: false,
           message: "No certificate template is configured for this course or programme yet. Add one under Certificate templates before issuing.",
         };
+      case "revoked-blocked":
+        revalidatePath("/staff/certificates");
+        return {
+          ok: false,
+          message:
+            "This certificate was revoked. Use Reissue on the certificate's page to replace it; it cannot be issued from the queue.",
+        };
       case "not-eligible":
         revalidatePath("/staff/certificates");
         return {
