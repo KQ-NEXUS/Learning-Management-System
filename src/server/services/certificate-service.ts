@@ -232,8 +232,28 @@ export type CertificateAuditStore = {
       orderBy?: Record<string, unknown>;
       select?: Record<string, unknown>;
     }): Promise<{ actorId: string | null; actor: { name: string } | null } | null>;
+    /** Batched form used by `listCertificateIssuanceSources` (plan 11-22). */
+    findMany(args: {
+      where: Record<string, unknown>;
+      orderBy?: Record<string, unknown>;
+      select?: Record<string, unknown>;
+    }): Promise<
+      Array<{
+        targetId: string;
+        actorId: string | null;
+        action: string;
+        actor: { name: string } | null;
+      }>
+    >;
   };
 };
+
+/** How a certificate came to exist, read from its issuance audit row (plan
+ *  11-22, UAT test 8). Name only — never an actor id or email. */
+export type IssuanceSource =
+  | { kind: "automatic" }
+  | { kind: "staff"; actorName: string | null }
+  | { kind: "not-recorded" };
 
 export type CertificateIssuerRow = { actorId: string | null; actorName: string | null } | null;
 
@@ -414,6 +434,51 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     });
     if (!row) return null;
     return { actorId: row.actorId, actorName: row.actor?.name ?? null };
+  });
+
+  // -------------------------------------------------------------------------
+  // 3c. listCertificateIssuanceSources (plan 11-22, UAT test 8) — one batched,
+  //     authorized audit read so the issued list can show "Automatic" vs a
+  //     staff name without N `getCertificateIssuer` calls. Same permission and
+  //     the same unscoped (global) scope as `certificateService.list({})`, so
+  //     exactly those who can see the list can see its sources. A certificate
+  //     with no issuance audit row is `not-recorded`, never guessed as
+  //     automatic. Only `{ kind, actorName }` crosses out — no actor id.
+  // -------------------------------------------------------------------------
+
+  const listCertificateIssuanceSources = deps.withPermission<{ certificateIds: string[] }>(
+    "certificates.view",
+    () => ({}),
+  )(async (input): Promise<Record<string, IssuanceSource>> => {
+    if (input.certificateIds.length === 0) return {};
+
+    const rows = await deps.auditStore.auditEvent.findMany({
+      where: {
+        targetType: "Certificate",
+        targetId: { in: input.certificateIds },
+        action: { in: ["certificate.issued", "certificate.issued_auto"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        targetId: true,
+        actorId: true,
+        action: true,
+        actor: { select: { name: true } },
+      },
+    });
+
+    const result: Record<string, IssuanceSource> = {};
+    for (const row of rows) {
+      if (row.targetId in result) continue; // newest first — keep the first seen
+      result[row.targetId] =
+        row.action === "certificate.issued_auto"
+          ? { kind: "automatic" }
+          : { kind: "staff", actorName: row.actor?.name ?? null };
+    }
+    for (const id of input.certificateIds) {
+      if (!(id in result)) result[id] = { kind: "not-recorded" };
+    }
+    return result;
   });
 
   // -------------------------------------------------------------------------
@@ -615,6 +680,7 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     listPendingIssuance,
     getOwnCertificateForDownload,
     getCertificateIssuer,
+    listCertificateIssuanceSources,
     issueCertificateManually,
     revokeCertificate,
     reissueCertificate,
@@ -647,6 +713,7 @@ export const certificateService = built.certificateService;
 export const listPendingIssuance = built.listPendingIssuance;
 export const getOwnCertificateForDownload = built.getOwnCertificateForDownload;
 export const getCertificateIssuer = built.getCertificateIssuer;
+export const listCertificateIssuanceSources = built.listCertificateIssuanceSources;
 export const issueCertificateManually = built.issueCertificateManually;
 export const revokeCertificate = built.revokeCertificate;
 export const reissueCertificate = built.reissueCertificate;

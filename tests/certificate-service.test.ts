@@ -54,12 +54,21 @@ function unusedRunInTransaction(): CertificateServiceDeps["runInTransaction"] {
   return (async (fn) => fn({} as never)) as CertificateServiceDeps["runInTransaction"];
 }
 
+type AuditRowFixture = {
+  targetId: string;
+  action: string;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: Date;
+};
+
 function harness(opts?: {
   certs?: Array<CertificateRow & { cohortId: string }>;
   grants?: ReturnType<typeof grant>[];
   pendingRecords?: Array<PendingIssuanceCompletionRecordRow & { supersededAt: Date | null }>;
   activeCertificates?: Array<{ enrolmentId: string; scope: "COURSE" | "PROGRAMME" }>;
   cohortByEnrolment?: Record<string, string>;
+  auditRows?: AuditRowFixture[];
 }) {
   const certs = opts?.certs ?? [cert()];
   const cohortByEnrolment = opts?.cohortByEnrolment ?? { "enr-1": "cohort-1" };
@@ -95,6 +104,33 @@ function harness(opts?: {
     certificate: { findMany: certificateFindManyForPending as unknown as PendingIssuanceStore["certificate"]["findMany"] },
   };
 
+  const auditRows = opts?.auditRows ?? [];
+  const auditFindManyWheres: Array<Record<string, unknown>> = [];
+  const auditFindMany = vi.fn(
+    async (args: { where: Record<string, unknown>; orderBy?: Record<string, unknown> }) => {
+      auditFindManyWheres.push(args.where);
+      const where = args.where as {
+        targetType?: string;
+        targetId?: { in: string[] };
+        action?: { in: string[] };
+      };
+      const matched = auditRows.filter(
+        (r) =>
+          where.targetType === "Certificate" &&
+          (where.targetId?.in ?? []).includes(r.targetId) &&
+          (where.action?.in ?? []).includes(r.action),
+      );
+      // Honour orderBy createdAt desc, as Prisma would.
+      matched.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return matched.map((r) => ({
+        targetId: r.targetId,
+        actorId: r.actorId,
+        action: r.action,
+        actor: r.actorName === null ? null : { name: r.actorName },
+      }));
+    },
+  );
+
   const { withPermission } = createTestWithPermission(opts?.grants ?? [grant("certificates.view", "GLOBAL")]);
 
   const service = createCertificateService({
@@ -103,13 +139,13 @@ function harness(opts?: {
     audit: vi.fn(async () => {}),
     enrolmentScope: async (enrolmentId: string) => ({ cohortId: cohortByEnrolment[enrolmentId] }),
     pendingStore,
-    auditStore: { auditEvent: { findFirst: async () => null } },
+    auditStore: { auditEvent: { findFirst: async () => null, findMany: auditFindMany } },
     runInTransaction: unusedRunInTransaction(),
     issuanceDeps: {} as never,
     writeEvent: (async () => {}) as never,
   });
 
-  return { service, findManyMock, findUniqueMock, completionRecordFindMany };
+  return { service, findManyMock, findUniqueMock, completionRecordFindMany, auditFindMany, auditFindManyWheres };
 }
 
 // ---------------------------------------------------------------------------
@@ -331,5 +367,109 @@ describe("certificateDisplayStatus", () => {
 
   it("an unflagged ACTIVE certificate reads as active", () => {
     expect(certificateDisplayStatus({ status: "ACTIVE", reviewFlaggedAt: null })).toBe("active");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listCertificateIssuanceSources (plan 11-22, UAT test 8)
+// ---------------------------------------------------------------------------
+
+describe("listCertificateIssuanceSources", () => {
+  const auto: AuditRowFixture = {
+    targetId: "a",
+    action: "certificate.issued_auto",
+    actorId: null,
+    actorName: null,
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+  };
+  const staff: AuditRowFixture = {
+    targetId: "b",
+    action: "certificate.issued",
+    actorId: "u1",
+    actorName: "Ngozi Eze",
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+  };
+
+  it("maps automatic / staff / not-recorded per certificate", async () => {
+    const h = harness({ auditRows: [auto, staff] });
+    const result = await h.service.listCertificateIssuanceSources({ certificateIds: ["a", "b", "c"] });
+    expect(result).toEqual({
+      a: { kind: "automatic" },
+      b: { kind: "staff", actorName: "Ngozi Eze" },
+      c: { kind: "not-recorded" },
+    });
+  });
+
+  it("yields staff with a null name when the actor no longer resolves", async () => {
+    const h = harness({ auditRows: [{ ...staff, actorName: null }] });
+    const result = await h.service.listCertificateIssuanceSources({ certificateIds: ["b"] });
+    expect(result).toEqual({ b: { kind: "staff", actorName: null } });
+  });
+
+  it("the most recent issuance row wins", async () => {
+    const h = harness({
+      auditRows: [
+        { ...auto, targetId: "a", createdAt: new Date("2026-09-01T00:00:00.000Z") },
+        {
+          targetId: "a",
+          action: "certificate.issued",
+          actorId: "u2",
+          actorName: "Later Staff",
+          createdAt: new Date("2026-09-02T00:00:00.000Z"),
+        },
+      ],
+    });
+    const result = await h.service.listCertificateIssuanceSources({ certificateIds: ["a"] });
+    expect(result).toEqual({ a: { kind: "staff", actorName: "Later Staff" } });
+  });
+
+  it("returns {} for an empty id list without querying the audit store", async () => {
+    const h = harness();
+    const result = await h.service.listCertificateIssuanceSources({ certificateIds: [] });
+    expect(result).toEqual({});
+    expect(h.auditFindMany).not.toHaveBeenCalled();
+  });
+
+  it("queries exactly the Certificate target, the requested ids and the two issuance actions", async () => {
+    const h = harness({ auditRows: [auto] });
+    await h.service.listCertificateIssuanceSources({ certificateIds: ["a", "b"] });
+    expect(h.auditFindMany).toHaveBeenCalledTimes(1);
+    expect(h.auditFindManyWheres[0]).toEqual({
+      targetType: "Certificate",
+      targetId: { in: ["a", "b"] },
+      action: { in: ["certificate.issued", "certificate.issued_auto"] },
+    });
+  });
+
+  it("ignores audit actions other than the two issuance actions (guard)", async () => {
+    const h = harness({
+      auditRows: [{ ...staff, targetId: "a", action: "certificate.revoked" }],
+    });
+    const result = await h.service.listCertificateIssuanceSources({ certificateIds: ["a"] });
+    expect(result).toEqual({ a: { kind: "not-recorded" } });
+  });
+
+  it("never leaks an actor id into the returned shape", async () => {
+    const h = harness({ auditRows: [auto, staff] });
+    const result = await h.service.listCertificateIssuanceSources({ certificateIds: ["a", "b", "c"] });
+    for (const value of Object.values(result)) {
+      expect(Object.keys(value)).not.toContain("actorId");
+    }
+    expect(JSON.stringify(result)).not.toContain("u1");
+  });
+
+  it("denies a caller without certificates.view", async () => {
+    const h = harness({ grants: [], auditRows: [auto] });
+    await expect(
+      h.service.listCertificateIssuanceSources({ certificateIds: ["a"] }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    expect(h.auditFindMany).not.toHaveBeenCalled();
+  });
+
+  it("denies a cohort-scoped grant (the list itself needs a global grant)", async () => {
+    const h = harness({ grants: [grant("certificates.view", "COHORT", "cohort-1")], auditRows: [auto] });
+    await expect(
+      h.service.listCertificateIssuanceSources({ certificateIds: ["a"] }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
   });
 });
