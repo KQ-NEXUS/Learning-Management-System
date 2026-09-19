@@ -1,4 +1,7 @@
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import fontkit from "@pdf-lib/fontkit";
 import zlib from "node:zlib";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { describe, expect, it } from "vitest";
@@ -20,6 +23,8 @@ const FIELDS: CertificateRenderFields = {
 // A4 landscape page height in points (595.28 x 841.89 swapped).
 const PAGE_HEIGHT = 595.28;
 const TOLERANCE = 0.01;
+
+const FONT_PATH = path.join(process.cwd(), "assets", "fonts", "certificate", "NotoSans-Regular.ttf");
 
 /** Minimal valid RGBA PNG of the given pixel size, built without any dependency. */
 function makePng(width: number, height: number): Uint8Array {
@@ -104,8 +109,10 @@ async function render(elements: CertificateElementV1[]): Promise<Uint8Array> {
  * The baseline therefore sits this far below the box top.
  */
 async function editorBaselineOffset(size: number): Promise<number> {
+  // Expected values come from the SAME bundled font the renderer embeds (plan 11-29).
   const document = await PDFDocument.create();
-  const font = await document.embedFont(StandardFonts.Helvetica);
+  document.registerFontkit(fontkit);
+  const font = await document.embedFont(new Uint8Array(readFileSync(FONT_PATH)), { subset: true, features: { ccmp: false } });
   const full = font.heightAtSize(size);
   const ascent = font.heightAtSize(size, { descender: false });
   return (1.25 * size - full) / 2 + ascent;
@@ -160,6 +167,25 @@ describe("certificate PDF positions (top-origin layout -> PDF space)", () => {
     expect(placements.map((p) => p.text)).toEqual(["first", "second", "third"]);
     expect(placements[0].y).toBeGreaterThan(placements[1].y);
     expect(placements[1].y).toBeGreaterThan(placements[2].y);
+  });
+
+  it("aligns left, centre and right text from the embedded font's own advance widths", async () => {
+    const document = await PDFDocument.create();
+    document.registerFontkit(fontkit);
+    const font = await document.embedFont(new Uint8Array(readFileSync(FONT_PATH)), { subset: true, features: { ccmp: false } });
+    const label = "Adébáyọ Ṣolá";
+    const width = font.widthOfTextAtSize(label.normalize("NFC"), 20);
+
+    const bytes = await render([
+      textElement({ literal: label, y: 40, x: 50, width: 400, align: "left" }),
+      textElement({ literal: label, y: 100, x: 50, width: 400, align: "center" }),
+      textElement({ literal: label, y: 160, x: 50, width: 400, align: "right" }),
+    ]);
+    const [left, centre, right] = readTextPlacements(bytes);
+    expect(left.text).toBe(label.normalize("NFC"));
+    expect(left.x).toBeCloseTo(50, 2);
+    expect(centre.x).toBeCloseTo(50 + (400 - width) / 2, 2);
+    expect(right.x).toBeCloseTo(50 + 400 - width, 2);
   });
 
   it("draws a square image at the converted bottom edge without changing its size", async () => {

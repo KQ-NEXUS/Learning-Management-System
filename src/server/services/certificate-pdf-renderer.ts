@@ -16,14 +16,31 @@
  * between the two (`toPdfTextBaselineY`, `fitImageInBox`) so no other file
  * re-derives it.
  *
+ * Text and fonts (plan 11-29, CR-01): the renderer embeds the bundled,
+ * human-approved Unicode font (`assets/fonts/certificate`, see
+ * `certificate-font.ts`) through the already-approved `@pdf-lib/fontkit`
+ * (D-08, recorded in 11-DECISIONS.md), subset per document so the PDF stays
+ * small. There is deliberately NO fallback to a standard font: an unreadable
+ * font file rejects the render. Every string is passed through
+ * `sanitiseCertificateText` before it is measured or drawn, so no name can make
+ * the renderer throw. Text is normalised to NFC because pdf-lib draws glyph
+ * advances only and applies no GPOS mark positioning: precomposed letters (the
+ * Yoruba dot-below and tone letters that have one) are used wherever they
+ * exist. A letter carrying a tone mark with no precomposed form is drawn as
+ * base then mark and may sit slightly off (recorded limitation). Scripts the
+ * font lacks (CJK, Arabic, Hebrew, emoji) show "?" per character, which the
+ * human accepted in plan 11-26.
+ *
  * Pure transform: no database-client import, no data access. Every input
  * (the parsed layout, the four learner facts, and an injected asset
  * resolver) is passed in by the caller, which keeps this module unit
  * testable without a database or an object store.
  */
 
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, rgb } from "pdf-lib";
 import type { PDFFont, PDFPage, RGB } from "pdf-lib";
+import { loadCertificateFontBytes } from "@/server/services/certificate-font";
 import type { CertificateElementV1, CertificateTemplateLayoutV1 } from "@/server/services/certificate-template-layout";
 
 export type CertificateRenderFields = {
@@ -146,6 +163,37 @@ export function fitImageInBox(input: {
   };
 }
 
+/**
+ * Make any string safe to measure and draw with `font`. Never throws.
+ *
+ * 1. Normalise to NFC (precomposed letters; see the header for why).
+ * 2. Runs of CR / LF / tab become one space (a drawText line cannot contain a
+ *    line break, and the layout is single-line per element).
+ * 3. Any other C0/C1 control character is dropped.
+ * 4. Every remaining code point the font has no glyph for becomes "?". Iteration
+ *    is by code point so an astral character (emoji) yields exactly one "?".
+ *
+ * The SAME result must be used for both width measurement and the draw call, or
+ * alignment drifts.
+ */
+export function sanitiseCertificateText(font: PDFFont, text: string): string {
+  let supported: Set<number>;
+  try {
+    supported = new Set(font.getCharacterSet());
+  } catch {
+    supported = new Set();
+  }
+
+  const collapsed = text.normalize("NFC").replace(/[\r\n\t]+/g, " ");
+  let result = "";
+  for (const character of collapsed) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)) continue;
+    result += supported.has(codePoint) ? character : "?";
+  }
+  return result;
+}
+
 function drawTextElement(
   page: PDFPage,
   font: PDFFont,
@@ -153,7 +201,7 @@ function drawTextElement(
   fields: CertificateRenderFields,
   pageHeight: number,
 ): void {
-  const value = resolveTextElementValue(element, fields);
+  const value = sanitiseCertificateText(font, resolveTextElementValue(element, fields));
   const color = parseHexColor(element.color);
   const textWidth = font.widthOfTextAtSize(value, element.fontSize);
 
@@ -266,7 +314,14 @@ export async function renderCertificatePdf(input: {
   const { layout, fields, resolveAsset } = input;
 
   const document = await PDFDocument.create();
-  const font = await document.embedFont(StandardFonts.Helvetica);
+  document.registerFontkit(fontkit);
+  // ccmp off: the font would otherwise decompose lowercase Yoruba letters (o + dot
+  // below) into a base glyph plus a zero-advance mark with no text mapping. With
+  // it off the precomposed glyph is used, drawn correctly and mapped in ToUnicode.
+  const font = await document.embedFont(await loadCertificateFontBytes(), {
+    subset: true,
+    features: { ccmp: false },
+  });
   const { width, height } = pageDimensionsFor(layout.pageSize, layout.orientation);
   const page = document.addPage([width, height]);
 

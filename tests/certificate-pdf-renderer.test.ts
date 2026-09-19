@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import zlib from "node:zlib";
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,6 +11,7 @@ import {
   parseCertificateTemplateLayout,
   type CertificateTemplateLayoutV1,
 } from "@/server/services/certificate-template-layout";
+import { extractPdfText } from "./support/pdf-content";
 
 // A 1x1 transparent PNG — the smallest legal PNG, used to prove image
 // elements embed real caller-supplied bytes without needing a real logo
@@ -29,67 +29,6 @@ const FIELDS: CertificateRenderFields = {
 async function resolveKnownAsset(assetKey: string): Promise<Uint8Array> {
   if (assetKey === "certificate-template-assets/tpl/logo") return ONE_PIXEL_PNG_BYTES;
   throw new Error(`No fixture asset registered for key: ${assetKey}`);
-}
-
-/**
- * Extracts the text shown by `Tj` operators from a pdf-lib-produced PDF's
- * content streams.
- *
- * pdf-lib always Flate-compresses content streams (no option disables it),
- * and exposes no public text-extraction API, so this reads the produced
- * bytes back directly: find each `stream ... endstream` object, inflate it
- * with the same zlib algorithm PDF's `/FlateDecode` uses, and pull the text
- * out of every `<HEXSTRING> Tj` operator. `pdf-lib`'s standard-font
- * embedder encodes text as WinAnsi-coded hex glyphs, which are byte-for-byte
- * identical to ASCII for the plain Latin characters this test suite uses,
- * so a straight hex-to-char decode recovers the original string.
- */
-function extractPdfText(bytes: Uint8Array): string {
-  const buffer = Buffer.from(bytes);
-  const latin1 = buffer.toString("latin1");
-  let extracted = "";
-  let searchFrom = 0;
-
-  for (;;) {
-    const streamIndex = latin1.indexOf("stream", searchFrom);
-    if (streamIndex === -1) break;
-
-    let start = streamIndex + "stream".length;
-    if (latin1[start] === "\r") start++;
-    if (latin1[start] === "\n") start++;
-
-    const endIndex = latin1.indexOf("endstream", start);
-    if (endIndex === -1) break;
-
-    let raw = buffer.subarray(start, endIndex);
-    while (raw.length > 0 && (raw[raw.length - 1] === 0x0a || raw[raw.length - 1] === 0x0d)) {
-      raw = raw.subarray(0, raw.length - 1);
-    }
-
-    try {
-      const inflated = zlib.inflateSync(raw).toString("latin1");
-      const hexShowTextPattern = /<([0-9A-Fa-f]+)>\s*Tj/g;
-      let match: RegExpExecArray | null;
-      while ((match = hexShowTextPattern.exec(inflated)) !== null) {
-        extracted += hexToLatin1(match[1]);
-      }
-    } catch {
-      // Not a Flate-compressed text content stream (e.g. embedded image
-      // data) — nothing to extract from this object.
-    }
-
-    searchFrom = endIndex + "endstream".length;
-  }
-
-  return extracted;
-}
-
-function hexToLatin1(hex: string): string {
-  let text = "";
-  for (let i = 0; i < hex.length; i += 2) {
-    text += String.fromCharCode(Number.parseInt(hex.slice(i, i + 2), 16));
-  }
-  return text;
 }
 
 function textOnlyLayout(

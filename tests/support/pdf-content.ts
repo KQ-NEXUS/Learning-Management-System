@@ -61,6 +61,72 @@ function hexToLatin1(hex: string): string {
   return text;
 }
 
+/**
+ * Builds a glyph-id -> string map from every ToUnicode CMap in the document
+ * (`beginbfchar` pairs and `beginbfrange` ranges). Embedded (fontkit) fonts
+ * write 2-byte glyph ids, not character codes, so the CMap is the only way to
+ * recover the drawn text. Returns null when the document has no CMap (the
+ * standard-14 Helvetica embedding, whose hex is plain Latin-1 codes).
+ */
+function readToUnicodeMap(streams: string[]): Map<number, string> | null {
+  const map = new Map<number, string>();
+  let found = false;
+  const utf16BeHexToString = (hex: string): string => {
+    let out = "";
+    for (let i = 0; i + 4 <= hex.length; i += 4) {
+      out += String.fromCharCode(Number.parseInt(hex.slice(i, i + 4), 16));
+    }
+    return out;
+  };
+
+  for (const stream of streams) {
+    if (!stream.includes("begincmap")) continue;
+    found = true;
+
+    for (const section of stream.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
+      for (const pair of section[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+        map.set(Number.parseInt(pair[1], 16), utf16BeHexToString(pair[2]));
+      }
+    }
+
+    for (const section of stream.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+      for (const range of section[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<[0-9A-Fa-f]+>|\[[^\]]*\])/g)) {
+        const low = Number.parseInt(range[1], 16);
+        const high = Number.parseInt(range[2], 16);
+        const target = range[3];
+        if (target.startsWith("[")) {
+          const items = [...target.matchAll(/<([0-9A-Fa-f]+)>/g)];
+          for (let id = low; id <= high; id++) {
+            const item = items[id - low];
+            if (item) map.set(id, utf16BeHexToString(item[1]));
+          }
+        } else {
+          const base = Number.parseInt(target.slice(1, -1), 16);
+          for (let id = low; id <= high; id++) map.set(id, String.fromCharCode(base + (id - low)));
+        }
+      }
+    }
+  }
+
+  return found ? map : null;
+}
+
+function decodeShownHex(hex: string, toUnicode: Map<number, string> | null): string {
+  if (toUnicode === null) return hexToLatin1(hex);
+  let text = "";
+  for (let i = 0; i + 4 <= hex.length; i += 4) {
+    text += toUnicode.get(Number.parseInt(hex.slice(i, i + 4), 16)) ?? "�";
+  }
+  return text;
+}
+
+/** All text shown in the document, in drawing order, concatenated. */
+export function extractPdfText(bytes: Uint8Array): string {
+  return readTextPlacements(bytes)
+    .map((placement) => placement.text)
+    .join("");
+}
+
 export function readTextPlacements(bytes: Uint8Array): TextPlacement[] {
   const placements: TextPlacement[] = [];
   const blockPattern = /BT([\s\S]*?)ET/g;
@@ -68,7 +134,10 @@ export function readTextPlacements(bytes: Uint8Array): TextPlacement[] {
   const originPattern = new RegExp(`1\\s+0\\s+0\\s+1\\s+${NUM}\\s+${NUM}\\s+Tm`);
   const showPattern = /<([0-9A-Fa-f]*)>\s*Tj/;
 
-  for (const stream of inflatedContentStreams(bytes)) {
+  const streams = inflatedContentStreams(bytes);
+  const toUnicode = readToUnicodeMap(streams);
+
+  for (const stream of streams) {
     let block: RegExpExecArray | null;
     while ((block = blockPattern.exec(stream)) !== null) {
       const body = block[1];
@@ -77,7 +146,7 @@ export function readTextPlacements(bytes: Uint8Array): TextPlacement[] {
       const show = showPattern.exec(body);
       if (!size || !origin || !show) continue;
       placements.push({
-        text: hexToLatin1(show[1]),
+        text: decodeShownHex(show[1], toUnicode),
         x: Number(origin[1]),
         y: Number(origin[2]),
         size: Number(size[1]),

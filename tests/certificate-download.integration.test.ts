@@ -45,8 +45,9 @@
  * this file is collected. Instead this file builds its own equivalent
  * all-four-dynamic-field layout through the same
  * `parseCertificateTemplateLayout` pipeline (so a layout-schema regression
- * still fails here) and copies that file's byte-level `extractPdfText`
- * helper, which is pure and has no such side effect.
+ * still fails here) and reads the drawn text through the shared
+ * `tests/support/pdf-content` helper (ToUnicode-aware since plan 11-29, pure,
+ * and free of that side effect).
  *
  * PREREQUISITE: Docker must be running. If it is not, `beforeAll` fails with
  * a container-start error and every case reports BLOCKED — the expected
@@ -54,9 +55,9 @@
  */
 
 import { Buffer } from "node:buffer";
-import zlib from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
+import { extractPdfText } from "./support/pdf-content";
 import { seedCohortFixture, seedEnrolmentFixture, seedLearnerFixture } from "./support/cohort-fixtures";
 import { renderCertificatePdf } from "@/server/services/certificate-pdf-renderer";
 import { parseCertificateTemplateLayout } from "@/server/services/certificate-template-layout";
@@ -193,58 +194,6 @@ const DOWNLOAD_TEST_LAYOUT = parseCertificateTemplateLayout({
     },
   ],
 });
-
-/**
- * Extracts the text shown by `Tj` operators from a pdf-lib-produced PDF's
- * content streams — copied from `tests/certificate-pdf-renderer.test.ts`
- * (see file header for why this is copied rather than imported).
- */
-function extractPdfText(bytes: Uint8Array): string {
-  const buffer = Buffer.from(bytes);
-  const latin1 = buffer.toString("latin1");
-  let extracted = "";
-  let searchFrom = 0;
-
-  for (;;) {
-    const streamIndex = latin1.indexOf("stream", searchFrom);
-    if (streamIndex === -1) break;
-
-    let start = streamIndex + "stream".length;
-    if (latin1[start] === "\r") start++;
-    if (latin1[start] === "\n") start++;
-
-    const endIndex = latin1.indexOf("endstream", start);
-    if (endIndex === -1) break;
-
-    let raw = buffer.subarray(start, endIndex);
-    while (raw.length > 0 && (raw[raw.length - 1] === 0x0a || raw[raw.length - 1] === 0x0d)) {
-      raw = raw.subarray(0, raw.length - 1);
-    }
-
-    try {
-      const inflated = zlib.inflateSync(raw).toString("latin1");
-      const hexShowTextPattern = /<([0-9A-Fa-f]+)>\s*Tj/g;
-      let match: RegExpExecArray | null;
-      while ((match = hexShowTextPattern.exec(inflated)) !== null) {
-        extracted += hexToLatin1(match[1]);
-      }
-    } catch {
-      // Not a Flate-compressed text content stream — nothing to extract.
-    }
-
-    searchFrom = endIndex + "endstream".length;
-  }
-
-  return extracted;
-}
-
-function hexToLatin1(hex: string): string {
-  let text = "";
-  for (let i = 0; i < hex.length; i += 2) {
-    text += String.fromCharCode(Number.parseInt(hex.slice(i, i + 2), 16));
-  }
-  return text;
-}
 
 /** Never invoked in this file's layout (no image element) — throws loudly if it ever is. */
 const resolveTemplateAsset = async (assetKey: string): Promise<Uint8Array> => {
