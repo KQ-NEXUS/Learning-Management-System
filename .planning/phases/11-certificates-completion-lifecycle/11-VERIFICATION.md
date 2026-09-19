@@ -1,7 +1,9 @@
 ---
 phase: 11-certificates-completion-lifecycle
 verified: 2026-09-19T20:10:00Z
-status: human_needed
+status: passed
+original_status: human_needed
+resolved_by_human: "2026-09-19 - the five human_verification items were decided by the user (WR-06, WR-05, WR-03 fixed in quick task 260919-rxu; WR-02 accepted; CR-05 deferred); see 11-HUMAN-UAT.md and the section at the end of this report"
 score: 4/4 roadmap success criteria verified (0 blockers; 5 open warnings need an accept-or-fix decision)
 overrides_applied: 0
 re_verification:
