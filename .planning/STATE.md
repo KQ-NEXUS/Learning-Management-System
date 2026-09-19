@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-29-PLAN.md (second gap pass, CR-01a: fontkit Noto Sans embedding with never-throw text sanitiser) - 11-32, 11-33 remain
-last_updated: "2026-09-19T17:00:00.000Z"
+stopped_at: Completed 11-32-PLAN.md (second gap pass: real Postgres + MinIO proof of CR-01/CR-03/CR-04/CR-06) - only 11-33 (human checkpoints) remains
+last_updated: "2026-09-19T18:58:00.000Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-29 done (renderer embeds the bundled Noto Sans via fontkit subset, sanitiser guarantees no throw, font traced for Next) - 32/34 plans complete; remaining: 11-32 (real Postgres + MinIO proof), 11-33 (human checkpoints)
+Plan: 11-32 done (two Testcontainers integration suites, 24 tests, prove Unicode certificates after commit, failure containment and the CR-03/CR-04/CR-06 guards on real Postgres + MinIO; evidence PDFs for 11-33 written, untracked) - 33/34 plans complete; remaining: 11-33 (human checkpoints: visual check of the evidence PDFs, enrolment-index migration on shared databases)
 Status: Second gap-closure pass in progress (11-REVIEW.md + 11-UAT.md open gaps) before verify
 Last activity: 2026-09-19
 
@@ -237,6 +237,8 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 
 - [Phase 11 gap closure done, verification OPEN]: Plans 11-17..11-24 executed and 8 UAT gaps re-verified in a browser (see 11-UAT.md). Full suite 3000/3001 pass; the 1 failure (Phase 10 submission-service.integration) is a 5s timeout under load and passes alone. NOT complete: (1) code review 11-REVIEW.md has 6 critical + 10 warning findings, CR-01 empirically confirmed (PDF renderer throws for non-WinAnsi names such as Yoruba ọ/ṣ/ẹ, inside the lesson-progress/attendance transaction, so the learner write rolls back); (2) new gap: deriveCertificateColumn hides the certificate slot when completion is superseded but a flagged certificate exists. gsd-verifier was NOT run. Certificates issued before 11-19 keep mirrored PDFs. Next: second gap-closure pass from 11-REVIEW.md, then verify.
 
+- [Phase 11/11-32]: Real-infrastructure proof executed (Testcontainers Postgres + live MinIO at localhost:9002): tests/certificate-unicode-file.integration.test.ts (12/12) and tests/certificate-lifecycle-guards.integration.test.ts (12/12), plus enrolment-live-index (10), certificate-concurrency (2) and certificate-download (5), all green; no source change. A temporary neutralisation of reissue's supersede-all-REVOKED step failed only the legacy two-REVOKED test, then was restored. Evidence PDFs for the 11-33 visual check (untracked, synthetic names): .planning/phases/11-certificates-completion-lifecycle/11-32-evidence/{yoruba,polish,cjk}-certificate.pdf. Phase 11 stays In Progress until 11-33.
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -247,6 +249,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T18:50:00.000Z
-Stopped at: Completed 11-29-PLAN.md (second gap pass, CR-01a: fontkit Noto Sans embedding with never-throw text sanitiser) - 11-32, 11-33 remain
+Last session: 2026-09-19T18:58:00.000Z
+Stopped at: Completed 11-32-PLAN.md (second gap pass: real Postgres + MinIO proof of CR-01/CR-03/CR-04/CR-06) - only 11-33 (human checkpoints) remains
 Resume file: None
