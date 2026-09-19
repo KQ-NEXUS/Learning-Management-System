@@ -511,7 +511,7 @@ Plans:
   3. Authorized staff can revoke and reissue a certificate with reason, linking old and new versions while preserving history. (CRD-05)
   4. A later grade, attendance, or completion correction flags affected certificates for review without silently altering or destroying the original record. (CRD-06)
 
-**Plans**: 33 plans across 13 waves (16 original plans in waves 1-6, then 8 UAT gap-closure plans 11-17..11-24 in waves 7-8, then 9 code-review/UAT second-pass gap-closure plans 11-25..11-33 in waves 9-13; foundation-first: the schema/migration, the human package + permission gates, and the pure primitives all land in wave 1 so every later plan builds on settled ground; the public verification surface ships in wave 2, before issuance exists, so its disclosure contract is tested in isolation)
+**Plans**: 34 plans across 13 waves (16 original plans in waves 1-6, then 8 UAT gap-closure plans 11-17..11-24 in waves 7-8, then 10 code-review/UAT second-pass gap-closure plans 11-25..11-34 in waves 9-13 (11-34 was split out of 11-29 so the font-independent CR-02 fix runs in the first wave of the pass); foundation-first: the schema/migration, the human package + permission gates, and the pure primitives all land in wave 1 so every later plan builds on settled ground; the public verification surface ships in wave 2, before issuance exists, so its disclosure contract is tested in isolation)
 
 Plans:
 **Wave 1**
@@ -568,19 +568,20 @@ Wave 8 *(blocked on Wave 7)*
 
 Wave 9 *(independent of each other, no shared files)*
 
-- [ ] 11-25-PLAN.md — CR-03 + CR-04: non-ACTIVE/COMPLETED enrolments are not certificate-eligible (typed not-eligible, eligible-only queue); a REVOKED certificate blocks every automatic and queue issuance until staff Reissue (CRD-01, CRD-02, CRD-04, CRD-05)
-- [ ] 11-26-PLAN.md — CR-01 precondition: BLOCKING human gate to supply, licence-check and hash-pin the bundled Unicode font asset (no executor download) (CRD-03)
+- [ ] 11-25-PLAN.md — CR-03 + CR-04: non-ACTIVE/COMPLETED enrolments are not certificate-eligible (typed not-eligible, eligible-only queue); a REVOKED certificate blocks every automatic and queue issuance until staff Reissue, which supersedes every REVOKED row for the enrolment and scope so legacy double-revoked data can still be reissued (CRD-01, CRD-02, CRD-04, CRD-05)
+- [ ] 11-26-PLAN.md — CR-01 precondition: BLOCKING human gate to supply, licence-check and hash-pin the bundled Unicode font asset; README records the exact .ttf filename, licence, source and SHA-256 (no executor download) (CRD-03)
 - [ ] 11-27-PLAN.md — CR-06: additive migration widening the one-live-enrolment index to ACTIVE + COMPLETED with a violation preflight, proven on real Postgres and never applied to the remote DB by the executor; CR-05 recorded as deliberately deferred (CRD-05, CRD-06)
 - [ ] 11-28-PLAN.md — Open UAT gap (test 17): certificate-first `deriveCertificateColumn` so a superseded completion no longer hides a flagged certificate or its download (CRD-03, CRD-06)
+- [ ] 11-34-PLAN.md — CR-02 (split out of 11-29, no dependency on the font gate): format-sniffing renderer image guard and template assets restricted to PNG/JPEG at presign, confirm and the inspector picker (CRD-03)
 
-Wave 10 *(blocked on Wave 9)*
+Wave 10 *(blocked on Wave 9; 11-29 also waits on 11-34 because both edit the renderer)*
 
-- [ ] 11-29-PLAN.md — CR-01 (renderer) + CR-02: fontkit Unicode font with a never-throw text sanitiser, format-sniffing image guard, template assets restricted to PNG/JPEG (CRD-03)
-- [ ] 11-30-PLAN.md — CR-01(b): two-phase issuance; the caller's transaction writes rows only, the PDF is rendered and stored after commit by a never-throwing, bounded, idempotent file service (also fixes WR-01) (CRD-01, CRD-02, CRD-03)
+- [ ] 11-29-PLAN.md — CR-01 (renderer): fontkit Unicode font with a never-throw text sanitiser and a font loader whose filename is pinned to the README record (needs the 11-26 font) (CRD-03)
+- [ ] 11-30-PLAN.md — CR-01(b): two-phase issuance; the caller's transaction writes rows only, the PDF is rendered and stored after commit by a never-throwing, bounded (6 s default), idempotent file service (also fixes WR-01) (CRD-01, CRD-02, CRD-03)
 
 Wave 11 *(blocked on Wave 10)*
 
-- [ ] 11-31-PLAN.md — Wire the post-commit settle into the lesson-progress, attendance and certificate-service roots; the download route produces a missing file on demand behind unchanged denial parity (CRD-01, CRD-03)
+- [ ] 11-31-PLAN.md — Wire the post-commit settle into the lesson-progress, attendance and certificate-service roots (an injectable `settle` dep inside `createCertificateService`); the download route produces a missing file on demand behind unchanged denial parity (CRD-01, CRD-03)
 
 Wave 12 *(blocked on Wave 11)*
 
@@ -690,7 +691,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 24/33 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 24/34 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
