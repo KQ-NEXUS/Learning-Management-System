@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   getOwnCertificateForDownload: vi.fn(),
   presignCertificateObjectUrl: vi.fn(async () => "https://s3.example/o?X-Amz-Expires=60"),
   getCurrentActor: vi.fn(async (): Promise<{ userId: string } | null> => null),
+  ensureCertificateFile: vi.fn(async (_id: string): Promise<string | null> => null),
 }));
 
 class AuthenticationError extends Error {}
@@ -27,6 +28,10 @@ vi.mock("@/server/permissions", () => ({
 vi.mock("@/server/services/certificate-service", () => ({
   certificateService: { get: h.certificateGet },
   getOwnCertificateForDownload: h.getOwnCertificateForDownload,
+}));
+
+vi.mock("@/server/services/certificate-file-service", () => ({
+  ensureCertificateFile: h.ensureCertificateFile,
 }));
 
 vi.mock("@/server/services/storage-service", () => ({
@@ -64,6 +69,7 @@ const activeCertificate = {
 beforeEach(() => {
   vi.clearAllMocks();
   h.presignCertificateObjectUrl.mockResolvedValue("https://s3.example/o?X-Amz-Expires=60");
+  h.ensureCertificateFile.mockResolvedValue(null);
 });
 
 describe("GET /api/certificates/[id]/download", () => {
@@ -88,6 +94,8 @@ describe("GET /api/certificates/[id]/download", () => {
     expect(response.status).toBe(302);
     expect(h.getCurrentActor).not.toHaveBeenCalled();
     expect(h.getOwnCertificateForDownload).not.toHaveBeenCalled();
+    // Normal path: the file already exists, so no on-demand production.
+    expect(h.ensureCertificateFile).not.toHaveBeenCalled();
   });
 
   it("returns empty 404 for a signed-in learner who does not own the certificate", async () => {
@@ -99,6 +107,7 @@ describe("GET /api/certificates/[id]/download", () => {
 
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("");
+    expect(h.ensureCertificateFile).not.toHaveBeenCalled();
   });
 
   it("returns empty 404 for an anonymous request", async () => {
@@ -110,6 +119,7 @@ describe("GET /api/certificates/[id]/download", () => {
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("");
     expect(h.getOwnCertificateForDownload).not.toHaveBeenCalled();
+    expect(h.ensureCertificateFile).not.toHaveBeenCalled();
   });
 
   it("returns a 404 for an unknown certificate id byte-identical to the not-yours response", async () => {
@@ -127,6 +137,7 @@ describe("GET /api/certificates/[id]/download", () => {
 
     expect(notFound.status).toBe(notYours.status);
     expect(await notFound.text()).toBe(await notYours.text());
+    expect(h.ensureCertificateFile).not.toHaveBeenCalled();
     expect([...notFound.headers.keys()].sort()).toEqual([...notYours.headers.keys()].sort());
   });
 
@@ -141,6 +152,7 @@ describe("GET /api/certificates/[id]/download", () => {
 
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("");
+    expect(h.ensureCertificateFile).not.toHaveBeenCalled();
   });
 
   it("succeeds for a flagged-but-ACTIVE certificate owned by the caller", async () => {
@@ -166,6 +178,78 @@ describe("GET /api/certificates/[id]/download", () => {
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("");
     expect(h.presignCertificateObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it("produces a missing file on demand for the authorized owner, then presigns THAT key (plan 11-31)", async () => {
+    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
+    h.ensureCertificateFile.mockResolvedValueOnce("certificates/cert-1/fresh.pdf");
+
+    const response = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    expect(h.ensureCertificateFile).toHaveBeenCalledTimes(1);
+    expect(h.ensureCertificateFile).toHaveBeenCalledWith("cert-1");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://s3.example/o?X-Amz-Expires=60");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(h.presignCertificateObjectUrl).toHaveBeenCalledWith({ key: "certificates/cert-1/fresh.pdf" });
+  });
+
+  it("produces a missing file on demand for an authorized staff actor too", async () => {
+    h.certificateGet.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
+    h.ensureCertificateFile.mockResolvedValueOnce("certificates/cert-1/fresh.pdf");
+
+    const response = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    expect(h.ensureCertificateFile).toHaveBeenCalledWith("cert-1");
+    expect(response.status).toBe(302);
+    expect(h.presignCertificateObjectUrl).toHaveBeenCalledWith({ key: "certificates/cert-1/fresh.pdf" });
+  });
+
+  it("answers the same empty 404 as any denial when the file cannot be produced (ensure returns null)", async () => {
+    // A denial for reference.
+    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "someone-else" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    const denied = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
+    h.ensureCertificateFile.mockResolvedValueOnce(null);
+    const unproducible = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    expect(h.ensureCertificateFile).toHaveBeenCalledTimes(1);
+    expect(unproducible.status).toBe(404);
+    expect(await unproducible.text()).toBe("");
+    expect(unproducible.status).toBe(denied.status);
+    expect([...unproducible.headers.keys()].sort()).toEqual([...denied.headers.keys()].sort());
+    expect(h.presignCertificateObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it("only responds after the on-demand production finished (no fire-and-forget)", async () => {
+    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
+    let release: (key: string) => void = () => undefined;
+    h.ensureCertificateFile.mockImplementationOnce(
+      () => new Promise<string | null>((resolve) => (release = resolve)),
+    );
+
+    let settled = false;
+    const pending = GET(new Request("http://localhost/d"), routeCtx("cert-1")).then((r) => {
+      settled = true;
+      return r;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    expect(h.presignCertificateObjectUrl).not.toHaveBeenCalled();
+
+    release("certificates/cert-1/late.pdf");
+    const response = await pending;
+    expect(response.status).toBe(302);
+    expect(h.presignCertificateObjectUrl).toHaveBeenCalledWith({ key: "certificates/cert-1/late.pdf" });
   });
 
   it("never leaks a certificate id, storage key, learner name, or error message in the response body", async () => {
