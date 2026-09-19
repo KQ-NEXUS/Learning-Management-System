@@ -9,6 +9,13 @@
  * `CertificateTemplateLayoutV1`, exactly as recorded in
  * `.planning/phases/11-certificates-completion-lifecycle/11-DECISIONS.md`.
  *
+ * Coordinate systems: the layout (`CertificateElementV1` x/y/width/height) is
+ * TOP-origin, y measured down from the top page edge, exactly as the template
+ * editor (`TemplateCanvas.tsx`) positions elements. pdf-lib's origin is the
+ * BOTTOM-left with y increasing upward. This module owns the single conversion
+ * between the two (`toPdfTextBaselineY`, `fitImageInBox`) so no other file
+ * re-derives it.
+ *
  * Pure transform: no database-client import, no data access. Every input
  * (the parsed layout, the four learner facts, and an injected asset
  * resolver) is passed in by the caller, which keeps this module unit
@@ -84,7 +91,68 @@ function resolveTextElementValue(element: TextElement, fields: CertificateRender
   return fields[element.field];
 }
 
-function drawTextElement(page: PDFPage, font: PDFFont, element: TextElement, fields: CertificateRenderFields): void {
+/**
+ * Line-height ratio the template editor applies to text elements: Tailwind
+ * `leading-tight` (1.25) in `TemplateCanvas.tsx`. The PDF places the baseline
+ * where the editor's glyphs sit, i.e. the glyph box centred in a 1.25-line that
+ * starts at the top of the element box.
+ */
+export const EDITOR_LINE_HEIGHT_RATIO = 1.25;
+
+/**
+ * Convert a top-origin text box (its `y` is the box top) into the PDF baseline
+ * y, in pdf-lib's bottom-origin space. `fullHeight` is ascent + descent and
+ * `ascent` the ascent alone, both at `fontSize` (pdf-lib `heightAtSize`).
+ */
+export function toPdfTextBaselineY(input: {
+  pageHeight: number;
+  elementY: number;
+  fontSize: number;
+  fullHeight: number;
+  ascent: number;
+}): number {
+  const { pageHeight, elementY, fontSize, fullHeight, ascent } = input;
+  const baselineOffset = (EDITOR_LINE_HEIGHT_RATIO * fontSize - fullHeight) / 2 + ascent;
+  return pageHeight - elementY - baselineOffset;
+}
+
+/**
+ * CSS `object-fit: contain` for an image inside a top-origin box: scale
+ * uniformly to fit, centre in the box, and return the bottom-left corner in
+ * pdf-lib's bottom-origin space. Returns null when nothing visible would be
+ * drawn (zero-sized box or image), which also guards the division (T-11-77).
+ */
+export function fitImageInBox(input: {
+  pageHeight: number;
+  box: { x: number; y: number; width: number; height: number };
+  imageWidth: number;
+  imageHeight: number;
+}): { x: number; y: number; width: number; height: number } | null {
+  const { pageHeight, box, imageWidth, imageHeight } = input;
+  if (!(imageWidth > 0) || !(imageHeight > 0)) return null;
+
+  const scale = Math.min(box.width / imageWidth, box.height / imageHeight);
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+
+  const offsetX = (box.width - width) / 2;
+  const offsetY = (box.height - height) / 2;
+  return {
+    x: box.x + offsetX,
+    y: pageHeight - (box.y + offsetY) - height,
+    width,
+    height,
+  };
+}
+
+function drawTextElement(
+  page: PDFPage,
+  font: PDFFont,
+  element: TextElement,
+  fields: CertificateRenderFields,
+  pageHeight: number,
+): void {
   const value = resolveTextElementValue(element, fields);
   const color = parseHexColor(element.color);
   const textWidth = font.widthOfTextAtSize(value, element.fontSize);
@@ -100,7 +168,15 @@ function drawTextElement(page: PDFPage, font: PDFFont, element: TextElement, fie
     x = element.x + element.width - textWidth;
   }
 
-  page.drawText(value, { x, y: element.y, size: element.fontSize, font, color });
+  const y = toPdfTextBaselineY({
+    pageHeight,
+    elementY: element.y,
+    fontSize: element.fontSize,
+    fullHeight: font.heightAtSize(element.fontSize),
+    ascent: font.heightAtSize(element.fontSize, { descender: false }),
+  });
+
+  page.drawText(value, { x, y, size: element.fontSize, font, color });
 }
 
 async function drawImageElement(
@@ -108,6 +184,7 @@ async function drawImageElement(
   page: PDFPage,
   element: ImageElement,
   resolveAsset: CertificateAssetResolver,
+  pageHeight: number,
 ): Promise<void> {
   // The renderer never touches the object store itself (T-11-14) — it only
   // calls the caller-injected resolver. An asset key the resolver cannot
@@ -122,7 +199,17 @@ async function drawImageElement(
     embedded = await document.embedJpg(bytes);
   }
 
-  page.drawImage(embedded, { x: element.x, y: element.y, width: element.width, height: element.height });
+  // Fit inside the box without stretching (matches the editor's object-contain
+  // preview) and convert the top-origin box to pdf-lib's bottom-origin space.
+  const placement = fitImageInBox({
+    pageHeight,
+    box: element,
+    imageWidth: embedded.width,
+    imageHeight: embedded.height,
+  });
+  if (placement === null) return;
+
+  page.drawImage(embedded, placement);
 }
 
 function drawBorderElement(page: PDFPage, element: BorderElement, pageWidth: number, pageHeight: number): void {
@@ -168,9 +255,9 @@ export async function renderCertificatePdf(input: {
 
   for (const element of layout.elements) {
     if (element.kind === "text") {
-      drawTextElement(page, font, element, fields);
+      drawTextElement(page, font, element, fields, height);
     } else if (element.kind === "image") {
-      await drawImageElement(document, page, element, resolveAsset);
+      await drawImageElement(document, page, element, resolveAsset, height);
     } else {
       drawBorderElement(page, element, width, height);
     }

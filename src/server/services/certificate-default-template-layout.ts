@@ -20,6 +20,9 @@ import { parseCertificateTemplateLayout, type CertificateTemplateLayoutV1 } from
 /** The fixed natural key the seed upserts on — see plan 11-05 Task 3. */
 export const DEFAULT_CERTIFICATE_TEMPLATE_NAME = "Default certificate";
 
+// y values are TOP-origin (measured down from the top page edge), the same
+// space the editor and the renderer use (11-19). Title at the top, reference
+// at the bottom of the text block, on a 595.28pt-high landscape A4 page.
 const rawDefaultCertificateTemplateLayout = {
   schema: 1,
   pageSize: "A4",
@@ -31,7 +34,7 @@ const rawDefaultCertificateTemplateLayout = {
       field: "literal",
       literal: "KQ NEXUS Training",
       x: 140,
-      y: 500,
+      y: 55,
       width: 500,
       height: 40,
       fontSize: 28,
@@ -42,7 +45,7 @@ const rawDefaultCertificateTemplateLayout = {
       kind: "text",
       field: "learnerName",
       x: 140,
-      y: 440,
+      y: 123,
       width: 500,
       height: 32,
       fontSize: 22,
@@ -53,7 +56,7 @@ const rawDefaultCertificateTemplateLayout = {
       kind: "text",
       field: "awardTitle",
       x: 140,
-      y: 400,
+      y: 167,
       width: 500,
       height: 28,
       fontSize: 18,
@@ -64,7 +67,7 @@ const rawDefaultCertificateTemplateLayout = {
       kind: "text",
       field: "issuedAt",
       x: 140,
-      y: 360,
+      y: 211,
       width: 300,
       height: 24,
       fontSize: 14,
@@ -75,7 +78,7 @@ const rawDefaultCertificateTemplateLayout = {
       kind: "text",
       field: "verificationRef",
       x: 140,
-      y: 330,
+      y: 241,
       width: 300,
       height: 24,
       fontSize: 12,
