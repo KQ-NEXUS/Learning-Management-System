@@ -582,6 +582,12 @@ export type ReactToCompletionResultsArgs = {
   enrolmentId: string;
   results: CompletionScopeResult[];
   now: Date;
+  /**
+   * The human whose action triggered the re-evaluation (e.g. the staff member
+   * correcting attendance). Absent for triggers with no human actor (lesson
+   * progress), in which case the review flag is attributed to SYSTEM.
+   */
+  actorId?: string | null;
 };
 
 /**
@@ -600,7 +606,8 @@ export type ReactToCompletionResultsArgs = {
  * | `created`     | award `certificateIssuanceMode: "MANUAL"`                | skipped — eligible, not issued (D-04)      |
  * | `created`     | award `certificateEnabled: true`, mode `"AUTOMATIC"`      | `issueCertificateForEnrolment` (system)    |
  * | `unchanged`   | —                                                         | no write of any kind                       |
- * | `superseded`  | —                                                         | `flagCertificateForReview` (system, "completion superseded") |
+ * | `superseded`  | `COURSE` scope on a Programme cohort                      | skipped — D-01, member-course evidence never flags |
+ * | `superseded`  | otherwise                                                 | `flagCertificateForReview` ("completion superseded"), at most once per call; actor is `args.actorId` (the triggering staff member) when known, else SYSTEM |
  */
 export async function reactToCompletionResults(
   tx: CertificateIssuanceTxClient,
@@ -616,6 +623,7 @@ export async function reactToCompletionResults(
   if (!cohort) return;
 
   const isProgrammeCohort = cohort.programmeId != null;
+  let flagged = false;
 
   for (const result of results) {
     if (result.action === "unchanged") continue;
@@ -651,14 +659,28 @@ export async function reactToCompletionResults(
     }
 
     // action === "superseded"
+    //
+    // D-01 on the way down — a Programme cohort's member-course supersession
+    // never drives certificate state. When the programme rule breaks the
+    // PROGRAMME-scope record is superseded in the same evaluation and flags.
+    if (result.scope === "COURSE" && isProgrammeCohort) continue;
+
+    // The flag is keyed on the enrolment (the one ACTIVE certificate), not on
+    // the result, so it is written at most once per re-evaluation.
+    if (flagged) continue;
+    flagged = true;
+
+    const actorId =
+      typeof args.actorId === "string" && args.actorId.length > 0 ? args.actorId : null;
     await flagCertificateForReview(
       tx,
       {
         enrolmentId,
         now,
         reason: "completion superseded",
-        actorId: null,
-        actorType: SYSTEM_ACTOR_TYPE,
+        ...(actorId
+          ? { actorId }
+          : { actorId: null, actorType: SYSTEM_ACTOR_TYPE }),
       },
       deps,
     );
@@ -704,14 +726,19 @@ export const liveIssuanceDeps: IssueCertificateDeps = {
  */
 export async function recalculateCompletionAndIssue(
   tx: CompletionServiceTxClient,
-  args: { enrolmentId: string; now: Date },
+  args: { enrolmentId: string; now: Date; actorId?: string | null },
 ): Promise<CompletionRecalculationResult> {
-  const result = await recalculateCompletion(tx, args);
+  const result = await recalculateCompletion(tx, { enrolmentId: args.enrolmentId, now: args.now });
 
   if (result.kind === "evaluated") {
     await reactToCompletionResults(
       tx as unknown as CertificateIssuanceTxClient,
-      { enrolmentId: args.enrolmentId, results: result.results, now: args.now },
+      {
+        enrolmentId: args.enrolmentId,
+        results: result.results,
+        now: args.now,
+        actorId: args.actorId,
+      },
       liveIssuanceDeps,
     );
   }

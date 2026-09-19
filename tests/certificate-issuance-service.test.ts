@@ -714,6 +714,194 @@ describe("reactToCompletionResults", () => {
   });
 });
 
+describe("reactToCompletionResults — superseded branch (plan 11-24, UAT test 18)", () => {
+  function activeCert(over: Partial<CertRow> = {}): CertRow {
+    return {
+      id: "cert-1",
+      enrolmentId: "enr-1",
+      userId: "user-1",
+      scope: "PROGRAMME",
+      courseId: null,
+      programmeId: "programme-1",
+      awardTitle: "Full Stack",
+      learnerName: "Jane Learner",
+      issuedAt: NOW,
+      status: "ACTIVE",
+      verificationRef: "CERT-ORIGINAL",
+      storageKey: "certificates/cert-1/key",
+      reviewFlaggedAt: null,
+      ...over,
+    };
+  }
+
+  function programmeHarness() {
+    return harness({
+      enrolments: [enr({ status: "COMPLETED", cohortId: "cohort-programme" })],
+      cohorts: [programmeCohort()],
+      programmes: [award({ id: "programme-1", title: "Full Stack" })],
+      certificates: [activeCert()],
+    });
+  }
+
+  const flagAudits = (calls: Array<Record<string, unknown>>) =>
+    calls.filter((a) => a.action === "certificate.review_flagged");
+  const flagEvents = (calls: Array<{ event: Record<string, unknown> }>) =>
+    calls.filter((c) => c.event.type === "certificate.review_flagged");
+
+  it("Programme cohort: three superseded results write exactly one flag audit row and one event", async () => {
+    const h = programmeHarness();
+    const { deps, auditCalls, writeEventCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [
+            scopeResult({ scope: "COURSE", courseId: "course-a", action: "superseded" }),
+            scopeResult({ scope: "COURSE", courseId: "course-b", action: "superseded" }),
+            scopeResult({ scope: "PROGRAMME", courseId: null, action: "superseded" }),
+          ],
+        },
+        deps,
+      ),
+    );
+
+    expect(flagAudits(auditCalls)).toHaveLength(1);
+    expect(flagEvents(writeEventCalls)).toHaveLength(1);
+    const cert = h.certificates.get("cert-1");
+    expect(cert?.reviewFlaggedAt).toEqual(NOW);
+    expect(cert?.status).toBe("ACTIVE");
+    expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
+  });
+
+  it("Programme cohort: COURSE-scope superseded results alone flag nothing (D-01)", async () => {
+    const h = programmeHarness();
+    const { deps, auditCalls, writeEventCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [
+            scopeResult({ scope: "COURSE", courseId: "course-a", action: "superseded" }),
+            scopeResult({ scope: "COURSE", courseId: "course-b", action: "superseded" }),
+          ],
+        },
+        deps,
+      ),
+    );
+
+    expect(flagAudits(auditCalls)).toHaveLength(0);
+    expect(flagEvents(writeEventCalls)).toHaveLength(0);
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toBeNull();
+    expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
+  });
+
+  it("Programme cohort: a PROGRAMME-only superseded result still flags once", async () => {
+    const h = programmeHarness();
+    const { deps, auditCalls, writeEventCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [scopeResult({ scope: "PROGRAMME", courseId: null, action: "superseded" })],
+        },
+        deps,
+      ),
+    );
+
+    expect(flagAudits(auditCalls)).toHaveLength(1);
+    expect(flagEvents(writeEventCalls)).toHaveLength(1);
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toEqual(NOW);
+  });
+
+  function courseHarness() {
+    return harness({
+      enrolments: [enr({ status: "COMPLETED" })],
+      certificates: [activeCert({ scope: "COURSE", courseId: "course-1", programmeId: null, awardTitle: "Intro to Testing" })],
+    });
+  }
+
+  it("Course cohort: two COURSE superseded results flag once", async () => {
+    const h = courseHarness();
+    const { deps, auditCalls, writeEventCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        {
+          enrolmentId: "enr-1",
+          now: NOW,
+          results: [scopeResult({ action: "superseded" }), scopeResult({ action: "superseded" })],
+        },
+        deps,
+      ),
+    );
+
+    expect(flagAudits(auditCalls)).toHaveLength(1);
+    expect(flagEvents(writeEventCalls)).toHaveLength(1);
+  });
+
+  it("Course cohort: one COURSE superseded result flags once", async () => {
+    const h = courseHarness();
+    const { deps, auditCalls, writeEventCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "superseded" })] },
+        deps,
+      ),
+    );
+
+    expect(flagAudits(auditCalls)).toHaveLength(1);
+    expect(flagEvents(writeEventCalls)).toHaveLength(1);
+  });
+
+  it("an explicit actorId is recorded on the flag audit row with no SYSTEM actorType", async () => {
+    const h = courseHarness();
+    const { deps, auditCalls, writeEventCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        { enrolmentId: "enr-1", now: NOW, actorId: "staff-1", results: [scopeResult({ action: "superseded" })] },
+        deps,
+      ),
+    );
+
+    const [audit] = flagAudits(auditCalls);
+    expect(audit.actorId).toBe("staff-1");
+    expect(audit.actorType).toBeUndefined();
+    const [event] = flagEvents(writeEventCalls);
+    expect((event.event.payload as Record<string, unknown>).reason).toBe("completion superseded");
+  });
+
+  it("no actorId keeps the flag attributed to SYSTEM", async () => {
+    const h = courseHarness();
+    const { deps, auditCalls } = makeDeps();
+
+    await h.runInTransaction((tx) =>
+      reactToCompletionResults(
+        tx,
+        { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "superseded" })] },
+        deps,
+      ),
+    );
+
+    const [audit] = flagAudits(auditCalls);
+    expect(audit.actorId).toBeNull();
+    expect(audit.actorType).toBe(SYSTEM_ACTOR_TYPE);
+  });
+});
+
 describe("recalculateCompletionAndIssue", () => {
   it("passes through a not-evaluable result unchanged and reacts to nothing", async () => {
     const notEvaluable: CompletionRecalculationResult = { kind: "not-evaluable", reason: "unpinned" };
