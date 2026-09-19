@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-24-PLAN.md
-last_updated: "2026-09-19T12:40:54.696Z"
+stopped_at: Completed 11-18-PLAN.md
+last_updated: "2026-09-19T12:52:54.038Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 160
-  completed_plans: 158
+  completed_plans: 159
   percent: 56
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-24 done (one attributable review flag per correction); 11-23 still pending — gap-closure wave 7 in progress; phase NOT complete
+Plan: 11-18 done (COMPLETED dashboard card surface + Next-up copy + real-Postgres regression); 11-23 still pending — gap-closure wave 8 in progress; phase NOT complete
 Status: Ready to execute
 Last activity: 2026-09-19
 
@@ -194,6 +194,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11-20]: Archived stored template shown as disabled selected option via CertificateSettingsFields archivedTemplate prop; changed-only template validation on Course update
 - [Phase 11]: [11-21] UAT test 13 delivered at /verify-certificate (bare /verify belongs to IAM-02 email verification); page static, no lookup
 - [Phase 11]: Plan 11-24: superseded COURSE-scope results on Programme cohorts skip flagging (D-01); flag once per re-evaluation, attributed to triggering staff actor else SYSTEM
+- [Phase 11]: Plan 11-18: a COMPLETED dashboard card renders only Next-up, progress, Support tickets slot and CertificateSlot; sessions, Assessments, Results and the access banner are omitted (G-01, no dead links). Proven against real issuance on Postgres.
 
 ### Pending Todos
 
@@ -235,6 +236,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T12:40:41.925Z
-Stopped at: Completed 11-24-PLAN.md
+Last session: 2026-09-19T12:52:53.463Z
+Stopped at: Completed 11-18-PLAN.md
 Resume file: None
