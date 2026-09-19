@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-26-PLAN.md (second gap pass: human-placed Noto Sans Regular 2.015 font committed with provenance README and hash/glyph-coverage test) - 11-29, 11-32, 11-33 remain
+stopped_at: Completed 11-29-PLAN.md (second gap pass, CR-01a: fontkit Noto Sans embedding with never-throw text sanitiser) - 11-32, 11-33 remain
 last_updated: "2026-09-19T17:00:00.000Z"
 last_activity: 2026-09-19
 progress:
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-26 done (human-approved Noto Sans Regular font asset committed, SHA-256 pinned, Yoruba/Polish coverage proven; CJK/Arabic/Hebrew limitation accepted) - 31/34 plans complete; remaining: 11-29 (Unicode rendering), 11-32, 11-33
+Plan: 11-29 done (renderer embeds the bundled Noto Sans via fontkit subset, sanitiser guarantees no throw, font traced for Next) - 32/34 plans complete; remaining: 11-32 (real Postgres + MinIO proof), 11-33 (human checkpoints)
 Status: Second gap-closure pass in progress (11-REVIEW.md + 11-UAT.md open gaps) before verify
 Last activity: 2026-09-19
 
@@ -111,6 +111,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11-19]: PDF renderer owns the single top-origin to bottom-origin conversion; text baseline modelled on the editor (1.25 line-height, centred glyph box); images fit object-contain; seeded default template y values converted to top-origin. Already-issued PDFs keep their mirrored layout (regeneration needs a user decision).
 
 - [Phase 11-26]: Certificate font is Noto Sans Regular 2.015 (SIL OFL 1.1), chosen and placed by the human (download URL recorded verbatim as the Google Fonts selection page, a non-stable pointer; stable references added separately); SHA-256 pinned by tests/certificate-font-asset.test.ts; CJK/Arabic/Hebrew limitation accepted ("yes limitation accepted"). Plan 11-29 loader filename must equal the README Filename: line.
+- [Phase 11-29]: Renderer embeds the bundled Noto Sans via fontkit (subset) with `features: { ccmp: false }` so lowercase Yoruba dot-below letters use their precomposed glyphs (the default ccmp splits them into base + unmapped mark); `sanitiseCertificateText` (NFC, CR/LF/tab -> space, controls dropped, unsupported code points -> "?") is applied to both measure and draw; no standard-font fallback; font traced via `outputFileTracingIncludes`; text is recovered in tests through the ToUnicode CMap.
 
 - [Ingest]: No Auth.js — hand-rolled database sessions, required by IAM-03's selective/global session revocation (Auth.js Credentials provider forces JWT). Already implemented.
 - [Ingest]: Next.js 16.3.4 is the locked tech-stack version (live `package.json`), not the stale foundation-design SPEC's "Next.js 15."
@@ -246,6 +247,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:00:00.000Z
-Stopped at: Completed 11-30-PLAN.md (second gap pass, CR-01b two-phase issuance: rows in the caller transaction, PDF after commit) - 11-26, 11-29, 11-31..11-33 remain
+Last session: 2026-09-19T18:50:00.000Z
+Stopped at: Completed 11-29-PLAN.md (second gap pass, CR-01a: fontkit Noto Sans embedding with never-throw text sanitiser) - 11-32, 11-33 remain
 Resume file: None
