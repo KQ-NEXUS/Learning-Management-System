@@ -2,7 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Award } from "lucide-react";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
-import { certificateService } from "@/server/services/certificate-service";
+import {
+  certificateService,
+  listCertificateIssuanceSources,
+} from "@/server/services/certificate-service";
 import { IssuedCertificatesTable } from "./IssuedCertificatesTable";
 
 /**
@@ -18,8 +21,11 @@ export const metadata = { title: "All certificates" };
 
 export default async function IssuedCertificatesPage() {
   let rows;
+  let sources;
   try {
     rows = await certificateService.list({});
+    // One batched, authorized audit read — never a per-row lookup (UAT test 8).
+    sources = await listCertificateIssuanceSources({ certificateIds: rows.map((row) => row.id) });
   } catch (error) {
     if (error instanceof AuthenticationError || error instanceof AuthorizationError) notFound();
     throw error;
@@ -36,7 +42,7 @@ export default async function IssuedCertificatesPage() {
           Pending issuance
         </Link>
       </div>
-      <IssuedCertificatesTable rows={rows} />
+      <IssuedCertificatesTable rows={rows} sources={sources} />
     </div>
   );
 }

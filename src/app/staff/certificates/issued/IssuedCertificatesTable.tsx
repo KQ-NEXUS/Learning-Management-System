@@ -22,9 +22,20 @@ import { useMemo, useState } from "react";
 import { ResourceTable, StatusPill, type Column } from "@/components/primitives";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { certificateDisplayStatus } from "@/lib/certificate-display-status";
-import type { CertificateRow } from "@/server/services/certificate-service";
+// `import type` only — this is a client component and must not pull the service's server graph
+// into the browser bundle (same reason `certificateDisplayStatus` lives in `src/lib`).
+import type { CertificateRow, IssuanceSource } from "@/server/services/certificate-service";
 
 type FilterValue = "" | "active" | "flagged" | "revoked";
+type IssuedByFilterValue = "" | "automatic" | "staff";
+
+/** Consistent with the detail page's "System (automatic issuance)" wording. A missing source is
+ *  "Not recorded" — never guessed as Automatic (T-11-93). */
+function issuedByLabel(source: IssuanceSource | undefined): string {
+  if (!source || source.kind === "not-recorded") return "Not recorded";
+  if (source.kind === "automatic") return "Automatic";
+  return source.actorName ?? "Staff member";
+}
 
 const STATUS_TONE = {
   revoked: "danger",
@@ -76,15 +87,45 @@ const columns: Column<CertificateRow>[] = [
   },
 ];
 
-export function IssuedCertificatesTable({ rows }: { rows: CertificateRow[] }) {
+export function IssuedCertificatesTable({
+  rows,
+  sources,
+}: {
+  rows: CertificateRow[];
+  /** Issuance source per certificate id (UAT test 8). Optional: when omitted the "Issued by"
+   *  column and filter are not rendered and the table is unchanged. */
+  sources?: Record<string, IssuanceSource>;
+}) {
   const [filter, setFilter] = useState<FilterValue>("");
+  const [issuedBy, setIssuedBy] = useState<IssuedByFilterValue>("");
+  const showIssuedBy = sources !== undefined;
+
+  const tableColumns = useMemo<Column<CertificateRow>[]>(() => {
+    if (!sources) return columns;
+    const issuedByColumn: Column<CertificateRow> = {
+      key: "issuedBy",
+      header: "Issued by",
+      render: (row) => issuedByLabel(sources[row.id]),
+    };
+    const issuedIndex = columns.findIndex((column) => column.key === "issuedAt");
+    return [...columns.slice(0, issuedIndex + 1), issuedByColumn, ...columns.slice(issuedIndex + 1)];
+  }, [sources]);
 
   const visible = useMemo(() => {
-    if (!filter) return rows;
-    return rows.filter((row) => certificateDisplayStatus(row) === filter);
-  }, [rows, filter]);
+    return rows.filter((row) => {
+      if (filter && certificateDisplayStatus(row) !== filter) return false;
+      if (issuedBy) {
+        const kind = sources?.[row.id]?.kind;
+        if (kind !== issuedBy) return false;
+      }
+      return true;
+    });
+  }, [rows, filter, issuedBy, sources]);
 
-  const activeFilterCount = filter ? 1 : 0;
+  const activeFilterCount = (filter ? 1 : 0) + (issuedBy ? 1 : 0);
+  const activeQuery = [filter ? `status=${filter}` : "", issuedBy ? `issuedBy=${issuedBy}` : ""]
+    .filter(Boolean)
+    .join("&");
 
   const state =
     visible.length > 0
@@ -94,7 +135,7 @@ export function IssuedCertificatesTable({ rows }: { rows: CertificateRow[] }) {
   return (
     <ResourceTable<CertificateRow>
       noun="certificates"
-      columns={columns}
+      columns={tableColumns}
       state={state}
       getRowKey={(row) => row.id}
       getRowHref={(row) => `/staff/certificates/issued/${row.id}`}
@@ -115,10 +156,34 @@ export function IssuedCertificatesTable({ rows }: { rows: CertificateRow[] }) {
             { value: "revoked", label: "Revoked" },
           ],
         },
+        ...(showIssuedBy
+          ? [
+              {
+                kind: "select" as const,
+                name: "issuedBy",
+                label: "Issued by",
+                value: issuedBy,
+                options: [
+                  { value: "", label: "All" },
+                  { value: "automatic", label: "Automatic" },
+                  { value: "staff", label: "Staff" },
+                ],
+              },
+            ]
+          : []),
       ]}
-      onFilterChange={(_name, value) => setFilter(value as FilterValue)}
-      activeQuery={activeFilterCount > 0 ? `?status=${filter}` : undefined}
-      onClearFilters={activeFilterCount > 0 ? () => setFilter("") : undefined}
+      onFilterChange={(name, value) =>
+        name === "issuedBy" ? setIssuedBy(value as IssuedByFilterValue) : setFilter(value as FilterValue)
+      }
+      activeQuery={activeFilterCount > 0 ? `?${activeQuery}` : undefined}
+      onClearFilters={
+        activeFilterCount > 0
+          ? () => {
+              setFilter("");
+              setIssuedBy("");
+            }
+          : undefined
+      }
       emptyHeading="No certificates issued yet"
       emptyBody="Certificates appear here automatically once one is issued."
     />

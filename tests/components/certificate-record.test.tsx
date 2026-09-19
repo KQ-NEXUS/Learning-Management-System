@@ -13,7 +13,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { CertificateRow } from "@/server/services/certificate-service";
+import type { CertificateRow, IssuanceSource } from "@/server/services/certificate-service";
 import { IssuedCertificatesTable } from "@/app/staff/certificates/issued/IssuedCertificatesTable";
 import { CertificateRecordActions } from "@/app/staff/certificates/issued/[id]/CertificateRecordActions";
 
@@ -133,6 +133,115 @@ describe("IssuedCertificatesTable — empty state", () => {
     expect(
       screen.getByText("Certificates appear here automatically once one is issued."),
     ).toBeTruthy();
+  });
+});
+
+describe("IssuedCertificatesTable — issuance source (UAT test 8)", () => {
+  const rows = [
+    baseCert({ id: "c-auto", learnerName: "Auto Learner" }),
+    baseCert({ id: "c-staff", learnerName: "Staff Learner" }),
+    baseCert({ id: "c-noname", learnerName: "Noname Learner" }),
+    baseCert({ id: "c-missing", learnerName: "Missing Learner" }),
+    baseCert({ id: "c-none", learnerName: "Unlisted Learner" }),
+  ];
+  const sources: Record<string, IssuanceSource> = {
+    "c-auto": { kind: "automatic" },
+    "c-staff": { kind: "staff", actorName: "Ngozi Eze" },
+    "c-noname": { kind: "staff", actorName: null },
+    "c-missing": { kind: "not-recorded" },
+    // "c-none" deliberately has no entry.
+  };
+
+  /** Non-button text matches (the filter buttons reuse the same words). */
+  const cellTexts = (text: string) =>
+    screen.queryAllByText(text).filter((el) => el.tagName !== "BUTTON");
+
+  const issuedByGroup = () => screen.getByRole("group", { name: "Issued by" });
+
+  it("shows Automatic, the staff name, 'Staff member' and 'Not recorded' in an Issued by column", () => {
+    render(<IssuedCertificatesTable rows={rows} sources={sources} />);
+    expect(screen.getAllByText("Issued by").length).toBeGreaterThan(0);
+    expect(cellTexts("Automatic").length).toBeGreaterThan(0);
+    expect(cellTexts("Ngozi Eze").length).toBeGreaterThan(0);
+    expect(cellTexts("Staff member").length).toBeGreaterThan(0);
+    // c-missing (not-recorded) and c-none (no entry) both fall back.
+    expect(cellTexts("Not recorded").length).toBeGreaterThan(0);
+  });
+
+  it("never labels a certificate with no audit source as Automatic (T-11-93)", () => {
+    render(
+      <IssuedCertificatesTable
+        rows={[baseCert({ id: "c-none", learnerName: "Unlisted Learner" })]}
+        sources={{}}
+      />,
+    );
+    expect(cellTexts("Automatic").length).toBe(0);
+    expect(cellTexts("Not recorded").length).toBeGreaterThan(0);
+  });
+
+  it("guard: with no sources prop the table renders exactly as before (no Issued by column or filter)", () => {
+    render(<IssuedCertificatesTable rows={rows} />);
+    expect(screen.queryByText("Issued by")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Issued by" })).toBeNull();
+    expect(cellTexts("Not recorded").length).toBe(0);
+  });
+
+  it("the Automatic filter shows only automatically issued rows", () => {
+    render(<IssuedCertificatesTable rows={rows} sources={sources} />);
+    fireEvent.click(within(issuedByGroup()).getByRole("button", { name: "Automatic" }));
+    expect(screen.getAllByText("Auto Learner").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Staff Learner")).toBeNull();
+    expect(screen.queryByText("Missing Learner")).toBeNull();
+    expect(screen.queryByText("Unlisted Learner")).toBeNull();
+  });
+
+  it("the Staff filter shows only staff-issued rows (including nameless staff, excluding not-recorded)", () => {
+    render(<IssuedCertificatesTable rows={rows} sources={sources} />);
+    fireEvent.click(within(issuedByGroup()).getByRole("button", { name: "Staff" }));
+    expect(screen.getAllByText("Staff Learner").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Noname Learner").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Auto Learner")).toBeNull();
+    expect(screen.queryByText("Missing Learner")).toBeNull();
+    expect(screen.queryByText("Unlisted Learner")).toBeNull();
+  });
+
+  it("composes with the Status filter — both must match", () => {
+    const mixed = [
+      baseCert({ id: "c-auto", learnerName: "Auto Active" }),
+      baseCert({
+        id: "c-auto-flagged",
+        learnerName: "Auto Flagged",
+        reviewFlaggedAt: new Date("2026-02-01"),
+      }),
+      baseCert({ id: "c-staff", learnerName: "Staff Active" }),
+    ];
+    render(
+      <IssuedCertificatesTable
+        rows={mixed}
+        sources={{
+          "c-auto": { kind: "automatic" },
+          "c-auto-flagged": { kind: "automatic" },
+          "c-staff": { kind: "staff", actorName: "Ngozi Eze" },
+        }}
+      />,
+    );
+    fireEvent.click(within(issuedByGroup()).getByRole("button", { name: "Automatic" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Status" })).getByRole("button", { name: "Active" }));
+    expect(screen.getAllByText("Auto Active").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Auto Flagged")).toBeNull();
+    expect(screen.queryByText("Staff Active")).toBeNull();
+  });
+
+  it("clearing filters resets both selects", () => {
+    render(<IssuedCertificatesTable rows={rows} sources={sources} />);
+    fireEvent.click(within(issuedByGroup()).getByRole("button", { name: "Automatic" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Status" })).getByRole("button", { name: "Flagged" }));
+    fireEvent.click(screen.getAllByRole("button", { name: /clear/i })[0]);
+    expect(within(issuedByGroup()).getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("true");
+    expect(
+      within(screen.getByRole("group", { name: "Status" })).getByRole("button", { name: "All" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getAllByText("Staff Learner").length).toBeGreaterThan(0);
   });
 });
 
