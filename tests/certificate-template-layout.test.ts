@@ -90,6 +90,57 @@ describe("parseCertificateTemplateLayout", () => {
     expect(() => parseCertificateTemplateLayout({ ...validLayout, elements: [image] })).toThrow(UnsupportedCertificateLayoutError);
   });
 
+  // WR-03: an image assetKey is read from the object store at render time, so
+  // it is confined to the certificate-template-assets/ namespace.
+  const layoutWithKey = (assetKey: unknown) => ({
+    ...validLayout,
+    elements: [{ ...validLayout.elements[1], assetKey }],
+  });
+
+  it.each([
+    "certificate-template-assets/tpl/image",
+    "certificate-template-assets/draft/0b6f6c2e-6f0e-4f8e-9d0e-2f6d7c1a9b11",
+    "certificate-template-assets/cmabc123def/0b6f6c2e-6f0e-4f8e-9d0e-2f6d7c1a9b11",
+  ])("accepts the production asset key shape %s, returning it unchanged", (key) => {
+    const parsed = parseCertificateTemplateLayout(layoutWithKey(key));
+    expect(parsed.elements[0]).toMatchObject({ kind: "image", assetKey: key });
+  });
+
+  it.each([
+    "   ",
+    "submissions/abc",
+    "lessons/x/y",
+    "certificates/cert-1/0b6f6c2e",
+    "certificate-template-asset-uploads/tpl/x",
+    "pending-upload",
+    "/certificate-template-assets/tpl/x",
+    " certificate-template-assets/tpl/x",
+    "certificate-template-assets/../submissions/abc",
+    "certificate-template-assets/tpl/../../x",
+    "certificate-template-assets/",
+    "certificate-template-assets//x",
+    "certificate-template-assets/tpl//x",
+    "certificate-template-assets/tpl/",
+    "certificate-template-assets/tpl/./x",
+    "certificate-template-assets/tpl\\x",
+    "certificate-template-assets/tpl/x\u0000y",
+    "certificate-template-assets/tpl/x\ny",
+    "certificate-template-assets",
+    "Certificate-Template-Assets/tpl/x",
+  ])("rejects the foreign / traversal asset key %j, reporting only the field name", (key) => {
+    // `issue` is the literal field name, so the key itself is never echoed.
+    expect(() => parseCertificateTemplateLayout(layoutWithKey(key))).toThrowError(
+      expect.objectContaining({ name: "UnsupportedCertificateLayoutError", issue: "assetKey" }),
+    );
+  });
+
+  it.each([undefined, null, 42, {}, ["certificate-template-assets/tpl/x"]])(
+    "rejects a non-string asset key %j",
+    (key) => {
+      expect(() => parseCertificateTemplateLayout(layoutWithKey(key))).toThrow(UnsupportedCertificateLayoutError);
+    },
+  );
+
   it("rejects a colour outside the #RRGGBB format", () => {
     const text = { ...validLayout.elements[0], color: "red" };
     expect(() => parseCertificateTemplateLayout({ ...validLayout, elements: [text] })).toThrow(UnsupportedCertificateLayoutError);

@@ -48,6 +48,17 @@ const VALID_LAYOUT = {
   ],
 };
 
+const imageLayout = (assetKey: string) => ({
+  ...VALID_LAYOUT,
+  elements: [
+    ...VALID_LAYOUT.elements,
+    { kind: "image", assetKey, x: 10, y: 10, width: 60, height: 60 },
+  ],
+});
+// WR-03: a foreign bucket key would be read into a certificate at render time.
+const BAD_IMAGE_LAYOUT = imageLayout("submissions/abc");
+const GOOD_IMAGE_LAYOUT = imageLayout("certificate-template-assets/tpl-1/0b6f6c2e-6f0e-4f8e-9d0e-2f6d7c1a9b11");
+
 const MALFORMED_LAYOUT = {
   schema: 1,
   pageSize: "A4",
@@ -176,6 +187,24 @@ describe("certificateTemplateService.create", () => {
     expect(rows.size).toBe(0);
   });
 
+  it("rejects an image element whose assetKey is outside certificate-template-assets/, and writes no row (WR-03)", async () => {
+    const { certificateTemplateService, delegate, rows } = harness();
+
+    await expect(
+      certificateTemplateService.create({ name: "Foreign asset", layout: BAD_IMAGE_LAYOUT }),
+    ).rejects.toThrow(UnsupportedCertificateLayoutError);
+    expect(delegate.create).not.toHaveBeenCalled();
+    expect(rows.size).toBe(0);
+  });
+
+  it("persists an image element whose assetKey is under certificate-template-assets/ (WR-03 positive twin)", async () => {
+    const { certificateTemplateService } = harness();
+
+    const created = await certificateTemplateService.create({ name: "Good asset", layout: GOOD_IMAGE_LAYOUT });
+
+    expect(created.layout).toEqual(GOOD_IMAGE_LAYOUT);
+  });
+
   it("stores EMPTY_LAYOUT_V1 when no layout is supplied", async () => {
     const { certificateTemplateService } = harness();
 
@@ -206,6 +235,29 @@ describe("certificateTemplateService.update", () => {
 
     const reloaded = await certificateTemplateService.get("tpl-1");
     expect(reloaded?.layout).toEqual(VALID_LAYOUT);
+  });
+
+  it("rejects an image element with a foreign assetKey and leaves the stored layout unchanged (WR-03)", async () => {
+    const { certificateTemplateService } = harness({
+      templateRows: [makeTemplateRow({ id: "tpl-1", layout: VALID_LAYOUT })],
+    });
+
+    await expect(
+      certificateTemplateService.update("tpl-1", { layout: BAD_IMAGE_LAYOUT }),
+    ).rejects.toThrow(UnsupportedCertificateLayoutError);
+
+    const reloaded = await certificateTemplateService.get("tpl-1");
+    expect(reloaded?.layout).toEqual(VALID_LAYOUT);
+  });
+
+  it("accepts an image element under certificate-template-assets/ on update (WR-03 positive twin)", async () => {
+    const { certificateTemplateService } = harness({
+      templateRows: [makeTemplateRow({ id: "tpl-1", layout: VALID_LAYOUT })],
+    });
+
+    const updated = await certificateTemplateService.update("tpl-1", { layout: GOOD_IMAGE_LAYOUT });
+
+    expect(updated.layout).toEqual(GOOD_IMAGE_LAYOUT);
   });
 
   it("leaves the layout untouched when the update omits it entirely (rename-only edit)", async () => {

@@ -144,9 +144,37 @@ function parseTextElement(record: Record<string, unknown>): CertificateElementV1
   };
 }
 
+/**
+ * WR-03 — the only namespace a template image's `assetKey` may name. The
+ * renderer reads the key straight from the object store, so an unconfined key
+ * would let a `certificates.manage` holder embed any bucket object (a
+ * submission, another learner's certificate) into a certificate. This module
+ * must stay pure (no imports — guarded by tests/certificate-phase-invariants),
+ * so the prefix is duplicated here; it MUST equal the prefix
+ * `storage-service.ts`'s `buildTemplateAssetStorageKey` /
+ * `finalTemplateAssetKeyFor` produce (`certificate-template-assets/<id>/<uuid>`).
+ */
+export const CERTIFICATE_TEMPLATE_ASSET_KEY_PREFIX = "certificate-template-assets/";
+
+/** No control characters (incl. NUL/newline) anywhere in a key. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+
+function isConfinedAssetKey(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!value.startsWith(CERTIFICATE_TEMPLATE_ASSET_KEY_PREFIX)) return false;
+  if (value.includes("\\") || CONTROL_CHARACTERS.test(value)) return false;
+  const remainder = value.slice(CERTIFICATE_TEMPLATE_ASSET_KEY_PREFIX.length);
+  if (remainder === "") return false;
+  // No empty segment (`//`, trailing `/`), no `.` / `..` traversal segment.
+  return remainder.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
 function parseImageElement(record: Record<string, unknown>): CertificateElementV1 {
   rejectUnknownKeys(record, RECOGNISED_IMAGE_KEYS);
-  if (typeof record.assetKey !== "string" || record.assetKey.trim() === "") fail("assetKey");
+  // The key is returned verbatim (never trimmed/normalised) so a stored key
+  // round-trips byte-for-byte; the issue text is the field name, never the key.
+  if (!isConfinedAssetKey(record.assetKey)) fail("assetKey");
 
   return {
     kind: "image",
