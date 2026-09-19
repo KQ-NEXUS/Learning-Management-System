@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 11-19-PLAN.md — next: remaining gap-closure plans (11-18, 11-20..11-24)"
-last_updated: "2026-09-19T11:39:33.066Z"
+stopped_at: "Completed 11-20-PLAN.md — next: remaining gap-closure plans (11-18, 11-21..11-24)"
+last_updated: "2026-09-19T12:07:59.942Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 160
-  completed_plans: 154
+  completed_plans: 155
   percent: 56
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 19 of 24 done — gap-closure wave 7 in progress (11-17 COMPLETED enrolments visible; 11-19 PDF coordinate conversion + image fit, UAT 11); phase NOT complete
-Status: Executing gap-closure plans 11-18, 11-20..11-24
+Plan: 20 of 24 done — gap-closure wave 7 in progress (11-17, 11-19, 11-20 Course edit page, UAT 6); phase NOT complete
+Status: Executing gap-closure plans 11-18, 11-21..11-24
 Last activity: 2026-09-19
 
-Progress: [██████████] 96%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -98,6 +98,7 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 | Phase 11 P13 | 56min | 3 tasks | 8 files |
 | Phase 11 P14 | 35min | 2 tasks | 5 files |
 | Phase 11 P15 | 55min | 3 tasks | 10 files |
+| Phase 11 P20 | 35min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -188,6 +189,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: Phase 11 P15: Added getCertificateIssuer to certificate-service.ts (Rule 2), resolving the detail page's Issued-by actor from the certificate's own issuance AuditEvent row, gated by certificates.view (not the GLOBAL-only audit.view), mirroring roster-service.ts's own-record AuditEvent read
 - [Phase 11]: Phase 11 P15: certificate-record-actions.ts's revoke/reissue zod schemas stay module-private (a use-server file may only export async functions); exported async validateRevokeCertificateInput/validateReissueCertificateInput wrappers let tests assert schema rejection directly
 - [Phase 11]: 11-17 G-01: a COMPLETED enrolment is VISIBLE but NOT OPERABLE. Only the dashboard read path (listOwnDashboardEnrolments, loadLearnerPath includeCompleted) sees it; assertLessonOpenable refuses it; lesson/progress/quiz/results/hasActiveEnrolmentCoveringCourse stay ACTIVE-only. COMPLETED cards skip learnerResults reads and have nextAction complete, so plan 11-18 must hide Assessments/Results. Whether completed learners may review content/results is an open product question.
+- [Phase 11-20]: Archived stored template shown as disabled selected option via CertificateSettingsFields archivedTemplate prop; changed-only template validation on Course update
 
 ### Pending Todos
 
@@ -229,6 +231,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T11:39:32.769Z
-Stopped at: Completed 11-19-PLAN.md — next: remaining gap-closure plans (11-18, 11-20..11-24)
+Last session: 2026-09-19T12:07:59.860Z
+Stopped at: Completed 11-20-PLAN.md
 Resume file: None
