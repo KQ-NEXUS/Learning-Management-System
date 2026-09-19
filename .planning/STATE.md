@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 11-17-PLAN.md — next: remaining gap-closure plans (11-18 dashboard page hides Assessments/Results on COMPLETED cards)"
-last_updated: "2026-09-19T11:29:28.394Z"
+stopped_at: "Completed 11-19-PLAN.md — next: remaining gap-closure plans (11-18, 11-20..11-24)"
+last_updated: "2026-09-19T11:39:33.066Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 160
-  completed_plans: 153
+  completed_plans: 154
   percent: 56
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 17 of 24 — gap-closure wave 7 in progress (11-17 done: COMPLETED enrolments visible-not-operable, G-01); phase NOT complete
-Status: Executing gap-closure plans 11-18..11-24
+Plan: 19 of 24 done — gap-closure wave 7 in progress (11-17 COMPLETED enrolments visible; 11-19 PDF coordinate conversion + image fit, UAT 11); phase NOT complete
+Status: Executing gap-closure plans 11-18, 11-20..11-24
 Last activity: 2026-09-19
 
 Progress: [██████████] 96%
@@ -104,6 +104,8 @@ Note: Phase 1's work (foundation, authorization core, Courses reference slice �
 ### Decisions
 
 Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affecting current work:
+
+- [Phase 11-19]: PDF renderer owns the single top-origin to bottom-origin conversion; text baseline modelled on the editor (1.25 line-height, centred glyph box); images fit object-contain; seeded default template y values converted to top-origin. Already-issued PDFs keep their mirrored layout (regeneration needs a user decision).
 
 - [Ingest]: No Auth.js — hand-rolled database sessions, required by IAM-03's selective/global session revocation (Auth.js Credentials provider forces JWT). Already implemented.
 - [Ingest]: Next.js 16.3.4 is the locked tech-stack version (live `package.json`), not the stale foundation-design SPEC's "Next.js 15."
@@ -227,6 +229,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T11:29:00.142Z
-Stopped at: Completed 11-17-PLAN.md — next: remaining gap-closure plans (11-18 dashboard page hides Assessments/Results on COMPLETED cards)
+Last session: 2026-09-19T11:39:32.769Z
+Stopped at: Completed 11-19-PLAN.md — next: remaining gap-closure plans (11-18, 11-20..11-24)
 Resume file: None
