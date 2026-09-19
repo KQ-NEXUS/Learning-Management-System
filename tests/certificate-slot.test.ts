@@ -126,7 +126,7 @@ function makeLearnerAccess(opts: {
   enrolmentsByActor: Record<string, OwnEnrolmentSnapshot[]>;
 }): EnrolmentDashboardLearnerAccess {
   return {
-    listOwnActiveEnrolments: async (actor: Actor) => opts.enrolmentsByActor[actor.userId] ?? [],
+    listOwnDashboardEnrolments: async (actor: Actor) => opts.enrolmentsByActor[actor.userId] ?? [],
     loadLearnerCourseStructure: async () => ({ kind: "unpinned" }) as never,
     loadLearnerPath: neverCalled("loadLearnerPath") as never,
     loadPinnedCompletionRuleSource: neverCalled("loadPinnedCompletionRuleSource") as never,
