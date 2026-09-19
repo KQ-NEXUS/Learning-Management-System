@@ -1,9 +1,9 @@
 ---
-status: resolved
+status: complete
 phase: 11-certificates-completion-lifecycle
 source: 11-01-SUMMARY.md, 11-02-SUMMARY.md, 11-03-SUMMARY.md, 11-04-SUMMARY.md, 11-05-SUMMARY.md, 11-06-SUMMARY.md, 11-07-SUMMARY.md, 11-08-SUMMARY.md, 11-09-SUMMARY.md, 11-10-SUMMARY.md, 11-11-SUMMARY.md, 11-12-SUMMARY.md, 11-13-SUMMARY.md, 11-14-SUMMARY.md, 11-15-SUMMARY.md, 11-16-SUMMARY.md
 started: 2026-09-19T02:00:00Z
-updated: 2026-09-19T21:00:00Z
+updated: 2026-09-19T21:30:00Z
 ---
 
 ## Current Test
@@ -32,7 +32,8 @@ verified_by: playwright walkthrough — live region announced "issued date moved
 
 ### 4. Upload and position a logo on the template
 expected: Uploading an image to an Image element shows it on the canvas, and dragging it with the mouse moves it smoothly to where it is dropped.
-result: issue
+result: pass
+resolution: "Originally failed (see reported/severity below); fixed by plan 11-21 and re-verified in a browser on 2026-09-19 (evidence in 11-16-evidence/reverify-*)"
 reported: "Upload works (presign, PUT, confirm). Dragging the uploaded logo is unreliable: a 100px drag moved 15px, because the canvas <img> is natively draggable and the browser's ghost-image drag cancels the pointer drag."
 severity: minor
 verified_by: playwright walkthrough
@@ -44,7 +45,8 @@ verified_by: playwright walkthrough — created "Walkthrough Template Course"; D
 
 ### 6. Change issuance mode and template on an existing Course
 expected: An existing Course has an edit page where certificates, issuance mode and template can be changed and saved.
-result: issue
+result: pass
+resolution: "Originally failed (see reported/severity below); fixed by plan 11-20 and re-verified in a browser on 2026-09-19 (evidence in 11-16-evidence/reverify-*)"
 reported: "There is no Course edit page. CourseForm only supports mode 'create' and no /staff/courses/[id]/edit route exists, so an existing course's issuance mode and template cannot be changed. (Programme has an edit mode; not exercised.)"
 severity: major
 verified_by: playwright walkthrough
@@ -56,7 +58,8 @@ verified_by: playwright walkthrough — Bisi Adewale issued; certificate ACTIVE,
 
 ### 8. Automatic issuance on completion
 expected: With a Course set to AUTOMATIC issuance, when a learner completes the last required lesson, a certificate is issued immediately with no staff action. The learner never appears in the manual queue, and a certificate exists for them at /staff/certificates/issued.
-result: issue
+result: pass
+resolution: "Originally failed (see reported/severity below); fixed by plan 11-22 + 11-23 and re-verified in a browser on 2026-09-19 (evidence in 11-16-evidence/reverify-*)"
 reported: "it should be issued since its automatic , but it should also show on the staff side that the certi has been issued"
 severity: minor
 verified_by: playwright run for this test — course set to AUTOMATIC by DB, learner3 (Tunde Bello) completed both required lessons in the UI. Certificate CERT-6959139673C13BA62B0EF9B1C44D28C1 was created at 01:17:11 with audit certificate.issued_auto (actor SYSTEM), enrolment COMPLETED, never in the manual queue. Issuance itself PASSES. Staff visibility: it appears at /staff/certificates/issued as Active and its detail says "Issued ... by System (automatic issuance)", but the /staff/certificates landing page still says "Nothing awaiting issuance" with no sign of the new certificate, and the issued list has no automatic/manual indicator. Evidence: 11-16-evidence/uat-08-*.png
@@ -68,14 +71,16 @@ verified_by: playwright run — Safety Leadership Programme set AUTOMATIC (DB), 
 
 ### 10. Learner finds and downloads their certificate
 expected: After a certificate is issued, the learner's /dashboard still shows that course's card with a Certificate slot containing a "Download certificate" link and the verification reference.
-result: issue
+result: pass
+resolution: "Originally failed (see reported/severity below); fixed by plan 11-17 + 11-18 and re-verified in a browser on 2026-09-19 (evidence in 11-16-evidence/reverify-*)"
 reported: "After issuance the Financial Controls card disappears from the learner dashboard entirely, taking the certificate slot and download link with it. The download route itself works when visited directly. The slot only reappears in revoked or flagged states."
 severity: blocker
 verified_by: playwright walkthrough
 
 ### 11. Downloaded PDF matches the template design
 expected: The downloaded PDF is readable, contains the learner's real name, award, date and reference, and each element sits where it was placed in the template editor (same top-to-bottom order, logo undistorted).
-result: issue
+result: pass
+resolution: "Originally failed (see reported/severity below); fixed by plan 11-19 + c7d8033 (whole-font embed) and re-verified in a browser on 2026-09-19 (evidence in 11-16-evidence/reverify-*)"
 reported: "PDF is A4 landscape with correct text, but vertically mirrored relative to the editor: the logo designed at the top is at the bottom and the verification reference designed at the bottom is at the top. The logo is stretched into an ellipse where the editor showed a circle."
 severity: major
 verified_by: playwright walkthrough
@@ -87,7 +92,8 @@ verified_by: playwright walkthrough
 
 ### 13. Employer can reach the verification form from /verify
 expected: Visiting the plain /verify path shows a form where a verification reference can be typed.
-result: issue
+result: pass
+resolution: "Originally failed (see reported/severity below); fixed by plan 11-21 and re-verified in a browser on 2026-09-19 (evidence in 11-16-evidence/reverify-*)"
 reported: "Bare /verify is the email-verification page ('This link is no longer valid… Resend verification email'), so there is no place to type a reference until you already have a /verify/{reference} URL. Route collision found in plan 11-06."
 severity: minor
 verified_by: playwright walkthrough
@@ -119,7 +125,8 @@ verified_by: playwright run — attendance correction (Present to Absent on Live
 
 ### 19. Dashboard copy reflects that certificates are live
 expected: The dashboard's "Next up" card for a completed course no longer refers to certificates as something that will ship in the future.
-result: issue
+result: pass
+resolution: "Originally failed (see reported/severity below); fixed by plan 11-18 and re-verified in a browser on 2026-09-19 (evidence in 11-16-evidence/reverify-*)"
 reported: "Card still reads 'You've completed everything required here — your certificate slot below will reflect this once certificates ship.' Stale Phase 9 copy (src/components/learner/NextUpCard.tsx:62)."
 severity: minor
 verified_by: playwright walkthrough
@@ -132,8 +139,8 @@ verified_by: playwright walkthrough — 50 nudges averaged 13 ms, 10 inspector e
 ## Summary
 
 total: 20
-passed: 13
-issues: 7
+passed: 20
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
