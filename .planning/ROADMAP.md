@@ -557,7 +557,7 @@ Wave 7 *(independent of each other, no shared files)*
 - [x] 11-20-PLAN.md — MAJOR (UAT 6): Course edit page, strict `updateCourseAction`, edit-mode `CourseForm` reusing `CertificateSettingsFields`; Programme edit certificate settings proven by test (CRD-01, CRD-02, CRD-03)
 - [x] 11-21-PLAN.md — MINOR (UAT 4, 13): drag-safe template canvas image; public `/verify-certificate` reference-entry page that does not collide with the IAM-02 `/verify` page (CRD-03, CRD-04)
 - [x] 11-22-PLAN.md — MINOR (UAT 8, data): batched `listCertificateIssuanceSources` and an Issued-by column and filter on All certificates (CRD-01, CRD-02)
-- [ ] 11-24-PLAN.md — MINOR (UAT 18 observation): one review-flag audit entry per correction (D-01 guard on the superseded branch) attributed to the correcting staff member (CRD-06)
+- [x] 11-24-PLAN.md — MINOR (UAT 18 observation): one review-flag audit entry per correction (D-01 guard on the superseded branch) attributed to the correcting staff member (CRD-06)
 
 Wave 8 *(blocked on Wave 7)*
 
@@ -664,7 +664,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 21/24 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 22/24 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |

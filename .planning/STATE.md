@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-21-PLAN.md
-last_updated: "2026-09-19T12:35:28.212Z"
+stopped_at: Completed 11-24-PLAN.md
+last_updated: "2026-09-19T12:40:54.696Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 160
-  completed_plans: 157
+  completed_plans: 158
   percent: 56
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 22 of 24 done — gap-closure wave 7 in progress (11-17, 11-19, 11-20, 11-21 canvas drag + /verify-certificate); phase NOT complete
+Plan: 11-24 done (one attributable review flag per correction); 11-23 still pending — gap-closure wave 7 in progress; phase NOT complete
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [██████████] 98%
+Progress: [██████████] 99%
 
 ## Performance Metrics
 
@@ -193,6 +193,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: 11-17 G-01: a COMPLETED enrolment is VISIBLE but NOT OPERABLE. Only the dashboard read path (listOwnDashboardEnrolments, loadLearnerPath includeCompleted) sees it; assertLessonOpenable refuses it; lesson/progress/quiz/results/hasActiveEnrolmentCoveringCourse stay ACTIVE-only. COMPLETED cards skip learnerResults reads and have nextAction complete, so plan 11-18 must hide Assessments/Results. Whether completed learners may review content/results is an open product question.
 - [Phase 11-20]: Archived stored template shown as disabled selected option via CertificateSettingsFields archivedTemplate prop; changed-only template validation on Course update
 - [Phase 11]: [11-21] UAT test 13 delivered at /verify-certificate (bare /verify belongs to IAM-02 email verification); page static, no lookup
+- [Phase 11]: Plan 11-24: superseded COURSE-scope results on Programme cohorts skip flagging (D-01); flag once per re-evaluation, attributed to triggering staff actor else SYSTEM
 
 ### Pending Todos
 
@@ -234,6 +235,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T12:35:17.471Z
-Stopped at: Completed 11-21-PLAN.md
+Last session: 2026-09-19T12:40:41.925Z
+Stopped at: Completed 11-24-PLAN.md
 Resume file: None
