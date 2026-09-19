@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 16 of 16
-Status: Ready to execute
-Last activity: 2026-09-18
+Plan: 16 of 16 — all plans executed; phase NOT complete (6 walkthrough gaps open, see 11-16-SUMMARY.md)
+Status: Ready for /gsd:verify-work 11 (gap closure)
+Last activity: 2026-09-19
 
 Progress: [██████████] 99%
 
@@ -214,6 +214,8 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 11 P15, informational] tests/boundary.test.ts's importersOf-based closure/importer-scan tests (checkout-webhook-system-service.ts closure, pdf-lib single-importer check) intermittently exceed the default 5000ms Vitest timeout in this sandbox when run alongside the full suite or in isolation -- a different sub-test times out each run, consistent with a slow full-src-tree scan under this sandbox's I/O, not a regression from plan 11-15's changes (unrelated files). Not fixed here (out of this plan's scope); worth a longer per-test timeout if it recurs.
 - [Tooling, Phase 11 P15] Same gap as the Phase 11 P05 entry above recurred: after state.advance-plan (15->16 of 16), the frontmatter's percent field was still stuck at 56 even though state.update-progress reported percent:99 (151/152) -- hand-corrected in STATE.md's frontmatter this session, same as before.
 
+- [Phase 11/11-16 walkthrough, OPEN]: Browser walkthrough (2026-09-19) found 6 gaps, none fixed. BLOCKER CRD-03: learner dashboard lists only ACTIVE enrolments (learner-access.ts listOwnActiveEnrolments) but issuance sets COMPLETED, so the certificate download slot vanishes when a certificate is ACTIVE. MAJOR CRD-03: certificate-pdf-renderer.ts passes top-origin y straight to pdf-lib (bottom-origin), so PDFs are vertically mirrored vs the editor, and images stretch. MAJOR: no Course edit page (CourseForm is create-only) so issuance mode/template cannot be changed on existing courses. Also: native image drag glitch on the editor canvas, bare /verify is the email-verification page, stale dashboard copy. Reopen CRD-03; CRD-02 has no browser evidence. Do not mark Phase 11 Complete until closed.
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -224,6 +226,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T22:47:11.644Z
-Stopped at: Completed 11-15-PLAN.md
+Last session: 2026-09-19
+Stopped at: Completed 11-16-PLAN.md (browser walkthrough run; 7/10 steps passed, gaps recorded) — next: /gsd:verify-work 11
 Resume file: None
