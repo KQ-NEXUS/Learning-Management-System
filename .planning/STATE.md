@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-28-PLAN.md (second gap pass, certificate-first slot precedence, UAT test 17) - 11-26, 11-29..11-34 remain
-last_updated: "2026-09-19T15:40:00.000Z"
+stopped_at: Completed 11-34-PLAN.md (second gap pass, CR-02 renderer image guard and PNG/JPEG-only template assets) - 11-26, 11-29..11-33 remain
+last_updated: "2026-09-19T16:40:00.000Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-28 done (certificate-first deriveCertificateColumn, UAT test 17 closed) - 27/34 plans complete; second gap pass 11-26, 11-29..11-34 remain (Phase 11 NOT complete)
+Plan: 11-34 done (CR-02: renderer skips undecodable images, template assets PNG/JPEG only) - 28/34 plans complete; second gap pass 11-26, 11-29..11-33 remain (Phase 11 NOT complete)
 Status: Second gap-closure pass in progress (11-REVIEW.md + 11-UAT.md open gaps) before verify
 Last activity: 2026-09-19
 
@@ -199,6 +199,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11-25]: Only ACTIVE/COMPLETED enrolments are certificate-eligible (typed not-eligible, before any write, eligible-only queue). A REVOKED certificate blocks every automatic and queue issuance (typed revoked-blocked) until staff Reissue, which supersedes every REVOKED row for the enrolment and scope first so legacy double-revoked data can still be reissued.
 - [Phase 11-27]: The one-live-enrolment partial unique index is widened to ACTIVE and COMPLETED (`enrolment_one_live_per_learner_cohort`) by an additive migration with a violation preflight (aborts, changes no data); created before the old index is dropped. Applied only to Testcontainers by the executor; applying to shared databases is the human step in plan 11-33. CR-05 (false-alarm flag strands enrolment at ACTIVE) is a recorded deferred decision, no Clear-flag control.
 - [Phase 11-28]: deriveCertificateColumn now lets an existing certificate decide the dashboard slot before the completion record (revoked, flagged, issued); no-certificate fallbacks unchanged. A superseded completion no longer hides a flagged certificate or its download (D-06/CRD-06, UAT test 17). WR-06 stays out of scope.
+- [Phase 11-34]: CR-02: the certificate renderer decides image format from leading bytes (PNG signature, JPEG SOI) and skips anything else or corrupt (permanent, retry cannot help); a resolver fetch failure still rejects (retryable). Template assets are restricted to PNG/JPEG at presign, confirm (server-observed type) and the inspector picker via validateTemplateAssetUpload; UPLOAD_LIMITS.IMAGE unchanged for lessons. Plan 11-29 must keep the image guard and its tests when swapping the font.
 
 ### Pending Todos
 
@@ -242,6 +243,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T15:40:00.000Z
-Stopped at: Completed 11-28-PLAN.md (second gap pass, certificate-first slot precedence, UAT test 17) - 11-26, 11-29..11-34 remain
+Last session: 2026-09-19T16:40:00.000Z
+Stopped at: Completed 11-34-PLAN.md (second gap pass, CR-02 renderer image guard and PNG/JPEG-only template assets) - 11-26, 11-29..11-33 remain
 Resume file: None

@@ -572,7 +572,7 @@ Wave 9 *(independent of each other, no shared files)*
 - [ ] 11-26-PLAN.md — CR-01 precondition: BLOCKING human gate to supply, licence-check and hash-pin the bundled Unicode font asset; README records the exact .ttf filename, licence, source and SHA-256 (no executor download) (CRD-03)
 - [x] 11-27-PLAN.md — CR-06: additive migration widening the one-live-enrolment index to ACTIVE + COMPLETED with a violation preflight, proven on real Postgres and never applied to the remote DB by the executor; CR-05 recorded as deliberately deferred (CRD-05, CRD-06)
 - [x] 11-28-PLAN.md — Open UAT gap (test 17): certificate-first `deriveCertificateColumn` so a superseded completion no longer hides a flagged certificate or its download (CRD-03, CRD-06)
-- [ ] 11-34-PLAN.md — CR-02 (split out of 11-29, no dependency on the font gate): format-sniffing renderer image guard and template assets restricted to PNG/JPEG at presign, confirm and the inspector picker (CRD-03)
+- [x] 11-34-PLAN.md — CR-02 (split out of 11-29, no dependency on the font gate): format-sniffing renderer image guard and template assets restricted to PNG/JPEG at presign, confirm and the inspector picker (CRD-03)
 
 Wave 10 *(blocked on Wave 9; 11-29 also waits on 11-34 because both edit the renderer)*
 
@@ -691,7 +691,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 27/34 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 28/34 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
