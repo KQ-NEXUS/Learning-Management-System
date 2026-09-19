@@ -51,6 +51,13 @@ export async function issueCertificateAction(
           ok: false,
           message: "No certificate template is configured for this course or programme yet. Add one under Certificate templates before issuing.",
         };
+      case "not-eligible":
+        revalidatePath("/staff/certificates");
+        return {
+          ok: false,
+          message:
+            "This learner's enrolment is no longer active, so a certificate cannot be issued. Reload the queue to see the current list.",
+        };
     }
   } catch (error) {
     if (error instanceof AuthenticationError || error instanceof AuthorizationError) {

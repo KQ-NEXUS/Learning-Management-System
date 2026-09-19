@@ -22,7 +22,9 @@
  *      Programme cohort surfaces at most one row (the PROGRAMME-scope
  *      completion record), never one row per member Course, even though
  *      `completion-service.ts` creates an internal COURSE-scope
- *      `CompletionRecord` for every member course.
+ *      `CompletionRecord` for every member course. Only enrolments that can
+ *      hold a certificate (`CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES`: ACTIVE
+ *      or COMPLETED) are listed — a withdrawn or unpaid learner never is.
  *
  *   3. `getOwnCertificateForDownload` — the learner-side ownership predicate
  *      the download route needs, mirroring `lesson-resource-service.ts`'s
@@ -67,6 +69,7 @@ import { enrolmentCohortScope } from "./cohort-scope";
 import { recordAudit } from "./audit-service";
 import { writeDomainEvent } from "./domain-event-service";
 import {
+  CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES,
   issueCertificateForEnrolment,
   liveIssuanceDeps,
   type CertificateIssuanceTxClient,
@@ -133,6 +136,8 @@ export type PendingIssuanceCompletionRecordRow = {
   completedAt: Date;
   enrolment: {
     userId: string;
+    /** Only ACTIVE/COMPLETED enrolments can hold a certificate (CR-03). */
+    status: string;
     user: { name: string };
     cohort: {
       courseId: string | null;
@@ -331,6 +336,12 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     const rows: PendingIssuanceRow[] = [];
 
     for (const record of records) {
+      // CR-03 — an enrolment that cannot hold a certificate (WITHDRAWN,
+      // PENDING_PAYMENT, TRANSFERRED, CANCELLED) is never queue-eligible:
+      // Issue would always fail for it. Filtered in application code, not only
+      // in the query, so the eligibility rule stays unit-testable.
+      if (!CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES.includes(record.enrolment.status)) continue;
+
       const cohort = record.enrolment.cohort;
       const isProgrammeCohort = cohort.programmeId != null;
 

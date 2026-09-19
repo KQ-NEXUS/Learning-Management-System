@@ -350,19 +350,57 @@ describe("issueCertificateForEnrolment", () => {
     expect(renderCalls).toHaveLength(0);
   });
 
-  it("refuses to complete an enrolment whose status cannot legally reach COMPLETED (D-05 via assertTransition)", async () => {
-    const h = harness({ enrolments: [enr({ status: "WITHDRAWN" })] });
+  // CR-03 (plan 11-25): an ineligible enrolment is a typed non-error outcome, never an
+  // IllegalTransitionError that would fail the caller's own write. Replaces the earlier
+  // "throws /cannot move from WITHDRAWN to COMPLETED/" behaviour; the "nothing committed"
+  // assertions are kept.
+  it.each(["WITHDRAWN", "PENDING_PAYMENT", "TRANSFERRED", "CANCELLED"])(
+    "returns not-eligible and writes nothing for a %s enrolment (CR-03), for a system and a staff actor",
+    async (status) => {
+      for (const actor of [null, { userId: "staff-1" }] as IssueCertificateActor[]) {
+        const h = harness({ enrolments: [enr({ status })] });
+        const { deps, renderCalls, putObjectCalls, auditCalls, writeEventCalls } = makeDeps();
+
+        const outcome = await h.runInTransaction((tx) =>
+          issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor }, deps),
+        );
+
+        expect(outcome).toEqual({ kind: "not-eligible" });
+        expect(h.certificates.size).toBe(0);
+        expect(h.enrolments.get("enr-1")?.status).toBe(status);
+        expect(renderCalls).toHaveLength(0);
+        expect(putObjectCalls).toHaveLength(0);
+        expect(auditCalls).toHaveLength(0);
+        expect(writeEventCalls).toHaveLength(0);
+        expect(h.events).toHaveLength(0);
+      }
+    },
+  );
+
+  it("not-eligible takes precedence over not-enabled (the gate runs before any other check)", async () => {
+    const h = harness({
+      enrolments: [enr({ status: "WITHDRAWN" })],
+      courses: [award({ certificateEnabled: false })],
+    });
     const { deps } = makeDeps();
 
-    await expect(
-      h.runInTransaction((tx) =>
-        issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
-      ),
-    ).rejects.toThrow(/cannot move from WITHDRAWN to COMPLETED/);
+    const outcome = await h.runInTransaction((tx) =>
+      issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
+    );
 
-    // Nothing committed — the staged transaction never resolved successfully.
-    expect(h.certificates.size).toBe(0);
-    expect(h.enrolments.get("enr-1")?.status).toBe("WITHDRAWN");
+    expect(outcome).toEqual({ kind: "not-eligible" });
+  });
+
+  it("a COMPLETED enrolment is still eligible (staff reissue path) and stays COMPLETED without an illegal transition", async () => {
+    const h = harness({ enrolments: [enr({ status: "COMPLETED" })] });
+    const { deps } = makeDeps();
+
+    const outcome = await h.runInTransaction((tx) =>
+      issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: { userId: "staff-1" } }, deps),
+    );
+
+    expect(outcome.kind).toBe("issued");
+    expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
   });
 
   it("is a no-op returning not-enabled when the Course has certificateEnabled: false (CRD-01)", async () => {
@@ -712,6 +750,31 @@ describe("reactToCompletionResults", () => {
 
     expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
   });
+});
+
+describe("reactToCompletionResults — ineligible enrolment (plan 11-25, CR-03)", () => {
+  it.each(["WITHDRAWN", "PENDING_PAYMENT"])(
+    "resolves without error and creates nothing for a %s enrolment on an AUTOMATIC enabled Course (the staff attendance-write scenario)",
+    async (status) => {
+      const h = harness({ enrolments: [enr({ status })] });
+      const { deps, renderCalls, auditCalls } = makeDeps();
+
+      await expect(
+        h.runInTransaction((tx) =>
+          reactToCompletionResults(
+            tx,
+            { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] },
+            deps,
+          ),
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(h.certificates.size).toBe(0);
+      expect(h.enrolments.get("enr-1")?.status).toBe(status);
+      expect(renderCalls).toHaveLength(0);
+      expect(auditCalls).toHaveLength(0);
+    },
+  );
 });
 
 describe("reactToCompletionResults — superseded branch (plan 11-24, UAT test 18)", () => {

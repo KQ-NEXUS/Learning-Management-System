@@ -66,7 +66,12 @@ function harness(opts?: {
   certs?: Array<CertificateRow & { cohortId: string }>;
   grants?: ReturnType<typeof grant>[];
   pendingRecords?: Array<PendingIssuanceCompletionRecordRow & { supersededAt: Date | null }>;
-  activeCertificates?: Array<{ enrolmentId: string; scope: "COURSE" | "PROGRAMME" }>;
+  activeCertificates?: Array<{
+    enrolmentId: string;
+    scope: "COURSE" | "PROGRAMME";
+    /** Defaults to ACTIVE; the fake honours the query's `status` filter as Prisma would. */
+    status?: "ACTIVE" | "REVOKED" | "SUPERSEDED";
+  }>;
   cohortByEnrolment?: Record<string, string>;
   auditRows?: AuditRowFixture[];
 }) {
@@ -97,7 +102,19 @@ function harness(opts?: {
         .filter((r) => r.supersededAt === where.supersededAt)
         .map((r) => r as unknown as PendingIssuanceCompletionRecordRow),
   );
-  const certificateFindManyForPending = vi.fn(async () => activeCertificates);
+  const certificateFindManyForPending = vi.fn(
+    async ({ where }: { where: { status?: string | { in: string[] } } }) => {
+      const wanted =
+        typeof where.status === "string"
+          ? [where.status]
+          : where.status && "in" in where.status
+            ? where.status.in
+            : null;
+      return activeCertificates
+        .filter((c) => wanted === null || wanted.includes(c.status ?? "ACTIVE"))
+        .map((c) => ({ enrolmentId: c.enrolmentId, scope: c.scope }));
+    },
+  );
 
   const pendingStore: PendingIssuanceStore = {
     completionRecord: { findMany: completionRecordFindMany as unknown as PendingIssuanceStore["completionRecord"]["findMany"] },
@@ -193,28 +210,37 @@ describe("certificateService.list/get scoping", () => {
 // listPendingIssuance (D-04)
 // ---------------------------------------------------------------------------
 
+type PendingEnrolment = PendingIssuanceCompletionRecordRow["enrolment"];
+
 function pendingRecord(
-  over: Partial<PendingIssuanceCompletionRecordRow & { supersededAt: Date | null }> = {},
+  over: Partial<Omit<PendingIssuanceCompletionRecordRow, "enrolment"> & { supersededAt: Date | null }> & {
+    /** Enrolment status; defaults to ACTIVE (certificate-eligible). */
+    status?: string;
+    enrolment?: Omit<PendingEnrolment, "status"> & { status?: string };
+  } = {},
 ): PendingIssuanceCompletionRecordRow & { supersededAt: Date | null } {
   return {
     enrolmentId: over.enrolmentId ?? "enr-1",
     scope: over.scope ?? "COURSE",
     completedAt: over.completedAt ?? new Date("2026-09-01T00:00:00.000Z"),
     supersededAt: over.supersededAt ?? null,
-    enrolment: over.enrolment ?? {
-      userId: "user-1",
-      user: { name: "Jane Learner" },
-      cohort: {
-        courseId: "course-1",
-        programmeId: null,
-        course: {
-          id: "course-1",
-          title: "Intro to Testing",
-          certificateEnabled: true,
-          certificateIssuanceMode: "MANUAL",
+    enrolment: {
+      status: over.status ?? "ACTIVE",
+      ...(over.enrolment ?? {
+        userId: "user-1",
+        user: { name: "Jane Learner" },
+        cohort: {
+          courseId: "course-1",
+          programmeId: null,
+          course: {
+            id: "course-1",
+            title: "Intro to Testing",
+            certificateEnabled: true,
+            certificateIssuanceMode: "MANUAL" as const,
+          },
+          programme: null,
         },
-        programme: null,
-      },
+      }),
     },
   };
 }
@@ -281,6 +307,20 @@ describe("listPendingIssuance", () => {
     expect(h.completionRecordFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ supersededAt: null }) }),
     );
+  });
+
+  it.each(["WITHDRAWN", "PENDING_PAYMENT", "TRANSFERRED", "CANCELLED"])(
+    "omits a completed MANUAL enrolment whose status is %s (CR-03: Issue would always fail for it)",
+    async (status) => {
+      const h = harness({ pendingRecords: [pendingRecord({ status })] });
+      expect(await h.service.listPendingIssuance()).toEqual([]);
+    },
+  );
+
+  it.each(["ACTIVE", "COMPLETED"])("still lists a completed MANUAL enrolment whose status is %s", async (status) => {
+    const h = harness({ pendingRecords: [pendingRecord({ status })] });
+    const rows = await h.service.listPendingIssuance();
+    expect(rows).toHaveLength(1);
   });
 
   it("yields exactly one row for a Programme cohort — the PROGRAMME-scope entry, never one per member course", async () => {

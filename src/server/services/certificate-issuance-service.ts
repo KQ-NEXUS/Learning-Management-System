@@ -203,11 +203,25 @@ export type IssueCertificateInput = {
   actor: IssueCertificateActor;
 };
 
+/**
+ * The ONE definition of which enrolments can hold a certificate (CR-03, plan
+ * 11-25). WITHDRAWN, PENDING_PAYMENT, TRANSFERRED and CANCELLED learners
+ * cannot. `COMPLETED` is included only because staff Reissue delegates to
+ * `issueCertificateForEnrolment` for an enrolment that never left COMPLETED
+ * (the idempotent "already COMPLETED" branch below); `ACTIVE` is the only
+ * status that can legally move to COMPLETED (`VALID_TRANSITIONS`). Shared with
+ * `certificate-service.ts`'s pending-issuance queue so eligibility has a single
+ * definition.
+ */
+export const CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES: readonly string[] = ["ACTIVE", "COMPLETED"];
+
 export type IssueCertificateOutcome =
   | { kind: "issued"; certificateId: string; verificationRef: string }
   | { kind: "already-issued"; certificateId: string }
   | { kind: "not-enabled" }
-  | { kind: "no-template" };
+  | { kind: "no-template" }
+  /** The enrolment's status cannot hold a certificate (CR-03). Nothing was written. */
+  | { kind: "not-eligible" };
 
 /**
  * Every I/O boundary `issueCertificateForEnrolment`/`reactToCompletionResults`
@@ -251,6 +265,11 @@ async function resolveTemplate(
  * its PDF, and moves the enrolment to `COMPLETED` (D-05) through
  * `enrolment-transitions.ts`'s state machine — never a bare `update`.
  *
+ * Ineligible enrolments (anything but ACTIVE/COMPLETED, see
+ * `CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES`) return `{ kind: "not-eligible" }`
+ * before any read of the award or any write — a typed non-error outcome, so
+ * a caller's own write is never failed by them (CR-03).
+ *
  * Resolution rules (D-01):
  * - `scope: "COURSE"` reads the enrolment's cohort; the award is the
  *   cohort's Course. If the cohort's `programmeId` is non-null, this refuses
@@ -274,6 +293,15 @@ export async function issueCertificateForEnrolment(
   const enrolment = await tx.enrolment.findUnique({ where: { id: enrolmentId } });
   if (!enrolment) {
     throw new Error(`Certificate issuance found no Enrolment for id ${enrolmentId}.`);
+  }
+
+  // CR-03 — the eligibility gate runs BEFORE every other check and every write.
+  // An ineligible enrolment (WITHDRAWN, PENDING_PAYMENT, TRANSFERRED, CANCELLED)
+  // is a typed non-error outcome: this function is called inside a caller's own
+  // transaction (a staff attendance write), and an `IllegalTransitionError`
+  // from the D-05 block below would fail that unrelated write.
+  if (!CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES.includes(enrolment.status)) {
+    return { kind: "not-eligible" };
   }
 
   const cohort = await tx.cohort.findUnique({ where: { id: enrolment.cohortId } });
