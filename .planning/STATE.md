@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-15-PLAN.md
-last_updated: "2026-09-18T22:50:05.537Z"
-last_activity: 2026-09-18
+stopped_at: "Completed 11-17-PLAN.md — next: remaining gap-closure plans (11-18 dashboard page hides Assessments/Results on COMPLETED cards)"
+last_updated: "2026-09-19T11:29:28.394Z"
+last_activity: 2026-09-19
 progress:
   total_phases: 16
   completed_phases: 9
-  total_plans: 152
-  completed_plans: 151
+  total_plans: 160
+  completed_plans: 153
   percent: 56
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 16 of 16 — all plans executed; phase NOT complete (6 walkthrough gaps open, see 11-16-SUMMARY.md)
-Status: Ready for /gsd:verify-work 11 (gap closure)
+Plan: 17 of 24 — gap-closure wave 7 in progress (11-17 done: COMPLETED enrolments visible-not-operable, G-01); phase NOT complete
+Status: Executing gap-closure plans 11-18..11-24
 Last activity: 2026-09-19
 
-Progress: [██████████] 99%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -185,6 +185,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: Phase 11 P15: Extracted certificateDisplayStatus into src/lib/certificate-display-status.ts (Rule 3) so a client table can call it without pulling Prisma/withPermission/next-headers into the browser bundle
 - [Phase 11]: Phase 11 P15: Added getCertificateIssuer to certificate-service.ts (Rule 2), resolving the detail page's Issued-by actor from the certificate's own issuance AuditEvent row, gated by certificates.view (not the GLOBAL-only audit.view), mirroring roster-service.ts's own-record AuditEvent read
 - [Phase 11]: Phase 11 P15: certificate-record-actions.ts's revoke/reissue zod schemas stay module-private (a use-server file may only export async functions); exported async validateRevokeCertificateInput/validateReissueCertificateInput wrappers let tests assert schema rejection directly
+- [Phase 11]: 11-17 G-01: a COMPLETED enrolment is VISIBLE but NOT OPERABLE. Only the dashboard read path (listOwnDashboardEnrolments, loadLearnerPath includeCompleted) sees it; assertLessonOpenable refuses it; lesson/progress/quiz/results/hasActiveEnrolmentCoveringCourse stay ACTIVE-only. COMPLETED cards skip learnerResults reads and have nextAction complete, so plan 11-18 must hide Assessments/Results. Whether completed learners may review content/results is an open product question.
 
 ### Pending Todos
 
@@ -226,6 +227,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19
-Stopped at: Completed 11-16-PLAN.md (browser walkthrough run; 7/10 steps passed, gaps recorded) — next: /gsd:verify-work 11
+Last session: 2026-09-19T11:29:00.142Z
+Stopped at: Completed 11-17-PLAN.md — next: remaining gap-closure plans (11-18 dashboard page hides Assessments/Results on COMPLETED cards)
 Resume file: None
