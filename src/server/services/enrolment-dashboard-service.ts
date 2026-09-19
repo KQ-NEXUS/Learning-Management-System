@@ -162,16 +162,18 @@ export type AssessmentObligationsColumn =
 export type ResultsColumn = DeferredColumn | { kind: "tracked"; recent: LearnerResultCard[] };
 
 /**
- * Plan 11-13 — UI-SPEC §7.6's five branches, first match wins: (1)
- * `not-complete` — no unsuperseded `CompletionRecord` for the enrolment's own
- * scope; (2) `pending-issuance` — a completion record exists but no
- * certificate has been issued yet (MANUAL-mode's D-04 queue, or an
- * AUTOMATIC-mode issuance not yet reflected); (3) `issued` — an
- * unflagged, current certificate; (4) `flagged` — a flagged-but-current
+ * Plan 11-13 / 11-28 — UI-SPEC §7.6's five branches. An existing certificate
+ * decides first (a superseded completion record never withdraws a
+ * certificate, D-06/CRD-06; the query already excludes SUPERSEDED
+ * certificates): `revoked` — carries NO certificate id, because there is no
+ * download affordance to build; `flagged` — a flagged-but-current
  * certificate, STILL carrying `certificateId` because the download stays
- * available (branch 4 — a flag never withdraws earned access); (5)
- * `revoked` — carries NO certificate id, because there is no download
- * affordance to build. Unlike `AssessmentObligationsColumn`/`ResultsColumn`,
+ * available (a flag never withdraws earned access); `issued` — an unflagged,
+ * current certificate. With no certificate at all: `pending-issuance` — an
+ * unsuperseded completion record exists but nothing has been issued yet
+ * (MANUAL-mode's D-04 queue, or an AUTOMATIC-mode issuance not yet
+ * reflected); otherwise `not-complete` — no unsuperseded `CompletionRecord`
+ * for the enrolment's own scope. Unlike `AssessmentObligationsColumn`/`ResultsColumn`,
  * this is NOT `DeferredColumn | …` — Phase 9's named gap is closed outright,
  * not widened to keep a still-reachable deferred inhabitant.
  */
@@ -453,17 +455,28 @@ export function buildUpcomingSessions(
 }
 
 /**
- * Plan 11-13 — pure and total, unit-testable with no store fake at all
- * (mirrors `deriveNextAction`'s own standalone-testability). Delegates the
- * existing-certificate precedence to `certificateDisplayStatus` rather than
- * re-deriving "revoked beats flagged beats active" a second time.
+ * Plan 11-13 / 11-28 — pure and total, unit-testable with no store fake at all
+ * (mirrors `deriveNextAction`'s own standalone-testability). An existing
+ * certificate decides the column FIRST: an attendance or completion
+ * correction supersedes the completion record (that is what raises the CRD-06
+ * flag), so consulting `hasCompletionRecord` before the certificate would hide
+ * a flagged certificate and its download (D-06/CRD-06 — a flag never
+ * withdraws earned access). Only when no certificate exists does the
+ * completion record choose between `not-complete` and `pending-issuance`.
+ * Delegates the existing-certificate precedence to `certificateDisplayStatus`
+ * rather than re-deriving "revoked beats flagged beats active" a second time.
+ * The batched query already excludes SUPERSEDED certificates.
+ *
+ * Out of scope (WR-06 in 11-REVIEW.md): row selection when REVOKED and ACTIVE
+ * rows coexist, and `certificateEnabled` false learners.
  */
 export function deriveCertificateColumn(input: {
   hasCompletionRecord: boolean;
   certificate: DashboardCertificateStoreRow | null;
 }): CertificateColumn {
-  if (!input.hasCompletionRecord) return { kind: "not-complete" };
-  if (!input.certificate) return { kind: "pending-issuance" };
+  if (!input.certificate) {
+    return input.hasCompletionRecord ? { kind: "pending-issuance" } : { kind: "not-complete" };
+  }
 
   const displayStatus = certificateDisplayStatus(input.certificate);
   if (displayStatus === "revoked") return { kind: "revoked" };

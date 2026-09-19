@@ -38,19 +38,53 @@ function certRow(overrides: Partial<DashboardCertificateStoreRow> = {}): Dashboa
 }
 
 describe("deriveCertificateColumn", () => {
-  it("yields not-complete when there is no unsuperseded completion record", () => {
+  // UAT test 17: a correction supersedes the completion record, which is what
+  // flags the certificate. An existing certificate must decide the slot first.
+  it("no completion record + ACTIVE flagged certificate -> flagged with download data (UAT gap)", () => {
+    expect(
+      deriveCertificateColumn({
+        hasCompletionRecord: false,
+        certificate: certRow({ reviewFlaggedAt: new Date("2026-09-10T00:00:00.000Z") }),
+      }),
+    ).toEqual({
+      kind: "flagged",
+      certificateId: "cert-1",
+      verificationRef: "VERIF-REF-1",
+      issuedAt: new Date("2026-09-01T00:00:00.000Z"),
+    });
+  });
+
+  it("no completion record + ACTIVE unflagged certificate -> issued", () => {
     expect(deriveCertificateColumn({ hasCompletionRecord: false, certificate: certRow() })).toEqual({
+      kind: "issued",
+      certificateId: "cert-1",
+      verificationRef: "VERIF-REF-1",
+      issuedAt: new Date("2026-09-01T00:00:00.000Z"),
+    });
+  });
+
+  it("no completion record + REVOKED certificate -> revoked with no certificateId key (T-11-116)", () => {
+    const result = deriveCertificateColumn({
+      hasCompletionRecord: false,
+      certificate: certRow({ status: "REVOKED" }),
+    });
+    expect(result).toEqual({ kind: "revoked" });
+    expect("certificateId" in result).toBe(false);
+  });
+
+  it("guard: no completion record and no certificate still yields not-complete", () => {
+    expect(deriveCertificateColumn({ hasCompletionRecord: false, certificate: null })).toEqual({
       kind: "not-complete",
     });
   });
 
-  it("yields pending-issuance when a completion record exists with no certificate", () => {
+  it("guard: a completion record with no certificate still yields pending-issuance", () => {
     expect(deriveCertificateColumn({ hasCompletionRecord: true, certificate: null })).toEqual({
       kind: "pending-issuance",
     });
   });
 
-  it("yields issued for an ACTIVE, unflagged certificate", () => {
+  it("guard: live record + ACTIVE, unflagged certificate yields issued", () => {
     expect(deriveCertificateColumn({ hasCompletionRecord: true, certificate: certRow() })).toEqual({
       kind: "issued",
       certificateId: "cert-1",
@@ -59,7 +93,7 @@ describe("deriveCertificateColumn", () => {
     });
   });
 
-  it("yields flagged (still carrying the certificate id) for an ACTIVE but flagged certificate", () => {
+  it("guard: live record + ACTIVE but flagged certificate yields flagged (still carrying the certificate id)", () => {
     const result = deriveCertificateColumn({
       hasCompletionRecord: true,
       certificate: certRow({ reviewFlaggedAt: new Date("2026-09-10T00:00:00.000Z") }),
@@ -72,7 +106,7 @@ describe("deriveCertificateColumn", () => {
     });
   });
 
-  it("yields revoked with NO certificateId key at all for a REVOKED certificate", () => {
+  it("guard: live record + REVOKED certificate yields revoked with NO certificateId key at all", () => {
     const result = deriveCertificateColumn({
       hasCompletionRecord: true,
       certificate: certRow({ status: "REVOKED" }),
