@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-23-PLAN.md (last gap plan) - awaiting phase verification
-last_updated: "2026-09-19T13:01:34.039Z"
+stopped_at: Completed 11-25-PLAN.md (second gap pass, CR-03/CR-04) - 11-26..11-34 remain
+last_updated: "2026-09-19T15:00:00.000Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-23 done (Recently issued on Certificates landing page) - all 24/24 plans complete; phase 11 awaiting orchestrator verification (NOT marked complete)
-Status: Gap-closure plans 11-17..11-24 done; second gap pass needed (11-REVIEW.md + 11-UAT.md open gaps) before verify
+Plan: 11-25 done (CR-03 eligibility gate + CR-04 revoked-blocked) - 25/34 plans complete; second gap pass 11-26..11-34 remain (Phase 11 NOT complete)
+Status: Second gap-closure pass in progress (11-REVIEW.md + 11-UAT.md open gaps) before verify
 Last activity: 2026-09-19
 
 Progress: [██████████] 99%
@@ -196,6 +196,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: [11-21] UAT test 13 delivered at /verify-certificate (bare /verify belongs to IAM-02 email verification); page static, no lookup
 - [Phase 11]: Plan 11-24: superseded COURSE-scope results on Programme cohorts skip flagging (D-01); flag once per re-evaluation, attributed to triggering staff actor else SYSTEM
 - [Phase 11]: Plan 11-18: a COMPLETED dashboard card renders only Next-up, progress, Support tickets slot and CertificateSlot; sessions, Assessments, Results and the access banner are omitted (G-01, no dead links). Proven against real issuance on Postgres.
+- [Phase 11-25]: Only ACTIVE/COMPLETED enrolments are certificate-eligible (typed not-eligible, before any write, eligible-only queue). A REVOKED certificate blocks every automatic and queue issuance (typed revoked-blocked) until staff Reissue, which supersedes every REVOKED row for the enrolment and scope first so legacy double-revoked data can still be reissued.
 
 ### Pending Todos
 
@@ -239,6 +240,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T13:01:33.826Z
-Stopped at: Completed 11-23-PLAN.md (last gap plan) - awaiting phase verification
+Last session: 2026-09-19T15:00:00.000Z
+Stopped at: Completed 11-25-PLAN.md (second gap pass, CR-03/CR-04) - 11-26..11-34 remain
 Resume file: None
