@@ -146,15 +146,32 @@ function harness(opts?: {
             (c) =>
               (where.enrolmentId === undefined || c.enrolmentId === where.enrolmentId) &&
               (where.scope === undefined || c.scope === where.scope) &&
-              (where.status === undefined || c.status === where.status),
+              (where.status === undefined || c.status === where.status) &&
+              (where.verificationRef === undefined || c.verificationRef === where.verificationRef),
           );
           return rows[0] ? { ...rows[0] } : null;
         },
-        create: async ({ data }: { data: Record<string, unknown> }) => {
-          certSeq += 1;
-          const id = `cert-${certSeq}`;
-          certStaged.set(id, { ...(data as unknown as CertRow), id, reviewFlaggedAt: null });
-          return { id };
+        // Models `createMany({ skipDuplicates: true })` (INSERT ... ON CONFLICT
+        // DO NOTHING) — the shape the service uses so a lost race never aborts
+        // the caller's Postgres transaction. Honours the partial unique index
+        // on (enrolmentId, scope) WHERE status = ACTIVE by inserting nothing.
+        createMany: async ({ data }: { data: Record<string, unknown>[]; skipDuplicates: boolean }) => {
+          let count = 0;
+          for (const row of data) {
+            const conflicts = [...certStaged.values()].some(
+              (c) =>
+                row.status === "ACTIVE" &&
+                c.status === "ACTIVE" &&
+                c.enrolmentId === row.enrolmentId &&
+                c.scope === row.scope,
+            );
+            if (conflicts) continue;
+            certSeq += 1;
+            const id = `cert-${certSeq}`;
+            certStaged.set(id, { ...(row as unknown as CertRow), id, reviewFlaggedAt: null });
+            count += 1;
+          }
+          return { count };
         },
         update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           const existing = certStaged.get(where.id);
@@ -383,13 +400,14 @@ describe("issueCertificateForEnrolment", () => {
     expect(h.certificates.size).toBe(1);
   });
 
-  it("treats a P2002 unique-constraint violation on create as already-issued, not a thrown error", async () => {
+  it("treats a zero-row ON CONFLICT DO NOTHING insert as already-issued, not a thrown error", async () => {
     // Models the race directly: the pre-check (`findFirst` call #1) sees
     // nothing — exactly like the real race window, where no ACTIVE row
-    // exists yet from this transaction's point of view — `create` then
-    // throws P2002 (a concurrent transaction won first), and the catch
-    // handler's own re-lookup (`findFirst` call #2) finds the row that
-    // concurrent transaction just committed.
+    // exists yet from this transaction's point of view — `createMany`
+    // (ON CONFLICT DO NOTHING) then inserts zero rows (a concurrent
+    // transaction won first), and the re-lookup (`findFirst` call #2) finds
+    // the row that concurrent transaction just committed. The real-Postgres
+    // proof is tests/certificate-concurrency.integration.test.ts.
     const winner = {
       id: "cert-winner",
       enrolmentId: "enr-1",
@@ -412,9 +430,10 @@ describe("issueCertificateForEnrolment", () => {
           findFirstCalls += 1;
           return findFirstCalls === 1 ? null : { ...winner };
         },
-        create: async () => {
-          throw { code: "P2002" };
-        },
+        // ON CONFLICT DO NOTHING against a row a concurrent transaction won
+        // with: zero rows inserted, no exception (a thrown P2002 would abort
+        // a real Postgres transaction — see the service's create comment).
+        createMany: async () => ({ count: 0 }),
         update: async () => {
           throw new Error("must not update after a lost race");
         },
@@ -877,7 +896,7 @@ describe("grade correction", () => {
     const tx: CertificateIssuanceTxClient = {
       certificate: {
         findFirst: async () => ({ ...activeCert() }),
-        create: async () => {
+        createMany: async () => {
           throw new Error("must not create a certificate");
         },
         update: async ({ data }) => data,

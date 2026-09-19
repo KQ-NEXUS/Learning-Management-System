@@ -17,11 +17,11 @@
  * let two concurrent triggers both pay for a full render before either
  * discovers the unique index was already won by the other, and risks two
  * different `storageKey`s both pointing at generated objects for what must
- * be one certificate. A `P2002` on the create is caught with
- * `isUniqueConstraintViolation` (the same duck-typed check
- * `resource-service.ts`/`checkout-webhook-system-service.ts` already use)
- * and treated as `{ kind: "already-issued" }` — a lost race is a correct
- * outcome, not a failure to propagate.
+ * be one certificate. The create is an
+ * `INSERT ... ON CONFLICT DO NOTHING` (`createMany` + `skipDuplicates`); a
+ * zero-row insert is treated as `{ kind: "already-issued" }` — a lost race
+ * is a correct outcome, not a failure to propagate, and (unlike catching a
+ * `P2002`) it leaves the caller's Postgres transaction usable.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHY THIS FILE DOES NOT WIDEN `CompletionServiceTxClient`.
@@ -142,7 +142,10 @@ export type CertificateIssuanceTxClient = DomainEventTxClient & {
     findFirst(args: {
       where: Record<string, unknown>;
     }): Promise<CertificateRow | null>;
-    create(args: { data: Record<string, unknown> }): Promise<{ id: string }>;
+    createMany(args: {
+      data: Record<string, unknown>[];
+      skipDuplicates: boolean;
+    }): Promise<{ count: number }>;
     update(args: {
       where: { id: string };
       data: Record<string, unknown>;
@@ -185,22 +188,6 @@ export type CertificateIssuanceTxClient = DomainEventTxClient & {
     findUnique(args: { where: { id: string } }): Promise<CertificateUserRow | null>;
   };
 };
-
-// ---------------------------------------------------------------------------
-// isUniqueConstraintViolation — the same duck-typed P2002 check
-// resource-service.ts / checkout-webhook-system-service.ts already use,
-// copied rather than imported so this file carries no cross-module coupling
-// on an internal helper (both source files keep their own private copy too).
-// ---------------------------------------------------------------------------
-
-function isUniqueConstraintViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "P2002"
-  );
-}
 
 // ---------------------------------------------------------------------------
 // issueCertificateForEnrolment
@@ -358,10 +345,24 @@ export async function issueCertificateForEnrolment(
 
   // Create FIRST — see header. `storageKey` starts null and is filled in
   // after the render below.
-  let certificateId: string;
-  try {
-    const created = await tx.certificate.create({
-      data: {
+  //
+  // `createMany({ skipDuplicates: true })` — i.e. `INSERT ... ON CONFLICT DO
+  // NOTHING` — and NOT `create` inside a try/catch(P2002). A plain INSERT
+  // that violates `certificate_one_active_per_enrolment_scope` ABORTS the
+  // surrounding Postgres transaction (SQLSTATE 25P02: "current transaction
+  // is aborted, commands ignored until end of transaction block"), so a
+  // catch-and-re-query on the same `tx` can never work — and this function
+  // runs INSIDE the caller's transaction (the learner's lesson-progress
+  // write, staff attendance marking), which must survive a lost race intact.
+  // ON CONFLICT DO NOTHING blocks on the winner's uncommitted index entry,
+  // then inserts nothing once the winner commits, leaving the transaction
+  // healthy. The real-Postgres proof of this is
+  // tests/certificate-concurrency.integration.test.ts — the earlier
+  // create+catch(P2002) shape passed every fake-backed unit test and failed
+  // there with 25P02.
+  const inserted = await tx.certificate.createMany({
+    data: [
+      {
         enrolmentId,
         userId: enrolment.userId,
         scope,
@@ -374,25 +375,35 @@ export async function issueCertificateForEnrolment(
         verificationRef,
         storageKey: null,
       },
+    ],
+    skipDuplicates: true,
+  });
+
+  if (inserted.count === 0) {
+    // Lost the race on certificate_one_active_per_enrolment_scope — a
+    // correct outcome, not a failure. The index guarantees a winning
+    // ACTIVE row now exists for this (enrolmentId, scope).
+    const winner = await tx.certificate.findFirst({
+      where: { enrolmentId, scope, status: "ACTIVE" },
     });
-    certificateId = created.id;
-  } catch (err) {
-    if (isUniqueConstraintViolation(err)) {
-      // Lost the race on certificate_one_active_per_enrolment_scope — a
-      // correct outcome, not a failure. The index guarantees a winning
-      // ACTIVE row now exists for this (enrolmentId, scope).
-      const winner = await tx.certificate.findFirst({
-        where: { enrolmentId, scope, status: "ACTIVE" },
-      });
-      if (!winner) {
-        throw new Error(
-          `Certificate issuance lost a unique-constraint race for enrolment ${enrolmentId}/${scope} but found no winning ACTIVE row.`,
-        );
-      }
-      return { kind: "already-issued", certificateId: winner.id };
+    if (!winner) {
+      throw new Error(
+        `Certificate issuance inserted nothing for enrolment ${enrolmentId}/${scope} but found no winning ACTIVE row.`,
+      );
     }
-    throw err;
+    return { kind: "already-issued", certificateId: winner.id };
   }
+
+  // `createMany` returns a count, not the row — `verificationRef` is unique
+  // and was minted just above, so it identifies exactly the row this call
+  // inserted.
+  const created = await tx.certificate.findFirst({ where: { verificationRef } });
+  if (!created) {
+    throw new Error(
+      `Certificate issuance inserted a row for enrolment ${enrolmentId}/${scope} but could not read it back.`,
+    );
+  }
+  const certificateId = created.id;
 
   // Render, then store — if this throws, the CALLER's transaction (the
   // lesson-progress/attendance write, or recalculateCompletionAndIssue's own

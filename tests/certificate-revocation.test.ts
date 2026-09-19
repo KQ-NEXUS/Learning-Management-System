@@ -150,16 +150,23 @@ function harness(opts?: {
             (c) =>
               (where.enrolmentId === undefined || c.enrolmentId === where.enrolmentId) &&
               (where.scope === undefined || c.scope === where.scope) &&
+              (where.verificationRef === undefined || c.verificationRef === where.verificationRef) &&
               (where.status === undefined || c.status === where.status),
           );
           return rows[0] ? { ...rows[0] } : null;
         },
-        create: async ({ data }: { data: Record<string, unknown> }) => {
+        // `createMany({ skipDuplicates: true })` — the shape
+        // `issueCertificateForEnrolment` inserts with (ON CONFLICT DO NOTHING).
+        createMany: async ({ data }: { data: Record<string, unknown>[]; skipDuplicates: boolean }) => {
           callOrder.push("certificate.create");
-          certSeq += 1;
-          const id = `new-cert-${certSeq}`;
-          certStaged.set(id, { ...(data as unknown as CertificateRow), id, reviewFlaggedAt: null });
-          return { id };
+          let count = 0;
+          for (const row of data) {
+            certSeq += 1;
+            const id = `new-cert-${certSeq}`;
+            certStaged.set(id, { ...(row as unknown as CertificateRow), id, reviewFlaggedAt: null });
+            count += 1;
+          }
+          return { count };
         },
         update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           const existing = certStaged.get(where.id);
