@@ -157,7 +157,6 @@ function parseTextElement(record: Record<string, unknown>): CertificateElementV1
 export const CERTIFICATE_TEMPLATE_ASSET_KEY_PREFIX = "certificate-template-assets/";
 
 /** No control characters (incl. NUL/newline) anywhere in a key. */
-// eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
 function isConfinedAssetKey(value: unknown): value is string {
