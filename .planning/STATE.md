@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-18-PLAN.md
-last_updated: "2026-09-19T12:52:54.038Z"
+stopped_at: Completed 11-23-PLAN.md (last gap plan) - awaiting phase verification
+last_updated: "2026-09-19T13:01:34.039Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 160
-  completed_plans: 159
+  completed_plans: 160
   percent: 56
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-18 done (COMPLETED dashboard card surface + Next-up copy + real-Postgres regression); 11-23 still pending — gap-closure wave 8 in progress; phase NOT complete
-Status: Ready to execute
+Plan: 11-23 done (Recently issued on Certificates landing page) - all 24/24 plans complete; phase 11 awaiting orchestrator verification (NOT marked complete)
+Status: Executing - awaiting phase 11 verification
 Last activity: 2026-09-19
 
 Progress: [██████████] 99%
@@ -192,6 +192,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11]: Phase 11 P15: certificate-record-actions.ts's revoke/reissue zod schemas stay module-private (a use-server file may only export async functions); exported async validateRevokeCertificateInput/validateReissueCertificateInput wrappers let tests assert schema rejection directly
 - [Phase 11]: 11-17 G-01: a COMPLETED enrolment is VISIBLE but NOT OPERABLE. Only the dashboard read path (listOwnDashboardEnrolments, loadLearnerPath includeCompleted) sees it; assertLessonOpenable refuses it; lesson/progress/quiz/results/hasActiveEnrolmentCoveringCourse stay ACTIVE-only. COMPLETED cards skip learnerResults reads and have nextAction complete, so plan 11-18 must hide Assessments/Results. Whether completed learners may review content/results is an open product question.
 - [Phase 11-20]: Archived stored template shown as disabled selected option via CertificateSettingsFields archivedTemplate prop; changed-only template validation on Course update
+- [Phase 11-23]: Landing page shows newest 10 non-superseded certificates with Automatic/staff source via 11-22 listCertificateIssuanceSources; no email added (Phase 13 scope)
 - [Phase 11]: [11-21] UAT test 13 delivered at /verify-certificate (bare /verify belongs to IAM-02 email verification); page static, no lookup
 - [Phase 11]: Plan 11-24: superseded COURSE-scope results on Programme cohorts skip flagging (D-01); flag once per re-evaluation, attributed to triggering staff actor else SYSTEM
 - [Phase 11]: Plan 11-18: a COMPLETED dashboard card renders only Next-up, progress, Support tickets slot and CertificateSlot; sessions, Assessments, Results and the access banner are omitted (G-01, no dead links). Proven against real issuance on Postgres.
@@ -236,6 +237,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T12:52:53.463Z
-Stopped at: Completed 11-18-PLAN.md
+Last session: 2026-09-19T13:01:33.826Z
+Stopped at: Completed 11-23-PLAN.md (last gap plan) - awaiting phase verification
 Resume file: None
