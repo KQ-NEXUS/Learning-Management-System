@@ -70,6 +70,7 @@ import {
 import { enrolmentCohortScope } from "./cohort-scope";
 import { recordAudit } from "./audit-service";
 import { writeDomainEvent } from "./domain-event-service";
+import { runTransactionThenSettleCertificateFiles } from "./certificate-file-service";
 import {
   CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES,
   issueCertificateForEnrolment,
@@ -274,11 +275,33 @@ export type CertificateServiceDeps = {
   runInTransaction: <R>(fn: (tx: CertificateServiceTxClient) => Promise<R>) => Promise<R>;
   issuanceDeps: IssueCertificateDeps;
   writeEvent: typeof writeDomainEvent;
+  /**
+   * CR-01(b), plan 11-31: the post-commit certificate-file step, given the very
+   * transaction object issuance registered against. Omitted in production (the
+   * live settle, a no-op for a transaction nothing registered against); tests
+   * inject a spy or a rejecting fake.
+   */
+  settle?: (tx: object) => Promise<void>;
   now?: () => Date;
 };
 
 export function createCertificateService(deps: CertificateServiceDeps) {
   const now = deps.now ?? (() => new Date());
+
+  /**
+   * Runs an ISSUING transaction (manual issue, Reissue) and renders and stores
+   * the issued certificate's PDF only after it has committed, in a step that can
+   * never fail or roll back the staff action (CR-01b). Wraps the
+   * `runInTransaction` this service received, so the live `prisma.$transaction`
+   * binding at the bottom of the file needs no change. `revokeCertificate` never
+   * issues and stays on plain `deps.runInTransaction`.
+   */
+  const runSettled = <R>(fn: (tx: CertificateServiceTxClient) => Promise<R>): Promise<R> =>
+    runTransactionThenSettleCertificateFiles<CertificateServiceTxClient, R>(
+      deps.runInTransaction,
+      fn,
+      deps.settle,
+    );
 
   /**
    * Resolves a Certificate id to its enrolment's cohort scope — reused by
@@ -509,7 +532,7 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     scope: "COURSE" | "PROGRAMME";
   }>("certificates.issue", (input) => deps.enrolmentScope(input.enrolmentId))(
     async (input, ctx) => {
-      return deps.runInTransaction(async (tx) => {
+      return runSettled(async (tx) => {
         // Re-checks eligibility server-side — staff sign off on an earned
         // credential, they cannot conjure one (T-11-46).
         const record = await tx.completionRecord.findFirst({
@@ -622,7 +645,7 @@ export function createCertificateService(deps: CertificateServiceDeps) {
 
     const stamp = now();
 
-    const result = await deps.runInTransaction(async (tx) => {
+    const result = await runSettled(async (tx) => {
       const before = await tx.certificate.findUnique({ where: { id: input.certificateId } });
       if (!before) throw new Error("Certificate not found.");
 

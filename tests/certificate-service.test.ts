@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { issueCertificateForEnrolment } from "@/server/services/certificate-issuance-service";
 import { createTestWithPermission, grant } from "./support/harness";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import {
@@ -21,6 +22,11 @@ import {
   type PendingIssuanceStore,
 } from "@/server/services/certificate-service";
 import type { Delegate } from "@/server/services/resource-service";
+
+vi.mock("@/server/services/certificate-issuance-service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/server/services/certificate-issuance-service")>()),
+  issueCertificateForEnrolment: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -535,5 +541,152 @@ describe("listCertificateIssuanceSources", () => {
     await expect(
       h.service.listCertificateIssuanceSources({ certificateIds: ["a"] }),
     ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 11-31 (CR-01b) — manual issue and Reissue settle certificate files AFTER
+// their transaction commits; a settle failure never fails the staff action
+// ---------------------------------------------------------------------------
+
+describe("issueCertificateManually / reissueCertificate — post-commit certificate file settle", () => {
+  const issueMock = vi.mocked(issueCertificateForEnrolment);
+
+  function settleHarness(opts?: { settle?: CertificateServiceDeps["settle"]; omitSettle?: boolean }) {
+    const order: string[] = [];
+    const txSeen: object[] = [];
+    const settleCalls: object[] = [];
+    // ONE stable tx object per transaction: settle must receive this very object.
+    const certificateReads = vi.fn();
+    const txObject = {
+      completionRecord: { findFirst: async () => ({ id: "cr-1" }) },
+      certificate: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          certificateReads(where.id);
+          return cert({ id: where.id, storageKey: null });
+        },
+        updateMany: async () => ({ count: 1 }),
+        update: async () => cert({ id: "new-cert", storageKey: null }),
+      },
+    };
+    const runInTransaction = (async (fn: (tx: unknown) => Promise<unknown>) => {
+      order.push("tx-begin");
+      const result = await fn(txObject);
+      order.push("tx-commit");
+      return result;
+    }) as unknown as CertificateServiceDeps["runInTransaction"];
+
+    const { withPermission } = createTestWithPermission([
+      grant("certificates.issue", "GLOBAL"),
+      grant("certificates.revoke", "GLOBAL"),
+      grant("certificates.view", "GLOBAL"),
+    ]);
+    const settle: CertificateServiceDeps["settle"] = async (tx) => {
+      order.push("settle");
+      settleCalls.push(tx);
+      if (opts?.settle) await opts.settle(tx);
+    };
+
+    const service = createCertificateService({
+      delegate: {
+        findMany: vi.fn(),
+        findUnique: async ({ where }: { where: { id: string } }) => cert({ id: where.id }),
+        create: vi.fn(),
+        update: vi.fn(),
+      } as unknown as Delegate<CertificateRow>,
+      withPermission,
+      audit: vi.fn(async () => {}),
+      enrolmentScope: async () => ({ cohortId: "cohort-1" }),
+      pendingStore: {} as never,
+      auditStore: {} as never,
+      runInTransaction,
+      issuanceDeps: {} as never,
+      writeEvent: (async () => {
+        order.push("event");
+      }) as never,
+      ...(opts?.omitSettle ? {} : { settle }),
+    });
+    issueMock.mockImplementation((async (tx: unknown) => {
+      txSeen.push(tx as object);
+      return { kind: "issued", certificateId: "new-cert", verificationRef: "VERIF-NEW" };
+    }) as never);
+    return { service, order, txSeen, settleCalls, txObject, certificateReads };
+  }
+
+  const reissueInput = { certificateId: "cert-1", reason: "Appeal upheld, reissuing credential" };
+
+  it("issueCertificateManually settles exactly once, after the transaction resolved, with the tx object issuance received", async () => {
+    const h = settleHarness();
+    await h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" });
+    expect(h.order).toEqual(["tx-begin", "tx-commit", "settle"]);
+    expect(h.settleCalls).toHaveLength(1);
+    expect(h.settleCalls[0]).toBe(h.txObject);
+    expect(h.txSeen[0]).toBe(h.settleCalls[0]);
+  });
+
+  it("reissueCertificate settles exactly once, after the transaction resolved, with the tx object issuance received", async () => {
+    const h = settleHarness();
+    await h.service.reissueCertificate(reissueInput);
+    expect(h.order.filter((o) => o === "settle")).toHaveLength(1);
+    expect(h.order.indexOf("settle")).toBeGreaterThan(h.order.indexOf("tx-commit"));
+    expect(h.order[h.order.length - 1]).toBe("settle");
+    expect(h.settleCalls[0]).toBe(h.txObject);
+    expect(h.txSeen[0]).toBe(h.settleCalls[0]);
+  });
+
+  it("a rolled-back transaction triggers no settle (reissue whose issuance is not-eligible) and the error propagates", async () => {
+    const h = settleHarness();
+    issueMock.mockImplementation((async () => ({ kind: "not-eligible" })) as never);
+    await expect(h.service.reissueCertificate(reissueInput)).rejects.toThrow(/Reissue could not produce/);
+    expect(h.settleCalls).toHaveLength(0);
+    expect(h.order).not.toContain("settle");
+  });
+
+  it("issueCertificateManually with no completion record rolls back and never settles", async () => {
+    const h = settleHarness();
+    h.txObject.completionRecord.findFirst = async () => null as never;
+    await expect(h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" })).rejects.toThrow();
+    expect(h.settleCalls).toHaveLength(0);
+  });
+
+  it("reissue survives a failing settle: the staff action still resolves with the new certificate", async () => {
+    const h = settleHarness({
+      settle: async () => {
+        throw new Error("object store down");
+      },
+    });
+    await expect(h.service.reissueCertificate(reissueInput)).resolves.toMatchObject({ id: "new-cert" });
+    expect(h.order).toContain("settle");
+  });
+
+  it("issueCertificateManually survives a failing settle and still returns its outcome", async () => {
+    const h = settleHarness({
+      settle: async () => {
+        throw new Error("object store down");
+      },
+    });
+    await expect(
+      h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" }),
+    ).resolves.toMatchObject({ kind: "issued" });
+    expect(h.order).toContain("settle");
+  });
+
+  it("revokeCertificate never settles", async () => {
+    const h = settleHarness();
+    const tx = h.txObject as unknown as Record<string, unknown>;
+    tx.enrolment = { findUnique: async () => ({ status: "ACTIVE" }), update: async () => ({}) };
+    await h.service.revokeCertificate({ certificateId: "cert-1", reason: "Issued in error, revoking now" });
+    expect(h.settleCalls).toHaveLength(0);
+    expect(h.order).not.toContain("settle");
+  });
+
+  it("with no settle dep, the default live settle is a no-op for a tx nothing registered against (zero extra store calls)", async () => {
+    const h = settleHarness({ omitSettle: true });
+    await expect(
+      h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" }),
+    ).resolves.toMatchObject({ kind: "issued" });
+    await expect(h.service.reissueCertificate(reissueInput)).resolves.toMatchObject({ id: "new-cert" });
+    // Only reissue's own two reads (before, after) touched the certificate store.
+    expect(h.certificateReads).toHaveBeenCalledTimes(2);
   });
 });

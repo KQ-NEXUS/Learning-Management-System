@@ -66,6 +66,7 @@ import {
   type CompletionRecalculationResult,
 } from "@/server/services/completion-service";
 import { recalculateCompletionAndIssue as recalculateCompletion } from "@/server/services/certificate-issuance-service";
+import { runTransactionThenSettleCertificateFiles } from "@/server/services/certificate-file-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 type Audit = (entry: ResourceAuditEntry) => Promise<void>;
@@ -755,6 +756,9 @@ export function createPrismaBackedAttendanceService(
   // wrapper so an attendance correction issues/re-evaluates a certificate,
   // without this file knowing certificates exist (plan 11-10).
   recalculateCompletionDep: AttendanceServiceDeps["recalculateCompletion"] = recalculateCompletion,
+  // CR-01(b), plan 11-31: the post-commit certificate-file step. Omitted in
+  // production (the live settle); tests inject a spy or a rejecting fake.
+  settle?: (tx: object) => Promise<void>,
 ) {
   const scopeResolvers = createCohortScopeResolvers({
     cohort: client.cohort,
@@ -803,7 +807,17 @@ export function createPrismaBackedAttendanceService(
     },
     audit,
     writeEvent: writeDomainEvent,
-    runInTransaction: (fn) => client.$transaction((tx: unknown) => fn(tx as AttendanceTxClient)),
+    // Any certificate issued inside the transaction (via `recalculateCompletion`)
+    // is rendered and stored only AFTER `$transaction` has committed, in a step
+    // that can never fail or roll back the staff member's write (CR-01b). The
+    // SAME tx object must reach issuance and settle: the cast below is
+    // type-only, never a wrapper or proxy.
+    runInTransaction: (fn) =>
+      runTransactionThenSettleCertificateFiles(
+        (body) => client.$transaction((tx: unknown) => body(tx as AttendanceTxClient)),
+        fn,
+        settle,
+      ),
     sessionScope: scopeResolvers.sessionCohortScope,
     withPermission,
     recalculateCompletion: recalculateCompletionDep,
