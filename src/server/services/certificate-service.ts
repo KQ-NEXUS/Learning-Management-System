@@ -33,7 +33,8 @@
  *      `getDownloadableResourceForLearner`: NOT wrapped in `withPermission`
  *      (granting a learner `certificates.view` would hand them every other
  *      certificate in the school), returns `null` — never throws — for
- *      every denial reason (wrong owner, unknown id, revoked), so the route
+ *      every denial reason (wrong owner, unknown id, revoked, superseded — only
+ *      the owner's current ACTIVE certificate is returned), so the route
  *      renders one indistinguishable 404 (T-11-51).
  *
  *   4. `issueCertificateManually`/`revokeCertificate`/`reissueCertificate` —
@@ -433,10 +434,12 @@ export function createCertificateService(deps: CertificateServiceDeps) {
    * `lesson-resource-service.ts`'s `getDownloadableResourceForLearner`:
    * granting a learner `certificates.view` would hand them every other
    * certificate in the school, not just their own. Returns `null` — never
-   * throws — for an unknown id, a non-owning actor (including a staff actor
-   * without `certificates.view`), and a `REVOKED` certificate (UI-SPEC
-   * §7.6 branch 5 — a revoked credential's download affordance is
-   * withdrawn). A flagged-but-`ACTIVE` certificate still returns (branch 4
+   * throws — for anything except the owner's CURRENT `ACTIVE` certificate:
+   * an unknown id, a non-owning actor (including a staff actor without
+   * `certificates.view`), a `REVOKED` certificate (UI-SPEC §7.6 branch 5 — a
+   * revoked credential's download affordance is withdrawn) and a `SUPERSEDED`
+   * one (WR-05 — a reissue withdraws the old PDF; the owner must not keep
+   * fetching it). A flagged-but-`ACTIVE` certificate still returns (branch 4
    * — a flag never withdraws already-earned access).
    */
   async function getOwnCertificateForDownload(
@@ -446,7 +449,7 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     const row = await deps.delegate.findUnique({ where: { id: certificateId } });
     if (!row) return null;
     if (row.userId !== actor.userId) return null;
-    if (row.status === "REVOKED") return null;
+    if (row.status !== "ACTIVE") return null;
     return row;
   }
 

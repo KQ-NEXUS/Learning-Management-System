@@ -399,6 +399,33 @@ describe("certificate download round trip — real Postgres + real object storag
     expect(result).toBeNull();
   }, TEST_DB_TIMEOUT_MS);
 
+  // WR-05, against real rows: only the owner's current ACTIVE certificate downloads.
+  it("a SUPERSEDED or REVOKED certificate is not downloadable by its owner, while a flagged-but-ACTIVE one still is (WR-05)", async () => {
+    const { certificate, userId } = await seedIssuedCourseCertificate();
+    expect((await getOwnCertificateForDownload({ userId }, certificate.id))?.id).toBe(certificate.id);
+
+    await testDb.prisma.certificate.update({
+      where: { id: certificate.id },
+      data: { status: "SUPERSEDED" },
+    });
+    expect(await getOwnCertificateForDownload({ userId }, certificate.id)).toBeNull();
+
+    await testDb.prisma.certificate.update({
+      where: { id: certificate.id },
+      data: { status: "REVOKED", revokedAt: new Date(), revocationReason: "test" },
+    });
+    expect(await getOwnCertificateForDownload({ userId }, certificate.id)).toBeNull();
+
+    const flagged = await seedIssuedCourseCertificate();
+    await testDb.prisma.certificate.update({
+      where: { id: flagged.certificate.id },
+      data: { reviewFlaggedAt: new Date() },
+    });
+    const stillOwned = await getOwnCertificateForDownload({ userId: flagged.userId }, flagged.certificate.id);
+    expect(stillOwned?.id).toBe(flagged.certificate.id);
+    expect(stillOwned?.status).toBe("ACTIVE");
+  }, TEST_DB_TIMEOUT_MS);
+
   // Plan 11-18 (UAT test 10). Every earlier dashboard test hand-wrote an ACTIVE
   // enrolment, while the real issuance path moves it to COMPLETED (D-05) — the
   // status the dashboard then filtered out. This case uses the status issuance

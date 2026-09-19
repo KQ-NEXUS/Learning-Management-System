@@ -409,6 +409,12 @@ describe("getOwnCertificateForDownload", () => {
     expect(await h.service.getOwnCertificateForDownload({ userId: "user-1" }, "cert-1")).toBeNull();
   });
 
+  // WR-05: a reissue withdraws the old PDF; its owner must not keep fetching it.
+  it("returns null for a SUPERSEDED certificate, even for its owner", async () => {
+    const h = harness({ certs: [cert({ id: "cert-1", userId: "user-1", status: "SUPERSEDED" })] });
+    expect(await h.service.getOwnCertificateForDownload({ userId: "user-1" }, "cert-1")).toBeNull();
+  });
+
   it("returns the certificate for a flagged-but-ACTIVE one", async () => {
     const h = harness({
       certs: [cert({ id: "cert-1", userId: "user-1", status: "ACTIVE", reviewFlaggedAt: new Date() })],
