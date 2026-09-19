@@ -40,7 +40,7 @@ Not judged separately by the human, and therefore recorded as open items: the sm
 
 ## Task 2: CR-06 migration on shared databases (checkpoint:human-action)
 
-Migration: `prisma/migrations/20260919120000_enrolment_one_live_per_learner_cohort`. **Deviation from the plan text, at the user's explicit direction:** the plan reserved this action for the human and forbade the executor from touching shared databases. The user supplied a Neon branch connection string and later instructed "apply to main db"; the orchestrator therefore ran the steps below. Connection strings were passed as environment variables to single commands and never written to a file or printed; the direct (non-pooled) host was used.
+Migration: `prisma/migrations/20260919120000_enrolment_one_live_per_learner_cohort`. **Deviation from the plan text, at the user's explicit direction:** the plan reserved this action for the human and forbade the executor from touching shared databases. The user supplied a Neon branch connection string and later instructed "apply to main db"; the orchestrator therefore ran the steps below. Connection strings were passed as environment variables to single commands and never written to a file (the main database URL was built from .env inside the shell and not echoed; the branch URL was typed inline in the commands, so it appears in the session transcript). The direct (non-pooled) host was used for both.
 
 | Environment | Diagnostic (duplicate live enrolments) | Result |
 |---|---|---|
