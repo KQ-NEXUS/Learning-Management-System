@@ -73,9 +73,10 @@ function card(over: Over = {}) {
     results: { kind: "deferred", phase: 10 },
     tickets: { kind: "deferred", phase: 12 },
     // Plan 11-13 — certificate is no longer a DeferredColumn; "not-complete"
-    // is the new no-certificate-yet state, and CertificateSlot renders it
-    // with the same DeferredSlot/"arriving in a future update" copy Phase 9
-    // originally shipped for this column (kept verbatim by plan 11-13).
+    // is the no-certificate-yet state. WR-06: CertificateSlot renders it as a
+    // normal card ("will appear here once you have completed all
+    // requirements"), no longer the Phase 9 "arriving in a future update"
+    // named gap, and "not-applicable" renders nothing at all.
     certificate: { kind: "not-complete" },
     progress: progress(),
     accessNotice: accessNotice(),
@@ -206,7 +207,19 @@ describe("/dashboard", () => {
     expect(count).toBe(0);
   });
 
-  it("never renders any of the four named-gap strings inside a link element", async () => {
+  it("renders no certificate surface at all when the card's certificate is not-applicable (WR-06)", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [card({ certificate: { kind: "not-applicable" } })],
+    });
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("being finalized");
+    expect(html).not.toContain("Certificate");
+    expect(html).not.toContain("certificate will appear");
+  });
+
+  it("never renders any of the remaining named-gap strings inside a link element", async () => {
     mocks.loadLearnerDashboard.mockResolvedValue({ cards: [card()] });
 
     const html = await renderPage();
@@ -215,7 +228,6 @@ describe("/dashboard", () => {
       "Assignments and quizzes — arriving in a future update",
       "Results — arriving in a future update",
       "Support tickets — arriving in a future update",
-      "Certificate — arriving in a future update",
     ];
 
     for (const anchor of anchors) {

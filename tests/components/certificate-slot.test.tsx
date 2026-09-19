@@ -36,9 +36,19 @@ const flagged: CertificateColumn = {
 };
 
 describe("CertificateSlot", () => {
-  it("not-complete — keeps Phase 9's exact 'arriving in a future update' copy", () => {
+  it("not-complete — a normal card, with no 'arriving in a future update' promise", () => {
     render(<CertificateSlot certificate={{ kind: "not-complete" }} />);
-    expect(screen.getByText("Certificate — arriving in a future update")).toBeTruthy();
+    expect(screen.getByText("Certificate")).toBeTruthy();
+    expect(
+      screen.getByText("Your certificate will appear here once you have completed all requirements."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/arriving in a future update/i)).toBeNull();
+  });
+
+  it("not-applicable — renders nothing at all (WR-06: an award that issues no certificate)", () => {
+    const { container } = render(<CertificateSlot certificate={{ kind: "not-applicable" }} />);
+    expect(container.innerHTML).toBe("");
+    expect(screen.queryByText("Certificate")).toBeNull();
   });
 
   it("pending-issuance — renders the exact 'being finalized' copy with no action", () => {
@@ -69,6 +79,7 @@ describe("CertificateSlot", () => {
     // The column deriveCertificateColumn now produces for: no unsuperseded
     // completion record + an ACTIVE flagged certificate.
     const supersededFlagged = deriveCertificateColumn({
+      certificateEnabled: true,
       hasCompletionRecord: false,
       certificate: {
         enrolmentId: "enrolment-1",

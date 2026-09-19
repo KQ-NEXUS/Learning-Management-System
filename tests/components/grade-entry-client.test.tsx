@@ -121,10 +121,12 @@ describe("GradeEntryClient — RELEASED", () => {
     expect(feedback.className).toContain("break-words");
   });
 
-  it("renders the certificate-impact named-gap placeholder verbatim", () => {
+  it("renders the certificate-impact line verbatim (a correction flags any active certificate)", () => {
     setup(releasedProps);
     expect(
-      screen.getByText("Certificate impact — not yet evaluated (arriving in a future update)"),
+      screen.getByText(
+        "Certificate impact — correcting a released grade flags any active certificate for staff review.",
+      ),
     ).toBeTruthy();
   });
 

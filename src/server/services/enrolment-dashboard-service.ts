@@ -83,11 +83,13 @@
  * (the single owner of "flagged beats active, revoked beats everything") so
  * this card and the staff-facing certificate surfaces can never disagree.
  *
- * Both new reads (`completionRecord.findMany`, `certificate.findMany`) are
- * batched ONCE per `loadLearnerDashboard` call across every enrolment id —
- * not once per card inside `buildCardContext` — so a 3-enrolment dashboard
- * issues exactly the same two additional queries a 1-enrolment dashboard
- * does, never N+1. Results are looked up per enrolment by an
+ * The reads (`completionRecord.findMany`, `certificate.findMany`, and — WR-06 —
+ * `course.findMany` / `programme.findMany` for `certificateEnabled`) are
+ * batched ONCE per `loadLearnerDashboard` call across every enrolment id /
+ * distinct award id — not once per card inside `buildCardContext` — so a
+ * 3-enrolment dashboard issues exactly the same four additional batched
+ * queries a 1-enrolment dashboard does (the course or programme read is skipped
+ * when no card needs it), never N+1. Results are looked up per enrolment by an
  * `${enrolmentId}:${scope}` key, matching the enrolment's OWN cohort scope
  * (COURSE vs PROGRAMME) so a programme-cohort's internal per-member-course
  * `CompletionRecord` rows (D-01, the same distinction `listPendingIssuance`
@@ -173,11 +175,15 @@ export type ResultsColumn = DeferredColumn | { kind: "tracked"; recent: LearnerR
  * unsuperseded completion record exists but nothing has been issued yet
  * (MANUAL-mode's D-04 queue, or an AUTOMATIC-mode issuance not yet
  * reflected); otherwise `not-complete` — no unsuperseded `CompletionRecord`
- * for the enrolment's own scope. Unlike `AssessmentObligationsColumn`/`ResultsColumn`,
+ * for the enrolment's own scope. WR-06: `not-applicable` — the award's own
+ * `certificateEnabled` is false and no certificate row exists, so the card
+ * renders NO certificate surface at all rather than promising one that will
+ * never be issued. Unlike `AssessmentObligationsColumn`/`ResultsColumn`,
  * this is NOT `DeferredColumn | …` — Phase 9's named gap is closed outright,
  * not widened to keep a still-reachable deferred inhabitant.
  */
 export type CertificateColumn =
+  | { kind: "not-applicable" }
   | { kind: "not-complete" }
   | { kind: "pending-issuance" }
   | { kind: "issued"; certificateId: string; verificationRef: string; issuedAt: Date }
@@ -259,6 +265,22 @@ export type EnrolmentDashboardStore = {
     findMany(args: {
       where: { enrolmentId: { in: string[] }; status: { not: "SUPERSEDED" } };
     }): Promise<DashboardCertificateStoreRow[]>;
+  };
+  /** WR-06 — `Course.certificateEnabled`, batched ONCE per call across every
+   *  distinct course-cohort `courseId` (skipped when there are none). */
+  course: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; certificateEnabled: true };
+    }): Promise<{ id: string; certificateEnabled: boolean }[]>;
+  };
+  /** WR-06 — `Programme.certificateEnabled`, batched ONCE per call across every
+   *  distinct programme-cohort `programmeId` (skipped when there are none). */
+  programme: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; certificateEnabled: true };
+    }): Promise<{ id: string; certificateEnabled: boolean }[]>;
   };
 };
 
@@ -467,14 +489,22 @@ export function buildUpcomingSessions(
  * rather than re-deriving "revoked beats flagged beats active" a second time.
  * The batched query already excludes SUPERSEDED certificates.
  *
- * Out of scope (WR-06 in 11-REVIEW.md): row selection when REVOKED and ACTIVE
- * rows coexist, and `certificateEnabled` false learners.
+ * WR-06: `certificateEnabled` (the enrolment's OWN award — Course or Programme
+ * per its cohort scope, D-01) only suppresses the no-certificate branches: an
+ * award that issues none returns `not-applicable` instead of promising a
+ * certificate. It never hides an existing certificate row — an earned or
+ * revoked certificate stays visible even if the award was later switched off.
+ *
+ * Still out of scope (WR-06 in 11-REVIEW.md, separate item): row selection when
+ * REVOKED and ACTIVE rows coexist.
  */
 export function deriveCertificateColumn(input: {
+  certificateEnabled: boolean;
   hasCompletionRecord: boolean;
   certificate: DashboardCertificateStoreRow | null;
 }): CertificateColumn {
   if (!input.certificate) {
+    if (!input.certificateEnabled) return { kind: "not-applicable" };
     return input.hasCompletionRecord ? { kind: "pending-issuance" } : { kind: "not-complete" };
   }
 
@@ -667,7 +697,11 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     actor: Actor,
     enrolment: OwnEnrolmentSnapshot,
     nowDate: Date,
-    certificateContext: { hasCompletionRecord: boolean; certificate: DashboardCertificateStoreRow | null },
+    certificateContext: {
+      certificateEnabled: boolean;
+      hasCompletionRecord: boolean;
+      certificate: DashboardCertificateStoreRow | null;
+    },
   ): Promise<EnrolmentCardContext> {
     const [sessions, records, structure] = await Promise.all([
       store.scheduledSession.findMany({ where: { cohortId: enrolment.cohortId } }),
@@ -842,7 +876,23 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     // (it comes straight from `listOwnDashboardEnrolments`), so this can never
     // surface another learner's certificate (T-11-61).
     const enrolmentIds = enrolments.map((e) => e.id);
-    const [completionRecords, certificates] = enrolmentIds.length
+
+    // WR-06 — the award whose `certificateEnabled` governs each card is the
+    // enrolment's OWN scope (D-01): a programme cohort reads the Programme, a
+    // course cohort reads the Course, never a member course. Distinct ids only,
+    // one query per award type, skipped when the list is empty.
+    const courseIds = [
+      ...new Set(
+        enrolments
+          .filter((e) => !e.cohort.programmeId && e.cohort.courseId)
+          .map((e) => e.cohort.courseId as string),
+      ),
+    ];
+    const programmeIds = [
+      ...new Set(enrolments.filter((e) => e.cohort.programmeId).map((e) => e.cohort.programmeId as string)),
+    ];
+
+    const [completionRecords, certificates, courseAwards, programmeAwards] = enrolmentIds.length
       ? await Promise.all([
           store.completionRecord.findMany({
             where: { enrolmentId: { in: enrolmentIds }, supersededAt: null },
@@ -850,8 +900,27 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
           store.certificate.findMany({
             where: { enrolmentId: { in: enrolmentIds }, status: { not: "SUPERSEDED" } },
           }),
+          courseIds.length
+            ? store.course.findMany({
+                where: { id: { in: courseIds } },
+                select: { id: true, certificateEnabled: true },
+              })
+            : Promise.resolve([] as { id: string; certificateEnabled: boolean }[]),
+          programmeIds.length
+            ? store.programme.findMany({
+                where: { id: { in: programmeIds } },
+                select: { id: true, certificateEnabled: true },
+              })
+            : Promise.resolve([] as { id: string; certificateEnabled: boolean }[]),
         ])
-      : [[], []];
+      : [[], [], [], []];
+
+    // Keyed by scope + id. An award row that cannot be found is treated as NOT
+    // enabled (`?? false` below): never promise a certificate we cannot confirm.
+    const awardEnabled = new Map<string, boolean>([
+      ...courseAwards.map((a) => [`COURSE:${a.id}`, a.certificateEnabled] as const),
+      ...programmeAwards.map((a) => [`PROGRAMME:${a.id}`, a.certificateEnabled] as const),
+    ]);
 
     // Keyed by `${enrolmentId}:${scope}` — a Programme-cohort enrolment also
     // owns internal per-member-course COURSE-scope `CompletionRecord` rows
@@ -864,7 +933,9 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       enrolments.map((enrolment) => {
         const scope = enrolment.cohort.programmeId ? "PROGRAMME" : "COURSE";
         const key = `${enrolment.id}:${scope}`;
+        const awardId = scope === "PROGRAMME" ? enrolment.cohort.programmeId : enrolment.cohort.courseId;
         return buildCardContext(actor, enrolment, nowDate, {
+          certificateEnabled: awardId ? (awardEnabled.get(`${scope}:${awardId}`) ?? false) : false,
           hasCompletionRecord: completionKeys.has(key),
           certificate: certificateByKey.get(key) ?? null,
         });

@@ -38,11 +38,42 @@ function certRow(overrides: Partial<DashboardCertificateStoreRow> = {}): Dashboa
 }
 
 describe("deriveCertificateColumn", () => {
+  // WR-06: an award that issues no certificate must not promise one.
+  it("certificateEnabled false + no certificate -> not-applicable, with or without a completion record", () => {
+    expect(
+      deriveCertificateColumn({ certificateEnabled: false, hasCompletionRecord: true, certificate: null }),
+    ).toEqual({ kind: "not-applicable" });
+    expect(
+      deriveCertificateColumn({ certificateEnabled: false, hasCompletionRecord: false, certificate: null }),
+    ).toEqual({ kind: "not-applicable" });
+  });
+
+  it("certificateEnabled false never hides an existing certificate row (issued / flagged / revoked)", () => {
+    expect(
+      deriveCertificateColumn({ certificateEnabled: false, hasCompletionRecord: false, certificate: certRow() }),
+    ).toMatchObject({ kind: "issued", certificateId: "cert-1" });
+    expect(
+      deriveCertificateColumn({
+        certificateEnabled: false,
+        hasCompletionRecord: false,
+        certificate: certRow({ reviewFlaggedAt: new Date("2026-09-10T00:00:00.000Z") }),
+      }),
+    ).toMatchObject({ kind: "flagged", certificateId: "cert-1" });
+    expect(
+      deriveCertificateColumn({
+        certificateEnabled: false,
+        hasCompletionRecord: true,
+        certificate: certRow({ status: "REVOKED" }),
+      }),
+    ).toEqual({ kind: "revoked" });
+  });
+
   // UAT test 17: a correction supersedes the completion record, which is what
   // flags the certificate. An existing certificate must decide the slot first.
   it("no completion record + ACTIVE flagged certificate -> flagged with download data (UAT gap)", () => {
     expect(
       deriveCertificateColumn({
+        certificateEnabled: true,
         hasCompletionRecord: false,
         certificate: certRow({ reviewFlaggedAt: new Date("2026-09-10T00:00:00.000Z") }),
       }),
@@ -55,7 +86,7 @@ describe("deriveCertificateColumn", () => {
   });
 
   it("no completion record + ACTIVE unflagged certificate -> issued", () => {
-    expect(deriveCertificateColumn({ hasCompletionRecord: false, certificate: certRow() })).toEqual({
+    expect(deriveCertificateColumn({ certificateEnabled: true, hasCompletionRecord: false, certificate: certRow() })).toEqual({
       kind: "issued",
       certificateId: "cert-1",
       verificationRef: "VERIF-REF-1",
@@ -65,6 +96,7 @@ describe("deriveCertificateColumn", () => {
 
   it("no completion record + REVOKED certificate -> revoked with no certificateId key (T-11-116)", () => {
     const result = deriveCertificateColumn({
+      certificateEnabled: true,
       hasCompletionRecord: false,
       certificate: certRow({ status: "REVOKED" }),
     });
@@ -73,19 +105,19 @@ describe("deriveCertificateColumn", () => {
   });
 
   it("guard: no completion record and no certificate still yields not-complete", () => {
-    expect(deriveCertificateColumn({ hasCompletionRecord: false, certificate: null })).toEqual({
+    expect(deriveCertificateColumn({ certificateEnabled: true, hasCompletionRecord: false, certificate: null })).toEqual({
       kind: "not-complete",
     });
   });
 
   it("guard: a completion record with no certificate still yields pending-issuance", () => {
-    expect(deriveCertificateColumn({ hasCompletionRecord: true, certificate: null })).toEqual({
+    expect(deriveCertificateColumn({ certificateEnabled: true, hasCompletionRecord: true, certificate: null })).toEqual({
       kind: "pending-issuance",
     });
   });
 
   it("guard: live record + ACTIVE, unflagged certificate yields issued", () => {
-    expect(deriveCertificateColumn({ hasCompletionRecord: true, certificate: certRow() })).toEqual({
+    expect(deriveCertificateColumn({ certificateEnabled: true, hasCompletionRecord: true, certificate: certRow() })).toEqual({
       kind: "issued",
       certificateId: "cert-1",
       verificationRef: "VERIF-REF-1",
@@ -95,6 +127,7 @@ describe("deriveCertificateColumn", () => {
 
   it("guard: live record + ACTIVE but flagged certificate yields flagged (still carrying the certificate id)", () => {
     const result = deriveCertificateColumn({
+      certificateEnabled: true,
       hasCompletionRecord: true,
       certificate: certRow({ reviewFlaggedAt: new Date("2026-09-10T00:00:00.000Z") }),
     });
@@ -108,6 +141,7 @@ describe("deriveCertificateColumn", () => {
 
   it("guard: live record + REVOKED certificate yields revoked with NO certificateId key at all", () => {
     const result = deriveCertificateColumn({
+      certificateEnabled: true,
       hasCompletionRecord: true,
       certificate: certRow({ status: "REVOKED" }),
     });
@@ -181,12 +215,29 @@ function makeLearnerResults(): EnrolmentDashboardLearnerResults {
 function makeDashboardStore(opts: {
   completionRecords?: DashboardCompletionRecordStoreRow[];
   certificates?: DashboardCertificateStoreRow[];
+  /** WR-06 - award flags by id; any id not listed defaults to ENABLED. */
+  courseCertificateEnabled?: Record<string, boolean>;
+  programmeCertificateEnabled?: Record<string, boolean>;
 }) {
   const completionRecords = opts.completionRecords ?? [];
   const certificates = opts.certificates ?? [];
-  const calls = { completionRecord: 0, certificate: 0 };
+  const courseEnabled = opts.courseCertificateEnabled ?? {};
+  const programmeEnabled = opts.programmeCertificateEnabled ?? {};
+  const calls = { completionRecord: 0, certificate: 0, course: 0, programme: 0 };
 
   const store: EnrolmentDashboardStore = {
+    course: {
+      findMany: async ({ where }) => {
+        calls.course += 1;
+        return where.id.in.map((id) => ({ id, certificateEnabled: courseEnabled[id] ?? true }));
+      },
+    },
+    programme: {
+      findMany: async ({ where }) => {
+        calls.programme += 1;
+        return where.id.in.map((id) => ({ id, certificateEnabled: programmeEnabled[id] ?? true }));
+      },
+    },
     scheduledSession: { findMany: async () => [] },
     attendanceRecord: { findMany: async () => [] },
     completionRecord: {
@@ -214,6 +265,8 @@ function makeService(opts: {
   enrolmentsByActor: Record<string, OwnEnrolmentSnapshot[]>;
   completionRecords?: DashboardCompletionRecordStoreRow[];
   certificates?: DashboardCertificateStoreRow[];
+  courseCertificateEnabled?: Record<string, boolean>;
+  programmeCertificateEnabled?: Record<string, boolean>;
 }) {
   const { store, calls } = makeDashboardStore(opts);
   const svc = createEnrolmentDashboardService({
@@ -311,6 +364,71 @@ describe("createEnrolmentDashboardService — certificate column wiring", () => 
 
     const [card] = (await svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
     expect(card.certificate).toEqual({ kind: "not-complete" });
+  });
+
+  // WR-06 - the enrolment's own scope decides which award flag is read (D-01).
+  function programmeEnrolment(id: string): OwnEnrolmentSnapshot {
+    return snapshot({
+      id,
+      cohort: {
+        id: "cohort-1",
+        title: "Programme Cohort",
+        deliveryMode: "INSTRUCTOR_LED",
+        timezone: "Africa/Lagos",
+        startsAt: new Date("2026-01-01T00:00:00.000Z"),
+        endsAt: new Date("2026-12-31T00:00:00.000Z"),
+        attendanceThresholdPct: null,
+        courseId: null,
+        programmeId: "programme-1",
+      },
+    });
+  }
+
+  it("WR-06 - a COURSE card with certificateEnabled false, a completion record and no certificate is not-applicable", async () => {
+    const { svc } = makeService({
+      enrolmentsByActor: { "user-a": [snapshot()] },
+      completionRecords: [{ enrolmentId: "enrolment-1", scope: "COURSE" }],
+      courseCertificateEnabled: { "course-1": false },
+    });
+    const [card] = (await svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
+    expect(card.certificate).toEqual({ kind: "not-applicable" });
+  });
+
+  it("WR-06 / D-01 - a PROGRAMME card reads Programme.certificateEnabled, never a member course's flag", async () => {
+    const enabledProgramme = makeService({
+      enrolmentsByActor: { "user-a": [programmeEnrolment("enrolment-1")] },
+      completionRecords: [{ enrolmentId: "enrolment-1", scope: "PROGRAMME" }],
+      courseCertificateEnabled: { "course-1": false },
+      programmeCertificateEnabled: { "programme-1": true },
+    });
+    const [enabledCard] = (await enabledProgramme.svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
+    expect(enabledCard.certificate).toEqual({ kind: "pending-issuance" });
+
+    const disabledProgramme = makeService({
+      enrolmentsByActor: { "user-a": [programmeEnrolment("enrolment-1")] },
+      completionRecords: [{ enrolmentId: "enrolment-1", scope: "PROGRAMME" }],
+      programmeCertificateEnabled: { "programme-1": false },
+    });
+    const [disabledCard] = (await disabledProgramme.svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
+    expect(disabledCard.certificate).toEqual({ kind: "not-applicable" });
+  });
+
+  it("WR-06 - one course query and one programme query for a mixed dashboard; no programme query for course-only", async () => {
+    const mixed = makeService({
+      enrolmentsByActor: {
+        "user-a": [snapshot({ id: "enrolment-1" }), programmeEnrolment("enrolment-2"), snapshot({ id: "enrolment-3" })],
+      },
+    });
+    await mixed.svc.loadLearnerDashboard({ userId: "user-a" } as Actor);
+    expect(mixed.calls.course).toBe(1);
+    expect(mixed.calls.programme).toBe(1);
+
+    const courseOnly = makeService({
+      enrolmentsByActor: { "user-a": [snapshot({ id: "enrolment-1" }), snapshot({ id: "enrolment-2" })] },
+    });
+    await courseOnly.svc.loadLearnerDashboard({ userId: "user-a" } as Actor);
+    expect(courseOnly.calls.course).toBe(1);
+    expect(courseOnly.calls.programme).toBe(0);
   });
 
   // UAT test 17 (Tunde Bello Programme scenario): the completion record was

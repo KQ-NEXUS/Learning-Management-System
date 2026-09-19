@@ -1,19 +1,21 @@
 import { AlertTriangle, Download } from "lucide-react";
-import { DeferredSlot } from "@/components/learner/DeferredSlot";
 import type { CertificateColumn } from "@/server/services/enrolment-dashboard-service";
 
 /**
  * CertificateSlot — Phase 9's `CERTIFICATE_DEFERRED` dashboard card, filled
  * (plan 11-13 Task 3, UI-SPEC §7.6/§6.1).
  *
- * Five branches, first match wins, copy used VERBATIM from §6.1 — these
- * strings were written deliberately (the flagged branch is reassuring
- * rather than alarming because a learner cannot act on a flag; the revoked
- * branch directs to support) and must never be paraphrased:
+ * Five rendered branches (plus one that renders nothing), first match wins,
+ * copy used VERBATIM from §6.1 — these strings were written deliberately
+ * (the flagged branch is reassuring rather than alarming because a learner
+ * cannot act on a flag; the revoked branch directs to support) and must never
+ * be paraphrased:
  *
- *   1. `not-complete` — Phase 9's original "arriving in a future update"
- *      copy, unchanged, via the same `DeferredSlot` component that card
- *      always used.
+ *   0. `not-applicable` — WR-06: the award issues no certificate
+ *      (`certificateEnabled` false, no certificate row). Renders nothing.
+ *   1. `not-complete` — a normal card: "Your certificate will appear here
+ *      once you have completed all requirements." (WR-06 replaced Phase 9's
+ *      false "coming later" named-gap copy.)
  *   2. `pending-issuance` — "being finalized" copy, no action.
  *   3. `issued` — a `Download` icon link plus the verification reference,
  *      mono and `break-all` so a learner can read it off the screen.
@@ -53,8 +55,16 @@ function DownloadLink({ certificateId }: { certificateId: string }) {
 }
 
 export function CertificateSlot({ certificate }: CertificateSlotProps) {
+  // WR-06: an award that issues no certificate shows nothing at all.
+  if (certificate.kind === "not-applicable") return null;
+
   if (certificate.kind === "not-complete") {
-    return <DeferredSlot title="Certificate" copy="Certificate — arriving in a future update" />;
+    return (
+      <div className={CARD}>
+        <p className={TITLE}>Certificate</p>
+        <p className={BODY}>Your certificate will appear here once you have completed all requirements.</p>
+      </div>
+    );
   }
 
   if (certificate.kind === "pending-issuance") {

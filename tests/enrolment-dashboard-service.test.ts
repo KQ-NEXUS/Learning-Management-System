@@ -251,12 +251,27 @@ function makeDashboardStore(opts: {
   attendanceByEnrolment?: Record<string, DashboardAttendanceRecordStoreRow[]>;
   completionRecords?: DashboardCompletionRecordStoreRow[];
   certificates?: DashboardCertificateStoreRow[];
+  /** WR-06 - Course.certificateEnabled by id. Any id not listed defaults to
+   *  ENABLED so every pre-existing scenario keeps its current expectation. */
+  courseCertificateEnabled?: Record<string, boolean>;
+  /** WR-06 - Programme.certificateEnabled by id (same default). */
+  programmeCertificateEnabled?: Record<string, boolean>;
 }): EnrolmentDashboardStore {
   const sessionsByCohort = opts.sessionsByCohort ?? {};
   const attendanceByEnrolment = opts.attendanceByEnrolment ?? {};
   const completionRecords = opts.completionRecords ?? [];
   const certificates = opts.certificates ?? [];
+  const courseEnabled = opts.courseCertificateEnabled ?? {};
+  const programmeEnabled = opts.programmeCertificateEnabled ?? {};
   return {
+    course: {
+      findMany: async ({ where }) =>
+        where.id.in.map((id) => ({ id, certificateEnabled: courseEnabled[id] ?? true })),
+    },
+    programme: {
+      findMany: async ({ where }) =>
+        where.id.in.map((id) => ({ id, certificateEnabled: programmeEnabled[id] ?? true })),
+    },
     scheduledSession: {
       findMany: async ({ where }) => sessionsByCohort[where.cohortId] ?? [],
     },
@@ -298,6 +313,8 @@ function makeService(opts: {
   resultsByEnrolment?: Record<string, LearnerResultCard[]>;
   completionRecords?: DashboardCompletionRecordStoreRow[];
   certificates?: DashboardCertificateStoreRow[];
+  courseCertificateEnabled?: Record<string, boolean>;
+  programmeCertificateEnabled?: Record<string, boolean>;
   now?: () => Date;
   /** Plan 11-17 - spy hooks: swap in wrapped fakes to count calls. */
   learnerResults?: EnrolmentDashboardLearnerResults;
@@ -615,6 +632,154 @@ describe("loadLearnerDashboard", () => {
     expect(cards).toHaveLength(2);
     expect(completionFindMany).toHaveBeenCalledTimes(1);
     expect(certificateFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // WR-06 - the certificate column is certificateEnabled-aware. The
+  // enrolment's OWN scope decides which award is read (D-01): a COURSE cohort
+  // reads Course.certificateEnabled, a PROGRAMME cohort reads
+  // Programme.certificateEnabled, never a member course's flag.
+  // -------------------------------------------------------------------------
+
+  const programmeCohort = () =>
+    cohort({ id: "cohort-prog", courseId: null, programmeId: "programme-1", coursePublicationId: null });
+
+  it("WR-06 - a COURSE-cohort card whose Course has certificateEnabled false, with a completion record and no certificate, is not-applicable", async () => {
+    const svc = makeService(
+      completedFixtures({
+        enrolments: [enrolment({ status: "COMPLETED" })],
+        completionRecords: [{ enrolmentId: "enrolment-1", scope: "COURSE" }],
+        courseCertificateEnabled: { "course-1": false },
+      }),
+    );
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.certificate).toEqual({ kind: "not-applicable" });
+  });
+
+  it("WR-06 - a PROGRAMME-cohort card follows Programme.certificateEnabled false, not the member course", async () => {
+    const svc = makeService(
+      completedFixtures({
+        enrolments: [enrolment({ status: "COMPLETED", cohortId: "cohort-prog" })],
+        cohorts: [programmeCohort()],
+        completionRecords: [{ enrolmentId: "enrolment-1", scope: "PROGRAMME" }],
+        courseCertificateEnabled: { "course-1": true },
+        programmeCertificateEnabled: { "programme-1": false },
+      }),
+    );
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.certificate).toEqual({ kind: "not-applicable" });
+  });
+
+  it("WR-06 / D-01 - an enabled Programme whose member Course is disabled still yields pending-issuance", async () => {
+    const svc = makeService(
+      completedFixtures({
+        enrolments: [enrolment({ status: "COMPLETED", cohortId: "cohort-prog" })],
+        cohorts: [programmeCohort()],
+        completionRecords: [{ enrolmentId: "enrolment-1", scope: "PROGRAMME" }],
+        courseCertificateEnabled: { "course-1": false },
+        programmeCertificateEnabled: { "programme-1": true },
+      }),
+    );
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.certificate).toEqual({ kind: "pending-issuance" });
+  });
+
+  it("WR-06 - certificateEnabled false never hides an existing certificate row (issued, flagged, revoked)", async () => {
+    const run = async (cert: DashboardCertificateStoreRow) => {
+      const svc = makeService(
+        completedFixtures({
+          enrolments: [enrolment({ status: "COMPLETED" })],
+          certificates: [cert],
+          courseCertificateEnabled: { "course-1": false },
+        }),
+      );
+      return (await svc.loadLearnerDashboard(actorA)).cards[0].certificate;
+    };
+    expect(await run(activeCert)).toMatchObject({ kind: "issued", certificateId: "cert-1" });
+    expect(await run({ ...activeCert, reviewFlaggedAt: new Date("2026-09-10T00:00:00.000Z") })).toMatchObject({
+      kind: "flagged",
+      certificateId: "cert-1",
+    });
+    expect(await run({ ...activeCert, status: "REVOKED" })).toEqual({ kind: "revoked" });
+  });
+
+  it("WR-06 - an award row that cannot be found is treated as NOT enabled", async () => {
+    const svc = makeService(
+      completedFixtures({
+        enrolments: [enrolment({ status: "COMPLETED" })],
+        completionRecords: [{ enrolmentId: "enrolment-1", scope: "COURSE" }],
+        wrapDashboardStore: (store) => ({ ...store, course: { findMany: async () => [] } }),
+      }),
+    );
+    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
+    expect(card.certificate).toEqual({ kind: "not-applicable" });
+  });
+
+  it("WR-06 - certificateEnabled true keeps pending-issuance / not-complete for the no-certificate branches", async () => {
+    const svc = makeService(
+      completedFixtures({
+        enrolments: [enrolment({ id: "enrolment-1" }), enrolment({ id: "enrolment-2" })],
+        completionRecords: [{ enrolmentId: "enrolment-1", scope: "COURSE" }],
+      }),
+    );
+    const { cards } = await svc.loadLearnerDashboard(actorA);
+    expect(cards.map((c) => c.certificate.kind).sort()).toEqual(["not-complete", "pending-issuance"]);
+  });
+
+  it("WR-06 - reads Course and Programme certificateEnabled exactly once each for a mixed dashboard (no N+1)", async () => {
+    const courseFindMany = vi.fn();
+    const programmeFindMany = vi.fn();
+    const svc = makeService(
+      completedFixtures({
+        enrolments: [
+          enrolment({ id: "enrolment-1" }),
+          enrolment({ id: "enrolment-2", cohortId: "cohort-prog" }),
+          enrolment({ id: "enrolment-3" }),
+        ],
+        cohorts: [cohort(), programmeCohort()],
+        wrapDashboardStore: (store) => ({
+          ...store,
+          course: {
+            findMany: (args) => {
+              courseFindMany(args);
+              return store.course.findMany(args);
+            },
+          },
+          programme: {
+            findMany: (args) => {
+              programmeFindMany(args);
+              return store.programme.findMany(args);
+            },
+          },
+        }),
+      }),
+    );
+    const { cards } = await svc.loadLearnerDashboard(actorA);
+    expect(cards).toHaveLength(3);
+    expect(courseFindMany).toHaveBeenCalledTimes(1);
+    expect(courseFindMany.mock.calls[0][0].where.id.in).toEqual(["course-1"]);
+    expect(programmeFindMany).toHaveBeenCalledTimes(1);
+    expect(programmeFindMany.mock.calls[0][0].where.id.in).toEqual(["programme-1"]);
+  });
+
+  it("WR-06 - a dashboard of only course cohorts issues no programme query", async () => {
+    const programmeFindMany = vi.fn();
+    const svc = makeService(
+      completedFixtures({
+        enrolments: [enrolment()],
+        wrapDashboardStore: (store) => ({
+          ...store,
+          programme: {
+            findMany: (args) => {
+              programmeFindMany(args);
+              return store.programme.findMany(args);
+            },
+          },
+        }),
+      }),
+    );
+    await svc.loadLearnerDashboard(actorA);
+    expect(programmeFindMany).not.toHaveBeenCalled();
   });
 
   it("assessmentObligations returns a tracked inhabitant, in the order learner-results-service returned it, when the learner has outstanding assessments", async () => {

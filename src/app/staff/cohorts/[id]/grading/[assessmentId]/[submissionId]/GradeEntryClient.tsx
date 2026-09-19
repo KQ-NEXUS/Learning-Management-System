@@ -255,7 +255,7 @@ export function GradeEntryClient({
           </dl>
 
           <p className="text-sm text-muted-foreground">
-            Certificate impact — not yet evaluated (arriving in a future update)
+            Certificate impact — correcting a released grade flags any active certificate for staff review.
           </p>
 
           {overrides.length > 0 && (
