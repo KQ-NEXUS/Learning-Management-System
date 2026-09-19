@@ -255,6 +255,84 @@ describe("TemplateCanvas", () => {
     expect(nudgeDelta(1200)).toBe(1);
   });
 
+  // UAT test 4 (plan 11-21): the uploaded logo is a plain <img> that the
+  // browser natively drags, cancelling the editor's pointer drag. jsdom has no
+  // native image drag, so these DOM-contract assertions (not a simulated
+  // drag) are what reproduce the gap.
+  describe("drag safety (UAT test 4)", () => {
+    const ASSET_KEY = "template-assets/logo.png";
+    function renderWithImage(onChangeSpy?: (els: CertificateElementV1[]) => void) {
+      const elements: CertificateElementV1[] = [imageElement({ assetKey: ASSET_KEY, x: 20, y: 20 })];
+      function ImageHarness() {
+        const [els, setEls] = useState(elements);
+        const [selected, setSelected] = useState<number | null>(null);
+        return (
+          <TemplateCanvas
+            elements={els}
+            selectedIndex={selected}
+            pageSize="A4"
+            orientation="landscape"
+            readOnly={false}
+            assetPreviewUrls={{ [ASSET_KEY]: "blob:test-preview" }}
+            onChange={(next) => {
+              onChangeSpy?.(next);
+              setEls(next);
+            }}
+            onSelect={setSelected}
+          />
+        );
+      }
+      return render(<ImageHarness />);
+    }
+
+    it("renders the preview image non-draggable and pointer-transparent", () => {
+      const { container } = renderWithImage();
+      const img = container.querySelector("img")!;
+      expect(img.getAttribute("draggable")).toBe("false");
+      expect(img.className).toContain("pointer-events-none");
+      expect(img.className).toContain("select-none");
+    });
+
+    it("cancels native dragstart on both the image and its element box", () => {
+      const { container } = renderWithImage();
+      const img = container.querySelector("img")!;
+      const box = screen.getByRole("group", { name: "Image element" });
+      // fireEvent returns false when the event was default-prevented.
+      expect(fireEvent.dragStart(img)).toBe(false);
+      expect(fireEvent.dragStart(box)).toBe(false);
+    });
+
+    it("gives every interactive element box select-none and touch-none", () => {
+      render(<Harness initialElements={[customTextElement(), imageElement(), borderElement()]} />);
+      for (const name of ["Text element: custom text", "Image element", "Border"]) {
+        const box = screen.getByRole("group", { name });
+        expect(box.className).toContain("select-none");
+        expect(box.className).toContain("touch-none");
+      }
+    });
+
+    it("adds no drag-safety handlers or classes to a readOnly canvas", () => {
+      const { container } = render(
+        <Harness initialElements={[customTextElement(), borderElement()]} readOnly />,
+      );
+      expect(container.innerHTML).not.toContain("touch-none");
+      expect(container.innerHTML).not.toContain("select-none");
+    });
+
+    // Regression GUARD only: passes both before and after the fix in jsdom
+    // (no native image drag exists there). The DOM-contract tests above are
+    // the ones that fail against the old markup.
+    it("moves an image element by the pointer distance (guard, not a browser repro)", () => {
+      const onChangeSpy = vi.fn();
+      renderWithImage(onChangeSpy);
+      const box = screen.getByRole("group", { name: "Image element" });
+      fireEvent.pointerDown(box, { pointerId: 1, clientX: 0, clientY: 0 });
+      fireEvent.pointerMove(box, { pointerId: 1, clientX: 100, clientY: 0 });
+      fireEvent.pointerUp(box, { pointerId: 1 });
+      expect(onChangeSpy.mock.calls.at(-1)![0][0].x).toBe(120);
+    });
+  });
+
   it("imports no drag/canvas library", async () => {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");

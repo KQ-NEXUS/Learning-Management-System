@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { X } from "lucide-react";
 import type {
   CertificateElementV1,
@@ -296,8 +296,15 @@ export function TemplateCanvas({
       onPointerMove: (event: PointerEvent<HTMLDivElement>) => handlePointerMove(event, index),
       onPointerUp: (event: PointerEvent<HTMLDivElement>) => handlePointerUp(event, index),
       onPointerCancel: (event: PointerEvent<HTMLDivElement>) => handlePointerUp(event, index),
+      // Never let the browser start a native drag (ghost image / text drag):
+      // it cancels the pointer-event drag above (UAT test 4).
+      onDragStart: (event: DragEvent<HTMLDivElement>) => event.preventDefault(),
     };
   }
+
+  /** Extra box classes for the interactive (non-readOnly) canvas: no text
+   * selection and no browser touch panning stealing the pointer drag. */
+  const dragSafe = readOnly ? "" : "select-none touch-none";
 
   function renderElement(element: CertificateElementV1, index: number) {
     const selected = selectedIndex === index;
@@ -310,7 +317,7 @@ export function TemplateCanvas({
           key={index}
           aria-label={name}
           {...interactiveProps(index)}
-          className={`absolute inset-3 ${ring}`}
+          className={`absolute inset-3 ${dragSafe} ${ring}`}
           style={{
             // See the UI-SPEC §5 exception comment on the text-element style
             // below — a border's own `color` is the same staff-authored
@@ -342,12 +349,18 @@ export function TemplateCanvas({
           aria-label={name}
           {...interactiveProps(index)}
           style={boxStyle}
-          className={`flex items-center justify-center overflow-hidden border border-dashed border-border bg-surface-2 ${ring}`}
+          className={`flex items-center justify-center overflow-hidden border border-dashed border-border bg-surface-2 ${dragSafe} ${ring}`}
         >
           {previewUrl ? (
             // A client-only `URL.createObjectURL` blob preview, never a remote/staff-controlled URL worth routing through next/image.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt="" className="h-full w-full object-contain" />
+            <img
+              src={previewUrl}
+              alt=""
+              draggable={false}
+              onDragStart={(event) => event.preventDefault()}
+              className="pointer-events-none h-full w-full object-contain select-none"
+            />
           ) : (
             <span className="px-2 text-center text-[10px] text-muted-foreground">No image attached</span>
           )}
@@ -376,7 +389,7 @@ export function TemplateCanvas({
           // fixed screen-pixel guess.
           fontSize: `${(element.fontSize / pageWidth) * 100}cqw`,
         }}
-        className={`overflow-hidden text-left leading-tight whitespace-pre ${ring}`}
+        className={`overflow-hidden text-left leading-tight whitespace-pre ${dragSafe} ${ring}`}
       >
         {sampleTextValue(element)}
         {selected && !readOnly && renderHandlesAndDelete(index, name)}
