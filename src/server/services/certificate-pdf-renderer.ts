@@ -187,16 +187,33 @@ async function drawImageElement(
   pageHeight: number,
 ): Promise<void> {
   // The renderer never touches the object store itself (T-11-14) — it only
-  // calls the caller-injected resolver. An asset key the resolver cannot
-  // resolve throws here and is never swallowed, so a template referencing a
-  // missing logo fails the render rather than silently omitting it.
+  // calls the caller-injected resolver. A resolver failure (missing object,
+  // storage outage) is an operational, retryable error and is deliberately
+  // NOT caught here, so it still fails the render. Image BYTES that pdf-lib
+  // cannot decode (WebP, GIF, corrupt, empty) are a permanent condition:
+  // retrying can never succeed, and throwing would let one bad logo block
+  // every certificate issued from the template, so such an image is skipped.
   const bytes = await resolveAsset(element.assetKey);
+
+  // Decide the format from the leading bytes, not by trial-and-error.
+  const isPng =
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a;
+  const isJpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (!isPng && !isJpeg) return;
 
   let embedded;
   try {
-    embedded = await document.embedPng(bytes);
+    embedded = isPng ? await document.embedPng(bytes) : await document.embedJpg(bytes);
   } catch {
-    embedded = await document.embedJpg(bytes);
+    return;
   }
 
   // Fit inside the box without stretching (matches the editor's object-contain

@@ -327,6 +327,108 @@ describe("renderCertificatePdf", () => {
   });
 });
 
+// CR-02: the renderer embeds only PNG and JPEG. Any other bytes (WebP, GIF,
+// corrupt, empty) must be skipped so one bad logo cannot block issuance, while
+// a resolver FETCH failure stays a retryable, propagated error.
+const TWO_PIXEL_JPEG_BASE64 =
+  "/9j/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAACAAIDAREAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAABf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAVAQEBAAAAAAAAAAAAAAAAAAAEBv/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/ABwVQ//Z";
+const JPEG_BYTES = new Uint8Array(Buffer.from(TWO_PIXEL_JPEG_BASE64, "base64"));
+
+const WEBP_BYTES = new Uint8Array([
+  ...Buffer.from("RIFF", "latin1"),
+  0x1a, 0x00, 0x00, 0x00,
+  ...Buffer.from("WEBPVP8L", "latin1"),
+  0x0d, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
+const GIF_BYTES = new Uint8Array([
+  ...Buffer.from("GIF89a", "latin1"),
+  0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff,
+  0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+]);
+// Correct 8-byte PNG signature, garbage body.
+const CORRUPT_PNG_BYTES = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xde, 0xad, 0xbe, 0xef, 0x00, 0x01, 0x02,
+]);
+// Correct SOI marker, garbage body.
+const CORRUPT_JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0xde, 0xad, 0xbe, 0xef]);
+const EMPTY_BYTES = new Uint8Array(0);
+
+const LOGO_KEY = "certificate-template-assets/tpl/logo";
+
+function textPlusImageLayout(): CertificateTemplateLayoutV1 {
+  const base = textOnlyLayout({ field: "literal", literal: "Sentinel Text" });
+  return {
+    ...base,
+    elements: [
+      ...base.elements,
+      { kind: "image", assetKey: LOGO_KEY, x: 40, y: 40, width: 60, height: 60 },
+    ],
+  };
+}
+
+/** Counts image XObjects in a produced PDF (object streams are parsed, not grepped). */
+async function countImageXObjects(bytes: Uint8Array): Promise<number> {
+  const doc = await PDFDocument.load(bytes);
+  let count = 0;
+  for (const [, object] of doc.context.enumerateIndirectObjects()) {
+    const dict = (object as { dict?: { toString(): string } }).dict;
+    if (dict && /\/Subtype\s*\/Image/.test(dict.toString())) count++;
+  }
+  return count;
+}
+
+describe("renderCertificatePdf — undecodable image bytes are skipped (CR-02)", () => {
+  const skipCases: Array<[string, Uint8Array]> = [
+    ["WebP", WEBP_BYTES],
+    ["GIF", GIF_BYTES],
+    ["corrupt PNG (valid signature)", CORRUPT_PNG_BYTES],
+    ["corrupt JPEG (valid SOI)", CORRUPT_JPEG_BYTES],
+    ["empty bytes", EMPTY_BYTES],
+  ];
+
+  it.each(skipCases)("renders the rest of the certificate when the image is %s", async (_label, imageBytes) => {
+    const bytes = await renderCertificatePdf({
+      layout: textPlusImageLayout(),
+      fields: FIELDS,
+      resolveAsset: async () => imageBytes,
+    });
+
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(extractPdfText(bytes)).toContain("Sentinel Text");
+    expect(await countImageXObjects(bytes)).toBe(0);
+  });
+
+  it("still embeds a valid PNG", async () => {
+    const bytes = await renderCertificatePdf({
+      layout: textPlusImageLayout(),
+      fields: FIELDS,
+      resolveAsset: async () => ONE_PIXEL_PNG_BYTES,
+    });
+    expect(await countImageXObjects(bytes)).toBe(1);
+  });
+
+  it("still embeds a valid JPEG", async () => {
+    const bytes = await renderCertificatePdf({
+      layout: textPlusImageLayout(),
+      fields: FIELDS,
+      resolveAsset: async () => JPEG_BYTES,
+    });
+    expect(await countImageXObjects(bytes)).toBe(1);
+  });
+
+  it("still rejects with the resolver's own error when the asset cannot be fetched (retryable)", async () => {
+    await expect(
+      renderCertificatePdf({
+        layout: textPlusImageLayout(),
+        fields: FIELDS,
+        resolveAsset: async () => {
+          throw new Error("storage unavailable");
+        },
+      }),
+    ).rejects.toThrow("storage unavailable");
+  });
+});
+
 describe("renderCertificatePdf — golden-layout regression fixture", () => {
   it("renders every element kind and every dynamic field with real values, and leaks no field token", async () => {
     const bytes = await renderCertificatePdf({
