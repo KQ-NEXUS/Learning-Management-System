@@ -470,6 +470,14 @@ describe("Image-element asset upload", () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
 
+  it("offers only PNG and JPEG in the image file picker (the renderer embeds nothing else)", () => {
+    render(<TemplateEditorShell initial={{ name: "Draft", layout: EMPTY_LAYOUT_V1, readOnly: false }} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Image" })[0]);
+
+    const fileInput = screen.getAllByLabelText("Image")[0] as HTMLInputElement;
+    expect(fileInput.getAttribute("accept")).toBe("image/png,image/jpeg");
+  });
+
   it("surfaces the danger state with a Retry affordance when the upload fails", async () => {
     vi.mocked(presignTemplateAssetUploadAction).mockResolvedValue({
       ok: false,

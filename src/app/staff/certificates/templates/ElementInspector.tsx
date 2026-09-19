@@ -209,7 +209,7 @@ export function ElementInspector({ element, onChange, templateId, onAssetUploade
           Image
           <input
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            accept="image/png,image/jpeg"
             disabled={uploadState === "uploading"}
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;

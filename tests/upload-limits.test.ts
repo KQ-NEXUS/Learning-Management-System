@@ -5,6 +5,8 @@ import {
   DOWNLOAD_TTL_SECONDS,
   downloadTtlFor,
   UPLOAD_URL_TTL_SECONDS,
+  CERTIFICATE_TEMPLATE_ASSET_MIME_TYPES,
+  validateTemplateAssetUpload,
 } from "@/lib/upload-limits";
 import { buildStorageKey, finalStorageKeyFor } from "@/server/services/storage-service";
 
@@ -104,6 +106,42 @@ describe("validateUpload — per-LessonType allow-list", () => {
     const allMimes = Object.values(UPLOAD_LIMITS).flatMap((l) => [...l.mimeTypes]);
     expect(allMimes).not.toContain("image/svg+xml");
     expect(allMimes).not.toContain("text/html");
+  });
+});
+
+describe("validateTemplateAssetUpload — certificate template assets (CR-02)", () => {
+  it("allows exactly image/png and image/jpeg", () => {
+    expect([...CERTIFICATE_TEMPLATE_ASSET_MIME_TYPES]).toEqual(["image/png", "image/jpeg"]);
+    expect(Object.isFrozen(CERTIFICATE_TEMPLATE_ASSET_MIME_TYPES)).toBe(true);
+  });
+
+  it.each(["image/png", "image/jpeg"])("accepts a small %s", (mimeType) => {
+    expect(validateTemplateAssetUpload({ mimeType, sizeBytes: 1_000 })).toEqual({ ok: true });
+  });
+
+  it.each(["image/webp", "image/gif", "image/svg+xml", "application/pdf", ""])(
+    "rejects %j with a message naming PNG and JPEG",
+    (mimeType) => {
+      const result = validateTemplateAssetUpload({ mimeType, sizeBytes: 1_000 });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.message).toMatch(/PNG/);
+        expect(result.message).toMatch(/JPEG/);
+      }
+    },
+  );
+
+  it("still enforces the IMAGE size cap", () => {
+    expect(
+      validateTemplateAssetUpload({ mimeType: "image/png", sizeBytes: 11 * 1024 * 1024 }).ok,
+    ).toBe(false);
+  });
+
+  it("leaves lesson image uploads on their wider list", () => {
+    expect(
+      validateUpload({ lessonType: "IMAGE", mimeType: "image/webp", sizeBytes: 1_000 }),
+    ).toEqual({ ok: true });
+    expect(UPLOAD_LIMITS.IMAGE.mimeTypes).toContain("image/gif");
   });
 });
 

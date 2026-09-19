@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { withPermission, AuthenticationError, AuthorizationError } from "@/server/permissions";
-import { validateUpload, UPLOAD_URL_TTL_SECONDS } from "@/lib/upload-limits";
+import { validateTemplateAssetUpload, UPLOAD_URL_TTL_SECONDS } from "@/lib/upload-limits";
 import {
   buildStagedTemplateAssetStorageKey,
   finalTemplateAssetKeyFor,
@@ -33,10 +33,13 @@ import {
  * uploaded object's real content-type and byte length → promote to the
  * final key. The client's declared MIME type is never trusted as the
  * verification — `confirmTemplateAssetUploadAction` re-validates the
- * server-OBSERVED type/size against the same `upload-limits.ts` allow-list
+ * server-OBSERVED type/size against the same template-asset allow-list
+ * (`validateTemplateAssetUpload`: PNG and JPEG only) that
  * `presignTemplateAssetUploadAction` checked the client-claimed ones
  * against, so a spoofed `Content-Type` on the presign request cannot slip a
- * type that same shared allow-list excludes (T-04-25) past the real check.
+ * type that allow-list excludes past the real check. The list is narrower
+ * than the lesson IMAGE list because the certificate renderer embeds only PNG
+ * and JPEG (CR-02): a WebP or GIF would upload fine and never render.
  *
  * Every failure path returns a fixed, generic `{ ok: false, message }` —
  * never a raw caught `error.message` — matching `grading-actions.ts` /
@@ -45,7 +48,7 @@ import {
 
 const DENIED_MESSAGE = "Your role does not permit uploading certificate template images.";
 const VERIFICATION_FAILED_MESSAGE =
-  "This image could not be verified. Choose a PNG, JPEG, WebP or GIF under 10 MB and try again.";
+  "This image could not be verified. Choose a PNG or JPEG under 10 MB and try again.";
 
 /** The verified stored object did not match its declared upload — the
  * client's claim was wrong, or the object failed the real allow-list check. */
@@ -65,8 +68,8 @@ const presignSchema = z
   .strict();
 
 /**
- * Step 1: authorize, validate the CLIENT-CLAIMED metadata against the shared
- * IMAGE allow-list (courtesy only — `confirmTemplateAssetUploadAction` is
+ * Step 1: authorize, validate the CLIENT-CLAIMED metadata against the template-asset
+ * PNG/JPEG allow-list (courtesy only — `confirmTemplateAssetUploadAction` is
  * the real gate), and hand back a short-lived presigned `PUT` bound to one
  * staged key and one `Content-Type`.
  */
@@ -76,8 +79,7 @@ export async function presignTemplateAssetUploadAction(input: unknown): Promise<
     return { ok: false, message: "Choose a valid image file to upload." };
   }
 
-  const check = validateUpload({
-    lessonType: "IMAGE",
+  const check = validateTemplateAssetUpload({
     mimeType: parsed.data.mimeType,
     sizeBytes: parsed.data.sizeBytes,
   });
@@ -121,7 +123,7 @@ const confirmSchema = z
 /**
  * Step 2: authorize, INSPECT the real stored object (never the client's
  * claim), reject anything that does not match both the declared metadata
- * AND the shared allow-list, then promote the verified object to its final
+ * AND the template-asset allow-list, then promote the verified object to its final
  * key. Mirrors `completeLessonResourceUpload`'s inspect → compare → promote
  * → cleanup-staged shape exactly.
  */
@@ -170,8 +172,7 @@ export async function confirmTemplateAssetUploadAction(input: unknown): Promise<
       // (T-11-11): a spoofed `Content-Type` header on the presign request
       // cannot get an excluded type (T-04-25) promoted, because what is
       // checked here is what the object store actually stored.
-      const verified = validateUpload({
-        lessonType: "IMAGE",
+      const verified = validateTemplateAssetUpload({
         mimeType: stored.contentType ?? "",
         sizeBytes: Number(stored.sizeBytes),
       });
