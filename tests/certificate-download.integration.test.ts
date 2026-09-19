@@ -84,6 +84,8 @@ const {
 let testDb: TestDatabase;
 let issueCertificateForEnrolment: typeof import("@/server/services/certificate-issuance-service")["issueCertificateForEnrolment"];
 let getOwnCertificateForDownload: typeof import("@/server/services/certificate-service")["getOwnCertificateForDownload"];
+let loadLearnerDashboard: typeof import("@/server/services/enrolment-dashboard-service")["loadLearnerDashboard"];
+let hasActiveEnrolmentCoveringCourse: typeof import("@/server/services/learner-access")["hasActiveEnrolmentCoveringCourse"];
 
 beforeAll(async () => {
   testDb = await startTestDatabase();
@@ -96,6 +98,14 @@ beforeAll(async () => {
 
   const certificateServiceModule = await import("@/server/services/certificate-service");
   getOwnCertificateForDownload = certificateServiceModule.getOwnCertificateForDownload;
+
+  // Plan 11-18: the dashboard and learner-access modules also import
+  // `@/server/db`, so they must come in through this same post-DATABASE_URL block.
+  const dashboardModule = await import("@/server/services/enrolment-dashboard-service");
+  loadLearnerDashboard = dashboardModule.loadLearnerDashboard;
+
+  const learnerAccessModule = await import("@/server/services/learner-access");
+  hasActiveEnrolmentCoveringCourse = learnerAccessModule.hasActiveEnrolmentCoveringCourse;
 }, TEST_DB_TIMEOUT_MS);
 
 afterAll(async () => {
@@ -313,7 +323,7 @@ async function seedIssuedCourseCertificate() {
     where: { id: outcome.certificateId },
   });
 
-  return { certificate, userId, courseId: course.id };
+  return { certificate, userId, courseId: course.id, enrolmentId };
 }
 
 describe("certificate download round trip — real Postgres + real object storage (CRD-03)", () => {
@@ -359,5 +369,36 @@ describe("certificate download round trip — real Postgres + real object storag
 
     const result = await getOwnCertificateForDownload({ userId: otherLearnerId }, certificate.id);
     expect(result).toBeNull();
+  }, TEST_DB_TIMEOUT_MS);
+
+  // Plan 11-18 (UAT test 10). Every earlier dashboard test hand-wrote an ACTIVE
+  // enrolment, while the real issuance path moves it to COMPLETED (D-05) — the
+  // status the dashboard then filtered out. This case uses the status issuance
+  // really wrote, read back from the row.
+  it("after a real issuance the owner's dashboard has a COMPLETED card carrying the issued certificate; a stranger sees none; the learner has no lesson access (G-01)", async () => {
+    const { certificate, userId, courseId, enrolmentId } = await seedIssuedCourseCertificate();
+
+    // (a) The status production writes — not a fixture value.
+    const enrolment = await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } });
+    expect(enrolment.status).toBe("COMPLETED");
+
+    // (b) The owner's dashboard still shows the course, with the certificate.
+    const dashboard = await loadLearnerDashboard({ userId } as never);
+    const cards = dashboard.cards.filter((c) => c.enrolmentId === enrolmentId);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].enrolmentStatus).toBe("COMPLETED");
+    expect(cards[0].certificate).toMatchObject({
+      kind: "issued",
+      certificateId: certificate.id,
+      verificationRef: certificate.verificationRef,
+    });
+
+    // (c) An unrelated learner sees no card for this enrolment.
+    const { userId: strangerId } = await seedLearnerFixture(testDb.prisma);
+    const strangerDashboard = await loadLearnerDashboard({ userId: strangerId } as never);
+    expect(strangerDashboard.cards.filter((c) => c.enrolmentId === enrolmentId)).toHaveLength(0);
+
+    // (d) G-01 against real rows: visible on the dashboard, not operable.
+    expect(await hasActiveEnrolmentCoveringCourse(userId, courseId)).toBe(false);
   }, TEST_DB_TIMEOUT_MS);
 });
