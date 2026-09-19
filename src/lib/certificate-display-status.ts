@@ -13,6 +13,22 @@
  */
 export type CertificateDisplayStatus = "revoked" | "flagged" | "superseded" | "active";
 
+/** StatusPill tone per display status (UI-SPEC §5) — shared by the issued list and the landing page. */
+export const CERTIFICATE_STATUS_TONE = {
+  revoked: "danger",
+  flagged: "warning",
+  superseded: "neutral",
+  active: "success",
+} as const;
+
+/** StatusPill label per display status (UI-SPEC §5). */
+export const CERTIFICATE_STATUS_LABEL = {
+  revoked: "Revoked",
+  flagged: "Flagged for review",
+  superseded: "Superseded",
+  active: "Active",
+} as const;
+
 /**
  * First match wins, in this exact order (UI-SPEC §5, load-bearing): (1)
  * `status === "REVOKED"` -> "revoked"; (2) `reviewFlaggedAt !== null` ->

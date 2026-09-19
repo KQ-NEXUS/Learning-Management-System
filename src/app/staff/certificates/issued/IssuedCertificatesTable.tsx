@@ -21,7 +21,11 @@
 import { useMemo, useState } from "react";
 import { ResourceTable, StatusPill, type Column } from "@/components/primitives";
 import { formatTimestamp } from "@/lib/format-timestamp";
-import { certificateDisplayStatus } from "@/lib/certificate-display-status";
+import {
+  CERTIFICATE_STATUS_LABEL,
+  CERTIFICATE_STATUS_TONE,
+  certificateDisplayStatus,
+} from "@/lib/certificate-display-status";
 // `import type` only — this is a client component and must not pull the service's server graph
 // into the browser bundle (same reason `certificateDisplayStatus` lives in `src/lib`).
 import type { CertificateRow, IssuanceSource } from "@/server/services/certificate-service";
@@ -36,20 +40,6 @@ function issuedByLabel(source: IssuanceSource | undefined): string {
   if (source.kind === "automatic") return "Automatic";
   return source.actorName ?? "Staff member";
 }
-
-const STATUS_TONE = {
-  revoked: "danger",
-  flagged: "warning",
-  superseded: "neutral",
-  active: "success",
-} as const;
-
-const STATUS_LABEL = {
-  revoked: "Revoked",
-  flagged: "Flagged for review",
-  superseded: "Superseded",
-  active: "Active",
-} as const;
 
 const columns: Column<CertificateRow>[] = [
   {
@@ -82,7 +72,12 @@ const columns: Column<CertificateRow>[] = [
     header: "Status",
     render: (row) => {
       const display = certificateDisplayStatus(row);
-      return <StatusPill tone={STATUS_TONE[display]} label={STATUS_LABEL[display]} />;
+      return (
+        <StatusPill
+          tone={CERTIFICATE_STATUS_TONE[display]}
+          label={CERTIFICATE_STATUS_LABEL[display]}
+        />
+      );
     },
   },
 ];
