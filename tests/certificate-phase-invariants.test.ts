@@ -214,7 +214,11 @@ describe("phase invariant 3 — verificationRef is generated in exactly one plac
 // ---------------------------------------------------------------------------
 
 const CACHE_EXPORT_NAMES = new Set(["dynamic", "revalidate", "fetchCache"]);
-const CACHE_ROUTE_DIRS = ["src/app/verify", "src/app/api/certificates"];
+const CACHE_ROUTE_DIRS = [
+  "src/app/verify",
+  "src/app/verify-certificate",
+  "src/app/api/certificates",
+];
 
 function exportsCacheDirective(filePath: string): { name: string }[] {
   const sourceFile = parse(filePath);
