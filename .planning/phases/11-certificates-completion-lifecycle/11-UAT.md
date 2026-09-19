@@ -142,7 +142,9 @@ blocked: 0
 
 <!-- Root causes below were established by direct code inspection during the 11-16 walkthrough; no debug agents were needed for these. -->
 - truth: "After a certificate is issued, the learner's dashboard still shows that course's Certificate slot with a Download link"
-  status: failed
+  status: resolved
+  resolved_by: "11-17 + 11-18"
+  reverified: "Dashboard as Tunde Bello shows the Financial Controls card for a COMPLETED enrolment with Download certificate link and reference (reverify-10-dashboard-completed-card.png)"
   reason: "User reported: After issuance the Financial Controls card disappears from the learner dashboard entirely, taking the certificate slot and download link with it."
   severity: blocker
   test: 10
@@ -159,7 +161,9 @@ blocked: 0
   debug_session: "diagnosed in 11-16 walkthrough (direct inspection); evidence 11-16-evidence/04-learner-dashboard-no-card-after-issue.png"
 
 - truth: "Each element in the downloaded PDF sits where it was placed in the editor, and images are not distorted"
-  status: failed
+  status: resolved
+  resolved_by: "11-19"
+  reverified: "Reissued certificate PDF: logo at top and round, name/award below, date lower-left, reference bottom-right, matching the editor layout (reverify-11-reissued-pdf-layout.png). Certificates issued BEFORE the fix keep their old mirrored PDF."
   reason: "User reported: PDF is vertically mirrored relative to the editor and the logo is stretched into an ellipse."
   severity: major
   test: 11
@@ -174,7 +178,9 @@ blocked: 0
   debug_session: "diagnosed in 11-16 walkthrough (direct inspection); evidence 11-16-evidence/06-downloaded-pdf-rendered.png"
 
 - truth: "An existing Course has an edit page where certificates, issuance mode and template can be changed"
-  status: failed
+  status: resolved
+  resolved_by: "11-20"
+  reverified: "/staff/courses/[id]/edit loads prefilled; switching Automatic to Manual and saving shows Saved., persists MANUAL, audit course.updated by USER"
   reason: "User reported: There is no Course edit page; CourseForm only supports create."
   severity: major
   test: 6
@@ -191,7 +197,9 @@ blocked: 0
   debug_session: "diagnosed in 11-16 walkthrough (direct inspection)"
 
 - truth: "Dragging an uploaded logo on the template canvas moves it smoothly to the drop position"
-  status: failed
+  status: resolved
+  resolved_by: "11-21"
+  reverified: "Logo drag in the template editor moved 150px of 150px requested (was 15px of 100px)"
   reason: "User reported: Dragging the uploaded logo is unreliable (100px drag moved 15px)."
   severity: minor
   test: 4
@@ -205,7 +213,9 @@ blocked: 0
   debug_session: "diagnosed in 11-16 walkthrough (DOM inspection: draggable=true, pointer-events=auto)"
 
 - truth: "Visiting the plain /verify path offers a form to enter a verification reference"
-  status: failed
+  status: resolved
+  resolved_by: "11-21"
+  reverified: "/verify-certificate shows the reference form; submitting routes to /verify/{ref} and shows valid; bare /verify unchanged"
   reason: "User reported: Bare /verify is the email-verification page, so an employer cannot type a reference there."
   severity: minor
   test: 13
@@ -220,7 +230,9 @@ blocked: 0
   debug_session: "diagnosed in 11-16 walkthrough; known deviation recorded in 11-06-SUMMARY.md"
 
 - truth: "The dashboard 'Next up' card for a completed course no longer refers to certificates shipping in the future"
-  status: failed
+  status: resolved
+  resolved_by: "11-18"
+  reverified: "Next-up card now reads: Your certificate, if this course issues one, is shown in the Certificate section below."
   reason: "User reported: Card still says 'your certificate slot below will reflect this once certificates ship.'"
   severity: minor
   test: 19
@@ -233,7 +245,9 @@ blocked: 0
   debug_session: "diagnosed in 11-16 walkthrough (grep)"
 
 - truth: "When a certificate is issued automatically, staff can see that it has been issued (not only by opening All certificates)"
-  status: failed
+  status: resolved
+  resolved_by: "11-22 + 11-23"
+  reverified: "Landing page shows a Recently issued section with Automatic pills; All certificates has an Issued by column and All/Automatic/Staff filter"
   reason: "User reported: it should be issued since its automatic , but it should also show on the staff side that the certi has been issued"
   severity: minor
   test: 8
@@ -250,7 +264,9 @@ blocked: 0
   debug_session: "diagnosed by direct observation during UAT test 8; evidence 11-16-evidence/uat-08-*.png"
 
 - truth: "One attendance/completion correction produces one attributable flag entry on the affected certificate"
-  status: observation
+  status: resolved
+  resolved_by: "11-24"
+  reverified: "Fix covered by unit tests (three superseded results give one flag audit row); not re-run in the browser"
   reason: "Observed in test 18 (function passes): a single attendance correction on a Programme cohort wrote three certificate.review_flagged audit events ~50 ms apart, all actor SYSTEM, reason "completion superseded"."
   severity: minor
   test: 18
@@ -263,3 +279,30 @@ blocked: 0
     - "Pass the correcting staff member as actor where the trigger has one (attendance correction)"
     - "Test asserting exactly one flag audit entry per correction on a Programme cohort"
   debug_session: "diagnosed by direct observation and code read during UAT test 18"
+
+- truth: "A learner whose certificate is flagged after an attendance/completion correction still sees the certificate slot and can download it"
+  status: failed
+  reason: "Found while re-verifying test 10: on a Programme card whose completion was superseded by an attendance correction, the Certificate slot shows the deferred "arriving in a future update" copy although an ACTIVE, flagged Programme certificate exists."
+  severity: major
+  test: 17
+  root_cause: "deriveCertificateColumn (enrolment-dashboard-service.ts ~L461) returns not-complete whenever there is no active CompletionRecord, before it looks at the certificate. An attendance or completion correction supersedes the completion record, so the learner loses the slot and the download. The grade-override case (test 17) passed only because it does not supersede completion."
+  artifacts:
+    - path: "src/server/services/enrolment-dashboard-service.ts"
+      issue: "deriveCertificateColumn checks hasCompletionRecord before certificate"
+  missing:
+    - "Check for an existing certificate first (flagged/revoked/active), and only fall back to not-complete / pending-issuance when none exists"
+    - "Regression test: superseded completion record plus ACTIVE flagged certificate renders the flagged branch with a download link"
+  debug_session: "found by browser re-verification 2026-09-19; evidence: Tunde Bello Programme card"
+
+- truth: "Certificate rendering and issuance are robust for real-world data"
+  status: failed
+  reason: "Code review 11-REVIEW.md: 6 critical and 10 warning findings. CR-01 is empirically confirmed: the PDF renderer throws for names outside WinAnsi (Yoruba ọ ṣ ẹ, Ł, CJK) and the render runs inside the learner lesson-progress / attendance transaction, so a learner with such a name could not complete their last lesson in an AUTOMATIC course."
+  severity: blocker
+  test: 11
+  root_cause: "See .planning/phases/11-certificates-completion-lifecycle/11-REVIEW.md (CR-01..CR-06, WR-01..WR-10)"
+  artifacts:
+    - path: "src/server/services/certificate-pdf-renderer.ts"
+      issue: "Helvetica-only (WinAnsi) embedding; approved fontkit not used; render not guarded and inside the caller transaction"
+  missing:
+    - "Plan a second gap-closure pass from 11-REVIEW.md, starting with CR-01 (Unicode-capable font), CR-03 (assertTransition on non-ACTIVE enrolments), CR-04/05/06"
+  debug_session: "11-REVIEW.md; CR-01 reproduced with tsx against renderCertificatePdf"
