@@ -47,7 +47,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
 import { seedCohortFixture, seedEnrolmentFixture } from "./support/cohort-fixtures";
-import { renderCertificatePdf } from "@/server/services/certificate-pdf-renderer";
 import { parseCertificateTemplateLayout, EMPTY_LAYOUT_V1 } from "@/server/services/certificate-template-layout";
 import { generateVerificationRef } from "@/server/services/certificate-reference";
 import type {
@@ -63,10 +62,6 @@ process.env.S3_ACCESS_KEY_ID = "lms-minio";
 process.env.S3_SECRET_ACCESS_KEY = "change-me-minio";
 process.env.S3_FORCE_PATH_STYLE = "true";
 process.env.S3_REGION = "us-east-1";
-
-const { putGeneratedCertificateObject, buildCertificateStorageKey } = await import(
-  "@/server/services/storage-service"
-);
 
 let testDb: TestDatabase;
 let issueCertificateForEnrolment: typeof import("@/server/services/certificate-issuance-service")["issueCertificateForEnrolment"];
@@ -85,18 +80,10 @@ afterAll(async () => {
   await testDb?.stop();
 }, TEST_DB_TIMEOUT_MS);
 
-/** No image element — never exercises `resolveTemplateAsset` in this file. */
 const RACE_TEST_LAYOUT = parseCertificateTemplateLayout(EMPTY_LAYOUT_V1);
-
-const resolveTemplateAsset: IssueCertificateDeps["resolveTemplateAsset"] = async (assetKey) => {
-  throw new Error(`certificate-concurrency.integration.test.ts's layout has no image element; unexpected resolve for ${assetKey}`);
-};
 
 function buildDeps(): IssueCertificateDeps {
   return {
-    renderPdf: renderCertificatePdf,
-    putObject: putGeneratedCertificateObject,
-    buildKey: buildCertificateStorageKey,
     generateRef: generateVerificationRef,
     audit: async (event) => {
       await testDb.prisma.auditEvent.create({
@@ -120,7 +107,6 @@ function buildDeps(): IssueCertificateDeps {
         },
       });
     },
-    resolveTemplateAsset,
   };
 }
 
@@ -247,6 +233,14 @@ describe("certificate duplicate-issuance race — real Postgres (CRD-01, T-11-01
       where: { enrolmentId, scope: "COURSE", status: "ACTIVE" },
     });
     expect(activeCount).toBe(1);
+
+    // Plan 11-30: issuance is database-only. Neither transaction rendered or
+    // stored anything, so the single winning row has no file yet.
+    const rows = await testDb.prisma.certificate.findMany({
+      where: { enrolmentId, scope: "COURSE", status: "ACTIVE" },
+      select: { storageKey: true },
+    });
+    expect(rows.map((r) => r.storageKey)).toEqual([null]);
   }, TEST_DB_TIMEOUT_MS);
 
   it("PROGRAMME scope: two concurrent issuance calls for the same enrolment converge on exactly one ACTIVE certificate; the loser reports already-issued, never throws", async () => {
@@ -264,5 +258,13 @@ describe("certificate duplicate-issuance race — real Postgres (CRD-01, T-11-01
       where: { enrolmentId, scope: "PROGRAMME", status: "ACTIVE" },
     });
     expect(activeCount).toBe(1);
+
+    // Plan 11-30: issuance is database-only. Neither transaction rendered or
+    // stored anything, so the single winning row has no file yet.
+    const rows = await testDb.prisma.certificate.findMany({
+      where: { enrolmentId, scope: "PROGRAMME", status: "ACTIVE" },
+      select: { storageKey: true },
+    });
+    expect(rows.map((r) => r.storageKey)).toEqual([null]);
   }, TEST_DB_TIMEOUT_MS);
 });

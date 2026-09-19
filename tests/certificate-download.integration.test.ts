@@ -65,6 +65,7 @@ import type {
   CertificateIssuanceTxClient,
   IssueCertificateDeps,
 } from "@/server/services/certificate-issuance-service";
+import type { CertificateFileStore } from "@/server/services/certificate-file-service";
 
 process.env.S3_BUCKET = "lms-private";
 process.env.S3_ENDPOINT = "http://localhost:9002";
@@ -83,6 +84,8 @@ const {
 
 let testDb: TestDatabase;
 let issueCertificateForEnrolment: typeof import("@/server/services/certificate-issuance-service")["issueCertificateForEnrolment"];
+let createCertificateFileService: typeof import("@/server/services/certificate-file-service")["createCertificateFileService"];
+let runTransactionThenSettleCertificateFiles: typeof import("@/server/services/certificate-file-service")["runTransactionThenSettleCertificateFiles"];
 let getOwnCertificateForDownload: typeof import("@/server/services/certificate-service")["getOwnCertificateForDownload"];
 let loadLearnerDashboard: typeof import("@/server/services/enrolment-dashboard-service")["loadLearnerDashboard"];
 let hasActiveEnrolmentCoveringCourse: typeof import("@/server/services/learner-access")["hasActiveEnrolmentCoveringCourse"];
@@ -95,6 +98,13 @@ beforeAll(async () => {
 
   const issuanceModule = await import("@/server/services/certificate-issuance-service");
   issueCertificateForEnrolment = issuanceModule.issueCertificateForEnrolment;
+
+  // Plan 11-30: the file service binds `@/server/db` at import time, so it
+  // also comes in after DATABASE_URL is set. Same module instance the
+  // issuance service registers pending ids into.
+  const fileModule = await import("@/server/services/certificate-file-service");
+  createCertificateFileService = fileModule.createCertificateFileService;
+  runTransactionThenSettleCertificateFiles = fileModule.runTransactionThenSettleCertificateFiles;
 
   const certificateServiceModule = await import("@/server/services/certificate-service");
   getOwnCertificateForDownload = certificateServiceModule.getOwnCertificateForDownload;
@@ -237,15 +247,27 @@ function hexToLatin1(hex: string): string {
 }
 
 /** Never invoked in this file's layout (no image element) — throws loudly if it ever is. */
-const resolveTemplateAsset: IssueCertificateDeps["resolveTemplateAsset"] = async (assetKey) => {
+const resolveTemplateAsset = async (assetKey: string): Promise<Uint8Array> => {
   throw new Error(`certificate-download.integration.test.ts's layout has no image element; unexpected resolve for ${assetKey}`);
 };
 
-function buildDeps(): IssueCertificateDeps {
-  return {
+/**
+ * The post-commit file step (plan 11-30) bound to the test database and the
+ * real renderer and real MinIO object store. Issuance itself no longer renders.
+ */
+function buildFileService() {
+  return createCertificateFileService({
+    store: testDb.prisma as unknown as CertificateFileStore,
     renderPdf: renderCertificatePdf,
     putObject: putGeneratedCertificateObject,
     buildKey: buildCertificateStorageKey,
+    resolveAsset: resolveTemplateAsset,
+    log: () => {},
+  });
+}
+
+function buildDeps(): IssueCertificateDeps {
+  return {
     generateRef: generateVerificationRef,
     audit: async (event) => {
       await testDb.prisma.auditEvent.create({
@@ -269,11 +291,10 @@ function buildDeps(): IssueCertificateDeps {
         },
       });
     },
-    resolveTemplateAsset,
   };
 }
 
-async function seedIssuedCourseCertificate() {
+async function seedIssuedCourseCertificate(settleVia: "explicit" | "wrapper" = "explicit") {
   const template = await testDb.prisma.certificateTemplate.create({
     data: { name: "Download Test Template", layout: DOWNLOAD_TEST_LAYOUT as never, isDefault: false },
     select: { id: true },
@@ -307,13 +328,38 @@ async function seedIssuedCourseCertificate() {
   });
 
   const deps = buildDeps();
-  const outcome = await testDb.prisma.$transaction((tx) =>
+  const fileService = buildFileService();
+  const issue = (tx: unknown) =>
     issueCertificateForEnrolment(
-      tx as unknown as CertificateIssuanceTxClient,
+      tx as CertificateIssuanceTxClient,
       { enrolmentId, scope: "COURSE", now: new Date(), actor: null },
       deps,
-    ),
-  );
+    );
+
+  let outcome: Awaited<ReturnType<typeof issue>>;
+  let storageKeyAfterCommit: string | null = null;
+  if (settleVia === "wrapper") {
+    // The composition-root shape: the transaction, then the settle on the SAME tx.
+    outcome = await runTransactionThenSettleCertificateFiles(
+      (body: (tx: object) => Promise<Awaited<ReturnType<typeof issue>>>) =>
+        testDb.prisma.$transaction((tx) => body(tx as object)),
+      (tx) => issue(tx),
+      fileService.settlePendingCertificateFiles,
+    );
+  } else {
+    let capturedTx: object | undefined;
+    outcome = await testDb.prisma.$transaction((tx) => {
+      capturedTx = tx as object;
+      return issue(tx);
+    });
+    if (outcome.kind === "issued") {
+      // Committed, but not yet settled: issuance wrote a database row only.
+      storageKeyAfterCommit = (
+        await testDb.prisma.certificate.findUniqueOrThrow({ where: { id: outcome.certificateId } })
+      ).storageKey;
+      await fileService.settlePendingCertificateFiles(capturedTx as object);
+    }
+  }
 
   if (outcome.kind !== "issued") {
     throw new Error(`Fixture issuance did not succeed: ${JSON.stringify(outcome)}`);
@@ -323,13 +369,16 @@ async function seedIssuedCourseCertificate() {
     where: { id: outcome.certificateId },
   });
 
-  return { certificate, userId, courseId: course.id, enrolmentId };
+  return { certificate, userId, courseId: course.id, enrolmentId, storageKeyAfterCommit };
 }
 
 describe("certificate download round trip — real Postgres + real object storage (CRD-03)", () => {
   it("writes a real object at the recorded storageKey, resolves a real presigned URL, and the fetched bytes are a genuine %PDF carrying the learner's real name", async () => {
-    const { certificate, userId } = await seedIssuedCourseCertificate();
+    const { certificate, userId, storageKeyAfterCommit } = await seedIssuedCourseCertificate();
 
+    // Two-phase issuance (plan 11-30): the committed row had no file until the
+    // post-commit settle produced it.
+    expect(storageKeyAfterCommit).toBeNull();
     expect(certificate.storageKey).toBeTruthy();
     const storageKey = certificate.storageKey as string;
     expect(storageKey.startsWith(`certificates/${certificate.id}/`)).toBe(true);
@@ -361,6 +410,36 @@ describe("certificate download round trip — real Postgres + real object storag
     const own = await getOwnCertificateForDownload({ userId }, certificate.id);
     expect(own?.id).toBe(certificate.id);
     expect(own?.storageKey).toBe(storageKey);
+  }, TEST_DB_TIMEOUT_MS);
+
+  it("runTransactionThenSettleCertificateFiles against real Postgres settles after commit: the file exists and ensure is idempotent (plan 11-30)", async () => {
+    const { certificate } = await seedIssuedCourseCertificate("wrapper");
+
+    const storageKey = certificate.storageKey as string;
+    expect(storageKey.startsWith(`certificates/${certificate.id}/`)).toBe(true);
+    const bytes = await getObjectBytes(storageKey);
+    expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
+
+    // Producing the file again on demand returns the same key and writes nothing new.
+    const fileService = buildFileService();
+    expect(await fileService.ensureCertificateFile(certificate.id)).toBe(storageKey);
+    const after = await testDb.prisma.certificate.findUniqueOrThrow({ where: { id: certificate.id } });
+    expect(after.storageKey).toBe(storageKey);
+  }, TEST_DB_TIMEOUT_MS);
+
+  it("a committed certificate with no file is produced on demand by ensureCertificateFile, from its snapshot (plan 11-30)", async () => {
+    const { certificate } = await seedIssuedCourseCertificate();
+    // Simulate a render/store that never completed after commit.
+    await testDb.prisma.certificate.update({ where: { id: certificate.id }, data: { storageKey: null } });
+
+    const key = await buildFileService().ensureCertificateFile(certificate.id);
+
+    expect(key).toBeTruthy();
+    const bytes = await getObjectBytes(key as string);
+    expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
+    expect(extractPdfText(bytes)).toContain(certificate.learnerName);
+    const row = await testDb.prisma.certificate.findUniqueOrThrow({ where: { id: certificate.id } });
+    expect(row.storageKey).toBe(key);
   }, TEST_DB_TIMEOUT_MS);
 
   it("a second learner's request through getOwnCertificateForDownload returns null, never another learner's certificate", async () => {

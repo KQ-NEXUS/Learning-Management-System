@@ -285,9 +285,6 @@ function harness(opts?: {
 
   let refSeq = 0;
   const issuanceDeps: IssueCertificateDeps = {
-    renderPdf: async () => new Uint8Array([1, 2, 3]),
-    putObject: async () => {},
-    buildKey: ({ certificateId }) => `certificates/${certificateId}`,
     generateRef: () => {
       refSeq += 1;
       return `VERIF-NEW-${refSeq}`;
@@ -300,7 +297,6 @@ function harness(opts?: {
         data: { type: event.type, payload: event.payload },
       });
     },
-    resolveTemplateAsset: async () => new Uint8Array(),
   };
 
   const delegate: Delegate<CertificateRow> = {

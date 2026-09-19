@@ -25,6 +25,10 @@ import type { CompletionScopeResult, CompletionRecalculationResult } from "@/ser
 import type { LessonProgressServiceDeps } from "@/server/services/lesson-progress-service";
 import type { AttendanceServiceDeps } from "@/server/services/attendance-service";
 import { EMPTY_LAYOUT_V1 } from "@/server/services/certificate-template-layout";
+import {
+  createCertificateFileService,
+  type CertificateFileStore,
+} from "@/server/services/certificate-file-service";
 import { SYSTEM_ACTOR_TYPE } from "@/server/services/checkout-webhook-system-service";
 
 // ---------------------------------------------------------------------------
@@ -112,6 +116,34 @@ function user(over: Partial<UserRow> = {}): UserRow {
 }
 
 // ---------------------------------------------------------------------------
+// Pending-file registry probe (plan 11-30). Issuance no longer renders or
+// stores anything; it only REGISTERS the certificate id for the post-commit
+// step. This drains that registry through a recording file service, so the
+// tests can assert exactly which certificate ids were registered for a tx.
+// ---------------------------------------------------------------------------
+
+async function drainRegisteredCertificateIds(tx: object): Promise<string[]> {
+  const ids: string[] = [];
+  const service = createCertificateFileService({
+    store: {
+      certificate: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          ids.push(where.id);
+          return null;
+        },
+      },
+    } as unknown as CertificateFileStore,
+    renderPdf: (async () => new Uint8Array()) as never,
+    putObject: async () => {},
+    buildKey: ({ certificateId }) => certificateId,
+    resolveAsset: async () => new Uint8Array(),
+    log: () => {},
+  });
+  await service.settlePendingCertificateFiles(tx);
+  return ids;
+}
+
+// ---------------------------------------------------------------------------
 // Staged-commit fake tx + harness
 // ---------------------------------------------------------------------------
 
@@ -132,6 +164,8 @@ function harness(opts?: {
   const users = new Map((opts?.users ?? [user()]).map((u) => [u.id, { ...u }]));
   const certificates = new Map((opts?.certificates ?? []).map((c) => [c.id, { ...c }]));
   const events: Array<Record<string, unknown>> = [];
+  /** Certificate ids registered for post-commit file generation, by COMMITTED transactions only. */
+  const registered: string[] = [];
   let certSeq = 0;
 
   function makeTx(
@@ -248,6 +282,7 @@ function harness(opts?: {
     const evStaged: Array<Record<string, unknown>> = [];
     const tx = makeTx(certStaged, enrStaged, evStaged);
     const result = await fn(tx);
+    registered.push(...(await drainRegisteredCertificateIds(tx)));
     // Commit only on success — mirrors a real Postgres transaction's
     // all-or-nothing guarantee for this test suite.
     certificates.clear();
@@ -258,7 +293,7 @@ function harness(opts?: {
     return result;
   };
 
-  return { certificates, enrolments, cohorts, courses, programmes, templates, users, events, runInTransaction };
+  return { certificates, enrolments, cohorts, courses, programmes, templates, users, events, registered, runInTransaction };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,21 +301,11 @@ function harness(opts?: {
 // ---------------------------------------------------------------------------
 
 function makeDeps(overrides?: Partial<IssueCertificateDeps>) {
-  const renderCalls: unknown[] = [];
-  const putObjectCalls: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
   const auditCalls: Array<Record<string, unknown>> = [];
   const writeEventCalls: Array<{ tx: unknown; event: Record<string, unknown> }> = [];
   let refSeq = 0;
 
   const deps: IssueCertificateDeps = {
-    renderPdf: overrides?.renderPdf ?? (async (input) => {
-      renderCalls.push(input);
-      return new Uint8Array([1, 2, 3]);
-    }),
-    putObject: overrides?.putObject ?? (async (input) => {
-      putObjectCalls.push(input);
-    }),
-    buildKey: overrides?.buildKey ?? (({ certificateId }) => `certificates/${certificateId}/key`),
     generateRef: overrides?.generateRef ?? (() => `CERT-${(refSeq += 1)}`),
     audit: overrides?.audit ?? (async (event) => {
       auditCalls.push(event as unknown as Record<string, unknown>);
@@ -289,10 +314,9 @@ function makeDeps(overrides?: Partial<IssueCertificateDeps>) {
       writeEventCalls.push({ tx, event: event as unknown as Record<string, unknown> });
       await (tx as CertificateIssuanceTxClient).domainEvent.create({ data: event as unknown as Record<string, unknown> });
     }),
-    resolveTemplateAsset: overrides?.resolveTemplateAsset ?? (async () => new Uint8Array()),
   };
 
-  return { deps, renderCalls, putObjectCalls, auditCalls, writeEventCalls };
+  return { deps, auditCalls, writeEventCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -300,22 +324,28 @@ function makeDeps(overrides?: Partial<IssueCertificateDeps>) {
 // ---------------------------------------------------------------------------
 
 describe("issueCertificateForEnrolment", () => {
-  it("issues a certificate, renders and stores its PDF, and completes the enrolment", async () => {
+  it("issues a database-only certificate row (storageKey null, no render, no store) and completes the enrolment (CR-01b)", async () => {
     const h = harness();
-    const { deps, renderCalls, putObjectCalls } = makeDeps();
+    const { deps, auditCalls } = makeDeps();
+
+    // The deps object has NO render/put/key/asset members at all: issuance
+    // cannot render or write an object even by accident.
+    expect(Object.keys(deps).sort()).toEqual(["audit", "generateRef", "writeEvent"]);
 
     const outcome = await h.runInTransaction((tx) =>
       issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
     );
 
     expect(outcome.kind).toBe("issued");
-    expect(renderCalls).toHaveLength(1);
-    expect(putObjectCalls).toHaveLength(1);
 
     const cert = [...h.certificates.values()][0];
     expect(cert).toBeDefined();
     expect(cert.status).toBe("ACTIVE");
-    expect(cert.storageKey).toBe(`certificates/${cert.id}/key`);
+    expect(cert.storageKey).toBeNull();
+    // The id is registered for the post-commit file step.
+    expect(h.registered).toEqual([cert.id]);
+    expect(auditCalls.find((a) => a.action === "certificate.issued_auto")).toBeDefined();
+    expect(h.events.find((e) => e.type === "certificate.issued")).toBeDefined();
     expect(cert.verificationRef).toBe("CERT-1");
     expect(cert.awardTitle).toBe("Intro to Testing");
     expect(cert.learnerName).toBe("Jane Learner");
@@ -339,7 +369,7 @@ describe("issueCertificateForEnrolment", () => {
 
   it("returns no-template and issues nothing when neither a selected nor a default template resolves", async () => {
     const h = harness({ templates: [] });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     const outcome = await h.runInTransaction((tx) =>
       issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
@@ -347,7 +377,7 @@ describe("issueCertificateForEnrolment", () => {
 
     expect(outcome).toEqual({ kind: "no-template" });
     expect(h.certificates.size).toBe(0);
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
   });
 
   // CR-03 (plan 11-25): an ineligible enrolment is a typed non-error outcome, never an
@@ -359,7 +389,7 @@ describe("issueCertificateForEnrolment", () => {
     async (status) => {
       for (const actor of [null, { userId: "staff-1" }] as IssueCertificateActor[]) {
         const h = harness({ enrolments: [enr({ status })] });
-        const { deps, renderCalls, putObjectCalls, auditCalls, writeEventCalls } = makeDeps();
+        const { deps, auditCalls, writeEventCalls } = makeDeps();
 
         const outcome = await h.runInTransaction((tx) =>
           issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor }, deps),
@@ -368,8 +398,7 @@ describe("issueCertificateForEnrolment", () => {
         expect(outcome).toEqual({ kind: "not-eligible" });
         expect(h.certificates.size).toBe(0);
         expect(h.enrolments.get("enr-1")?.status).toBe(status);
-        expect(renderCalls).toHaveLength(0);
-        expect(putObjectCalls).toHaveLength(0);
+        expect(h.registered).toHaveLength(0);
         expect(auditCalls).toHaveLength(0);
         expect(writeEventCalls).toHaveLength(0);
         expect(h.events).toHaveLength(0);
@@ -405,7 +434,7 @@ describe("issueCertificateForEnrolment", () => {
 
   it("is a no-op returning not-enabled when the Course has certificateEnabled: false (CRD-01)", async () => {
     const h = harness({ courses: [award({ certificateEnabled: false })] });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     const outcome = await h.runInTransaction((tx) =>
       issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
@@ -414,7 +443,7 @@ describe("issueCertificateForEnrolment", () => {
     expect(outcome).toEqual({ kind: "not-enabled" });
     expect(h.certificates.size).toBe(0);
     expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
   });
 
   it("idempotent: a second issue call for the same enrolment/scope returns already-issued and creates no second row", async () => {
@@ -493,7 +522,7 @@ describe("issueCertificateForEnrolment", () => {
       user: { findUnique: async () => user() },
       domainEvent: { create: async () => ({}) },
     };
-    const { deps, renderCalls, putObjectCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     const outcome = await issueCertificateForEnrolment(
       tx,
@@ -502,8 +531,7 @@ describe("issueCertificateForEnrolment", () => {
     );
 
     expect(outcome).toEqual({ kind: "already-issued", certificateId: "cert-winner" });
-    expect(renderCalls).toHaveLength(0);
-    expect(putObjectCalls).toHaveLength(0);
+    expect(await drainRegisteredCertificateIds(tx)).toEqual([]);
   });
 
   it("stamps actorId: null, actorType: SYSTEM on the audit row for a system-triggered issuance", async () => {
@@ -548,23 +576,92 @@ describe("issueCertificateForEnrolment", () => {
     expect(payload.scope).toBe("COURSE");
   });
 
-  it("rolls back the Certificate row and the COMPLETED status when PDF rendering throws", async () => {
+  it("a corrupt stored template layout no longer aborts issuance: the row is created and the enrolment COMPLETED (CR-01b)", async () => {
+    // Layout parsing moved to the post-commit file step. On the pre-change
+    // source `parseCertificateTemplateLayout` threw here, aborting the
+    // caller's whole transaction.
+    const h = harness({
+      templates: [template({ layout: { version: 99, garbage: true } })],
+    });
+    const { deps } = makeDeps();
+
+    const outcome = await h.runInTransaction((tx) =>
+      issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
+    );
+
+    expect(outcome.kind).toBe("issued");
+    expect(h.certificates.size).toBe(1);
+    expect([...h.certificates.values()][0].storageKey).toBeNull();
+    expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
+  });
+
+  it("registers the certificate id for the transaction it was issued in, so the post-commit step can find it", async () => {
     const h = harness();
-    const { deps, putObjectCalls } = makeDeps({
-      renderPdf: async () => {
-        throw new Error("render exploded");
-      },
+    const { deps } = makeDeps();
+    let seenTx: CertificateIssuanceTxClient | undefined;
+
+    const outcome = await h.runInTransaction(async (tx) => {
+      seenTx = tx;
+      return issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps);
     });
 
-    await expect(
-      h.runInTransaction((tx) =>
-        issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
-      ),
-    ).rejects.toThrow("render exploded");
+    expect(outcome.kind).toBe("issued");
+    // The harness already drained the registry on commit; a second drain of
+    // the same tx finds nothing (settle clears what it processed).
+    expect(h.registered).toHaveLength(1);
+    expect(await drainRegisteredCertificateIds(seenTx as CertificateIssuanceTxClient)).toEqual([]);
+  });
 
+  it("when the enclosing transaction rolls back after issuance, nothing was rendered or stored", async () => {
+    const h = harness();
+    const { deps } = makeDeps();
+
+    await expect(
+      h.runInTransaction(async (tx) => {
+        await issueCertificateForEnrolment(
+          tx,
+          { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null },
+          deps,
+        );
+        throw new Error("caller's later step failed");
+      }),
+    ).rejects.toThrow("caller's later step failed");
+
+    // Row, COMPLETED transition and event all rolled back with the caller...
     expect(h.certificates.size).toBe(0);
     expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
-    expect(putObjectCalls).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
+    // ...and no post-commit file work was ever scheduled for a committed row.
+    expect(h.registered).toHaveLength(0);
+    // Issuance has no object-store dependency at all, so nothing could have been written.
+    expect(Object.keys(deps)).not.toContain("putObject");
+  });
+
+  it("a lost race registers nothing (the winner's transaction owns the file)", async () => {
+    const winner: CertRow = {
+      id: "cert-winner",
+      enrolmentId: "enr-1",
+      userId: "user-1",
+      scope: "COURSE",
+      courseId: "course-1",
+      programmeId: null,
+      awardTitle: "Intro to Testing",
+      learnerName: "Jane Learner",
+      issuedAt: NOW,
+      status: "ACTIVE",
+      verificationRef: "CERT-W",
+      storageKey: null,
+      reviewFlaggedAt: null,
+    };
+    const h = harness({ certificates: [winner] });
+    const { deps } = makeDeps();
+
+    const outcome = await h.runInTransaction((tx) =>
+      issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
+    );
+
+    expect(outcome).toEqual({ kind: "already-issued", certificateId: "cert-winner" });
+    expect(h.registered).toHaveLength(0);
   });
 
   it("refuses scope COURSE for a Programme cohort — D-01's structural guard", async () => {
@@ -573,14 +670,14 @@ describe("issueCertificateForEnrolment", () => {
       cohorts: [programmeCohort()],
       programmes: [award({ id: "programme-1", title: "Full Stack" })],
     });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     const outcome = await h.runInTransaction((tx) =>
       issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor: null }, deps),
     );
 
     expect(outcome).toEqual({ kind: "not-enabled" });
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
   });
 });
 
@@ -600,13 +697,13 @@ function scopeResult(over: Partial<CompletionScopeResult> = {}): CompletionScope
 describe("reactToCompletionResults", () => {
   it("issues a Course certificate when action is created, scope COURSE, mode AUTOMATIC, and issuance is enabled", async () => {
     const h = harness();
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] }, deps),
     );
 
-    expect(renderCalls).toHaveLength(1);
+    expect(h.registered).toHaveLength(1);
     expect(h.certificates.size).toBe(1);
     expect(h.enrolments.get("enr-1")?.status).toBe("COMPLETED");
   });
@@ -617,7 +714,7 @@ describe("reactToCompletionResults", () => {
       cohorts: [programmeCohort()],
       programmes: [award({ id: "programme-1", title: "Full Stack" })],
     });
-    const { deps, renderCalls, putObjectCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(
@@ -631,8 +728,7 @@ describe("reactToCompletionResults", () => {
       ),
     );
 
-    expect(renderCalls).toHaveLength(0);
-    expect(putObjectCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
     expect(h.certificates.size).toBe(0);
     expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
   });
@@ -643,7 +739,7 @@ describe("reactToCompletionResults", () => {
       cohorts: [programmeCohort()],
       programmes: [award({ id: "programme-1", title: "Full Stack" })],
     });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(
@@ -661,7 +757,7 @@ describe("reactToCompletionResults", () => {
       ),
     );
 
-    expect(renderCalls).toHaveLength(1);
+    expect(h.registered).toHaveLength(1);
     expect(h.certificates.size).toBe(1);
     const cert = [...h.certificates.values()][0];
     expect(cert.scope).toBe("PROGRAMME");
@@ -670,38 +766,38 @@ describe("reactToCompletionResults", () => {
 
   it("MANUAL issuance mode leaves the completion eligible but unissued (D-04)", async () => {
     const h = harness({ courses: [award({ certificateIssuanceMode: "MANUAL" })] });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] }, deps),
     );
 
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
     expect(h.certificates.size).toBe(0);
     expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
   });
 
   it("no certificate issues when certificateEnabled is false regardless of issuance mode", async () => {
     const h = harness({ courses: [award({ certificateEnabled: false, certificateIssuanceMode: "AUTOMATIC" })] });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "created" })] }, deps),
     );
 
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
     expect(h.certificates.size).toBe(0);
   });
 
   it("unchanged completion results write nothing", async () => {
     const h = harness();
-    const { deps, renderCalls, auditCalls, writeEventCalls } = makeDeps();
+    const { deps, auditCalls, writeEventCalls } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(tx, { enrolmentId: "enr-1", now: NOW, results: [scopeResult({ action: "unchanged" })] }, deps),
     );
 
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
     expect(auditCalls).toHaveLength(0);
     expect(writeEventCalls).toHaveLength(0);
     expect(h.certificates.size).toBe(0);
@@ -760,7 +856,7 @@ describe("reactToCompletionResults — ineligible enrolment (plan 11-25, CR-03)"
     "resolves without error and creates nothing for a %s enrolment on an AUTOMATIC enabled Course (the staff attendance-write scenario)",
     async (status) => {
       const h = harness({ enrolments: [enr({ status })] });
-      const { deps, renderCalls, auditCalls } = makeDeps();
+      const { deps, auditCalls } = makeDeps();
 
       await expect(
         h.runInTransaction((tx) =>
@@ -774,7 +870,7 @@ describe("reactToCompletionResults — ineligible enrolment (plan 11-25, CR-03)"
 
       expect(h.certificates.size).toBe(0);
       expect(h.enrolments.get("enr-1")?.status).toBe(status);
-      expect(renderCalls).toHaveLength(0);
+      expect(h.registered).toHaveLength(0);
       expect(auditCalls).toHaveLength(0);
     },
   );
@@ -788,7 +884,7 @@ describe("a REVOKED certificate blocks every automatic issuance (plan 11-25, CR-
     "returns revoked-blocked and writes nothing for a %s actor when a REVOKED certificate exists",
     async (_label, actor) => {
       const h = harness({ certificates: [activeCert({ status: "REVOKED" })] });
-      const { deps, renderCalls, putObjectCalls, auditCalls, writeEventCalls } = makeDeps();
+      const { deps, auditCalls, writeEventCalls } = makeDeps();
 
       const outcome = await h.runInTransaction((tx) =>
         issueCertificateForEnrolment(tx, { enrolmentId: "enr-1", scope: "COURSE", now: NOW, actor }, deps),
@@ -798,8 +894,7 @@ describe("a REVOKED certificate blocks every automatic issuance (plan 11-25, CR-
       expect(h.certificates.size).toBe(1);
       expect([...h.certificates.values()][0].status).toBe("REVOKED");
       expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
-      expect(renderCalls).toHaveLength(0);
-      expect(putObjectCalls).toHaveLength(0);
+      expect(h.registered).toHaveLength(0);
       expect(auditCalls).toHaveLength(0);
       expect(writeEventCalls).toHaveLength(0);
     },
@@ -810,7 +905,7 @@ describe("a REVOKED certificate blocks every automatic issuance (plan 11-25, CR-
       enrolments: [enr({ status: "ACTIVE" })],
       certificates: [activeCert({ status: "REVOKED" })],
     });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(
@@ -830,7 +925,7 @@ describe("a REVOKED certificate blocks every automatic issuance (plan 11-25, CR-
     expect(h.certificates.size).toBe(1);
     expect([...h.certificates.values()][0].status).toBe("REVOKED");
     expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
   });
 
   it("the same undo/redo sequence on a Programme cohort does not re-issue either, and COURSE-scope results stay skipped (D-01)", async () => {
@@ -842,7 +937,7 @@ describe("a REVOKED certificate blocks every automatic issuance (plan 11-25, CR-
         activeCert({ scope: "PROGRAMME", courseId: null, programmeId: "programme-1", status: "REVOKED" }),
       ],
     });
-    const { deps, renderCalls } = makeDeps();
+    const { deps } = makeDeps();
 
     await h.runInTransaction((tx) =>
       reactToCompletionResults(
@@ -873,7 +968,7 @@ describe("a REVOKED certificate blocks every automatic issuance (plan 11-25, CR-
     expect(h.certificates.size).toBe(1);
     expect([...h.certificates.values()][0].status).toBe("REVOKED");
     expect(h.enrolments.get("enr-1")?.status).toBe("ACTIVE");
-    expect(renderCalls).toHaveLength(0);
+    expect(h.registered).toHaveLength(0);
   });
 
   it("a REVOKED certificate for the OTHER scope does not block the current scope (key is enrolment + scope)", async () => {

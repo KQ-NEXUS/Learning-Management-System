@@ -4,22 +4,39 @@
  * certificate, and reacts when a completion is later superseded.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * ORDERING — WHY CREATE-THEN-RENDER, NEVER RENDER-THEN-CREATE.
+ * ORDERING — THE ROW FIRST, THE FILE AFTER COMMIT (TWO-PHASE ISSUANCE).
  * ─────────────────────────────────────────────────────────────────────────────
- * `issueCertificateForEnrolment` creates the `Certificate` row FIRST, before
- * any PDF rendering or object-store write happens. The partial unique index
+ * `issueCertificateForEnrolment` is DATABASE-ONLY. Inside the caller's
+ * transaction it creates the `Certificate` row (`storageKey: null`), moves the
+ * enrolment to COMPLETED, writes the audit row and the domain event, and calls
+ * `registerPendingCertificateFile(tx, certificateId)`. It renders nothing,
+ * stores nothing and parses no template layout. The PDF is produced by
+ * `certificate-file-service.ts` AFTER the caller's transaction commits (best
+ * effort, bounded, never throws) or lazily on demand.
+ *
+ * WHY (CR-01b, WR-01): a render or object-store call inside the caller's
+ * transaction can roll the caller's lesson-progress / attendance write back. A
+ * slow store or a large logo can exceed Prisma's default 5 s interactive
+ * transaction timeout (P2028), which aborts the transaction regardless of any
+ * try/catch inside it. Only moving the work out of the transaction gives the
+ * guarantee; it also removes orphaned stored objects (a file is only ever
+ * written for a row that has committed). tests/certificate-phase-invariants
+ * invariant 8 keeps the renderer and object-store functions out of this module.
+ * Do NOT reintroduce rendering here.
+ *
+ * D-03 (issuance in the same transaction that satisfies the completion
+ * record), D-05 (COMPLETED written only here, only together with a certificate
+ * row) and D-07 (a fresh per-learner PDF, rendered from the row's own snapshot)
+ * all still hold. The row is committed before its file exists; the download
+ * route produces the file on demand so the link always works.
+ *
+ * WHY THE INSERT IS THE ARBITER. The partial unique index
  * `certificate_one_active_per_enrolment_scope` (`ON ("enrolmentId","scope")
  * WHERE status = 'ACTIVE'`, plan 11-01) is what actually arbitrates a race
- * between two simultaneous completion triggers (RESEARCH Pitfall 4) — create
- * first, so that race resolves BEFORE any rendering work is spent on a
- * request that is about to lose it. Do NOT "optimize" this later by
- * rendering first and creating the row only once a PDF exists: that would
- * let two concurrent triggers both pay for a full render before either
- * discovers the unique index was already won by the other, and risks two
- * different `storageKey`s both pointing at generated objects for what must
- * be one certificate. (Before the create, the function also refuses — CR-03 —
- * an ineligible enrolment and — CR-04 — an enrolment/scope that already holds
- * a REVOKED certificate; both are typed outcomes, never writes.) The create is an
+ * between two simultaneous completion triggers (RESEARCH Pitfall 4).
+ * (Before the create, the function also refuses — CR-03 — an ineligible
+ * enrolment and — CR-04 — an enrolment/scope that already holds a REVOKED
+ * certificate; both are typed outcomes, never writes.) The create is an
  * `INSERT ... ON CONFLICT DO NOTHING` (`createMany` + `skipDuplicates`); a
  * zero-row insert is treated as `{ kind: "already-issued" }` — a lost race
  * is a correct outcome, not a failure to propagate, and (unlike catching a
@@ -78,15 +95,9 @@ import { SYSTEM_ACTOR_TYPE } from "@/server/services/checkout-webhook-system-ser
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
 import { generateVerificationRef } from "@/server/services/certificate-reference";
 import {
-  renderCertificatePdf,
-  type CertificateAssetResolver,
-} from "@/server/services/certificate-pdf-renderer";
-import { parseCertificateTemplateLayout } from "@/server/services/certificate-template-layout";
-import {
-  buildCertificateStorageKey,
-  putGeneratedCertificateObject,
-  getObjectBytes,
-} from "@/server/services/storage-service";
+  registerPendingCertificateFile,
+  resolveCertificateTemplate,
+} from "@/server/services/certificate-file-service";
 import { prisma } from "@/server/db";
 
 // ---------------------------------------------------------------------------
@@ -232,45 +243,23 @@ export type IssueCertificateOutcome =
 
 /**
  * Every I/O boundary `issueCertificateForEnrolment`/`reactToCompletionResults`
- * (Task 2) touch beyond the injected `tx`, so the behavior list in this plan
- * is testable without a real PDF library, object store, or audit sink.
+ * touch beyond the injected `tx`, so the behavior list is testable without a
+ * real audit sink. Deliberately has NO render / object-store members (plan
+ * 11-30, CR-01b): the file is produced after commit by
+ * `certificate-file-service.ts`.
  */
 export type IssueCertificateDeps = {
-  renderPdf: typeof renderCertificatePdf;
-  putObject: (input: {
-    key: string;
-    body: Uint8Array;
-    contentType: string;
-  }) => Promise<void>;
-  buildKey: (input: { certificateId: string }) => string;
   generateRef: () => string;
   audit: (event: BusinessAuditEvent) => Promise<void>;
   writeEvent: typeof writeDomainEvent;
-  resolveTemplateAsset: CertificateAssetResolver;
 };
 
 /**
- * Resolves the Course/Programme template for issuance: the award's own
- * `certificateTemplateId` when set (regardless of that template's own
- * archived state — RESEARCH Pitfall 5: an archived template still renders
- * correctly for issuance already pointed at it; the UI is what keeps it out
- * of the *pickable* list going forward), else the library's `isDefault`
- * template (D-10). Returns `null` when neither resolves.
- */
-async function resolveTemplate(
-  tx: CertificateIssuanceTxClient,
-  award: CertificateAwardRow,
-): Promise<CertificateTemplateRow | null> {
-  if (award.certificateTemplateId) {
-    return tx.certificateTemplate.findUnique({ where: { id: award.certificateTemplateId } });
-  }
-  return tx.certificateTemplate.findFirst({ where: { isDefault: true } });
-}
-
-/**
- * Issues exactly one certificate for one enrolment/scope, renders and stores
- * its PDF, and moves the enrolment to `COMPLETED` (D-05) through
- * `enrolment-transitions.ts`'s state machine — never a bare `update`.
+ * Issues exactly one certificate ROW for one enrolment/scope and moves the
+ * enrolment to `COMPLETED` (D-05) through `enrolment-transitions.ts`'s state
+ * machine — never a bare `update`. The row starts with `storageKey: null`; its
+ * PDF is rendered and stored after the caller's transaction commits (see the
+ * header), and the row's id is registered for that step.
  *
  * Ineligible enrolments (anything but ACTIVE/COMPLETED, see
  * `CERTIFICATE_ELIGIBLE_ENROLMENT_STATUSES`) return `{ kind: "not-eligible" }`
@@ -385,11 +374,13 @@ export async function issueCertificateForEnrolment(
     return { kind: "revoked-blocked" };
   }
 
-  const template = await resolveTemplate(tx, award);
+  // Existence check only, so `no-template` is still decided before any row is
+  // written. The stored layout is parsed by the post-commit file step: a
+  // corrupt layout must never abort the caller's transaction (CR-01b).
+  const template = await resolveCertificateTemplate(tx, award);
   if (!template) {
     return { kind: "no-template" };
   }
-  const layout = parseCertificateTemplateLayout(template.layout);
 
   const user = await tx.user.findUnique({ where: { id: enrolment.userId } });
   if (!user) {
@@ -398,8 +389,8 @@ export async function issueCertificateForEnrolment(
 
   const verificationRef = deps.generateRef();
 
-  // Create FIRST — see header. `storageKey` starts null and is filled in
-  // after the render below.
+  // Create FIRST — see header. `storageKey` starts null and is filled in by
+  // the post-commit file step.
   //
   // `createMany({ skipDuplicates: true })` — i.e. `INSERT ... ON CONFLICT DO
   // NOTHING` — and NOT `create` inside a try/catch(P2002). A plain INSERT
@@ -460,28 +451,6 @@ export async function issueCertificateForEnrolment(
   }
   const certificateId = created.id;
 
-  // Render, then store — if this throws, the CALLER's transaction (the
-  // lesson-progress/attendance write, or recalculateCompletionAndIssue's own
-  // caller — Task 2) rolls back as a whole, undoing the create above along
-  // with everything else in the same transaction. Postgres transactional
-  // atomicity is what keeps "no Certificate row without a stored PDF" true
-  // here — this function does not (and cannot, mid-transaction) compensate
-  // for a partial object-store write by hand.
-  const pdfBytes = await deps.renderPdf({
-    layout,
-    fields: {
-      learnerName: user.name,
-      awardTitle: award.title,
-      issuedAt: now,
-      verificationRef,
-    },
-    resolveAsset: deps.resolveTemplateAsset,
-  });
-
-  const storageKey = deps.buildKey({ certificateId });
-  await deps.putObject({ key: storageKey, body: pdfBytes, contentType: "application/pdf" });
-  await tx.certificate.update({ where: { id: certificateId }, data: { storageKey } });
-
   // D-05 — the COMPLETED transition fires ON ISSUANCE, through the state
   // machine, never a bare update. Idempotent when the enrolment is ALREADY
   // COMPLETED (plan 11-11's reissue path: reissuing a certificate whose
@@ -511,6 +480,10 @@ export async function issueCertificateForEnrolment(
     payload: { certificateId, enrolmentId, scope, verificationRef },
     occurredAt: now,
   });
+
+  // Phase B hand-off: the file is produced after this transaction commits.
+  // Registering is an in-memory list append: it cannot fail the caller's write.
+  registerPendingCertificateFile(tx, certificateId);
 
   return { kind: "issued", certificateId, verificationRef };
 }
@@ -755,13 +728,9 @@ export async function reactToCompletionResults(
  * writers instead of constructing a second, independently-drifting copy.
  */
 export const liveIssuanceDeps: IssueCertificateDeps = {
-  renderPdf: renderCertificatePdf,
-  putObject: putGeneratedCertificateObject,
-  buildKey: buildCertificateStorageKey,
   generateRef: generateVerificationRef,
   audit: (event) => recordAudit(event),
   writeEvent: writeDomainEvent,
-  resolveTemplateAsset: (assetKey) => getObjectBytes(assetKey),
 };
 
 /**

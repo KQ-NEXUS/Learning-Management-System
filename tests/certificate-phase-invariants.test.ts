@@ -412,3 +412,91 @@ describe("phase invariant 7 — Enrolment.status -> COMPLETED is written by exac
     expect(new Set(writers)).toEqual(new Set(["src/server/services/certificate-issuance-service.ts"]));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Invariant 8 — issuance never renders or stores a file (plan 11-30, CR-01b).
+//
+// A render or object-store call inside the caller's transaction can roll the
+// caller's lesson-progress / attendance write back (a slow store exceeding
+// Prisma's default 5 s interactive-transaction timeout, P2028, aborts the
+// transaction no matter what is caught inside it). Issuance is therefore
+// database-only; the PDF is produced by certificate-file-service.ts after
+// commit. This scan is AST-based: prose in the header comment cannot trip it
+// (or hide a violation).
+// ---------------------------------------------------------------------------
+
+const ISSUANCE_SERVICE_FILE = path.resolve(
+  process.cwd(),
+  "src/server/services/certificate-issuance-service.ts",
+);
+const FORBIDDEN_ISSUANCE_MODULES = ["@/server/services/certificate-pdf-renderer"];
+const FORBIDDEN_ISSUANCE_STORAGE_NAMES = new Set(["putGeneratedCertificateObject", "getObjectBytes"]);
+const FORBIDDEN_ISSUANCE_IDENTIFIERS = new Set([
+  "renderCertificatePdf",
+  "putGeneratedCertificateObject",
+  "getObjectBytes",
+  "parseCertificateTemplateLayout",
+]);
+
+function findIssuanceRenderViolations(filePath: string): string[] {
+  const sourceFile = parse(filePath);
+  const violations: string[] = [];
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const specifier = statement.moduleSpecifier.text;
+    if (FORBIDDEN_ISSUANCE_MODULES.includes(specifier)) {
+      violations.push(`imports ${specifier}`);
+    }
+    if (specifier === "@/server/services/storage-service") {
+      const named = statement.importClause?.namedBindings;
+      if (named && ts.isNamedImports(named)) {
+        for (const element of named.elements) {
+          const imported = (element.propertyName ?? element.name).text;
+          if (FORBIDDEN_ISSUANCE_STORAGE_NAMES.has(imported)) {
+            violations.push(`imports ${imported} from storage-service`);
+          }
+        }
+      }
+    }
+  }
+
+  // Any live reference (call, alias, re-export) to the forbidden functions.
+  // Identifier nodes never come from comments.
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && FORBIDDEN_ISSUANCE_IDENTIFIERS.has(node.text)) {
+      violations.push(`references ${node.text}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  return violations;
+}
+
+describe("phase invariant 8 — the issuance service never renders a PDF or writes an object (CR-01b)", () => {
+  it("certificate-issuance-service.ts imports neither the renderer nor the object-store functions and never parses a layout", () => {
+    expect(findIssuanceRenderViolations(ISSUANCE_SERVICE_FILE)).toEqual([]);
+  });
+
+  it("the scan is not vacuous: it flags a synthetic source that renders and stores", () => {
+    const probe = path.resolve(process.cwd(), "tests", "__invariant8-probe__.ts");
+    // Exercise the detector on in-memory source, not a file on disk.
+    const source = [
+      'import { renderCertificatePdf } from "@/server/services/certificate-pdf-renderer";',
+      'import { putGeneratedCertificateObject } from "@/server/services/storage-service";',
+      "// parseCertificateTemplateLayout in a comment is fine",
+      "void renderCertificatePdf; void putGeneratedCertificateObject;",
+    ].join("\n");
+    const sourceFile = ts.createSourceFile(probe, source, ts.ScriptTarget.Latest, true);
+    const identifiers: string[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && FORBIDDEN_ISSUANCE_IDENTIFIERS.has(node.text)) identifiers.push(node.text);
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+    expect(identifiers).toContain("renderCertificatePdf");
+    expect(identifiers).toContain("putGeneratedCertificateObject");
+    expect(identifiers).not.toContain("parseCertificateTemplateLayout");
+  });
+});
