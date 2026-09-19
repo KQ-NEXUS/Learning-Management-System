@@ -312,4 +312,96 @@ describe("createEnrolmentDashboardService — certificate column wiring", () => 
     const [card] = (await svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
     expect(card.certificate).toEqual({ kind: "not-complete" });
   });
+
+  // UAT test 17 (Tunde Bello Programme scenario): the completion record was
+  // superseded by a correction, so the store returns NO unsuperseded record,
+  // but the ACTIVE certificate is flagged. The slot must still show it.
+  describe("superseded completion + flagged certificate (UAT test 17)", () => {
+    const flaggedAt = new Date("2026-09-10T00:00:00.000Z");
+
+    function programmeSnapshot(id: string): OwnEnrolmentSnapshot {
+      return snapshot({
+        id,
+        cohort: {
+          id: "cohort-1",
+          title: "Programme Cohort",
+          deliveryMode: "INSTRUCTOR_LED",
+          timezone: "Africa/Lagos",
+          startsAt: new Date("2026-01-01T00:00:00.000Z"),
+          endsAt: new Date("2026-12-31T00:00:00.000Z"),
+          attendanceThresholdPct: null,
+          courseId: null,
+          programmeId: "programme-1",
+        },
+      });
+    }
+
+    it("PROGRAMME cohort: no completion record + flagged PROGRAMME certificate -> flagged with id, ref and issuedAt", async () => {
+      const { svc } = makeService({
+        enrolmentsByActor: { "user-a": [programmeSnapshot("enrolment-1")] },
+        completionRecords: [],
+        certificates: [
+          certRow({
+            enrolmentId: "enrolment-1",
+            scope: "PROGRAMME",
+            id: "cert-programme",
+            verificationRef: "REF-PROG",
+            reviewFlaggedAt: flaggedAt,
+          }),
+        ],
+      });
+
+      const [card] = (await svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
+      expect(card.certificate.kind).toBe("flagged");
+      expect(card.certificate).toEqual({
+        kind: "flagged",
+        certificateId: "cert-programme",
+        verificationRef: "REF-PROG",
+        issuedAt: certRow().issuedAt,
+      });
+    });
+
+    it("COURSE cohort: no completion record + flagged COURSE certificate -> flagged", async () => {
+      const { svc } = makeService({
+        enrolmentsByActor: { "user-a": [snapshot({ id: "enrolment-1" })] },
+        completionRecords: [],
+        certificates: [
+          certRow({
+            enrolmentId: "enrolment-1",
+            scope: "COURSE",
+            id: "cert-course",
+            verificationRef: "REF-COURSE",
+            reviewFlaggedAt: flaggedAt,
+          }),
+        ],
+      });
+
+      const [card] = (await svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
+      expect(card.certificate.kind).toBe("flagged");
+      expect(card.certificate).toEqual({
+        kind: "flagged",
+        certificateId: "cert-course",
+        verificationRef: "REF-COURSE",
+        issuedAt: certRow().issuedAt,
+      });
+    });
+
+    it("guard: a flagged certificate on a DIFFERENT enrolment never leaks onto this card (T-11-114)", async () => {
+      const { svc } = makeService({
+        enrolmentsByActor: { "user-a": [programmeSnapshot("enrolment-1")] },
+        completionRecords: [],
+        certificates: [
+          certRow({
+            enrolmentId: "enrolment-other",
+            scope: "PROGRAMME",
+            id: "cert-foreign",
+            reviewFlaggedAt: flaggedAt,
+          }),
+        ],
+      });
+
+      const [card] = (await svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
+      expect(card.certificate).toEqual({ kind: "not-complete" });
+    });
+  });
 });

@@ -12,7 +12,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { CertificateSlot } from "@/components/learner/CertificateSlot";
-import type { CertificateColumn } from "@/server/services/enrolment-dashboard-service";
+import {
+  deriveCertificateColumn,
+  type CertificateColumn,
+} from "@/server/services/enrolment-dashboard-service";
 
 afterEach(() => {
   cleanup();
@@ -60,6 +63,30 @@ describe("CertificateSlot", () => {
     ).toBeTruthy();
     const link = screen.getByRole("link", { name: /download certificate/i });
     expect(link.getAttribute("href")).toBe("/api/certificates/cert-1/download");
+  });
+
+  it("flagged after a superseded completion (UAT test 17) — shows the download link and reference, not the deferred copy", () => {
+    // The column deriveCertificateColumn now produces for: no unsuperseded
+    // completion record + an ACTIVE flagged certificate.
+    const supersededFlagged = deriveCertificateColumn({
+      hasCompletionRecord: false,
+      certificate: {
+        enrolmentId: "enrolment-1",
+        scope: "PROGRAMME",
+        id: "cert-programme",
+        status: "ACTIVE",
+        reviewFlaggedAt: new Date("2026-09-10T00:00:00.000Z"),
+        verificationRef: "VERIF-REF-PROG",
+        issuedAt: new Date("2026-09-01T00:00:00.000Z"),
+      },
+    });
+    expect(supersededFlagged.kind).toBe("flagged");
+
+    render(<CertificateSlot certificate={supersededFlagged} />);
+    const link = screen.getByRole("link", { name: /download certificate/i });
+    expect(link.getAttribute("href")).toBe("/api/certificates/cert-programme/download");
+    expect(screen.getByText("VERIF-REF-PROG")).toBeTruthy();
+    expect(screen.queryByText(/arriving in a future update/i)).toBeNull();
   });
 
   it("revoked — renders the exact revoked copy, no download link, no reference", () => {
