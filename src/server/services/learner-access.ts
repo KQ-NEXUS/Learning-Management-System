@@ -258,6 +258,9 @@ export type LearnerPath = {
   sequencing: SequencingResult[];
 };
 
+/** `includeCompleted` is passed ONLY by the dashboard read path (G-01). */
+export type LoadLearnerPathOptions = { includeCompleted?: boolean };
+
 export type LessonOpenResult =
   | { ok: true; lesson: DecoratedLesson }
   | { ok: false; reason: "not-found" | "locked" | "access-window-closed" };
@@ -344,20 +347,34 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
   const now = deps.now ?? (() => new Date());
 
   /**
-   * Not-found, not-mine and not-ACTIVE all return the identical `null` — a
-   * guessed enrolment id cannot be used to confirm another learner's
-   * enrolment exists (T-09-01, the T-06-13 denial-parity rule applied to
-   * Enrolment). A `readOnly` access window does NOT make this return
-   * `null` — D-03 keeps the enrolment ACTIVE and readable; only
+   * DECISION G-01 (plan 11-17): a COMPLETED enrolment is VISIBLE but NOT
+   * OPERABLE. Certificate issuance itself moves an enrolment to COMPLETED
+   * (D-05), so the dashboard must be able to read it to show the certificate
+   * slot. It must never be usable to open lesson content or write progress,
+   * attempts or submissions (Phase 9's rule, and what keeps D-06 safe: a
+   * revoke or CRD-06 flag returns it to ACTIVE with full access). Only the
+   * dashboard read path passes `["ACTIVE", "COMPLETED"]`; everything else
+   * goes through `getOwnActiveEnrolment` (`["ACTIVE"]`).
+   *
+   * Not-found, not-mine and a status outside `allowedStatuses` all return
+   * the identical `null` — a guessed enrolment id cannot be used to confirm
+   * another learner's enrolment exists (T-09-01, the T-06-13 denial-parity
+   * rule applied to Enrolment). A `readOnly` access window does NOT make
+   * this return `null` — D-03 keeps the enrolment ACTIVE and readable; only
    * content-opening and progress-writing callers refuse, via
    * `assertLessonOpenable` reading `accessWindow.readOnly`.
    */
-  async function getOwnActiveEnrolment(
+  async function resolveOwnEnrolment(
     actor: Actor,
     enrolmentId: string,
+    allowedStatuses: readonly string[],
   ): Promise<OwnEnrolmentSnapshot | null> {
     const enrolment = await store.enrolment.findUnique({ where: { id: enrolmentId } });
-    if (!enrolment || enrolment.userId !== actor.userId || enrolment.status !== "ACTIVE") {
+    if (
+      !enrolment ||
+      enrolment.userId !== actor.userId ||
+      !allowedStatuses.includes(enrolment.status)
+    ) {
       return null;
     }
 
@@ -397,6 +414,14 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     };
   }
 
+  /** Own ACTIVE enrolment only — `null` for not-found, not-mine and every non-ACTIVE status (incl. COMPLETED, G-01). */
+  function getOwnActiveEnrolment(
+    actor: Actor,
+    enrolmentId: string,
+  ): Promise<OwnEnrolmentSnapshot | null> {
+    return resolveOwnEnrolment(actor, enrolmentId, ["ACTIVE"]);
+  }
+
   /**
    * DD-22 — the ONE actionable question the D-07 denial path may ask
    * beyond the identical `null` `getOwnActiveEnrolment` returns for every
@@ -423,23 +448,46 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     return `/orders/${order.reference}`;
   }
 
+  /** Most-recently-activated first, id ascending as tiebreak. */
+  function byActivatedAtDescThenId(a: EnrolmentStoreRow, b: EnrolmentStoreRow): number {
+    const aAt = a.activatedAt ? a.activatedAt.getTime() : 0;
+    const bAt = b.activatedAt ? b.activatedAt.getTime() : 0;
+    if (aAt !== bAt) return bAt - aAt; // descending
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  }
+
   /** Every ACTIVE enrolment for `actor.userId`, most-recently-activated first. */
   async function listOwnActiveEnrolments(actor: Actor): Promise<OwnEnrolmentSnapshot[]> {
     const rows = await store.enrolment.findMany({
       where: { userId: actor.userId, status: "ACTIVE" },
     });
 
-    const ordered = rows.slice().sort((a, b) => {
-      const aAt = a.activatedAt ? a.activatedAt.getTime() : 0;
-      const bAt = b.activatedAt ? b.activatedAt.getTime() : 0;
-      if (aAt !== bAt) return bAt - aAt; // descending
-      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-    });
-
     const snapshots: OwnEnrolmentSnapshot[] = [];
-    for (const row of ordered) {
+    for (const row of rows.slice().sort(byActivatedAtDescThenId)) {
       const snapshot = await getOwnActiveEnrolment(actor, row.id);
       if (snapshot) snapshots.push(snapshot);
+    }
+    return snapshots;
+  }
+
+  /**
+   * The dashboard's read path (G-01, UAT test 10): the actor's ACTIVE
+   * enrolments first, then their COMPLETED ones (active work first), each
+   * group in `listOwnActiveEnrolments` order. COMPLETED is included because
+   * issuance itself writes it (D-05) — without it the certificate slot's card
+   * would vanish exactly when the certificate becomes ACTIVE. Two `findMany`
+   * calls (one status each) rather than a widened `status` type keeps the
+   * structural `LearnerAccessStore` surface unchanged for every fake store.
+   * Every other status, and every other user's enrolment, is excluded.
+   */
+  async function listOwnDashboardEnrolments(actor: Actor): Promise<OwnEnrolmentSnapshot[]> {
+    const snapshots: OwnEnrolmentSnapshot[] = [];
+    for (const status of ["ACTIVE", "COMPLETED"] as const) {
+      const rows = await store.enrolment.findMany({ where: { userId: actor.userId, status } });
+      for (const row of rows.slice().sort(byActivatedAtDescThenId)) {
+        const snapshot = await resolveOwnEnrolment(actor, row.id, ["ACTIVE", "COMPLETED"]);
+        if (snapshot) snapshots.push(snapshot);
+      }
     }
     return snapshots;
   }
@@ -623,13 +671,20 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
   /**
    * A learner's whole path with lock state and completion applied.
    * `null` for every denial cause `getOwnActiveEnrolment` returns `null`
-   * for. Un-completing is not modelled as a distinct operation here at
+   * for — including COMPLETED, unless the caller (only the dashboard) passes
+   * `{ includeCompleted: true }` (G-01: visible, not operable). Un-completing is not modelled as a distinct operation here at
    * all — sequencing is recomputed fresh from live `LessonProgress` on
    * every call, which IS D-16's lazy re-lock: nothing needs to walk a
    * downstream chain eagerly, because the next read simply recomputes it.
    */
-  async function loadLearnerPath(actor: Actor, enrolmentId: string): Promise<LearnerPath | null> {
-    const enrolment = await getOwnActiveEnrolment(actor, enrolmentId);
+  async function loadLearnerPath(
+    actor: Actor,
+    enrolmentId: string,
+    options?: LoadLearnerPathOptions,
+  ): Promise<LearnerPath | null> {
+    const enrolment = options?.includeCompleted
+      ? await resolveOwnEnrolment(actor, enrolmentId, ["ACTIVE", "COMPLETED"])
+      : await getOwnActiveEnrolment(actor, enrolmentId);
     if (!enrolment) return null;
 
     const structure = await loadLearnerCourseStructure(enrolment);
@@ -708,10 +763,18 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
    * id, `"access-window-closed"` when D-03's window is `readOnly` (closed
    * or not yet started) — checked BEFORE the lock, so a closed window
    * refuses even an otherwise-unlocked lesson — and `"locked"` otherwise.
+   * A COMPLETED enrolment's path (only obtainable via `includeCompleted`)
+   * is refused with `"access-window-closed"` too (G-01: visible, not
+   * operable). Compared with `=== "COMPLETED"`, never `!== "ACTIVE"`, so a
+   * hand-built path with no `status` still opens.
    */
   function assertLessonOpenable(path: LearnerPath, lessonId: string): LessonOpenResult {
     const lesson = findDecoratedLesson(path, lessonId);
     if (!lesson) return { ok: false, reason: "not-found" };
+
+    if (path.enrolment.status === "COMPLETED") {
+      return { ok: false, reason: "access-window-closed" };
+    }
 
     if (path.enrolment.accessWindow.readOnly) {
       return { ok: false, reason: "access-window-closed" };
@@ -726,6 +789,7 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     getOwnActiveEnrolment,
     getOwnPendingEnrolmentOrderHref,
     listOwnActiveEnrolments,
+    listOwnDashboardEnrolments,
     hasActiveEnrolmentCoveringCourse,
     loadLearnerCourseStructure,
     loadPinnedCompletionRuleSource,
@@ -754,6 +818,7 @@ const built = createLearnerAccessService({ store: liveStore });
 export const getOwnActiveEnrolment = built.getOwnActiveEnrolment;
 export const getOwnPendingEnrolmentOrderHref = built.getOwnPendingEnrolmentOrderHref;
 export const listOwnActiveEnrolments = built.listOwnActiveEnrolments;
+export const listOwnDashboardEnrolments = built.listOwnDashboardEnrolments;
 export const hasActiveEnrolmentCoveringCourse = built.hasActiveEnrolmentCoveringCourse;
 export const loadLearnerCourseStructure = built.loadLearnerCourseStructure;
 export const loadPinnedCompletionRuleSource = built.loadPinnedCompletionRuleSource;

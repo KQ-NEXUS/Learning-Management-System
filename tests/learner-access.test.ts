@@ -296,6 +296,55 @@ describe("listOwnActiveEnrolments", () => {
   });
 });
 
+// Plan 11-17 (UAT test 10, decision G-01): a COMPLETED enrolment (the status
+// certificate issuance itself writes, D-05) must be VISIBLE on the dashboard
+// read path but NOT OPERABLE.
+describe("listOwnDashboardEnrolments (G-01: COMPLETED is visible)", () => {
+  it("lists ACTIVE then COMPLETED, each activatedAt-descending with id tiebreak, excluding other statuses and other users", async () => {
+    const store = makeStore({
+      enrolments: [
+        enrolment({ id: "a-old", activatedAt: new Date("2026-01-01T00:00:00.000Z") }),
+        enrolment({ id: "a-new", activatedAt: new Date("2026-03-01T00:00:00.000Z") }),
+        enrolment({ id: "c-old", status: "COMPLETED", activatedAt: new Date("2026-01-01T00:00:00.000Z") }),
+        enrolment({ id: "c-new", status: "COMPLETED", activatedAt: new Date("2026-05-01T00:00:00.000Z") }),
+        enrolment({ id: "c-tie", status: "COMPLETED", activatedAt: new Date("2026-01-01T00:00:00.000Z") }),
+        enrolment({ id: "x-other", status: "COMPLETED", userId: "someone-else" }),
+        enrolment({ id: "x-pending", status: "PENDING_PAYMENT" }),
+        enrolment({ id: "x-withdrawn", status: "WITHDRAWN" }),
+        enrolment({ id: "x-cancelled", status: "CANCELLED" }),
+        enrolment({ id: "x-transferred", status: "TRANSFERRED" }),
+      ],
+      cohorts: [cohort()],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const results = await service.listOwnDashboardEnrolments(actorFor("user-1"));
+
+    expect(results.map((r) => r.id)).toEqual(["a-new", "a-old", "c-new", "c-old", "c-tie"]);
+    expect(results.map((r) => r.status)).toEqual(["ACTIVE", "ACTIVE", "COMPLETED", "COMPLETED", "COMPLETED"]);
+  });
+
+  it("leaves listOwnActiveEnrolments ACTIVE-only", async () => {
+    const store = makeStore({
+      enrolments: [enrolment({ id: "a" }), enrolment({ id: "c", status: "COMPLETED" })],
+      cohorts: [cohort()],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const results = await service.listOwnActiveEnrolments(actorFor("user-1"));
+    expect(results.map((r) => r.id)).toEqual(["a"]);
+  });
+});
+
+describe("hasActiveEnrolmentCoveringCourse (G-01: COMPLETED is not operable)", () => {
+  it("is false when the only enrolment covering the course is COMPLETED", async () => {
+    const store = makeStore({
+      enrolments: [enrolment({ status: "COMPLETED" })],
+      cohorts: [cohort({ courseId: "course-1" })],
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    expect(await service.hasActiveEnrolmentCoveringCourse("user-1", "course-1")).toBe(false);
+  });
+});
+
 describe("hasActiveEnrolmentCoveringCourse", () => {
   it("is true for an ACTIVE enrolment in a standalone course-cohort covering that course", async () => {
     const store = makeStore({
@@ -598,6 +647,37 @@ describe("loadLearnerPath", () => {
     expect(await service.loadLearnerPath(actorFor("user-1"), "missing")).toBeNull();
   });
 
+  it("G-01: a COMPLETED enrolment is null by default and resolves only with includeCompleted", async () => {
+    const store = twoLessonCourseStore({ enrolment: { status: "COMPLETED" } });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+
+    expect(await service.loadLearnerPath(actorFor("user-1"), "enrolment-1")).toBeNull();
+    expect(await service.loadLearnerPath(actorFor("user-1"), "enrolment-1", {})).toBeNull();
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1", { includeCompleted: true });
+    expect(path).not.toBeNull();
+    expect(path?.enrolment.status).toBe("COMPLETED");
+  });
+
+  it("T-11-70: includeCompleted returns the identical null for a stranger's COMPLETED id and a missing id", async () => {
+    const store = twoLessonCourseStore({ enrolment: { status: "COMPLETED", userId: "someone-else" } });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+
+    const stranger = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1", { includeCompleted: true });
+    const missing = await service.loadLearnerPath(actorFor("user-1"), "nope", { includeCompleted: true });
+    expect(stranger).toBeNull();
+    expect(stranger).toStrictEqual(missing);
+  });
+
+  it("includeCompleted still refuses non-ACTIVE/COMPLETED statuses", async () => {
+    for (const status of ["PENDING_PAYMENT", "WITHDRAWN", "CANCELLED", "TRANSFERRED"]) {
+      const store = twoLessonCourseStore({ enrolment: { status } });
+      const service = createLearnerAccessService({ store, now: () => NOW });
+      expect(
+        await service.loadLearnerPath(actorFor("user-1"), "enrolment-1", { includeCompleted: true }),
+      ).toBeNull();
+    }
+  });
+
   it("names the specific blocking lesson for a locked lesson", async () => {
     const store = twoLessonCourseStore();
     const service = createLearnerAccessService({ store, now: () => NOW });
@@ -802,6 +882,20 @@ describe("assertLessonOpenable", () => {
     expect(path!.enrolment.accessWindow.readOnly).toBe(true);
     const result = service.assertLessonOpenable(path!, "lesson-1");
     expect(result).toEqual({ ok: false, reason: "access-window-closed" });
+  });
+
+  it("G-01: refuses every lesson on a COMPLETED path, even an otherwise open unlocked one", async () => {
+    const store = twoLessonCourseStore({ enrolment: { status: "COMPLETED" } });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    const path = await service.loadLearnerPath(actorFor("user-1"), "enrolment-1", { includeCompleted: true });
+
+    expect(path!.enrolment.status).toBe("COMPLETED");
+    expect(path!.enrolment.accessWindow.readOnly).toBe(false);
+    expect(path!.courses[0].modules[0].lessons[0].locked).toBe(false);
+    expect(service.assertLessonOpenable(path!, "lesson-1")).toEqual({
+      ok: false,
+      reason: "access-window-closed",
+    });
   });
 
   it("refuses a cross-course lesson id with 'not-found', not 'locked'", async () => {
