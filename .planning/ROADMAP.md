@@ -511,7 +511,7 @@ Plans:
   3. Authorized staff can revoke and reissue a certificate with reason, linking old and new versions while preserving history. (CRD-05)
   4. A later grade, attendance, or completion correction flags affected certificates for review without silently altering or destroying the original record. (CRD-06)
 
-**Plans**: 16 plans across 6 waves (foundation-first: the schema/migration, the human package + permission gates, and the pure primitives all land in wave 1 so every later plan builds on settled ground; the public verification surface ships in wave 2, before issuance exists, so its disclosure contract is tested in isolation)
+**Plans**: 24 plans across 8 waves (16 original plans in waves 1-6, then 8 UAT gap-closure plans 11-17..11-24 in waves 7-8; foundation-first: the schema/migration, the human package + permission gates, and the pure primitives all land in wave 1 so every later plan builds on settled ground; the public verification surface ships in wave 2, before issuance exists, so its disclosure contract is tested in isolation)
 
 Plans:
 **Wave 1**
@@ -547,6 +547,22 @@ Plans:
 **Wave 6** *(blocked on Wave 5 completion)*
 
 - [x] 11-16-PLAN.md — Phase close: real-Postgres/MinIO integration suites, seven executable phase invariants, validation reconciliation, and the ten-step browser walkthrough (all six requirements)
+
+**Gap closure — from `11-UAT.md` (7 failed tests + 1 observation)** *(`gap_closure: true`; run with `/gsd:execute-phase 11 --gaps-only`)*
+
+Wave 7 *(independent of each other, no shared files)*
+
+- [ ] 11-17-PLAN.md — BLOCKER (UAT 10): COMPLETED enrolments visible-but-not-operable on the learner dashboard; `listOwnDashboardEnrolments`, `includeCompleted`, regression tests using a COMPLETED fixture (CRD-03)
+- [ ] 11-19-PLAN.md — MAJOR (UAT 11): PDF renderer converts top-origin layout to pdf-lib space and fits images; position-asserting tests read coordinates back out of the PDF (CRD-03)
+- [ ] 11-20-PLAN.md — MAJOR (UAT 6): Course edit page, strict `updateCourseAction`, edit-mode `CourseForm` reusing `CertificateSettingsFields`; Programme edit certificate settings proven by test (CRD-01, CRD-02, CRD-03)
+- [ ] 11-21-PLAN.md — MINOR (UAT 4, 13): drag-safe template canvas image; public `/verify-certificate` reference-entry page that does not collide with the IAM-02 `/verify` page (CRD-03, CRD-04)
+- [ ] 11-22-PLAN.md — MINOR (UAT 8, data): batched `listCertificateIssuanceSources` and an Issued-by column and filter on All certificates (CRD-01, CRD-02)
+- [ ] 11-24-PLAN.md — MINOR (UAT 18 observation): one review-flag audit entry per correction (D-01 guard on the superseded branch) attributed to the correcting staff member (CRD-06)
+
+Wave 8 *(blocked on Wave 7)*
+
+- [ ] 11-18-PLAN.md — BLOCKER surface + MINOR (UAT 10, 19): COMPLETED-aware dashboard card without dead links, corrected Next-up copy, real-Postgres issue-then-dashboard regression (CRD-03)
+- [ ] 11-23-PLAN.md — MINOR (UAT 8, landing): Recently issued section on the Certificates landing page so automatic issuances are visible (CRD-01, CRD-02)
 
 **Cross-cutting constraints:**
 
