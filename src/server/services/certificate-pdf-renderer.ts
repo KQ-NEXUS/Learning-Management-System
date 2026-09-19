@@ -19,8 +19,13 @@
  * Text and fonts (plan 11-29, CR-01): the renderer embeds the bundled,
  * human-approved Unicode font (`assets/fonts/certificate`, see
  * `certificate-font.ts`) through the already-approved `@pdf-lib/fontkit`
- * (D-08, recorded in 11-DECISIONS.md), subset per document so the PDF stays
- * small. There is deliberately NO fallback to a standard font: an unreadable
+ * (D-08, recorded in 11-DECISIONS.md). The complete font program is embedded
+ * (about 300 KB per certificate): fontkit's subsetter produced a truncated
+ * program for this font in which most glyphs had no outline and drew as blanks
+ * in Chrome and pdf.js while text extraction still passed (found by the human
+ * visual check in plan 11-33, pinned by tests/certificate-pdf-unicode.test.ts).
+ * A pre-trimmed Latin-only font could shrink this later. There is deliberately
+ * NO fallback to a standard font: an unreadable
  * font file rejects the render. Every string is passed through
  * `sanitiseCertificateText` before it is measured or drawn, so no name can make
  * the renderer throw. Text is normalised to NFC because pdf-lib draws glyph
@@ -318,8 +323,9 @@ export async function renderCertificatePdf(input: {
   // ccmp off: the font would otherwise decompose lowercase Yoruba letters (o + dot
   // below) into a base glyph plus a zero-advance mark with no text mapping. With
   // it off the precomposed glyph is used, drawn correctly and mapped in ToUnicode.
+  // subset: false — see the header note: the subsetted program lost glyph outlines.
   const font = await document.embedFont(await loadCertificateFontBytes(), {
-    subset: true,
+    subset: false,
     features: { ccmp: false },
   });
   const { width, height } = pageDimensionsFor(layout.pageSize, layout.orientation);

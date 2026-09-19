@@ -36,10 +36,10 @@ function inflatedContentStreams(bytes: Uint8Array): string[] {
     const endIndex = latin1.indexOf("endstream", start);
     if (endIndex === -1) break;
 
-    let raw = buffer.subarray(start, endIndex);
-    while (raw.length > 0 && (raw[raw.length - 1] === 0x0a || raw[raw.length - 1] === 0x0d)) {
-      raw = raw.subarray(0, raw.length - 1);
-    }
+    // Do NOT trim trailing CR/LF: the last byte of a Flate stream can legitimately be
+    // 0x0a or 0x0d, and inflate stops at the end-of-stream marker so the EOL before
+    // `endstream` is harmless. (Trimming corrupted the ToUnicode map of full-font PDFs.)
+    const raw = buffer.subarray(start, endIndex);
 
     try {
       streams.push(zlib.inflateSync(raw).toString("latin1"));

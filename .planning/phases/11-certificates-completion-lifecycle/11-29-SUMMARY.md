@@ -90,3 +90,15 @@ None.
 
 - FOUND: src/server/services/certificate-font.ts, tests/certificate-pdf-unicode.test.ts
 - FOUND commit: 0f79c58
+
+## Post-verification defect (found in plan 11-33's visual check, fixed 2026-09-19)
+
+The 11-29 renderer embedded the font with `subset: true`. The 11-32 evidence PDFs then looked wrong in both Chrome's PDF viewer and pdf.js: most letters were blank (a Yoruba name showed only tone marks; "September" drew as "Sep e"). Every automated test still passed, because they read text through the ToUnicode map, which was intact, and never checked that glyphs have outlines.
+
+Root cause (isolated with a four-way experiment): fontkit's subsetter produced a truncated font program (10 glyphs, most without outlines) for Noto Sans, independent of the `ccmp` option. Embedding the whole font renders correctly.
+
+Fix: `subset: false` (about 316 KB per certificate, was 3-5 KB). New viewer-independent tests read the font program out of the PDF and require every drawn glyph to have an outline and the embedded program to be complete; they fail against the subset embedding (4 failures, embedded font 10 glyphs vs 4,503) and pass after. The old "PDF under 200 KB" guard, which encoded the wrong premise, now bounds the size at 200-500 KB.
+
+Also fixed: `tests/support/pdf-content.ts` trimmed every trailing CR/LF from streams, which can drop a legitimate last byte of Flate data and hid the ToUnicode map of full-font PDFs; it no longer trims.
+
+Follow-up (not done): a pre-trimmed Latin-only font would cut the per-certificate size to roughly 50-60 KB.
