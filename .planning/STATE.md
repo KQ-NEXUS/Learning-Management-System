@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
 Plan: 11-23 done (Recently issued on Certificates landing page) - all 24/24 plans complete; phase 11 awaiting orchestrator verification (NOT marked complete)
-Status: Executing - awaiting phase 11 verification
+Status: Gap-closure plans 11-17..11-24 done; second gap pass needed (11-REVIEW.md + 11-UAT.md open gaps) before verify
 Last activity: 2026-09-19
 
 Progress: [██████████] 99%
@@ -226,6 +226,8 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Tooling, Phase 11 P15] Same gap as the Phase 11 P05 entry above recurred: after state.advance-plan (15->16 of 16), the frontmatter's percent field was still stuck at 56 even though state.update-progress reported percent:99 (151/152) -- hand-corrected in STATE.md's frontmatter this session, same as before.
 
 - [Phase 11/11-16 walkthrough, OPEN]: Browser walkthrough (2026-09-19) found 6 gaps, none fixed. BLOCKER CRD-03: learner dashboard lists only ACTIVE enrolments (learner-access.ts listOwnActiveEnrolments) but issuance sets COMPLETED, so the certificate download slot vanishes when a certificate is ACTIVE. MAJOR CRD-03: certificate-pdf-renderer.ts passes top-origin y straight to pdf-lib (bottom-origin), so PDFs are vertically mirrored vs the editor, and images stretch. MAJOR: no Course edit page (CourseForm is create-only) so issuance mode/template cannot be changed on existing courses. Also: native image drag glitch on the editor canvas, bare /verify is the email-verification page, stale dashboard copy. Reopen CRD-03; CRD-02 has no browser evidence. Do not mark Phase 11 Complete until closed.
+
+- [Phase 11 gap closure done, verification OPEN]: Plans 11-17..11-24 executed and 8 UAT gaps re-verified in a browser (see 11-UAT.md). Full suite 3000/3001 pass; the 1 failure (Phase 10 submission-service.integration) is a 5s timeout under load and passes alone. NOT complete: (1) code review 11-REVIEW.md has 6 critical + 10 warning findings, CR-01 empirically confirmed (PDF renderer throws for non-WinAnsi names such as Yoruba ọ/ṣ/ẹ, inside the lesson-progress/attendance transaction, so the learner write rolls back); (2) new gap: deriveCertificateColumn hides the certificate slot when completion is superseded but a flagged certificate exists. gsd-verifier was NOT run. Certificates issued before 11-19 keep mirrored PDFs. Next: second gap-closure pass from 11-REVIEW.md, then verify.
 
 ## Deferred Items
 
