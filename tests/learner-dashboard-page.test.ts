@@ -276,4 +276,100 @@ describe("/dashboard", () => {
     expect(endedHtml).toContain("Your access window has ended");
     expect(endedHtml).toContain("your progress and results stay on record");
   });
+
+  // ---- Plan 11-18: COMPLETED cards (UAT tests 10 and 19, decision G-01) ----
+
+  const issuedAt = new Date("2026-09-10T00:00:00.000Z");
+  function completedCard(over: Over = {}) {
+    return card({
+      enrolmentStatus: "COMPLETED",
+      nextAction: { kind: "complete" },
+      certificate: {
+        kind: "issued",
+        certificateId: "cert-1",
+        verificationRef: "CERT-ABC",
+        issuedAt,
+      },
+      // A COMPLETED card carries these to-the-page-hostile fields on purpose:
+      // if the page rendered them the omitted-section assertions would catch it.
+      assessmentObligations: {
+        kind: "tracked",
+        items: [{ assessmentId: "a-1", title: "Final quiz", lessonId: "lesson-7" }],
+      },
+      results: {
+        kind: "tracked",
+        recent: [{ assessmentId: "a-1", title: "Final quiz", effectiveScore: 8, maxScore: 10 }],
+      },
+      upcomingSessions: [
+        {
+          id: "session-1",
+          title: "Wrap-up call",
+          startsAt: new Date("2026-09-20T09:00:00.000Z"),
+          endsAt: new Date("2026-09-20T10:00:00.000Z"),
+          mode: "unknown",
+          location: null,
+          cancelledAt: null,
+        },
+      ],
+      hasMoreSessions: true,
+      accessNotice: { kind: "ended" },
+      ...over,
+    });
+  }
+
+  it("G-01: a COMPLETED card shows the certificate download and reference and no dead links", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({ cards: [completedCard()] });
+
+    const html = await renderPage();
+
+    expect(html).toContain('href="/api/certificates/cert-1/download"');
+    expect(html).toContain("Download certificate");
+    expect(html).toContain("CERT-ABC");
+    // Still present.
+    expect(html).toContain("Cohort One");
+    expect(html).toContain("Next up");
+    expect(html).toContain("Your progress");
+    expect(html).toContain("Support tickets");
+    // Omitted: sections and links the COMPLETED enrolment cannot open.
+    expect(html).not.toContain("Upcoming sessions");
+    expect(html).not.toContain("Wrap-up call");
+    expect(html).not.toContain("Assessments");
+    expect(html).not.toContain("Results");
+    expect(html).not.toContain("Continue learning");
+    expect(html).not.toContain("Your access window has ended");
+    expect(html).not.toContain("/learn/enrolment-1/");
+  });
+
+  it("the Next-up 'complete' copy no longer promises certificates are yet to ship", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [card({ nextAction: { kind: "complete" } })],
+    });
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("certificates ship");
+    expect(html).not.toContain("once certificates");
+    expect(html).toContain("Certificate section below");
+  });
+
+  it("guard: an ACTIVE card still renders Assessments, Results and Upcoming sessions", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [
+        completedCard({
+          enrolmentStatus: "ACTIVE",
+          nextAction: { kind: "none" },
+          accessNotice: { kind: "none" },
+        }),
+      ],
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("Upcoming sessions");
+    expect(html).toContain("Assessments");
+    expect(html).toContain("Results");
+    expect(html).toContain('href="/learn/enrolment-1/sessions"');
+    expect(html).toContain('href="/learn/enrolment-1/results"');
+    expect(html).toContain('href="/learn/enrolment-1/lessons/lesson-7"');
+  });
 });

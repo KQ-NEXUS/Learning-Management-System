@@ -58,8 +58,8 @@ export function NextUpCard({ action, enrolmentId, timezone }: NextUpCardProps) {
 
       {action.kind === "complete" && (
         <p className="text-sm text-foreground">
-          You&apos;ve completed everything required here — your certificate slot below will
-          reflect this once certificates ship.
+          You&apos;ve completed everything required here. Your certificate, if this course
+          issues one, is shown in the Certificate section below.
         </p>
       )}
 

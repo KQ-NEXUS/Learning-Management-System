@@ -224,6 +224,33 @@ function ResultsCard({ card }: { card: LearnerDashboardCard }) {
 }
 
 function EnrolmentSection({ card }: { card: LearnerDashboardCard }) {
+  // Decision G-01 (plan 11-17/11-18): a COMPLETED enrolment is VISIBLE but not
+  // OPERABLE. Strict equality so an absent enrolmentStatus reads as ACTIVE.
+  // For a COMPLETED card we omit everything that would render a link the
+  // learner cannot open: the access-window banner (noise on a finished course,
+  // could contradict the certificate), Upcoming sessions ("View all" ->
+  // /learn/{id}/sessions, ACTIVE-only ownership check -> 404), and the
+  // Assessments/Results cards (lesson and results pages are closed to a
+  // COMPLETED enrolment and their data is deliberately not loaded).
+  if (card.enrolmentStatus === "COMPLETED") {
+    return (
+      <section className="flex flex-col gap-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          {card.cohortTitle}
+        </h2>
+
+        <NextUpCard action={card.nextAction} enrolmentId={card.enrolmentId} timezone={card.timezone} />
+
+        <ProgressSection card={card} />
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <DeferredSlot title="Support tickets" copy="Support tickets — arriving in a future update" />
+          <CertificateSlot certificate={card.certificate} />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="flex flex-col gap-4">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
