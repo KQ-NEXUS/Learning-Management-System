@@ -589,7 +589,7 @@ Wave 12 *(blocked on Wave 11)*
 
 Wave 13 *(blocked on Wave 12; human-only)*
 
-- [ ] 11-33-PLAN.md — Human checkpoints: visual check of Yoruba/Polish/CJK certificates, and the human-owned application (or deferral) of the enrolment-index migration on shared databases (CRD-03, CRD-05, CRD-06)
+- [x] 11-33-PLAN.md — Human checkpoints: visual check of Yoruba/Polish/CJK certificates, and the human-owned application (or deferral) of the enrolment-index migration on shared databases (CRD-03, CRD-05, CRD-06)
 
 **Cross-cutting constraints:**
 
@@ -691,7 +691,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 33/34 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 34/34 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |

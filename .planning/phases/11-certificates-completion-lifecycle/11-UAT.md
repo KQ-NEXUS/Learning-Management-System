@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 11-certificates-completion-lifecycle
 source: 11-01-SUMMARY.md, 11-02-SUMMARY.md, 11-03-SUMMARY.md, 11-04-SUMMARY.md, 11-05-SUMMARY.md, 11-06-SUMMARY.md, 11-07-SUMMARY.md, 11-08-SUMMARY.md, 11-09-SUMMARY.md, 11-10-SUMMARY.md, 11-11-SUMMARY.md, 11-12-SUMMARY.md, 11-13-SUMMARY.md, 11-14-SUMMARY.md, 11-15-SUMMARY.md, 11-16-SUMMARY.md
 started: 2026-09-19T02:00:00Z
-updated: 2026-09-19T02:50:00Z
+updated: 2026-09-19T21:00:00Z
 ---
 
 ## Current Test
@@ -281,7 +281,9 @@ blocked: 0
   debug_session: "diagnosed by direct observation and code read during UAT test 18"
 
 - truth: "A learner whose certificate is flagged after an attendance/completion correction still sees the certificate slot and can download it"
-  status: failed
+  status: resolved
+  resolved_by: "11-28"
+  reverified: "Browser 2026-09-19: Tunde Bello Programme card shows Your certificate is under review, a Download certificate link and the reference (11-16-evidence/reverify-17-programme-flagged-slot.png); regression tests fail against the old early return (6 failures)"
   reason: "Found while re-verifying test 10: on a Programme card whose completion was superseded by an attendance correction, the Certificate slot shows the deferred "arriving in a future update" copy although an ACTIVE, flagged Programme certificate exists."
   severity: major
   test: 17
@@ -295,7 +297,9 @@ blocked: 0
   debug_session: "found by browser re-verification 2026-09-19; evidence: Tunde Bello Programme card"
 
 - truth: "Certificate rendering and issuance are robust for real-world data"
-  status: failed
+  status: resolved
+  resolved_by: "11-25, 11-26, 11-27, 11-29, 11-30, 11-31, 11-32, 11-34 and c7d8033 (whole-font embed)"
+  reverified: "CR-01/02/03/04/06 closed and proven on real Postgres+MinIO (11-32); Yoruba/Polish/CJK PDFs visually approved by the human in 11-33 after a subset-font defect was found and fixed; CR-05 deliberately deferred; warnings WR-01..WR-10 (except WR-01) and info items remain logged in 11-REVIEW.md"
   reason: "Code review 11-REVIEW.md: 6 critical and 10 warning findings. CR-01 is empirically confirmed: the PDF renderer throws for names outside WinAnsi (Yoruba ọ ṣ ẹ, Ł, CJK) and the render runs inside the learner lesson-progress / attendance transaction, so a learner with such a name could not complete their last lesson in an AUTOMATIC course."
   severity: blocker
   test: 11

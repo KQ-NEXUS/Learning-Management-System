@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-32-PLAN.md (second gap pass: real Postgres + MinIO proof of CR-01/CR-03/CR-04/CR-06) - only 11-33 (human checkpoints) remains
+stopped_at: Completed 11-33-PLAN.md (human PDF check passed after the subset-font fix; CR-06 migration applied and verified on the Neon mirror branch and the main Neon database) - all 34 plans executed; gsd-verifier NOT yet run
 last_updated: "2026-09-19T18:58:00.000Z"
 last_activity: 2026-09-19
 progress:
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-32 done (two Testcontainers integration suites, 24 tests, prove Unicode certificates after commit, failure containment and the CR-03/CR-04/CR-06 guards on real Postgres + MinIO; evidence PDFs for 11-33 written, untracked) - 33/34 plans complete; remaining: 11-33 (human checkpoints: visual check of the evidence PDFs, enrolment-index migration on shared databases)
-Status: Second gap-closure pass in progress (11-REVIEW.md + 11-UAT.md open gaps) before verify
+Plan: 34 of 34 executed (second gap pass complete: 11-25..11-34). UAT gaps all resolved; full suite 3189 passed. Phase 11 NOT marked complete: run /gsd:verify-work 11 / verifier first
+Status: All plans executed; awaiting phase verification (gsd-verifier) before marking Phase 11 complete
 Last activity: 2026-09-19
 
 Progress: [██████████] 99%
