@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 11-30-PLAN.md (second gap pass, CR-01b two-phase issuance: rows in the caller transaction, PDF after commit) - 11-26, 11-29, 11-31..11-33 remain
+stopped_at: Completed 11-31-PLAN.md (second gap pass: certificate file settle wired after commit at the three roots; download route produces a missing file on demand) - 11-26 (human font gate), 11-29, 11-32, 11-33 remain
 last_updated: "2026-09-19T17:00:00.000Z"
 last_activity: 2026-09-19
 progress:
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 11 (certificates-completion-lifecycle) — EXECUTING
-Plan: 11-30 done (CR-01b: issuance is database-only, PDF rendered and stored after commit by certificate-file-service; nothing settles until 11-31 wires the roots) - 29/34 plans complete; second gap pass 11-26, 11-29, 11-31..11-33 remain (Phase 11 NOT complete)
+Plan: 11-31 done (post-commit settle wired at lesson-progress, attendance and certificate-service roots; download route recovers a missing PDF on demand) - 30/34 plans complete; remaining: 11-26 (needs the human font choice), 11-29, 11-32, 11-33
 Status: Second gap-closure pass in progress (11-REVIEW.md + 11-UAT.md open gaps) before verify
 Last activity: 2026-09-19
 

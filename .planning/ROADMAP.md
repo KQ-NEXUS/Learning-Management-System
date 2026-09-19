@@ -581,7 +581,7 @@ Wave 10 *(blocked on Wave 9; 11-29 also waits on 11-34 because both edit the ren
 
 Wave 11 *(blocked on Wave 10)*
 
-- [ ] 11-31-PLAN.md — Wire the post-commit settle into the lesson-progress, attendance and certificate-service roots (an injectable `settle` dep inside `createCertificateService`); the download route produces a missing file on demand behind unchanged denial parity (CRD-01, CRD-03)
+- [x] 11-31-PLAN.md — Wire the post-commit settle into the lesson-progress, attendance and certificate-service roots (an injectable `settle` dep inside `createCertificateService`); the download route produces a missing file on demand behind unchanged denial parity (CRD-01, CRD-03)
 
 Wave 12 *(blocked on Wave 11)*
 
@@ -691,7 +691,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 29/34 | In Progress|  |
+| 11. Certificates & Completion Lifecycle | 30/34 | In Progress|  |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
