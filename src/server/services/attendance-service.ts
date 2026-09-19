@@ -280,7 +280,7 @@ export type AttendanceServiceDeps = {
    */
   recalculateCompletion: (
     tx: CompletionServiceTxClient,
-    args: { enrolmentId: string; now: Date },
+    args: { enrolmentId: string; now: Date; actorId?: string | null },
   ) => Promise<CompletionRecalculationResult>;
 };
 
@@ -428,6 +428,9 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
     await deps.recalculateCompletion(tx as unknown as CompletionServiceTxClient, {
       enrolmentId,
       now: now(),
+      // The staff member recording/correcting — so a resulting certificate
+      // review flag is attributed to them, not SYSTEM (plan 11-24, T-11-98).
+      actorId,
     });
 
     return { before, after: state, beforeNote: existing?.note ?? null, afterNote: note };

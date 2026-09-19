@@ -141,7 +141,12 @@ function harness(opts?: {
   );
   const events: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
-  const recalculateCompletionCalls: Array<{ enrolmentId: string; now: Date; tx: unknown }> = [];
+  const recalculateCompletionCalls: Array<{
+    enrolmentId: string;
+    now: Date;
+    tx: unknown;
+    actorId?: string | null;
+  }> = [];
 
   const now = opts?.now ?? DURING;
 
@@ -310,8 +315,16 @@ function harness(opts?: {
     },
     withPermission,
     now: () => now,
-    recalculateCompletion: (async (tx: unknown, args: { enrolmentId: string; now: Date }) => {
-      recalculateCompletionCalls.push({ enrolmentId: args.enrolmentId, now: args.now, tx });
+    recalculateCompletion: (async (
+      tx: unknown,
+      args: { enrolmentId: string; now: Date; actorId?: string | null },
+    ) => {
+      recalculateCompletionCalls.push({
+        enrolmentId: args.enrolmentId,
+        now: args.now,
+        tx,
+        actorId: args.actorId,
+      });
       return { kind: "evaluated", results: [] };
     }) as never,
   });
@@ -1036,5 +1049,27 @@ describe("D-11 — recalculateCompletion is called inside the same transaction",
       reason: "medical note produced",
     });
     expect(recalculateCompletionCalls).toHaveLength(1);
+  });
+
+  it("a within-window mark passes the acting staff member as actorId (plan 11-24, T-11-98)", async () => {
+    const { service, recalculateCompletionCalls } = harness({ now: DURING });
+    await service.markAttendance({ sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT" });
+    expect(recalculateCompletionCalls).toHaveLength(1);
+    expect(recalculateCompletionCalls[0].actorId).toBe("user-1");
+  });
+
+  it("a post-window correction passes the correcting staff member as actorId (plan 11-24, T-11-98)", async () => {
+    const { service, recalculateCompletionCalls } = harness({
+      now: JUST_AFTER_CLOSE,
+      records: [rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "ABSENT" })],
+    });
+    await service.markAttendance({
+      sessionId: "ses-1",
+      enrolmentId: "enr-1",
+      state: "PRESENT",
+      reason: "medical note produced",
+    });
+    expect(recalculateCompletionCalls).toHaveLength(1);
+    expect(recalculateCompletionCalls[0].actorId).toBe("user-1");
   });
 });
