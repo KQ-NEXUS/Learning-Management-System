@@ -15,6 +15,7 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { hashPassword } from "../src/server/auth/password";
 import { PERMISSIONS } from "../src/server/permissions/catalogue";
+import { buildCourseObligationTree, buildProgrammeObligationTree } from "../src/server/services/publication";
 import {
   DEFAULT_CERTIFICATE_TEMPLATE_NAME,
   defaultCertificateTemplateLayout,
@@ -712,9 +713,9 @@ async function main() {
         courseId: safetyCourseId,
         type: "QUIZ",
         title: "Hazard identification check",
-        instructions: "Answer all questions. 70% is required to pass.",
+        instructions: "Answer both questions correctly to pass.",
         status: "PUBLISHED",
-        passMark: 70,
+        passMark: 2,
         totalMarks: 2,
         maxAttempts: 3,
         allowedFileTypes: [],
@@ -824,6 +825,442 @@ async function main() {
       active: true,
     },
   });
+
+  // --- Learner journey (pinned course content, progress, results) -----------
+  // Cohorts are published above without a course publication, so a learner would see
+  // "content not available". This block publishes each course/programme, pins the cohorts to
+  // those publications the way the real publish flow does, and adds enough learner activity
+  // (progress, a passed quiz, a submission waiting for grading, orders, a flagged certificate,
+  // near-term sessions) that every learner and staff screen has something real to show.
+  {
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@kqnexus.test" } });
+
+    // Quiz and assignment lessons in the safety course, so the course has assessed steps.
+    const safetyModule2 = await prisma.module.findFirstOrThrow({
+      where: { courseId: safetyCourseId, position: 2 },
+    });
+    const quizA = await prisma.assessment.findFirstOrThrow({ where: { courseId: safetyCourseId, type: "QUIZ" } });
+    const asgA = await prisma.assessment.findFirstOrThrow({ where: { courseId: safetyCourseId, type: "ASSIGNMENT" } });
+    for (const [position, title, type, assessmentId] of [
+      [3, "Hazard identification check", "QUIZ", quizA.id],
+      [4, "Site hazard report", "ASSIGNMENT", asgA.id],
+    ] as const) {
+      const exists = await prisma.lesson.findFirst({ where: { moduleId: safetyModule2.id, position } });
+      if (!exists) {
+        await prisma.lesson.create({
+          data: { moduleId: safetyModule2.id, title, position, type, assessmentId, required: true, allowManualComplete: false },
+        });
+      }
+    }
+
+    // A database seeded by an older version of this file can hold a legacy completion-rule shape
+    // (e.g. { allCourses: true }) that the current parser rejects, and the upserts above never
+    // rewrite existing rows. Put the seed-owned courses and programme on the current v1 rule so
+    // the snapshots below are valid.
+    const canonicalRule = { version: 1, requireAllRequiredLessons: true } as Prisma.InputJsonValue;
+    await prisma.course.updateMany({ where: { id: { in: [...courses.values()] } }, data: { completionRule: canonicalRule } });
+    await prisma.programme.update({ where: { id: programme.id }, data: { completionRule: canonicalRule } });
+
+    // Publish every course and pin the cohorts / cohort-courses that use it.
+    for (const courseId of courses.values()) {
+      const course = await prisma.course.findUniqueOrThrow({
+        where: { id: courseId },
+        include: { modules: { include: { lessons: true } } },
+      });
+      const payload = buildCourseObligationTree(course);
+      const publication = await prisma.coursePublication.upsert({
+        where: { courseId_version: { courseId, version: 1 } },
+        update: { payload: payload as unknown as Prisma.InputJsonValue },
+        create: { courseId, version: 1, payload: payload as unknown as Prisma.InputJsonValue, publishedById: admin.id },
+      });
+      await prisma.cohortCourse.updateMany({
+        where: { courseId, coursePublicationId: null },
+        data: { coursePublicationId: publication.id },
+      });
+      await prisma.cohort.updateMany({
+        where: { courseId, coursePublicationId: null },
+        data: { coursePublicationId: publication.id },
+      });
+    }
+    const programmeRow = await prisma.programme.findUniqueOrThrow({ where: { id: programme.id } });
+    const programmeMembers = await prisma.programmeCourse.findMany({ where: { programmeId: programme.id } });
+    const programmePayload = buildProgrammeObligationTree({
+      status: programmeRow.status,
+      sequential: programmeRow.sequential,
+      completionRule: programmeRow.completionRule,
+      completionRuleVersion: programmeRow.completionRuleVersion,
+      courses: programmeMembers.map((m) => ({ courseId: m.courseId, position: m.position })),
+    }) as unknown as Prisma.InputJsonValue;
+    const programmePublication = await prisma.programmePublication.upsert({
+      where: { programmeId_version: { programmeId: programme.id, version: 1 } },
+      update: { payload: programmePayload },
+      create: {
+        programmeId: programme.id,
+        version: 1,
+        payload: programmePayload,
+        publishedById: admin.id,
+      },
+    });
+    await prisma.cohort.updateMany({
+      where: { programmeId: programme.id, programmePublicationId: null },
+      data: { programmePublicationId: programmePublication.id },
+    });
+
+    // Publicly list the demo catalogue so /courses and /programmes have something to show. The rows
+    // are PUBLISHED (and published above) but `publiclyListed` defaults to false, which would leave both pages empty.
+    const listedAt = new Date();
+    await prisma.course.updateMany({
+      where: { id: { in: [...courses.values()] }, publiclyListed: false },
+      data: { publiclyListed: true, publiclyListedAt: listedAt },
+    });
+    await prisma.programme.updateMany({
+      where: { id: programme.id, publiclyListed: false },
+      data: { publiclyListed: true, publiclyListedAt: listedAt },
+    });
+
+    // The first programme cohort is mid-delivery, so the overview has learners in delivery.
+    await prisma.cohort.update({ where: { id: programmeCohort.id }, data: { status: "IN_PROGRESS" } });
+
+    // Learner 4 (Bisi) is part-way through: first four reading/video lessons done, quiz passed on attempt 2.
+    const safetyLessons = await prisma.lesson.findMany({
+      where: { module: { courseId: safetyCourseId } },
+      orderBy: [{ module: { position: "asc" } }, { position: "asc" }],
+    });
+    for (const lesson of safetyLessons.filter((l) => l.type !== "QUIZ" && l.type !== "ASSIGNMENT").slice(0, 4)) {
+      await prisma.lessonProgress.upsert({
+        where: { enrolmentId_lessonId: { enrolmentId: activeLearner4.id, lessonId: lesson.id } },
+        update: {},
+        create: { enrolmentId: activeLearner4.id, lessonId: lesson.id, source: "MANUAL" },
+      });
+    }
+    // Attempts carry the frozen question snapshot + responses, exactly as startAttempt/submitAttempt write them.
+    const quizQuestions = await prisma.quizQuestion.findMany({
+      where: { assessmentId: quizA.id },
+      orderBy: { position: "asc" },
+      include: { options: { orderBy: { position: "asc" } } },
+    });
+    const snapshot = quizQuestions.map((q) => ({
+      id: q.id,
+      position: q.position,
+      prompt: q.prompt,
+      type: q.type,
+      marks: q.marks,
+      explanation: q.explanation,
+      options: q.options.map((o) => ({ id: o.id, position: o.position, label: o.label, isCorrect: o.isCorrect })),
+    }));
+    const correctIds = (q: (typeof quizQuestions)[number]) => q.options.filter((o) => o.isCorrect).map((o) => o.id);
+    const wrongIds = (q: (typeof quizQuestions)[number]) => q.options.filter((o) => !o.isCorrect).slice(0, 1).map((o) => o.id);
+    const answersFor = (attemptNumber: number) => ({
+      questionSnapshot: snapshot,
+      responses: quizQuestions.map((q, i) => ({
+        questionId: q.id,
+        selectedOptionIds: attemptNumber === 2 || i === 0 ? correctIds(q) : wrongIds(q),
+      })),
+      passMark: quizA.passMark,
+      totalMarks: quizA.totalMarks,
+    });
+    for (const [attemptNumber, score, passed] of [[1, 1, false], [2, 2, true]] as const) {
+      await prisma.attempt.upsert({
+        where: { assessmentId_enrolmentId_attemptNumber: { assessmentId: quizA.id, enrolmentId: activeLearner4.id, attemptNumber } },
+        update: { answers: answersFor(attemptNumber) as unknown as Prisma.InputJsonValue },
+        create: {
+          assessmentId: quizA.id,
+          enrolmentId: activeLearner4.id,
+          attemptNumber,
+          versionUsed: 1,
+          status: "SUBMITTED",
+          submittedAt: daysFromNow(-4 + attemptNumber),
+          answers: answersFor(attemptNumber) as unknown as Prisma.InputJsonValue,
+          score,
+          maxScore: 2,
+          passed,
+        },
+      });
+    }
+    const finalAttempt = await prisma.attempt.findFirstOrThrow({
+      where: { assessmentId: quizA.id, enrolmentId: activeLearner4.id, attemptNumber: 2 },
+    });
+    if (!(await prisma.grade.findFirst({ where: { attemptId: finalAttempt.id } }))) {
+      await prisma.grade.create({
+        data: {
+          assessmentId: quizA.id,
+          enrolmentId: activeLearner4.id,
+          attemptId: finalAttempt.id,
+          score: 2,
+          maxScore: 2,
+          passed: true,
+          status: "RELEASED",
+          gradedById: admin.id,
+          releasedById: admin.id,
+          releasedAt: new Date(),
+        },
+      });
+    }
+
+    // A submission from another learner that has been waiting four days for a grade.
+    const otherActive = await prisma.enrolment.findFirst({
+      where: { cohortId: programmeCohort.id, status: "ACTIVE", userId: { not: activeLearner4.userId } },
+    });
+    if (otherActive && !(await prisma.submission.findFirst({ where: { assessmentId: asgA.id, enrolmentId: otherActive.id } }))) {
+      await prisma.submission.create({
+        data: {
+          assessmentId: asgA.id,
+          enrolmentId: otherActive.id,
+          attemptNumber: 1,
+          versionUsed: 1,
+          submittedAt: daysFromNow(-4),
+          isLate: false,
+          storageKey: `seed/site-hazard-report-${otherActive.id}.pdf`,
+          filename: "site-hazard-report.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 182_000,
+          uploadStatus: "READY",
+        },
+      });
+    }
+
+    // Payments: one paid this month and one needing review.
+    for (const [reference, userEmail, status, key] of [
+      ["ORD-SEED-0001", "learner4@kqnexus.test", "PAID", "seed-order-1"],
+      ["ORD-SEED-0002", "learner6@kqnexus.test", "EXCEPTION", "seed-order-2"],
+    ] as const) {
+      if (await prisma.order.findFirst({ where: { reference } })) continue;
+      await prisma.order.create({
+        data: {
+          reference,
+          userId: learnerByEmail.get(userEmail)!,
+          cohortId: programmeCohort.id,
+          amountMinor: 18_500_000,
+          currency: "NGN",
+          status,
+          selectedProvider: "PAYSTACK",
+          baseAmountMinor: 18_500_000,
+          platformFeeMinor: 277_500,
+          gatewayFeeEstimateMinor: 291_700,
+          idempotencyKey: key,
+          paidAt: status === "PAID" ? new Date() : null,
+        },
+      });
+    }
+
+    // An issued certificate flagged for review, so the issued list and the overview queue show one.
+    if (!(await prisma.certificate.findFirst({ where: { verificationRef: "CERT-SEED-0001" } }))) {
+      await prisma.certificate.create({
+        data: {
+          verificationRef: "CERT-SEED-0001",
+          enrolmentId: activeLearner4.id,
+          userId: activeLearner4.userId,
+          scope: "COURSE",
+          courseId: safetyCourseId,
+          awardTitle: "Workplace Safety Essentials",
+          learnerName: "Bisi Adewale",
+          status: "ACTIVE",
+          reviewFlaggedAt: daysFromNow(-3),
+        },
+      });
+    }
+
+    // Sessions close to today: one coming up this week, one recent and never marked.
+    for (const [title, startOffsetDays, startHour] of [
+      ["Site walk-through", 2, 9],
+      ["Toolbox briefing", -3, 9],
+    ] as const) {
+      if (await prisma.scheduledSession.findFirst({ where: { cohortId: programmeCohort.id, title } })) continue;
+      const startsAt = new Date(daysFromNow(startOffsetDays));
+      startsAt.setUTCHours(startHour - 1, 0, 0, 0); // Lagos is UTC+1
+      await prisma.scheduledSession.create({
+        data: {
+          cohortId: programmeCohort.id,
+          title,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + 3 * 3_600_000),
+          location: "Ikeja",
+          attendanceExpected: true,
+        },
+      });
+    }
+  }
+
+  // --- Role showcase (admin, instructor, learner review data) --------------
+  // Fills the remaining gaps so every role has something real on every page: a payment with a
+  // provider transaction and a partial refund, an active and a revoked certificate, a graded
+  // assignment for the main demo learner, a second certificate template, and recent audit events.
+  // Every write is guarded so re-running the seed never duplicates rows.
+  {
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@kqnexus.test" } });
+    const finance = await prisma.user.findUniqueOrThrow({ where: { email: "finance@kqnexus.test" } });
+    const instructorUser = await prisma.user.findUniqueOrThrow({ where: { email: "instructor@kqnexus.test" } });
+    const asg = await prisma.assessment.findFirstOrThrow({ where: { courseId: safetyCourseId, type: "ASSIGNMENT" } });
+
+    // 1. Provider transaction for the paid order, plus a second, partly refunded order.
+    const paidOrder = await prisma.order.findFirstOrThrow({ where: { reference: "ORD-SEED-0001" } });
+    async function attemptFor(orderId: string, ref: string, key: string) {
+      return (
+        (await prisma.paymentAttempt.findFirst({ where: { orderId } })) ??
+        (await prisma.paymentAttempt.create({
+          data: {
+            orderId,
+            provider: "PAYSTACK",
+            providerRef: ref,
+            providerIntentId: ref,
+            amountMinor: 18_500_000,
+            currency: "NGN",
+            status: "SUCCEEDED",
+            idempotencyKey: key,
+            confirmedAt: new Date(),
+            gatewayFeeActualMinor: 291_700,
+            schoolSettlementActualMinor: 18_500_000,
+            platformGrossActualMinor: 277_500,
+            platformNetActualMinor: 0,
+            reconciledAt: new Date(),
+          },
+        }))
+      );
+    }
+    await attemptFor(paidOrder.id, "PSK-SEED-0001", "seed-attempt-1");
+
+    if (!(await prisma.order.findFirst({ where: { reference: "ORD-SEED-0003" } }))) {
+      const refundedOrder = await prisma.order.create({
+        data: {
+          reference: "ORD-SEED-0003",
+          userId: learnerByEmail.get("learner1@kqnexus.test")!,
+          cohortId: programmeCohort.id,
+          amountMinor: 18_500_000,
+          currency: "NGN",
+          status: "PARTIALLY_REFUNDED",
+          selectedProvider: "PAYSTACK",
+          baseAmountMinor: 18_500_000,
+          platformFeeMinor: 277_500,
+          gatewayFeeEstimateMinor: 291_700,
+          idempotencyKey: "seed-order-3",
+          paidAt: daysFromNow(-6),
+        },
+      });
+      const attempt = await attemptFor(refundedOrder.id, "PSK-SEED-0003", "seed-attempt-3");
+      await prisma.refund.create({
+        data: {
+          orderId: refundedOrder.id,
+          paymentAttemptId: attempt.id,
+          amountMinor: 5_000_000,
+          currency: "NGN",
+          provider: "PAYSTACK",
+          providerRef: "PSK-RF-SEED-0003",
+          reason: "Partial refund - learner missed the first fortnight",
+          accessDecision: "RETAINED",
+          status: "COMPLETED",
+          actorId: finance.id,
+          completedAt: daysFromNow(-2),
+          baseComponentMinor: 5_000_000,
+          platformComponentMinor: 0,
+          gatewayComponentMinor: 0,
+        },
+      });
+    }
+
+    // 2. Certificates: one active, one revoked (the flagged one is added above).
+    const enrolmentOf = async (email: string) =>
+      prisma.enrolment.findFirst({ where: { userId: learnerByEmail.get(email)! } });
+    for (const [ref, email, title, name, status] of [
+      ["CERT-SEED-0002", "learner1@kqnexus.test", "Workplace Safety Essentials", "Chidi Okafor", "ACTIVE"],
+      ["CERT-SEED-0003", "learner2@kqnexus.test", "Incident Investigation", "Amara Nwosu", "REVOKED"],
+    ] as const) {
+      if (await prisma.certificate.findFirst({ where: { verificationRef: ref } })) continue;
+      const enrolment = await enrolmentOf(email);
+      if (!enrolment) continue;
+      await prisma.certificate.create({
+        data: {
+          verificationRef: ref,
+          enrolmentId: enrolment.id,
+          userId: enrolment.userId,
+          scope: "COURSE",
+          courseId: title === "Workplace Safety Essentials" ? safetyCourseId : courses.get("incident-investigation") ?? safetyCourseId,
+          awardTitle: title,
+          learnerName: name,
+          issuedAt: daysFromNow(-10),
+          status,
+          ...(status === "REVOKED"
+            ? {
+                revokedAt: daysFromNow(-1),
+                revokedById: admin.id,
+                revocationReason: "Attendance record corrected below the required threshold",
+              }
+            : {}),
+        },
+      });
+    }
+
+    // 3. A graded, released assignment for the main demo learner.
+    if (!(await prisma.submission.findFirst({ where: { assessmentId: asg.id, enrolmentId: activeLearner4.id } }))) {
+      const submission = await prisma.submission.create({
+        data: {
+          assessmentId: asg.id,
+          enrolmentId: activeLearner4.id,
+          attemptNumber: 1,
+          versionUsed: 1,
+          submittedAt: daysFromNow(-6),
+          isLate: false,
+          storageKey: `seed/site-hazard-report-${activeLearner4.id}.pdf`,
+          filename: "hazard-report-bisi.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 241_000,
+          uploadStatus: "READY",
+        },
+      });
+      await prisma.grade.create({
+        data: {
+          assessmentId: asg.id,
+          enrolmentId: activeLearner4.id,
+          submissionId: submission.id,
+          score: 78,
+          maxScore: 100,
+          passed: true,
+          feedback: "Clear hazard register and sensible controls. Tighten the escalation steps for the loading bay.",
+          status: "RELEASED",
+          gradedById: instructorUser.id,
+          releasedById: instructorUser.id,
+          releasedAt: daysFromNow(-4),
+        },
+      });
+    }
+
+    // 4. A second certificate template (not default) so the templates list has more than one row.
+    if (!(await prisma.certificateTemplate.findFirst({ where: { name: "Programme completion" } }))) {
+      await prisma.certificateTemplate.create({
+        data: {
+          name: "Programme completion",
+          layout: defaultCertificateTemplateLayout as unknown as Prisma.InputJsonValue,
+          layoutSchemaVersion: defaultCertificateTemplateLayout.schema,
+          isDefault: false,
+        },
+      });
+    }
+
+    // 5. Recent audit history so the audit log reads like real use.
+    if (!(await prisma.auditEvent.findFirst({ where: { correlationId: "seed-showcase" } }))) {
+      const events = [
+        { actorId: admin.id, action: "cohort.published", targetType: "Cohort", targetId: programmeCohort.id, daysAgo: 12 },
+        { actorId: admin.id, action: "cohort.instructor_assigned", targetType: "Cohort", targetId: programmeCohort.id, daysAgo: 11 },
+        { actorId: finance.id, action: "payment.manual_confirmed", targetType: "Order", targetId: paidOrder.id, daysAgo: 7, reason: "Bank transfer confirmed" },
+        { actorId: instructorUser.id, action: "grade.released", targetType: "Assessment", targetId: asg.id, daysAgo: 4 },
+        { actorId: finance.id, action: "refund.recorded", targetType: "Order", targetId: paidOrder.id, daysAgo: 2, reason: "Partial refund - learner missed the first fortnight" },
+        { actorId: admin.id, action: "certificate.revoked", targetType: "Certificate", targetId: null, daysAgo: 1, reason: "Attendance record corrected below the required threshold" },
+      ];
+      for (const e of events) {
+        await prisma.auditEvent.create({
+          data: {
+            actorId: e.actorId,
+            action: e.action,
+            targetType: e.targetType,
+            targetId: e.targetId,
+            reason: e.reason ?? null,
+            outcome: "SUCCESS",
+            correlationId: "seed-showcase",
+            createdAt: daysFromNow(-e.daysAgo),
+          },
+        });
+      }
+    }
+  }
 
   // --- Summary -------------------------------------------------------------
   const counts = {
