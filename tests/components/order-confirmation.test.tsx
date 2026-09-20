@@ -1,3 +1,7 @@
+function usd(amount: number): string {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amount);
+}
+
 /**
  * Plan 06-08 Task 3: the permanent receipt at `/orders/[reference]` — REG-05's
  * six required fields, its two sub-states, and the T-06-55 transparency
@@ -115,7 +119,7 @@ describe("OrderReceiptPage — success sub-state", () => {
     expect(screen.getByText("You're enrolled")).toBeTruthy();
     expect(screen.getByText(REFERENCE)).toBeTruthy();
     expect(screen.getByText("September Cohort")).toBeTruthy();
-    expect(screen.getByText("$450.00")).toBeTruthy();
+    expect(screen.getByText(usd(450))).toBeTruthy();
     expect(screen.getByText("Paid")).toBeTruthy();
     expect(screen.getByText("Active")).toBeTruthy();
     expect(screen.getByText(/Need help with this order/)).toBeTruthy();
@@ -130,8 +134,8 @@ describe("OrderReceiptPage — success sub-state", () => {
   it("shows the amount recorded on the Order, never a differing cohort price in the same fixture", async () => {
     seedSignedIn(baseOrder({ amountMinor: 45000, currency: "USD" }));
     render(await run());
-    expect(screen.getByText("$450.00")).toBeTruthy();
-    expect(screen.queryByText("$999.99")).toBeNull();
+    expect(screen.getByText(usd(450))).toBeTruthy();
+    expect(screen.queryByText(usd(999.99))).toBeNull();
   });
 });
 
@@ -174,7 +178,7 @@ describe("OrderReceiptPage — exception sub-state (T-06-55)", () => {
 
     expect(screen.getByText(REFERENCE)).toBeTruthy();
     expect(screen.getByText("September Cohort")).toBeTruthy();
-    expect(screen.getByText("$450.00")).toBeTruthy();
+    expect(screen.getByText(usd(450))).toBeTruthy();
     expect(screen.getByText("Paid")).toBeTruthy();
     expect(screen.getByText("Pending review")).toBeTruthy();
     expect(screen.getByText(/Need help with this order/)).toBeTruthy();
@@ -270,7 +274,7 @@ describe("OrderReceiptPage — breakdown (07-09 D-16/D-18)", () => {
     });
     seedSignedIn(order);
     render(await run());
-    expect(screen.getByText("$450.00")).toBeTruthy();
+    expect(screen.getByText(usd(450))).toBeTruthy();
     cleanup();
 
     // The Cohort's price changes after the Order was paid — the mock's
@@ -284,10 +288,10 @@ describe("OrderReceiptPage — breakdown (07-09 D-16/D-18)", () => {
     };
     seedSignedIn(mutatedOrder);
     render(await run());
-    expect(screen.getByText("$450.00")).toBeTruthy();
-    expect(screen.getByText("$430.00")).toBeTruthy();
-    expect(screen.getByText("$6.50")).toBeTruthy();
-    expect(screen.getByText("$13.50")).toBeTruthy();
+    expect(screen.getByText(usd(450))).toBeTruthy();
+    expect(screen.getByText(usd(430))).toBeTruthy();
+    expect(screen.getByText(usd(6.5))).toBeTruthy();
+    expect(screen.getByText(usd(13.5))).toBeTruthy();
   });
 
   it("D-18: leaves every rendered receipt amount unchanged when the active GatewayFeeSchedule is edited between renders — the page reads no schedule at all", async () => {
@@ -300,8 +304,8 @@ describe("OrderReceiptPage — breakdown (07-09 D-16/D-18)", () => {
     });
     seedSignedIn(order);
     render(await run());
-    expect(screen.getByText("$450.00")).toBeTruthy();
-    expect(screen.getByText("$13.50")).toBeTruthy();
+    expect(screen.getByText(usd(450))).toBeTruthy();
+    expect(screen.getByText(usd(13.5))).toBeTruthy();
     cleanup();
 
     // `getOwnOrderByReference` is the ONLY data source this page reads —
@@ -312,8 +316,8 @@ describe("OrderReceiptPage — breakdown (07-09 D-16/D-18)", () => {
     // above is the other half of the same proof (D-18, D-13).
     seedSignedIn(order);
     render(await run());
-    expect(screen.getByText("$450.00")).toBeTruthy();
-    expect(screen.getByText("$13.50")).toBeTruthy();
+    expect(screen.getByText(usd(450))).toBeTruthy();
+    expect(screen.getByText(usd(13.5))).toBeTruthy();
     expect(mocks.getOwnOrderByReference).toHaveBeenCalledTimes(2);
   });
 });

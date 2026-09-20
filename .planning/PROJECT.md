@@ -35,6 +35,8 @@ Verified by an independent security audit (26 threats, 0 open) and goal-backward
 
 Cross-cutting foundation *also* already in place, underpinning multiple future requirements even though it is not itself a REQ-ID: folder-boundary ESLint rule confining `@prisma/client` to `src/server/services/**`; the closed 36-identifier permission catalogue (`src/server/permissions/catalogue.ts`); the resource-service CRUD factory; audit-first write path (`AuditEvent`); hand-rolled database-session auth (sign-in/out, lockout, selective+global session revocation). 84 tests passing across 10 files as of 2026-09-01.
 
+- ✓ **ASM-01 through ASM-07**: Full assessment loop — versioned Quiz/Assignment authoring with draft-validation, automatic reproducible Quiz scoring with full attempt evidence, verified two-step Assignment submission with durable receipts, Cohort-scoped grading with invisible drafts and explicit release, mandatory-reason audited overrides, and learner-visible released-only results — Phase 10. Verified by goal-backward verification (`.planning/phases/10-assessment-quizzes-assignments-grading/10-VERIFICATION.md`, 7/7 must-haves) and a delegated 30-step Chrome walkthrough (7 defects found and fixed). See `10-VALIDATION.md`.
+
 ### Active
 
 <!-- Current v1 scope. Full requirement list with acceptance criteria: .planning/REQUIREMENTS.md. -->
@@ -45,7 +47,6 @@ Cross-cutting foundation *also* already in place, underpinning multiple future r
 - [ ] **Registration & Orders** — REG-01 through REG-05
 - [ ] **Payments, Refunds & Reconciliation** — PAY-02 through PAY-14 (PAY-01 superseded by PAY-08 within the PRD itself — see REQUIREMENTS.md)
 - [ ] **Learning Delivery & Progress** — LRN-01 through LRN-07
-- [ ] **Assessment & Grading** — ASM-01 through ASM-07
 - [ ] **Certificates** — CRD-01 through CRD-06
 - [ ] **Communications** — COM-01 through COM-04
 - [ ] **Support Tickets** — SUP-01 through SUP-06
@@ -107,4 +108,4 @@ Full descriptions, acceptance criteria, and phase mapping: `.planning/REQUIREMEN
 | RBAC-07 continuity guard uses a transaction-scoped count, not a row lock | A row lock would need raw SQL with no precedent in this codebase and would be untestable without a real database; the action (revoking the last admin) is rare and already reactive-only | ✓ Accepted — narrow READ COMMITTED TOCTOU race documented and accepted, not closed; user-confirmed 2026-09-02 (`02-SECURITY.md` AR-02-01) |
 
 ---
-*Last updated: 2026-09-02 after Phase 2 (Roles, Permissions & Staff Accounts) completed — UAT, independent security audit, and goal-backward verification all passed.*
+*Last updated: 2026-09-16 after Phase 10 (Assessment — Quizzes, Assignments & Grading) completed — goal-backward verification (7/7 must-haves) and a delegated Chrome walkthrough both passed.*

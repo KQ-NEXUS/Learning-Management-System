@@ -1,3 +1,7 @@
+function usd(amount: number): string {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amount);
+}
+
 import { expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -20,6 +24,7 @@ vi.mock("@/app/staff/cohorts/[id]/SessionsTab", () => ({ SessionsTab: () => null
 vi.mock("@/app/staff/cohorts/[id]/RosterTab", () => ({ RosterTab: () => null }));
 vi.mock("@/app/staff/cohorts/[id]/ExceptionsTab", () => ({ ExceptionsTab: () => null }));
 vi.mock("@/app/staff/cohorts/[id]/InstructorsPanel", () => ({ InstructorsPanel: () => null }));
+vi.mock("@/app/staff/cohorts/[id]/GradingTab", () => ({ GradingTab: () => null }));
 import DetailPage from "@/app/staff/cohorts/[id]/page";
 import EditPage from "@/app/staff/cohorts/[id]/edit/page";
 
@@ -89,7 +94,7 @@ it("renders the USD price fact and leaves NGN 'Not set' for a USD-only cohort", 
   seed("Africa/Lagos", { priceUsdMinor: 50000 });
   const page = await DetailPage({ params: Promise.resolve({ id: "cohort-1" }), searchParams: Promise.resolve({}) });
   const facts = overviewFacts(page);
-  expect(facts.find((f) => f.label === "USD price")?.value).toBe("$500.00");
+  expect(facts.find((f) => f.label === "USD price")?.value).toBe(usd(500));
   expect(facts.find((f) => f.label === "NGN price")?.value).toBe("Not set");
 });
 

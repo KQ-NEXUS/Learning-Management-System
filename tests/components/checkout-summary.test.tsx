@@ -1,3 +1,7 @@
+function usd(amount: number): string {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amount);
+}
+
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot } from "react-dom/client";
@@ -286,10 +290,10 @@ describe("OrderBreakdownCard", () => {
         })}
       />,
     );
-    expect(screen.getByText("$1,000.00")).toBeTruthy();
-    expect(screen.getByText("$15.00")).toBeTruthy();
-    expect(screen.getByText("$25.00")).toBeTruthy();
-    expect(screen.getByText("$1,040.00")).toBeTruthy();
+    expect(screen.getByText(usd(1000))).toBeTruthy();
+    expect(screen.getByText(usd(15))).toBeTruthy();
+    expect(screen.getByText(usd(25))).toBeTruthy();
+    expect(screen.getByText(usd(1040))).toBeTruthy();
     expect(screen.getByText("USD via Stripe")).toBeTruthy();
   });
 

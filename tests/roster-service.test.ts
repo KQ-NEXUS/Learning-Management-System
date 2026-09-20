@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import type { ResourceScope } from "@/server/permissions/scope";
+import type { LearnerCourseStructure } from "@/server/services/learner-access";
 import {
   createRosterService,
   exceptionsToCsv,
@@ -62,6 +63,7 @@ type RawAudit = {
   actorId: string | null;
   actor: { name: string } | null;
 };
+type RawLessonProgress = { enrolmentId: string; lessonId: string };
 
 function session(over: Partial<RawSession> = {}): RawSession {
   return {
@@ -98,6 +100,48 @@ function record(over: Partial<RawRecord> = {}): RawRecord {
   };
 }
 
+/** DD-32 — a pinned, single-course structure with one module carrying the
+ *  given required lessons (plus one optional lesson thrown in, so a test
+ *  can prove the optional lesson never counts toward `total`). */
+function structureWithRequiredLessons(requiredLessonIds: string[]): LearnerCourseStructure {
+  return {
+    kind: "structure",
+    courses: [
+      {
+        courseId: "course-1",
+        courseTitle: "Course One",
+        modules: [
+          {
+            id: "mod-1",
+            title: "Module One",
+            position: 1,
+            lessons: [
+              ...requiredLessonIds.map((id, i) => ({
+                id,
+                title: `Lesson ${id}`,
+                type: "TEXT",
+                position: i + 1,
+                required: true,
+                allowManualComplete: true,
+                withdrawnAt: null,
+              })),
+              {
+                id: "lesson-optional",
+                title: "Optional lesson",
+                type: "TEXT",
+                position: requiredLessonIds.length + 1,
+                required: false,
+                allowManualComplete: true,
+                withdrawnAt: null,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function harness(opts?: {
   grants?: ReturnType<typeof grant>[];
   scope?: ResourceScope;
@@ -106,6 +150,8 @@ function harness(opts?: {
   sessions?: RawSession[];
   records?: RawRecord[];
   audits?: RawAudit[];
+  progress?: RawLessonProgress[];
+  pinnedStructure?: LearnerCourseStructure;
 }) {
   const cohort: RawCohort | null =
     opts && "cohort" in opts
@@ -118,6 +164,7 @@ function harness(opts?: {
     scheduledSession: { findMany: vi.fn(async () => opts?.sessions ?? [session()]) },
     attendanceRecord: { findMany: vi.fn(async () => opts?.records ?? []) },
     auditEvent: { findMany: vi.fn(async () => opts?.audits ?? []) },
+    lessonProgress: { findMany: vi.fn(async () => opts?.progress ?? []) },
   } as unknown as RosterStore;
 
   const { withPermission } = createTestWithPermission(
@@ -129,6 +176,7 @@ function harness(opts?: {
     resolveCohortScope: async () =>
       opts?.scope ?? { cohortId: "cohort-1", courseIds: ["course-1"] },
     withPermission,
+    resolvePinnedStructure: async () => opts?.pinnedStructure ?? { kind: "unpinned" },
     now: () => NOW,
   });
 
@@ -258,10 +306,53 @@ describe("loadCohortRoster — row contents (D-17, D-18)", () => {
     });
   });
 
-  it("renders progress/assessment/completion as the named deferred state, never a zero or blank", async () => {
+  it("renders progress/assessment/completion as the named deferred state, never a zero or blank, for an unpinned cohort", async () => {
     const { service } = harness({ sessions: [] });
     const [row] = await service.loadCohortRoster({ cohortId: "cohort-1" });
     expect(row.progress).toEqual({ kind: "deferred", phase: 9 });
+    expect(row.assessment).toEqual({ kind: "deferred", phase: 10 });
+    expect(row.completion).toEqual({ kind: "deferred", phase: 11 });
+  });
+});
+
+describe("loadCohortRoster — progress column (DD-32)", () => {
+  it("widens progress to a tracked count for a pinned cohort, counting only required lessons", async () => {
+    const { service } = harness({
+      sessions: [],
+      pinnedStructure: structureWithRequiredLessons(["lesson-1", "lesson-2", "lesson-3"]),
+      progress: [
+        { enrolmentId: "enr-1", lessonId: "lesson-1" },
+        { enrolmentId: "enr-1", lessonId: "lesson-2" },
+        // Completing the optional lesson must never inflate the count.
+        { enrolmentId: "enr-1", lessonId: "lesson-optional" },
+      ],
+    });
+    const [row] = await service.loadCohortRoster({ cohortId: "cohort-1" });
+    expect(row.progress).toEqual({ kind: "tracked", completed: 2, total: 3 });
+  });
+
+  it("keeps progress as the D-18 deferred gap (phase 9) for an unpinned cohort", async () => {
+    const { service } = harness({ sessions: [], pinnedStructure: { kind: "unpinned" } });
+    const [row] = await service.loadCohortRoster({ cohortId: "cohort-1" });
+    expect(row.progress).toEqual({ kind: "deferred", phase: 9 });
+  });
+
+  it("renders '0 of 0' as a legitimate tracked value for a pinned offer with no required lessons, never a gap", async () => {
+    const { service } = harness({
+      sessions: [],
+      pinnedStructure: structureWithRequiredLessons([]),
+    });
+    const [row] = await service.loadCohortRoster({ cohortId: "cohort-1" });
+    expect(row.progress).toEqual({ kind: "tracked", completed: 0, total: 0 });
+  });
+
+  it("never widens assessment or completion — they stay deferred even when the cohort is pinned", async () => {
+    const { service } = harness({
+      sessions: [],
+      pinnedStructure: structureWithRequiredLessons(["lesson-1"]),
+      progress: [{ enrolmentId: "enr-1", lessonId: "lesson-1" }],
+    });
+    const [row] = await service.loadCohortRoster({ cohortId: "cohort-1" });
     expect(row.assessment).toEqual({ kind: "deferred", phase: 10 });
     expect(row.completion).toEqual({ kind: "deferred", phase: 11 });
   });

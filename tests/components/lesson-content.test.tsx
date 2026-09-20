@@ -162,9 +162,10 @@ describe("LessonContent", () => {
     expect(link.getAttribute("rel")).toBe("noopener noreferrer nofollow");
   });
 
-  it.each(["QUIZ", "ASSIGNMENT"] as const)("renders a %s placeholder naming Phase 10", (type) => {
-    render(<LessonContent lesson={lesson({ type })} />);
-    expect(screen.getByText(/Phase 10/)).toBeTruthy();
+  it.each(["QUIZ", "ASSIGNMENT"] as const)("renders %s lesson prose beside its delivery island", (type) => {
+    render(<LessonContent lesson={lesson({ type, body: "<p>Assessment lesson instructions</p>" })} />);
+    expect(screen.getByText("Assessment lesson instructions")).toBeTruthy();
+    expect(screen.queryByText(/Phase 10/)).toBeNull();
   });
 
   it("renders a withdrawn lesson read-only with a visible Withdrawn marker", () => {

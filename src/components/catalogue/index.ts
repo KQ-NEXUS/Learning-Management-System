@@ -25,3 +25,7 @@ export type { UploadPanelProps, LessonResourceView } from "./UploadPanel";
 
 export { LessonFormFields } from "./LessonFormFields";
 export type { LessonFormFieldsProps, LessonFieldValues } from "./LessonFormFields";
+
+export { AssessmentFormFields } from "./AssessmentFormFields";
+export type { AssessmentFieldValues } from "./AssessmentFormFields";
+export { QuestionBuilder } from "./QuestionBuilder";

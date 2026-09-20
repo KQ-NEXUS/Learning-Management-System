@@ -21,6 +21,9 @@ const eslintConfig = defineConfig([
     // gitignored). ESLint 9's flat config does not read .gitignore, so these
     // must be listed or `eslint .` lints the GSD CLI's own .cjs scripts.
     ".claude/**",
+    // Other checkouts contain their own source and generated Next output.
+    // Lint each checkout independently, rather than recursively linting copies.
+    ".worktrees/**",
     ".planning/**",
     "reference/**",
   ]),

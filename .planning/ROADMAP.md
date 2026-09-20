@@ -27,8 +27,8 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement. (completed 2026-09-12)
 - [x] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
 - [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
-- [ ] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion.
-- [ ] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides.
+- [x] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion. (completed 2026-09-15)
+- [x] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides. (completed 2026-09-16)
 - [ ] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly.
 - [ ] **Phase 12: Support Tickets** *(Track B, depends on Phase 2)* - Learners raise tickets; staff (including a non-Administrator Support role) triage, reply, escalate, and report.
 - [ ] **Phase 13: Transactional Communications & Notifications** *(Shared, depends on Phases 3, 5, 6, 7, 10, 11, 12)* - Every lifecycle event across the system sends exactly one deduplicated transactional email; in-product alerts surface important state.
@@ -401,44 +401,44 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — Schema (Cohort.accessDurationDays, LessonWatchProgress) + migration + pure access-window evaluator
-- [ ] 09-02-PLAN.md — Pure evaluators: lesson sequencing, completionRule v1 parser, completion engine
+- [x] 09-01-PLAN.md — Schema (Cohort.accessDurationDays, LessonWatchProgress) + migration + pure access-window evaluator
+- [x] 09-02-PLAN.md — Pure evaluators: lesson sequencing, completionRule v1 parser, completion engine
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 09-03-PLAN.md — learner-access.ts: ownership-scoped enrolment, pinned course structure, server-side lesson gate
+- [x] 09-03-PLAN.md — learner-access.ts: ownership-scoped enrolment, pinned course structure, server-side lesson gate
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 09-04-PLAN.md — completion-service.ts, three new domain events, attendance-change recalculation trigger
-- [ ] 09-05-PLAN.md — Learner download predicate + dual-predicate lesson-resource route
+- [x] 09-04-PLAN.md — completion-service.ts, three new domain events, attendance-change recalculation trigger
+- [x] 09-05-PLAN.md — Learner download predicate + dual-predicate lesson-resource route
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 09-06-PLAN.md — lesson-progress-service.ts: mark/undo, video watch write + 90% auto-complete, staff override
-- [ ] 09-07-PLAN.md — enrolment-dashboard-service.ts: aggregate read, typed named gaps, next-action derivation
+- [x] 09-06-PLAN.md — lesson-progress-service.ts: mark/undo, video watch write + 90% auto-complete, staff override
+- [x] 09-07-PLAN.md — enrolment-dashboard-service.ts: aggregate read, typed named gaps, next-action derivation
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 09-08-PLAN.md — (learner) route group layout + /dashboard page + progress/gap components
-- [ ] 09-13-PLAN.md — Staff progress-override screen + roster Progress column widening
+- [x] 09-08-PLAN.md — (learner) route group layout + /dashboard page + progress/gap components
+- [x] 09-13-PLAN.md — Staff progress-override screen + roster Progress column widening
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 09-09-PLAN.md — /learn/[enrolmentId] lesson list with lock affordances and the D-07 access gate
-- [ ] 09-10-PLAN.md — learner-session-service.ts + /learn/[enrolmentId]/sessions with the meeting-link window
+- [x] 09-09-PLAN.md — /learn/[enrolmentId] lesson list with lock affordances and the D-07 access gate
+- [x] 09-10-PLAN.md — learner-session-service.ts + /learn/[enrolmentId]/sessions with the meeting-link window
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 09-11-PLAN.md — Lesson reading pane, mark/undo Server Actions, complete-control island
+- [x] 09-11-PLAN.md — Lesson reading pane, mark/undo Server Actions, complete-control island
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 09-12-PLAN.md — Video watch tracker island + recordWatchProgress action
+- [x] 09-12-PLAN.md — Video watch tracker island + recordWatchProgress action
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 09-14-PLAN.md — Phase invariants test, real-Postgres learner journey, human walkthrough checkpoint
+- [x] 09-14-PLAN.md — Phase invariants test, real-Postgres learner journey, human walkthrough checkpoint
 
 **UI hint**: yes
 
@@ -457,7 +457,44 @@ Plans:
   4. Graders see only in-scope submissions, can save draft grades invisibly to learners, and must explicitly release results; overrides require a mandatory reason and are fully audited. (ASM-05, ASM-06)
   5. Learners see only released results, feedback, attempt history, and unmet pass requirements. (ASM-07)
 
-**Plans**: TBD
+**Plans**: 17 plans
+
+Plans:
+**Wave 1**
+
+- [x] 10-01-PLAN.md — Schema migration for attemptGradingMethod, four domain-event types, assessment scope resolver, Submission storage keys
+- [x] 10-02-PLAN.md — Pure quiz-scoring module — per-QuestionType scoring with D-09 partial credit, effective-attempt selection, purity gate
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 10-03-PLAN.md — Assessment draft-validation evaluator and authoring service (CRUD, nested question writes, readiness-gated publish)
+- [x] 10-04-PLAN.md — Attempt service part 1 — start/resume/save with the D-08 frozen question snapshot
+- [x] 10-05-PLAN.md — Submission service — verified two-step upload, durable receipt, lateness flag, resubmission rows
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 10-06-PLAN.md — Attempt service part 2 — submit, server-side scoring, auto-released Grade, lazy expiry, real-Postgres evidence suite
+- [x] 10-07-PLAN.md — Grading service — Cohort-scoped queue, draft save, single release, D-06 batch release in one transaction
+- [x] 10-08-PLAN.md — Staff assessment authoring UI — Course-scoped list, create/edit form, readiness-gated publish
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 10-09-PLAN.md — Grade-override service (D-07 RELEASED-only, reason mandatory) and learner released-only results service
+- [x] 10-10-PLAN.md — Quiz question builder UI — nested question/option authoring with keyboard reorder
+- [x] 10-11-PLAN.md — Learner quiz attempt UI — single-page form, immediate scored result, attempt history
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 10-12-PLAN.md — Staff grading queue UI — Cohort Grading tab, submission queue, first real bulk-select batch release
+- [x] 10-13-PLAN.md — Staff grade-entry UI — draft save, explicit release, RELEASED-only override with mandatory reason
+- [x] 10-14-PLAN.md — Learner assignment submission UI — presigned upload, verified receipt, lateness, cutoff, resubmission history
+- [x] 10-15-PLAN.md — Learner results page and the two Phase 9 dashboard named gaps filled with real data
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 10-16-PLAN.md — Real-Postgres and MinIO integration suites — receipt invariant, Cohort scoping, batch atomicity, released-only read
+- [x] 10-17-PLAN.md — Phase invariants test, validation contract, and the 30-step human walkthrough
+
 **UI hint**: yes
 
 ---
@@ -562,8 +599,8 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
-| 9. Learning Delivery & Progress Tracking | 0/TBD | Not started | - |
-| 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
+| 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
+| 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
