@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type ReactNode } from "react";
+import { PageHeader } from "@/components/shell/PageHeader";
 
 /**
  * DetailLayout — the record primitive.
@@ -23,6 +23,8 @@ export type DetailSection = {
   content: ReactNode;
   /** Renders in place of this section's content, leaving others intact. */
   error?: { message: string; onRetry?: () => void };
+  /** Stacked mode only: draw this section in the right-hand rail (from `lg`) instead of the main column. */
+  aside?: boolean;
 };
 
 export type DetailLayoutState =
@@ -42,6 +44,8 @@ export type DetailLayoutProps = {
   sections: DetailSection[];
   mode?: "tabbed" | "stacked";
   state?: DetailLayoutState;
+  /** Tabbed mode: the section to open first, when it is not the first one. */
+  initialSectionId?: string;
 };
 
 export function DetailLayout({
@@ -54,18 +58,27 @@ export function DetailLayout({
   sections,
   mode = "tabbed",
   state = { status: "ready" },
+  initialSectionId,
 }: DetailLayoutProps) {
-  const [activeId, setActiveId] = useState(sections[0]?.id);
+  // `initialSectionId` (from the page's `?tab=`) opens that tab; links such as "Back to cohort" from a
+  // grading page rely on it.
+  const [activeId, setActiveId] = useState(
+    initialSectionId && sections.some((section) => section.id === initialSectionId)
+      ? initialSectionId
+      : sections[0]?.id,
+  );
 
   if (state.status === "denied") {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
-        <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
-        <p className="text-sm font-semibold text-foreground">You do not have access to this record</p>
-        <p className="max-w-prose text-sm text-muted-foreground">
+      <div className="flex max-w-[680px] flex-col items-start gap-3 border-t border-foreground pt-12 pb-3">
+        <span className="font-mono text-sm text-muted-foreground">403</span>
+        <h2 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
+          You do not have access to this record
+        </h2>
+        <p className="max-w-prose text-base text-foreground-soft">
           Your role does not include{" "}
           {state.permission ? (
-            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">
+            <code className="rounded-sm bg-accent-wash px-2 font-mono text-sm">
               {state.permission}
             </code>
           ) : (
@@ -79,7 +92,7 @@ export function DetailLayout({
 
   if (state.status === "error") {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+      <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
         <p className="text-sm font-semibold text-foreground">Could not load this record</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           {state.message ?? "The request failed. Nothing has been changed."}
@@ -101,7 +114,7 @@ export function DetailLayout({
     return (
       <div
         aria-busy
-        className="flex flex-col gap-6 rounded-xl border border-border bg-surface px-6 py-6 shadow-card"
+        className="flex flex-col gap-6 border-t border-foreground pt-5"
       >
         <span className="h-5 w-64 animate-pulse rounded-sm bg-surface-2" />
         <span className="h-3 w-40 animate-pulse rounded-sm bg-surface-2" />
@@ -123,53 +136,21 @@ export function DetailLayout({
 
   return (
     <div className="flex flex-col gap-6">
-      {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav aria-label="Breadcrumb">
-          <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-            {breadcrumbs.map((crumb, i) => (
-              <li key={crumb.label} className="flex items-center gap-1">
-                {i > 0 && <span aria-hidden>/</span>}
-                {crumb.href ? (
-                  <Link href={crumb.href} className="hover:text-foreground hover:underline">
-                    {crumb.label}
-                  </Link>
-                ) : (
-                  <span className="font-semibold text-foreground">{crumb.label}</span>
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
-
-      <header className="flex flex-col gap-2 border-b border-border pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight text-foreground">
-                {title}
-              </h1>
-              {badges && (
-                <div className="flex flex-wrap items-center gap-1">{badges}</div>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              {identifier && (
-                <p className="font-mono text-[11px] text-muted-foreground">{identifier}</p>
-              )}
-              {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
-            </div>
-          </div>
-          {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
-        </div>
-      </header>
+      <PageHeader
+        breadcrumbs={breadcrumbs}
+        title={title}
+        identifier={identifier}
+        subtitle={subtitle}
+        meta={badges}
+        actions={actions}
+      />
 
       {mode === "tabbed" ? (
         <div className="flex flex-col gap-4">
           <div
             role="tablist"
             aria-label="Record sections"
-            className="flex flex-wrap gap-6 border-b border-border"
+            className="flex gap-8 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-border [&>*]:shrink-0 [&>*]:whitespace-nowrap"
           >
             {sections.map((section, i) => {
               const selected = section.id === active?.id;
@@ -197,7 +178,7 @@ export function DetailLayout({
                 >
                   {section.label}
                   {section.badge !== undefined && (
-                    <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
                       {section.badge}
                     </span>
                   )}
@@ -212,30 +193,57 @@ export function DetailLayout({
               role="tabpanel"
               aria-labelledby={`tab-${active.id}`}
               tabIndex={0}
-              className="rounded-xl border border-border bg-surface p-6 shadow-card"
+              className="pt-2"
             >
               <SectionBody section={active} />
             </div>
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {sections.map((section) => (
-            <section key={section.id} aria-labelledby={`heading-${section.id}`} className="flex flex-col gap-2">
-              <h2
-                id={`heading-${section.id}`}
-                className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                {section.label}
-              </h2>
-              <div className="rounded-xl border border-border bg-surface p-6 shadow-card">
-                <SectionBody section={section} />
+        <div
+          className={
+            sections.some((section) => section.aside)
+              ? "grid gap-12 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start"
+              : "flex flex-col gap-12"
+          }
+        >
+          {sections.some((section) => section.aside) ? (
+            <>
+              <div className="flex min-w-0 flex-col gap-12 lg:pr-14">
+                {sections.filter((section) => !section.aside).map((section) => (
+                  <StackedSection key={section.id} section={section} />
+                ))}
               </div>
-            </section>
-          ))}
+              <div className="flex flex-col gap-12 lg:border-l lg:border-border lg:pl-10">
+                {sections.filter((section) => section.aside).map((section) => (
+                  <StackedSection key={section.id} section={section} />
+                ))}
+              </div>
+            </>
+          ) : (
+            sections.map((section) => <StackedSection key={section.id} section={section} />)
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function StackedSection({ section }: { section: DetailSection }) {
+  // A section with nothing to show (e.g. a control this viewer may not use) draws no empty heading.
+  if (section.content === null || section.content === undefined || section.content === false) return null;
+  return (
+    <section aria-labelledby={`heading-${section.id}`} className="flex flex-col gap-4">
+      <h2
+        id={`heading-${section.id}`}
+        className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground"
+      >
+        {section.label}
+      </h2>
+      <div className="border-t border-foreground">
+        <SectionBody section={section} />
+      </div>
+    </section>
   );
 }
 
@@ -269,15 +277,16 @@ export function DetailFacts({
   facts: { label: string; value: ReactNode; mono?: boolean }[];
 }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
+    <dl className="flex flex-col">
       {facts.map((fact) => (
-        <div key={fact.label} className="flex flex-col gap-1">
-          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {fact.label}
-          </dt>
+        <div
+          key={fact.label}
+          className="grid grid-cols-1 gap-1 border-b border-border py-4 sm:grid-cols-[210px_minmax(0,1fr)] sm:gap-4"
+        >
+          <dt className="text-sm text-muted-foreground">{fact.label}</dt>
           <dd
-            className={`text-sm text-foreground ${
-              fact.mono ? "font-mono tabular-nums" : ""
+            className={`text-base font-medium text-foreground ${
+              fact.mono ? "font-mono text-[13px] tabular-nums" : ""
             }`}
           >
             {fact.value}

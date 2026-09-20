@@ -2,88 +2,107 @@
 
 /*
  * Design tokens — three-tier chain (primitive / pill / sidebar / semantic).
- * See .planning/phases/04.1-design-system-rollout-modern-ui-across-every-existing-surfac/04.1-UI-SPEC.md
- * section 5.3 for the authoritative source this block is copied from.
+ *
+ * Redesign (ui-redesign branch): navy rail + header band, white content sheet, one blue
+ * accent, Schibsted Grotesk + JetBrains Mono. The mockup canvas is the reference:
+ * https://claude.ai/artifact/TXEVNafyQtshRLECRWNLgg
  *
  * Component code MUST consume only the semantic tier (or the pill/sidebar tiers where
  * documented) via the @theme inline block below — never a primitive token directly, and
- * never a raw hex outside this file.
+ * never a raw hex outside this file. Semantic names are unchanged from the previous
+ * theme so existing utilities (bg-surface, text-muted-foreground, border-border,
+ * bg-accent…) re-skin the whole app without a find-and-replace.
  */
 
 :root {
   /* ---- Primitive tier: raw values. Never referenced directly by components. ---- */
   --primitive-white: #ffffff;
-  --primitive-ink: #101828;
-  --primitive-muted: #667085;
-  --primitive-line: #dfe5ee;
-  --primitive-paper: #f5f7fb;
-  --primitive-surface-2: #eef3fb;
+  --primitive-ink: #0f1730;
+  --primitive-ink-2: #2b3350;
+  --primitive-muted: #5b6478; /* 5.9:1 on white — text-safe */
+  --primitive-line: #e3e7f1; /* hairlines, structural dividers */
+  --primitive-field: #7c869b; /* 3.6:1 on white — interactive-control borders (WCAG 1.4.11) */
+  --primitive-paper: #f3f5f9;
+  --primitive-surface-2: #f3f5f9;
 
-  --primitive-brand: #2457d6; /* LOCKED (D-08): brand blue, brighter than today's #1c4ed8 */
-  --primitive-brand-deep: #15398f; /* gradient/glow partner */
-  --primitive-glow: rgba(36, 87, 214, 0.18);
+  --primitive-navy: #0a1024;
+  --primitive-navy-2: #141c3a;
 
-  --primitive-teal-700: #0f766e; /* LOCKED: teal text-safe (state-only, D-09) */
-  --primitive-teal-500: #12a594; /* LOCKED: teal fill (state-only, D-09) */
-  --primitive-teal-900: #123f45; /* teal-deep, avatar-chip gradient partner */
+  --primitive-brand: #2d4bff; /* 5.9:1 against white */
+  --primitive-brand-deep: #1f36c7;
+  --primitive-brand-light: #8fa0ff; /* the accent on navy */
+  --primitive-brand-wash: #eef1ff;
+  --primitive-glow: rgba(45, 75, 255, 0.18);
 
-  --primitive-amber-700: #b45309; /* LOCKED: amber text-safe (== today's --warning, unchanged) */
-  --primitive-amber-500: #f79009; /* AMENDED (D-12): retires the ROADMAP's prior amber-fill literal */
-  --primitive-amber-50: #fffaeb; /* pill tint */
+  --primitive-amber-700: #8a5a00; /* text-safe amber, 5.8:1 on white */
+  --primitive-amber-500: #f79009;
+  --primitive-amber-50: #fff7e6;
 
-  --primitive-red-700: #b42318; /* DECIDED (D-11): unchanged from today's --danger */
-  --primitive-red-50: #fdf3f2; /* unchanged from today's --danger-surface */
+  --primitive-red-700: #b4231a;
+  --primitive-red-50: #fdf3f1;
 
-  --primitive-green-700: #15803d; /* DECIDED (D-10): unchanged from today's --success */
+  --primitive-green-700: #1e6b3a;
 
-  /* Pill-tone tier: StatusPill's five tinted tones. Component maps a `tone` prop to one of
-     these named triples; it never reads a hex. See UI-SPEC 5.6. */
-  --pill-green-bg: #ecfdf3;
-  --pill-green-ink: #067647;
-  --pill-green-dot: #17b26a;
-  --pill-blue-bg: #eff4ff;
-  --pill-blue-ink: #1e40af;
-  --pill-blue-dot: #3b6ef5;
-  --pill-amber-bg: #fffaeb;
-  --pill-amber-ink: #b45309;
-  --pill-amber-dot: #f79009;
-  --pill-grey-bg: #f7f7f7;
-  --pill-grey-ink: #525252;
-  --pill-grey-dot: #a3a3a3;
-  --pill-red-bg: #fdf3f2;
-  --pill-red-ink: #b42318;
-  --pill-red-dot: #d92d20;
+  /* Pill-tone tier: StatusPill renders coloured text with a leading dot — no tinted
+     background. The -bg values remain for the few places that still tint (leading
+     tiles, banners); components map a tone prop to a named triple, never a hex. */
+  --pill-green-bg: #eaf5ee;
+  --pill-green-ink: #1e6b3a;
+  --pill-green-dot: #1e6b3a;
+  --pill-blue-bg: #eef1ff;
+  --pill-blue-ink: #2d4bff;
+  --pill-blue-dot: #2d4bff;
+  --pill-amber-bg: #fff7e6;
+  --pill-amber-ink: #8a5a00;
+  --pill-amber-dot: #8a5a00;
+  --pill-grey-bg: #f3f5f9;
+  --pill-grey-ink: #5b6478;
+  --pill-grey-dot: #8b95ab;
+  --pill-red-bg: #fdf3f1;
+  --pill-red-ink: #b4231a;
+  --pill-red-dot: #b4231a;
 
-  /* Staff sidebar tier — used only inside staff/layout.tsx, never elsewhere. */
-  --sidebar-bg: #0d1b3d;
-  --sidebar-fg: #eef3fb;
-  --sidebar-accent: #15398f;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-muted: #8fa3cf;
+  /* Navy frame tier — the staff rail, the header bands and the auth panel. */
+  --sidebar-bg: #0a1024;
+  --sidebar-fg: #c9d0e6;
+  --sidebar-accent: #2d4bff;
+  --sidebar-hover: #141c3a;
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --sidebar-muted: #8e99bb; /* 6.4:1 on navy */
+  --sidebar-soft: #a9b2cc; /* secondary text on navy, 8:1 */
+  --sidebar-line: #2a3560;
+
+  /* Status text on the navy band: the light counterparts of the pill inks. */
+  --on-navy-green: #7fd3a0;
+  --on-navy-amber: #f2c572;
+  --on-navy-red: #ff9b8f;
+  --on-navy-blue: #8fa0ff;
+  --on-navy-grey: #a9b2cc;
 
   /* ---- Semantic tier: role names. Component code consumes ONLY these (or the pill/sidebar ---- */
-  /* ---- tiers above), via the @theme block below. Utility class names for the four that     ---- */
-  /* ---- already existed (accent/danger/success/warning) are UNCHANGED, so no find-and-        ---- */
-  /* ---- replace is needed for those; new roles (teal, ink/muted/line/paper/surface-2) are new. ---- */
-  --background: var(--primitive-paper);
+  /* ---- tiers above), via the @theme block below.                                          ---- */
+  --background: var(--primitive-white);
   --foreground: var(--primitive-ink);
+  --foreground-soft: var(--primitive-ink-2);
   --surface: var(--primitive-white);
-  --surface-2: var(--primitive-surface-2);
+  --surface-2: var(--primitive-paper);
   --muted-foreground: var(--primitive-muted);
-  --border: var(--primitive-line); /* decorative/structural border — cards, dividers, tab strips */
-  --input-border: var(--primitive-muted); /* interactive-control border — inputs, selects, textareas (D-15) */
+  --border: var(--primitive-line);
+  --input-border: var(--primitive-field);
 
-  --accent: var(--primitive-brand); /* buttons, links, focus ring, active tab/nav — carries words */
-  --accent-deep: var(--primitive-brand-deep); /* gradient end for brand mark + primary-button gradient */
+  --accent: var(--primitive-brand);
+  --accent-deep: var(--primitive-brand-deep);
+  --accent-light: var(--primitive-brand-light);
+  --accent-wash: var(--primitive-brand-wash);
   --accent-contrast: var(--primitive-white);
   --accent-glow: var(--primitive-glow);
 
-  --teal-fill: var(--primitive-teal-500); /* progress bars, grade dots — non-text, state-only, NEVER interactive */
-  --teal-text: var(--primitive-teal-700); /* wherever teal carries words */
-  --teal-deep: var(--primitive-teal-900); /* avatar-chip gradient partner */
+  /* Progress fill and its caption text: the single accent, named for the role. */
+  --progress-fill: var(--primitive-brand);
+  --progress-text: var(--primitive-brand);
 
-  --warning: var(--primitive-amber-700); /* text-safe amber — value unchanged from today */
-  --warning-fill: var(--primitive-amber-500); /* AMENDED (D-12): course-state indicator dots ONLY */
+  --warning: var(--primitive-amber-700);
+  --warning-fill: var(--primitive-amber-500);
   --warning-surface: var(--primitive-amber-50);
 
   --danger: var(--primitive-red-700);
@@ -95,6 +114,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-foreground-soft: var(--foreground-soft);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-muted-foreground: var(--muted-foreground);
@@ -103,11 +123,12 @@
 
   --color-accent: var(--accent);
   --color-accent-deep: var(--accent-deep);
+  --color-accent-light: var(--accent-light);
+  --color-accent-wash: var(--accent-wash);
   --color-accent-contrast: var(--accent-contrast);
 
-  --color-teal-fill: var(--teal-fill);
-  --color-teal-text: var(--teal-text);
-  --color-teal-deep: var(--teal-deep);
+  --color-progress-fill: var(--progress-fill);
+  --color-progress-text: var(--progress-text);
 
   --color-warning: var(--warning);
   --color-warning-fill: var(--warning-fill);
@@ -136,31 +157,41 @@
   --color-sidebar-bg: var(--sidebar-bg);
   --color-sidebar-fg: var(--sidebar-fg);
   --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-soft: var(--sidebar-soft);
+  --color-sidebar-line: var(--sidebar-line);
+  --color-on-navy-blue: var(--on-navy-blue);
 
-  /* Radius overrides (UI-SPEC 3.2) — redefining Tailwind's own theme keys means
-     rounded-sm/md/lg/xl resolve to the mockup's values project-wide; no arbitrary-value
-     class needed anywhere. */
-  --radius-sm: 8px;
-  --radius-md: 11px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  /* Radii: tighter than before. Controls are 6px, panels 8 to 10px. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
 
-  /* Shadow (UI-SPEC 3.3) — shadow-xs is redefined to match exactly; shadow-card is a new
-     named key, deliberately NOT overloading Tailwind's native shadow-sm (which means
-     something else). */
-  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-card: 0 18px 48px rgba(16, 24, 40, 0.1);
+  /* Shadows: the redesign separates content with whitespace and hairlines, so shadows
+     are near-flat. shadow-card is kept (32 call sites) but is now a whisper. */
+  --shadow-xs: none;
+  --shadow-card: 0 1px 2px rgba(15, 23, 48, 0.05);
 
-  --font-sans: var(--font-plus-jakarta-sans);
-  --font-mono: var(--font-ibm-plex-mono);
+  --font-sans: var(--font-schibsted-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
 }
+
+/* StatusPill inside the navy band (PageHeader meta). Keyed on the data-tone attribute. */
+.on-navy [data-tone="success"] { color: var(--on-navy-green); }
+.on-navy [data-tone="warning"] { color: var(--on-navy-amber); }
+.on-navy [data-tone="danger"] { color: var(--on-navy-red); }
+.on-navy [data-tone="accent"] { color: var(--on-navy-blue); }
+.on-navy [data-tone="neutral"] { color: var(--on-navy-grey); }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), "Segoe UI Variable", system-ui, sans-serif;
+  font-size: 14.5px;
+  line-height: 1.5;
 }
 
 /* Display tracking (UI-SPEC 4.2, D-07). Applied as a base rule so ~50 files that already
@@ -180,6 +211,29 @@ h1 {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+
+/* The quiet attention marker beside "Needs attention": a solid dot with a slow expanding ring.
+   The reduced-motion rule below switches the ring off. */
+@keyframes alert-ping {
+  0% { transform: scale(0.7); opacity: 0.5; }
+  80%, 100% { transform: scale(2.6); opacity: 0; }
+}
+.alert-dot {
+  position: relative;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: var(--danger);
+}
+.alert-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--danger);
+  animation: alert-ping 2.4s ease-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -24,7 +24,9 @@ describe("approved brand glyph", () => {
     expect(svg!.getAttribute("focusable")).toBe("false");
     expect(svg!.getAttribute("stroke")).toBe("currentColor");
     expect(svg!.parentElement!.className).toContain("text-accent-contrast");
-    expect(svg!.parentElement!.getAttribute("style")).toContain("linear-gradient(140deg");
+    // Redesign: a flat accent square, no gradient.
+    expect(svg!.parentElement!.className).toContain("bg-accent");
+    expect(svg!.parentElement!.getAttribute("style")).toBeNull();
     expect(screen.getByText("KQ Nexus")).toBeTruthy();
     expect(screen.getByText("Page content")).toBeTruthy();
     expect(screen.queryByRole("img")).toBeNull();
