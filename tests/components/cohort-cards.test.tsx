@@ -1,5 +1,5 @@
 function usd(amount: number): string {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amount);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(amount);
 }
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,13 +9,9 @@ import type { PublicCohort } from "@/server/services/public-catalogue-service";
 
 afterEach(cleanup);
 
-// Mirrors CohortCards' own (unexported) formatDateRange so the test asserts
-// against the same formatting rule without depending on the component's
-// internals, and stays correct under whatever ICU locale this process runs.
-function expectedDateRange(startsAt: Date, endsAt: Date): string {
-  const fmt = (value: Date) =>
-    new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-  return `${fmt(startsAt)}–${fmt(endsAt)}`;
+// The start date as the card prints it: "10 November 2026", in a pinned locale.
+function expectedStart(startsAt: Date): string {
+  return `Starts ${new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(startsAt)}`;
 }
 
 function cohort(overrides: Partial<PublicCohort> & { id: string }): PublicCohort {
@@ -79,7 +75,7 @@ describe("CohortCards", () => {
         ]}
       />,
     );
-    expect(screen.getByText(expectedDateRange(startsAt, endsAt))).toBeTruthy();
+    expect(screen.getByText(expectedStart(startsAt))).toBeTruthy();
     expect(screen.getByText("Self-paced")).toBeTruthy();
     expect(screen.getByText(usd(250))).toBeTruthy();
   });
@@ -205,7 +201,7 @@ describe("CohortCards", () => {
       render(
         <CohortCards cohorts={[cohort({ id: "c1", priceNgnMinor: 45_000_000, priceUsdMinor: null })]} />,
       );
-      expect(screen.getByText(/450,000\.00/)).toBeTruthy();
+      expect(screen.getByText(/450,000/)).toBeTruthy();
       expect(screen.queryByText(/\$0\.00/)).toBeNull();
       expect(screen.queryByText(usd(0))).toBeNull();
     });

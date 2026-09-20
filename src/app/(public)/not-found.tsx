@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SearchX } from "lucide-react";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 
 /**
  * The public-segment 404. Same properties as the root one — it reveals nothing
@@ -12,28 +12,20 @@ import { SearchX } from "lucide-react";
  */
 export default function PublicNotFound() {
   return (
-    <section className="flex min-h-[60vh] items-center justify-center py-8">
-      <div className="flex w-full max-w-2xl flex-col items-center gap-4 rounded-xl border border-border bg-surface px-6 py-12 text-center shadow-card">
-        <span
-          aria-hidden
-          className="flex size-12 items-center justify-center rounded-lg bg-surface-2 text-muted-foreground"
-        >
-          <SearchX className="size-[22px]" />
-        </span>
-        <p className="font-mono text-[11px] font-semibold tracking-widest text-muted-foreground">
-          404
-        </p>
-        <h1 className="text-[25px] font-semibold leading-[1.2]">We can&apos;t find that page</h1>
-        <p className="max-w-prose text-sm text-muted-foreground">
+    <div className="flex flex-col gap-8">
+      <LearnerPageHeader title="We can't find that page" />
+      <div className="flex flex-col gap-4 pb-12">
+        <p className="font-mono text-sm text-muted-foreground">404</p>
+        <p className="max-w-prose text-base text-foreground-soft">
           The course or programme may have been archived, or the link may be out of date.
         </p>
         <Link
           href="/courses"
-          className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+          className="inline-flex min-h-11 w-fit items-center rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
         >
           Back to the catalogue
         </Link>
       </div>
-    </section>
+    </div>
   );
 }

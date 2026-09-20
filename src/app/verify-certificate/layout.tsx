@@ -1,3 +1,2 @@
-// One implementation of the guard-free public verification shell (no catalogue
-// nav, no sign-in prompt) — shared with /verify/[verificationRef].
+// The reference-entry page uses the same public shell as /verify/[verificationRef].
 export { default } from "../verify/layout";
