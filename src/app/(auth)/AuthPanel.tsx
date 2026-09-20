@@ -46,7 +46,7 @@ export function AuthTitle({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <h1 className="text-[25px] font-semibold tracking-[-0.03em] text-foreground">{title}</h1>
+      <h1 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">{title}</h1>
       {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
     </div>
   );

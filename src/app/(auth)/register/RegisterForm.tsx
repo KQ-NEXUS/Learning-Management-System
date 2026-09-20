@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { AuthFooterLine, AuthTitle } from "../AuthPanel";
 import { registerAction, type RegisterState } from "./actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/identity";
+import { PasswordInput } from "@/components/primitives/PasswordInput";
 
 const INITIAL: RegisterState = { error: null, sent: false };
 
@@ -42,7 +43,7 @@ export function RegisterForm() {
             type="text"
             autoComplete="name"
             required
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
+            className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
           />
         </label>
 
@@ -53,37 +54,48 @@ export function RegisterForm() {
             type="email"
             autoComplete="email"
             required
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
+            className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
           />
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-semibold text-foreground">Password</span>
-          <input
+          <PasswordInput
             name="password"
-            type="password"
             autoComplete="new-password"
             required
             minLength={MIN_PASSWORD_LENGTH}
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
+            className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
           />
-          <span className="text-[11px] text-muted-foreground">At least 10 characters.</span>
+          <span className="text-xs text-muted-foreground">At least 10 characters.</span>
         </label>
 
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input name="acceptTerms" type="checkbox" required className={CHECKBOX} />
-          <span>I agree to the terms of service.</span>
+          <span>
+            I agree to the{" "}
+            <a href="/policies/terms" target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">
+              terms of service
+            </a>
+            .
+          </span>
         </label>
 
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input name="acceptPrivacy" type="checkbox" required className={CHECKBOX} />
-          <span>I agree to the privacy notice.</span>
+          <span>
+            I agree to the{" "}
+            <a href="/policies/privacy" target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">
+              privacy notice
+            </a>
+            .
+          </span>
         </label>
 
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:opacity-50"
+          className="h-12 w-full rounded-md bg-accent px-4 text-base font-semibold text-accent-contrast hover:bg-accent-deep disabled:opacity-50"
         >
           {pending ? "Creating account…" : "Create account"}
         </button>

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { profileService } from "@/server/services/profile-service";
 import { ProfileForm } from "./ProfileForm";
@@ -14,14 +15,7 @@ export default async function AccountPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-[25px] font-semibold tracking-[-0.02em] text-foreground">
-          Your account
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Details, sign-in and communication preferences.
-        </p>
-      </div>
+      <LearnerPageHeader size="hero" title="Your account" subtitle="Details, sign-in and communication preferences." />
       <ProfileForm
         name={profile.name}
         phone={profile.phone}

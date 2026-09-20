@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { BrandMark } from "@/components/shell/BrandMark";
 
@@ -19,30 +20,36 @@ import { BrandMark } from "@/components/shell/BrandMark";
  */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="flex min-h-screen flex-col bg-sidebar-bg md:flex-row">
       <div className="flex w-full shrink-0 flex-col justify-between gap-8 bg-sidebar-bg p-12 md:w-[44%]">
         <div className="flex items-center gap-2">
           <BrandMark className="size-7" />
-          <span className="text-sm font-semibold tracking-[-0.01em] text-sidebar-fg">
+          <span className="text-base font-semibold tracking-[-0.01em] text-white">
             KQ Nexus
           </span>
         </div>
 
         <div className="flex flex-col gap-4">
-          <h2 className="max-w-[18ch] text-[28px] leading-[1.2] font-semibold tracking-[-0.03em] text-sidebar-fg">
+          <h2 className="max-w-[18ch] text-[36px] leading-[1.15] font-bold tracking-[-0.04em] text-white">
             Professional training that an employer can verify.
           </h2>
           <p className="max-w-[38ch] text-sm leading-relaxed text-sidebar-muted">
             Every certificate carries a public verification link. No phone call, no letterhead.
           </p>
+          <Link
+            href="/verify-certificate"
+            className="w-fit text-sm font-semibold text-white underline underline-offset-4 hover:text-sidebar-fg"
+          >
+            Verify a certificate →
+          </Link>
         </div>
 
-        <span className="font-mono text-[11px] tracking-wide text-sidebar-muted">
+        <span className="font-mono text-xs tracking-wide text-sidebar-muted">
           AFRICA/LAGOS
         </span>
       </div>
 
-      <main className="flex flex-1 items-center justify-center bg-background p-8">
+      <main className="flex flex-1 items-center justify-center rounded-t-[28px] bg-surface p-8 md:rounded-l-[28px] md:rounded-tr-none">
         <div className="flex w-full max-w-[378px] flex-col gap-5">{children}</div>
       </main>
     </div>
