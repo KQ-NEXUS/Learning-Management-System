@@ -3,6 +3,7 @@ import { getCurrentActor } from "@/server/auth/current-actor";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { profileService } from "@/server/services/profile-service";
 import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
+import { deriveAvatarDisplay } from "@/lib/avatar-display";
 
 /**
  * The Learner account shell — not `staff/layout.tsx`'s sidebar workspace.
@@ -12,41 +13,17 @@ import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShe
  *
  * Convenience only. The server action's own actor resolution is the
  * security boundary — a layout guard protects rendering, not data.
+ *
+ * `deriveAvatarDisplay` now lives in `src/lib/avatar-display.ts` (09-08 Task
+ * 1) so this shell and `(learner)/layout.tsx` cannot drift on the initials
+ * rule. The learner shell shows no name or role line beside the avatar
+ * (UI-SPEC 8.18 empty) — this is the only identity surface here.
  */
 
 const NAV: LearnerNavItem[] = [
   { label: "Catalogue", href: "/courses" },
   { label: "Account", href: "/account" },
 ];
-
-/**
- * Derives the avatar's initials + accessible label.
- *
- * When a display name exists it wins outright. When it does not, initials
- * come from the email local-part (first char, uppercased, plus the first
- * char of a second `.`/`_`/`-`-delimited segment if one exists) and the
- * email itself fills the label slot. The learner shell shows no name or
- * role line beside the avatar (UI-SPEC 8.18 empty) — this is the only
- * identity surface here.
- */
-function deriveAvatarDisplay(
-  identity: { name: string; email: string } | null,
-): { initials: string; label: string } | null {
-  if (!identity) return null;
-  const trimmedName = identity.name.trim();
-  if (trimmedName) {
-    const words = trimmedName.split(/\s+/).filter(Boolean);
-    const initials =
-      words.length > 1
-        ? `${words[0][0]}${words[1][0]}`.toUpperCase()
-        : words[0].slice(0, 2).toUpperCase();
-    return { initials, label: trimmedName };
-  }
-  const local = identity.email.split("@")[0] ?? "";
-  const segments = local.split(/[._-]/).filter(Boolean);
-  const initials = `${segments[0]?.[0] ?? ""}${segments[1]?.[0] ?? ""}`.toUpperCase();
-  return { initials, label: identity.email };
-}
 
 export default async function AccountLayout({
   children,

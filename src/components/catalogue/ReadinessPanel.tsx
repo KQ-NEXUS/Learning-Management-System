@@ -23,6 +23,14 @@ import type {
 const CATEGORY_ORDER: readonly ReadinessCategory[] = [
   "Catalogue",
   "Content",
+  // "Grading" (plan 10-08) sits beside "Content" — `evaluateAssessmentReadiness`
+  // (assessment-readiness.ts) is this category's only producer today, covering
+  // pass mark / attempt limit / attempt-grading method / feedback behaviour.
+  // Omitting it here would silently drop those items from every render of this
+  // panel (T-10-14 requires the panel to render the SAME evaluator output the
+  // server-side publish refusal checks against — a missing category is a
+  // correctness bug, not a cosmetic gap).
+  "Grading",
   "Schedule",
   "Price",
   "Capacity",

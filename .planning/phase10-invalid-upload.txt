@@ -1,0 +1,1 @@
+Disallowed assignment file type for the Phase 10 walkthrough.

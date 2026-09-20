@@ -1,3 +1,7 @@
+function usd(amount: number): string {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amount);
+}
+
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { CohortCards } from "@/app/(public)/CohortCards";
@@ -77,7 +81,7 @@ describe("CohortCards", () => {
     );
     expect(screen.getByText(expectedDateRange(startsAt, endsAt))).toBeTruthy();
     expect(screen.getByText("Self-paced")).toBeTruthy();
-    expect(screen.getByText("$250.00")).toBeTruthy();
+    expect(screen.getByText(usd(250))).toBeTruthy();
   });
 
   it("does not render the delivery mode through the tinted StatusPill primitive", () => {
@@ -203,7 +207,7 @@ describe("CohortCards", () => {
       );
       expect(screen.getByText(/450,000\.00/)).toBeTruthy();
       expect(screen.queryByText(/\$0\.00/)).toBeNull();
-      expect(screen.queryByText("$0.00")).toBeNull();
+      expect(screen.queryByText(usd(0))).toBeNull();
     });
 
     it("targets no anchor at the /enrol/ resumption path anywhere in this component", () => {

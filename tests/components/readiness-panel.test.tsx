@@ -68,6 +68,7 @@ describe("ReadinessPanel", () => {
     expect(headings).toEqual([
       "Catalogue",
       "Content",
+      "Grading",
       "Schedule",
       "Price",
       "Capacity",
@@ -103,7 +104,7 @@ describe("ReadinessPanel", () => {
       item({ id: category.toLowerCase(), category, label: `${category} check`, state: "NOT_YET_CHECKED", deferredTo: "Phase 5" }),
     );
     render(<ReadinessPanel items={deferred} />);
-    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(7);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(8);
   });
 
   it("renders a NOT_YET_CHECKED item with the • glyph and neither a tick nor a cross", () => {

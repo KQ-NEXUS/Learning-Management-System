@@ -56,8 +56,7 @@ import {
   type DomainEventTxClient,
 } from "@/server/services/domain-event-service";
 import {
-  cohortResourceScope,
-  enrolmentCohortScope,
+  createCohortScopeResolvers,
 } from "@/server/services/cohort-scope";
 // The transition table and the PENDING_PAYMENT -> ACTIVE transition body
 // live in enrolment-transitions.ts (06-06) — split out so a webhook-driven,
@@ -715,6 +714,13 @@ export function createPrismaBackedEnrolmentService(
   audit: Audit = liveAudit,
   options: Pick<EnrolmentServiceDeps, "correlateReconciliationEvidence"> = {},
 ) {
+  // Scope reads must use the same database as the service's reads and writes.
+  // This also keeps isolated integration clients off the global singleton.
+  const scopes = createCohortScopeResolvers({
+    cohort: client.cohort,
+    session: client.scheduledSession,
+    enrolment: client.enrolment,
+  });
   return createEnrolmentService({
     db: {
       $transaction: (fn) =>
@@ -739,8 +745,8 @@ export function createPrismaBackedEnrolmentService(
           },
         }),
     },
-    enrolmentScope: enrolmentCohortScope,
-    cohortScope: cohortResourceScope,
+    enrolmentScope: scopes.enrolmentCohortScope,
+    cohortScope: scopes.cohortResourceScope,
     withPermission,
     audit,
     ...options,

@@ -82,15 +82,6 @@ function BodyProse({ html }: { html: string }) {
   );
 }
 
-function Placeholder({ type }: { type: string }) {
-  return (
-    <p className="rounded-md border border-border bg-surface-2 px-4 py-2 text-sm text-muted-foreground">
-      {type === "QUIZ" ? "Quiz" : "Assignment"} content — assessment authoring and delivery arrive in
-      Phase 10. This lesson still holds its place in the order.
-    </p>
-  );
-}
-
 export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
   const withdrawn = lesson.withdrawnAt != null;
   const first = resources[0];
@@ -219,8 +210,14 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
     }
 
     case "QUIZ":
+      body = <BodyProse html={lesson.body ?? ""} />;
+      break;
     case "ASSIGNMENT": {
-      body = <Placeholder type={lesson.type} />;
+      // The submission panel itself is a sibling client island rendered by
+      // the page (`AssignmentSubmissionPanel`, 10-14 Task 2), matching how
+      // `QuizAttemptPanel` sits beside this same `QUIZ` case above — this
+      // branch only ever owns the lesson's own authored body text.
+      body = <BodyProse html={lesson.body ?? ""} />;
       break;
     }
 

@@ -33,6 +33,11 @@ import {
   type AttendanceStateValue,
 } from "./attendance-component";
 import { cohortResourceScope } from "./cohort-scope";
+import {
+  loadLearnerCourseStructure as liveLoadLearnerCourseStructure,
+  type LearnerCourseStructure,
+  type OwnEnrolmentSnapshot,
+} from "./learner-access";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 
@@ -51,8 +56,40 @@ type WithPermission = ReturnType<typeof createWithPermission>;
  * will DELIBERATELY widen its column's type (e.g. `DeferredColumn | { kind:
  * "tracked"; pct: number }`); until then the roster is structurally incapable
  * of rendering a fake zero for these columns.
+ *
+ * Phase 12 (support tickets) joined the set via the Phase 9 learner
+ * dashboard (`enrolment-dashboard-service.ts`) — a fourth named gap for the
+ * same reason as the original three: no ticket-count engine exists yet, and
+ * a fake zero would read as "no tickets" rather than "not built yet".
+ *
+ * Plan 10-15 (Phase 10) did the DELIBERATE widening this comment promised,
+ * for exactly the two columns Phase 10 owns on the learner dashboard —
+ * `enrolment-dashboard-service.ts`'s `assessmentObligations` and `results`
+ * fields, each now typed `DeferredColumn | { kind: "tracked"; ... }`
+ * (`AssessmentObligationsColumn` / `ResultsColumn`, defined there), backed by
+ * `learner-results-service.ts`'s `getOwnAssessmentObligations`/`getOwnResults`.
+ * Follows DD-32's Progress-column precedent exactly: `DeferredColumn` itself
+ * is UNCHANGED here, and an unpinned cohort's card still gets the deferred
+ * inhabitant (no computable obligation set), mirroring Progress's own
+ * `"unpinned"` branch. This roster file's OWN `RosterRow.assessment` /
+ * `.completion` columns (below) are a separate staff-facing named gap, not
+ * touched by plan 10-15 — they stay deferred until their own owning plan
+ * widens them. Certificate (Phase 11) and Tickets (Phase 12) remain deferred
+ * on the dashboard too; only the two Phase-10-owned columns moved.
  */
-export type DeferredColumn = { kind: "deferred"; phase: 9 | 10 | 11 };
+export type DeferredColumn = { kind: "deferred"; phase: 9 | 10 | 11 | 12 };
+
+/**
+ * D-18 amended by DD-32 (Phase 9, plan 09-13): the Progress column now has a
+ * SECOND inhabitant — `{ kind: "tracked"; completed: number; total: number }`
+ * — for a cohort whose offer is pinned. `PROGRESS_DEFERRED` below is no
+ * longer the only progress value; it now applies ONLY to an unpinned cohort,
+ * which still has no computable obligation set (an authoring anomaly, not a
+ * missing engine) — a named gap is still the honest answer there. Assessment
+ * and completion are untouched; they stay deferred to Phases 10 and 11 per
+ * this type's own comment above.
+ */
+export type TrackedProgress = { kind: "tracked"; completed: number; total: number };
 
 const PROGRESS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 9 };
 const ASSESSMENT_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
@@ -88,7 +125,8 @@ export type RosterRow = {
   /** The discriminated attendance component — `{ kind: "no-rule" }` when the
    *  cohort has no `attendanceThresholdPct` (D-20), never a fake `0%`. */
   attendance: AttendanceComponent;
-  progress: DeferredColumn;
+  /** DD-32 — `TrackedProgress` for a pinned cohort, `DeferredColumn` (phase 9) for an unpinned one. */
+  progress: DeferredColumn | TrackedProgress;
   assessment: DeferredColumn;
   completion: DeferredColumn;
 };
@@ -137,6 +175,14 @@ type EnrolmentAuditRow = {
   actor: { name: string } | null;
 };
 
+/** DD-32 — the narrow `LessonProgress` slice this file needs: which enrolment
+ *  completed which lesson, nothing else (never the completion timestamp or
+ *  source; that detail belongs to the per-learner page, plan 09-13 Task 3). */
+type LessonProgressRosterRow = {
+  enrolmentId: string;
+  lessonId: string;
+};
+
 export type RosterStore = {
   cohort: {
     findUnique(args: Record<string, unknown>): Promise<CohortRosterRow | null>;
@@ -152,6 +198,9 @@ export type RosterStore = {
   };
   auditEvent: {
     findMany(args: Record<string, unknown>): Promise<EnrolmentAuditRow[]>;
+  };
+  lessonProgress: {
+    findMany(args: Record<string, unknown>): Promise<LessonProgressRosterRow[]>;
   };
 };
 
@@ -195,6 +244,11 @@ const AUDIT_SELECT = {
   actor: { select: { name: true } },
 } as const;
 
+const PROGRESS_SELECT = {
+  enrolmentId: true,
+  lessonId: true,
+} as const;
+
 // ---------------------------------------------------------------------------
 // Shared read: the cohort's roster inputs in a bounded number of queries
 // ---------------------------------------------------------------------------
@@ -204,6 +258,7 @@ type RosterInputs = {
   enrolments: EnrolmentRosterRow[];
   sessions: SessionRosterRow[];
   records: AttendanceRosterRow[];
+  progress: LessonProgressRosterRow[];
 };
 
 async function loadRosterInputs(
@@ -236,7 +291,14 @@ async function loadRosterInputs(
       })
     : [];
 
-  return { cohort, enrolments, sessions, records };
+  const progress = enrolmentIds.length
+    ? await store.lessonProgress.findMany({
+        where: { enrolmentId: { in: enrolmentIds } },
+        select: PROGRESS_SELECT,
+      })
+    : [];
+
+  return { cohort, enrolments, sessions, records, progress };
 }
 
 /** One `AttendanceComponentEntry` per session for `enrolmentId` — the real
@@ -596,6 +658,17 @@ export type RosterServiceDeps = {
   store: RosterStore;
   resolveCohortScope: (cohortId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
+  /**
+   * DD-32 — resolves the cohort's pinned course structure so the Progress
+   * column can count required lessons for real. Injected (rather than
+   * calling `learner-access.ts`'s live singleton directly) so
+   * `tests/roster-service.test.ts` can prove both the pinned and unpinned
+   * branches against a fake, matching `resolveCohortScope`'s own injection
+   * shape. The production binding at the bottom of this file wires the real
+   * `loadLearnerCourseStructure` — it only ever reads `enrolment.cohortId`,
+   * so passing it a structural stand-in carrying just that field is safe.
+   */
+  resolvePinnedStructure: (cohortId: string) => Promise<LearnerCourseStructure>;
   now?: () => Date;
 };
 
@@ -618,6 +691,34 @@ export function createRosterService(deps: RosterServiceDeps) {
     const inputs = await loadRosterInputs(store, input.cohortId);
     const threshold = inputs.cohort?.attendanceThresholdPct ?? null;
     const instructors = (inputs.cohort?.instructors ?? []).map((ci) => ci.user.name);
+
+    // DD-32 — required-lesson ids from the PINNED structure, never the live
+    // tree (an authoring edit after publication must not move the goalposts
+    // on an already-enrolled cohort). `null` means "unpinned": the column
+    // stays the D-18 named deferred gap, never a fake `0 of 0`.
+    const structure = await deps.resolvePinnedStructure(input.cohortId);
+    const requiredLessonIds: Set<string> | null =
+      structure.kind === "structure"
+        ? new Set(
+            structure.courses.flatMap((course) =>
+              course.modules.flatMap((mod) =>
+                mod.lessons.filter((lesson) => lesson.required).map((lesson) => lesson.id),
+              ),
+            ),
+          )
+        : null;
+
+    const progressCountByEnrolment = new Map<string, number>();
+    if (requiredLessonIds) {
+      for (const row of inputs.progress) {
+        if (requiredLessonIds.has(row.lessonId)) {
+          progressCountByEnrolment.set(
+            row.enrolmentId,
+            (progressCountByEnrolment.get(row.enrolmentId) ?? 0) + 1,
+          );
+        }
+      }
+    }
 
     const enrolmentIds = inputs.enrolments.map((e) => e.id);
     const auditRows = enrolmentIds.length
@@ -663,7 +764,13 @@ export function createRosterService(deps: RosterServiceDeps) {
           thresholdPct: threshold,
           entries: entriesFor(enrolment.id, inputs.sessions, inputs.records),
         }),
-        progress: PROGRESS_DEFERRED,
+        progress: requiredLessonIds
+          ? {
+              kind: "tracked",
+              completed: progressCountByEnrolment.get(enrolment.id) ?? 0,
+              total: requiredLessonIds.size,
+            }
+          : PROGRESS_DEFERRED,
         assessment: ASSESSMENT_DEFERRED,
         completion: COMPLETION_DEFERRED,
       };
@@ -709,6 +816,11 @@ const built = createRosterService({
   store: prisma as unknown as RosterStore,
   resolveCohortScope: cohortResourceScope,
   withPermission: liveWithPermission,
+  // DD-32 — only `enrolment.cohortId` is ever read by `loadLearnerCourseStructure`,
+  // so a structural stand-in carrying just that field is safe here; see the
+  // `resolvePinnedStructure` doc comment on `RosterServiceDeps` above.
+  resolvePinnedStructure: (cohortId) =>
+    liveLoadLearnerCourseStructure({ cohortId } as unknown as OwnEnrolmentSnapshot),
 });
 
 export const loadCohortRoster = built.loadCohortRoster;

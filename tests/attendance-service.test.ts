@@ -141,6 +141,7 @@ function harness(opts?: {
   );
   const events: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
+  const recalculateCompletionCalls: Array<{ enrolmentId: string; now: Date; tx: unknown }> = [];
 
   const now = opts?.now ?? DURING;
 
@@ -309,9 +310,13 @@ function harness(opts?: {
     },
     withPermission,
     now: () => now,
+    recalculateCompletion: (async (tx: unknown, args: { enrolmentId: string; now: Date }) => {
+      recalculateCompletionCalls.push({ enrolmentId: args.enrolmentId, now: args.now, tx });
+      return { kind: "evaluated", results: [] };
+    }) as never,
   });
 
-  return { service, sessions, cohorts, enrolments, records, events, audits };
+  return { service, sessions, cohorts, enrolments, records, events, audits, recalculateCompletionCalls };
 }
 
 const changedEvents = (events: Array<Record<string, unknown>>) =>
@@ -951,5 +956,85 @@ describe("loadSessionRegister", () => {
     const row = rows.find((r) => r.enrolmentId === "enr-1")!;
     expect(row.isCorrection).toBe(true);
     expect(row.windowClosesAt).toEqual(WINDOW_CLOSES_AT);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-11 — the reactive completion-recalculation trigger
+// ---------------------------------------------------------------------------
+
+describe("D-11 — recalculateCompletion is called inside the same transaction", () => {
+  it("markAttendance calls recalculateCompletion once, with the same enrolmentId and the same tx object the attendance upsert was written through", async () => {
+    const { service, recalculateCompletionCalls } = harness({ now: DURING });
+    await service.markAttendance({
+      sessionId: "ses-1",
+      enrolmentId: "enr-1",
+      state: "PRESENT",
+    });
+    expect(recalculateCompletionCalls).toHaveLength(1);
+    expect(recalculateCompletionCalls[0].enrolmentId).toBe("enr-1");
+    expect(recalculateCompletionCalls[0].tx).toBeDefined();
+  });
+
+  it("recalculateCompletion still runs when the cohort has no attendance threshold (required-lessons rule always applies)", async () => {
+    const { service, recalculateCompletionCalls } = harness({
+      now: DURING,
+      cohorts: [coh({ attendanceThresholdPct: null })],
+    });
+    await service.markAttendance({
+      sessionId: "ses-1",
+      enrolmentId: "enr-1",
+      state: "PRESENT",
+    });
+    expect(recalculateCompletionCalls).toHaveLength(1);
+  });
+
+  it("saveSessionAttendance calls recalculateCompletion exactly once per changed enrolment", async () => {
+    const { service, recalculateCompletionCalls } = harness({ now: DURING, enrolments: roster() });
+    await service.saveSessionAttendance({
+      sessionId: "ses-1",
+      entries: [
+        { enrolmentId: "enr-1", state: "PRESENT" },
+        { enrolmentId: "enr-2", state: "ABSENT" },
+        { enrolmentId: "enr-3", state: "LATE" },
+      ],
+    });
+    expect(recalculateCompletionCalls).toHaveLength(3);
+    expect(recalculateCompletionCalls.map((c) => c.enrolmentId).sort()).toEqual([
+      "enr-1",
+      "enr-2",
+      "enr-3",
+    ]);
+  });
+
+  it("saveSessionAttendance does not call recalculateCompletion for unchanged entries", async () => {
+    const { service, recalculateCompletionCalls } = harness({
+      now: DURING,
+      enrolments: roster(),
+      records: [rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT" })],
+    });
+    await service.saveSessionAttendance({
+      sessionId: "ses-1",
+      entries: [
+        { enrolmentId: "enr-1", state: "PRESENT" },
+        { enrolmentId: "enr-2", state: "ABSENT" },
+      ],
+    });
+    expect(recalculateCompletionCalls).toHaveLength(1);
+    expect(recalculateCompletionCalls[0].enrolmentId).toBe("enr-2");
+  });
+
+  it("a post-window correction still triggers recalculation", async () => {
+    const { service, recalculateCompletionCalls } = harness({
+      now: JUST_AFTER_CLOSE,
+      records: [rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "ABSENT" })],
+    });
+    await service.markAttendance({
+      sessionId: "ses-1",
+      enrolmentId: "enr-1",
+      state: "PRESENT",
+      reason: "medical note produced",
+    });
+    expect(recalculateCompletionCalls).toHaveLength(1);
   });
 });

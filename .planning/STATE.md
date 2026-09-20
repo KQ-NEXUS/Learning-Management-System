@@ -1,20 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-current_phase: 08
-current_phase_name: Finance Reconciliation, Dashboards & Reporting Exports
-status: verifying
-stopped_at: Phase 08 implementation complete; two human UAT checks pending
-last_updated: "2026-09-17T03:19:52Z"
-last_activity: 2026-09-17
-last_activity_desc: All twelve Phase 08 plans summarized; segmented regression, typecheck, lint, and build passed; deployed lifecycle and visual UAT pending
-state_head: ce21d6a7fdf8fd529d31497cf13a79fbffa0b7ad
+milestone_name: milestone
+status: ready_to_plan
+stopped_at: Phase 10 complete (17/17) — ready to discuss Phase 11
+last_updated: 2026-09-16T14:04:36.004Z
+last_activity: 2026-09-16 -- Phase 10 walkthrough passed and Plan 10-17 completed
 progress:
   total_phases: 16
-  completed_phases: 2
-  total_plans: 131
-  completed_plans: 105
-milestone_name: milestone
+  completed_phases: 10
+  total_plans: 136
+  completed_plans: 136
+  percent: 63
 ---
 
 # Project State
@@ -24,33 +21,29 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 08 — Finance Reconciliation, Dashboards & Reporting Exports
+**Current focus:** Phase 11 — certificates & completion lifecycle
 
 ## Current Position
 
-Phase: 08 (Finance Reconciliation, Dashboards & Reporting Exports) — VERIFYING
-Status: All 12 plans implemented; `08-VERIFICATION.md` is `human_needed` with two pending checks in `08-UAT.md`
-Last activity: 2026-09-17 -- all 162 test files passed in segmented runs; typecheck, lint, and build passed
+Phase: 11
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-16
 
-Progress: [████░░░░░░] 44% (7/16 numbered phases complete: 1, 2, 3, 4, 5, 6, 7; Phase 04.1 also complete)
+Progress: Phase 10 17/17 plans complete; milestone 136/136 planned plans complete; 10/16 phases complete.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed (via GSD workflow): 0
-- Average duration: N/A
-- Total execution time: N/A
-
-Note: Phase 1's work (foundation, authorization core, Courses reference slice — 84 tests across 10 files) was implemented directly by the dev team prior to this roadmap's creation, not tracked through GSD plan execution. It is marked Complete in ROADMAP.md on the strength of `.planning/codebase/*.md` evidence, not plan-completion timing.
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
 | 1. Foundation | Retroactive | - | - |
 | 2 | 8 | - | - |
 | 06 | 9 | - | - |
+| 10 | 17 | - | - |
 
 **Recent Trend:**
 
@@ -165,6 +158,8 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 6/06-04]: tests/checkout-intent.integration.test.ts (4 cases, real-Postgres register->verify->sign-in->order round trip) could not run in this execution sandbox -- Docker unavailable, same gate 06-01/06-02/06-03 hit. Needs a Docker-enabled environment to actually execute before REG-02's real-Postgres proof is complete.
 - [Phase 6/06-07]: tests/checkout-hold-race.integration.test.ts and tests/checkout-webhook.integration.test.ts were updated to compile against 06-07's extended initiateStripePayment(actor, orderId, consent) signature and new user dep -- both remain Docker-BLOCKED in this sandbox (same gate as above), so the D-13-aware fixture change and the transactional PolicyAcceptance write were proven only at the unit level (tests/checkout-service.test.ts), not against a real Postgres transaction. Needs a Docker-enabled environment to confirm.
 - [Phase 6/06-09]: Phase 6 code is complete across all nine plans but three real-Postgres integration test files (checkout-webhook.integration.test.ts, checkout-hold-race.integration.test.ts, checkout-intent.integration.test.ts) have never run to completion in any sandboxed execution of this phase (Docker unavailable throughout), and the consolidated five-part human UAT walkthrough (06-03/06-05/06-07/06-08/06-09) is still outstanding -- both needed before Phase 6's UAT can close. See 06-09-SUMMARY.md.
+- [Phase 9/09-14]: All 14 plans executed, all automated gates green (including a real production bug found, fixed, then further hardened after code review — see 09-14-SUMMARY.md deviations 2-3). The developer independently ran the final fix's test suite themselves (186 focused tests + both real-Postgres integration tests + tsc/eslint) and confirmed steps 1, 6, 8, 9 of the walkthrough in the browser. Still open: three UI-SPEC backstops (long-title wrap, video auto-completion/offline resilience, one long-form-text wrapping item) blocked by seed-data gaps (no long lesson titles, no real uploaded video, no realistic long-form copy) — not code defects. Also open: live browser confirmation of a session's meeting-link opening transition (a throwaway test session was seeded 2026-09-15 to make this checkable; delete `ScheduledSession` id `cmu2iy9mr0001ulxwgbg7na3z` after use if it wasn't already removed). Amara's cohort (cohort `cmtn3eo6j001huliwsyaw1sw4`, March) was never offered by either course's staff migration dialog and remains unpinned to any publication — a data-health gap worth investigating if that migration-dialog eligibility logic is ever touched.
+- [Phase 9/09-08]: `ProgressMeter.tsx`'s caption renders BELOW the progress bar with only an "N of M lessons complete" string — `09-UI-SPEC.md` §5's token rules for `--teal-fill`/`--teal-text` and §7.1's copy table both specify the caption sits BESIDE the bar, and §5's token rule additionally names an actual percentage figure ("62% complete") that the current implementation never renders at all. Found during the 09-14 human walkthrough (not part of that plan's own scope to fix), deferred by explicit user decision on 2026-09-15 rather than fixed in-session. Note the UI-SPEC itself is internally inconsistent about the caption's exact text format ("62% complete" in §5 vs "{N} of {M} required lessons complete" in §7.1) — resolve that ambiguity with the user before implementing either the layout or content fix.
 
 ## Deferred Items
 
@@ -176,6 +171,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-16T13:41:24+01:00
-Stopped at: Plan 08-07 worker implementation and real-PostgreSQL verification in progress
-Resume file: .planning/phases/08-finance-reconciliation-dashboards-reporting-exports/08-07-PLAN.md
+Last session: 2026-09-16T00:31:00.000Z
+Stopped at: Phase 10 plan 10-17 Chrome walkthrough partially complete; uploads and remaining checks blocked
+Resume file: .planning/phases/10-assessment-quizzes-assignments-grading/.continue-here.md

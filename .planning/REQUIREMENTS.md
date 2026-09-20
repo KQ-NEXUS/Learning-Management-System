@@ -86,8 +86,8 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 - [ ] **LRN-01**: Each learner sees an enrolment dashboard with next action, progress, scheduled sessions, assessment obligations, results, tickets, and certificate state — own records only.
 - [ ] **LRN-02**: Published Modules and Lessons render in defined order with prerequisite locks where configured; required sequencing is enforced server-side; locked content explains the unmet condition.
 - [ ] **LRN-03**: Supported lesson content is delivered securely and accessibly — text, images, permitted files, uploaded video, embeds, links — with appropriate labels, keyboard behavior, and authorized file access.
-- [ ] **LRN-04**: Learner progress is tracked using completion rules appropriate to each content type; progress is idempotent, attributable, timestamped, recalculable, and not advanced by unauthorized requests.
-- [ ] **LRN-05**: Manual Lesson completion is allowed only where the published rule permits it, only by the enrolled learner in the valid access window, reversible only per policy.
+- [x] **LRN-04**: Learner progress is tracked using completion rules appropriate to each content type; progress is idempotent, attributable, timestamped, recalculable, and not advanced by unauthorized requests.
+- [x] **LRN-05**: Manual Lesson completion is allowed only where the published rule permits it, only by the enrolled learner in the valid access window, reversible only per policy.
 - [ ] **LRN-06**: Scheduled-session details and meeting links are provided to eligible learners; links are hidden before the visibility window and from unenrolled users; time-zone/access guidance is clear.
 - [ ] **LRN-07**: Course and Programme completion is calculated from versioned rules and current learner evidence; the calculation identifies each satisfied/unmet rule, handles corrections, and records completion time and rule version.
 
@@ -100,13 +100,13 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Quizzes, Assignments, Grading, and Feedback (ASM)
 
-- [ ] **ASM-01**: Quizzes are created with questions, options/answers, marks, pass threshold, attempt limit, availability, and feedback behavior; draft validation catches incomplete questions; published settings are versioned.
-- [ ] **ASM-02**: Supported objective Quiz questions are scored automatically with reproducible calculation; attempts store start/submit time, answers, version, result, status.
-- [ ] **ASM-03**: Assignments are created with instructions, due date, permitted file types/size, grading scale, and resubmission policy; published constraints apply consistently to server validation.
-- [ ] **ASM-04**: Assignment submissions are accepted and issue a durable receipt; a successful submission stores file metadata/reference, learner, assessment version, time, attempt, receipt ID; failures never display false success.
-- [ ] **ASM-05**: Authorized graders can view in-scope submissions, record grades/feedback, save drafts, and release results; learners cannot see draft grades; release is explicit and attributed.
-- [ ] **ASM-06**: An authorized grade override/correction requires a mandatory reason; original/revised value, actor, reason, time, and completion/certificate impact are preserved.
-- [ ] **ASM-07**: Learners see released results, feedback, attempt history, and unmet pass requirements; only released/permitted details appear.
+- [x] **ASM-01**: Quizzes are created with questions, options/answers, marks, pass threshold, attempt limit, availability, and feedback behavior; draft validation catches incomplete questions; published settings are versioned.
+- [x] **ASM-02**: Supported objective Quiz questions are scored automatically with reproducible calculation; attempts store start/submit time, answers, version, result, status.
+- [x] **ASM-03**: Assignments are created with instructions, due date, permitted file types/size, grading scale, and resubmission policy; published constraints apply consistently to server validation.
+- [x] **ASM-04**: Assignment submissions are accepted and issue a durable receipt; a successful submission stores file metadata/reference, learner, assessment version, time, attempt, receipt ID; failures never display false success.
+- [x] **ASM-05**: Authorized graders can view in-scope submissions, record grades/feedback, save drafts, and release results; learners cannot see draft grades; release is explicit and attributed.
+- [x] **ASM-06**: An authorized grade override/correction requires a mandatory reason; original/revised value, actor, reason, time, and completion/certificate impact are preserved.
+- [x] **ASM-07**: Learners see released results, feedback, attempt history, and unmet pass requirements; only released/permitted details appear.
 
 ### Certificates and Verification (CRD)
 
@@ -255,17 +255,17 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | LRN-01 | Phase 9 | Pending |
 | LRN-02 | Phase 9 | Pending |
 | LRN-03 | Phase 9 | Pending |
-| LRN-04 | Phase 9 | Pending |
-| LRN-05 | Phase 9 | Pending |
+| LRN-04 | Phase 9 | Complete |
+| LRN-05 | Phase 9 | Complete |
 | LRN-06 | Phase 9 | Pending |
 | LRN-07 | Phase 9 | Pending |
-| ASM-01 | Phase 10 | Pending |
-| ASM-02 | Phase 10 | Pending |
-| ASM-03 | Phase 10 | Pending |
-| ASM-04 | Phase 10 | Pending |
-| ASM-05 | Phase 10 | Pending |
-| ASM-06 | Phase 10 | Pending |
-| ASM-07 | Phase 10 | Pending |
+| ASM-01 | Phase 10 | Complete |
+| ASM-02 | Phase 10 | Complete |
+| ASM-03 | Phase 10 | Complete |
+| ASM-04 | Phase 10 | Complete |
+| ASM-05 | Phase 10 | Complete |
+| ASM-06 | Phase 10 | Complete |
+| ASM-07 | Phase 10 | Complete |
 | CRD-01 | Phase 11 | Pending |
 | CRD-02 | Phase 11 | Pending |
 | CRD-03 | Phase 11 | Pending |

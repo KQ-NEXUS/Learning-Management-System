@@ -118,6 +118,14 @@ enum GradeStatus {
   RELEASED
 }
 
+// D-02 — which Attempt's score is the learner-visible, pass/fail-deciding
+// one when an Assessment's maxAttempts > 1.
+enum AttemptGradingMethod {
+  HIGHEST
+  LATEST
+  AVERAGE
+}
+
 enum CompletionScope {
   COURSE
   PROGRAMME
@@ -710,10 +718,11 @@ model Lesson {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  module     Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  assessment Assessment?      @relation(fields: [assessmentId], references: [id])
-  resources  LessonResource[]
-  progress   LessonProgress[]
+  module        Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  assessment    Assessment?           @relation(fields: [assessmentId], references: [id])
+  resources     LessonResource[]
+  progress      LessonProgress[]
+  watchProgress LessonWatchProgress[]
 
   @@unique([moduleId, position])
   @@index([moduleId])
@@ -791,6 +800,14 @@ model Cohort {
   // seat is only counted when the enrolment reaches ACTIVE. The non-negative
   // CHECK lives in prisma/sql/003_cohort_operations.sql.
   holdMinutes Int? @default(30)
+
+  // D-01/D-02 — self-paced access-duration window, read ONLY when
+  // deliveryMode = SELF_PACED (INSTRUCTOR_LED and BLENDED keep using the
+  // Cohort-wide startsAt/endsAt above). `null` means unlimited access,
+  // mirroring the holdMinutes nullable-duration convention. A set value is a
+  // day count measured from the learner's own Enrolment.activatedAt, not
+  // from this Cohort's startsAt.
+  accessDurationDays Int?
 
   priceMinor Int
   currency   String @default("NGN")
@@ -981,6 +998,7 @@ model Enrolment {
   transferredTo   Enrolment[] @relation("EnrolmentTransfer")
 
   lessonProgress LessonProgress[]
+  watchProgress  LessonWatchProgress[]
   attendance     AttendanceRecord[]
   attempts       Attempt[]
   submissions    Submission[]
@@ -1029,6 +1047,26 @@ model LessonProgress {
   @@unique([enrolmentId, lessonId])
 }
 
+// LRN-04/D-08/D-09 — the running video watch position, written periodically
+// as a learner plays a VIDEO lesson. A row here is NOT a completion — that
+// remains exactly LessonProgress's meaning. This table only carries the
+// in-progress position so a learner resuming a video does not restart the
+// 90% auto-complete threshold from zero.
+model LessonWatchProgress {
+  id              String   @id @default(cuid())
+  enrolmentId     String
+  lessonId        String
+  secondsWatched  Int      @default(0)
+  durationSeconds Int?
+  percentWatched  Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  lesson    Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([enrolmentId, lessonId])
+}
+
 // LRN-07 — records which rule version was satisfied and what evidence
 // satisfied it, so a later correction can be reasoned about.
 model CompletionRecord {
@@ -1069,6 +1107,9 @@ model Assessment {
   maxAttempts Int?
   passMark    Int?
   totalMarks  Int?
+  // D-02 — selects which Attempt's score is the learner-visible,
+  // pass/fail-deciding one when maxAttempts > 1.
+  attemptGradingMethod AttemptGradingMethod @default(HIGHEST)
 
   // Assignment settings — ASM-03
   allowedFileTypes  String[]

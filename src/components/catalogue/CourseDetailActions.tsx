@@ -284,6 +284,12 @@ export function CourseDetailActions({
         )}
 
         <a
+          href={`/staff/courses/${courseId}/assessments`}
+          className={BTN}
+        >
+          Assessments
+        </a>
+        <a
           href={`/staff/courses/${courseId}/arrange`}
           className={BTN}
         >

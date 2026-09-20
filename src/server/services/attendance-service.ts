@@ -61,6 +61,11 @@ import {
   type DomainEventTxClient,
 } from "@/server/services/domain-event-service";
 import { createCohortScopeResolvers } from "@/server/services/cohort-scope";
+import {
+  recalculateCompletion,
+  type CompletionServiceTxClient,
+  type CompletionRecalculationResult,
+} from "@/server/services/completion-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 type Audit = (entry: ResourceAuditEntry) => Promise<void>;
@@ -267,6 +272,16 @@ export type AttendanceServiceDeps = {
   sessionScope: (sessionId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   now?: () => Date;
+  /**
+   * D-11 — injected exactly like `writeEvent`/`audit` so the existing unit
+   * tests keep running without a database. Defaults to the live
+   * `completion-service.ts` export where the live singleton is built at the
+   * bottom of this file.
+   */
+  recalculateCompletion: (
+    tx: CompletionServiceTxClient,
+    args: { enrolmentId: string; now: Date },
+  ) => Promise<CompletionRecalculationResult>;
 };
 
 // ---------------------------------------------------------------------------
@@ -404,6 +419,15 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
         component,
         actorId,
       },
+    });
+
+    // D-11 — recalculate completion reactively, inside the SAME transaction
+    // as the attendance write. This is a direct same-tx call, not an outbox
+    // subscription: the "attendance.changed" event above remains Phase 13's
+    // to drain, and this call never reads it back.
+    await deps.recalculateCompletion(tx as unknown as CompletionServiceTxClient, {
+      enrolmentId,
+      now: now(),
     });
 
     return { before, after: state, beforeNote: existing?.note ?? null, afterNote: note };
@@ -724,6 +748,7 @@ export function createPrismaBackedAttendanceService(
   client: AnyPrisma,
   withPermission: WithPermission,
   audit: Audit = liveAudit,
+  recalculateCompletionDep: AttendanceServiceDeps["recalculateCompletion"] = recalculateCompletion,
 ) {
   const scopeResolvers = createCohortScopeResolvers({
     cohort: client.cohort,
@@ -775,6 +800,7 @@ export function createPrismaBackedAttendanceService(
     runInTransaction: (fn) => client.$transaction((tx: unknown) => fn(tx as AttendanceTxClient)),
     sessionScope: scopeResolvers.sessionCohortScope,
     withPermission,
+    recalculateCompletion: recalculateCompletionDep,
   });
 }
 
