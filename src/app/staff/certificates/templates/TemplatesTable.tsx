@@ -141,12 +141,20 @@ export function TemplatesTable({
         title="Certificate templates"
         headerActions={
           canCreate ? (
-            <Link
-              href="/staff/certificates/templates/new"
-              className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
-            >
-              New template
-            </Link>
+            <>
+              <Link
+                href="/staff/certificates/templates/from-design"
+                className="inline-flex min-h-10 items-center rounded-md border border-input-border bg-surface px-4 text-sm font-semibold text-foreground hover:bg-surface-2"
+              >
+                Upload existing design
+              </Link>
+              <Link
+                href="/staff/certificates/templates/new"
+                className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              >
+                New template
+              </Link>
+            </>
           ) : undefined
         }
         noun="templates"

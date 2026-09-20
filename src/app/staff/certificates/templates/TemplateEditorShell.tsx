@@ -42,6 +42,8 @@ export type TemplateEditorInitial = {
   name: string;
   layout: CertificateTemplateLayoutV1;
   readOnly: boolean;
+  /** Open with Save enabled and the unsaved-changes warning on, for a layout built before the editor opened. */
+  startDirty?: boolean;
 };
 
 type SaveResult = { ok: true } | { ok: false; message: string };
@@ -49,6 +51,8 @@ type CreateResult = { ok: true; id: string } | { ok: false; message: string };
 
 type Props = {
   initial: TemplateEditorInitial;
+  /** Private view links for images the template already has, keyed by `assetKey` (server-made). */
+  initialAssetPreviewUrls?: Record<string, string>;
   onSave?: (input: { id: string; name: string; layout: unknown }) => Promise<SaveResult>;
   onCreate?: (input: { name: string; layout: unknown }) => Promise<CreateResult>;
 };
@@ -104,6 +108,7 @@ const BTN_PRIMARY =
 
 export function TemplateEditorShell({
   initial,
+  initialAssetPreviewUrls,
   onSave = saveTemplateLayoutAction,
   onCreate = createTemplateAction,
 }: Props) {
@@ -114,14 +119,15 @@ export function TemplateEditorShell({
   const [orientation, setOrientation] = useState(initial.layout.orientation);
   const [elements, setElements] = useState<CertificateElementV1[]>(initial.layout.elements);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(initial.startDirty ?? false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
-  // Transient client-only preview URLs (`URL.createObjectURL`) keyed by the
-  // real `assetKey` a just-completed upload returned — never part of the
-  // persisted layout, purely so the canvas can show what was just uploaded
-  // without a template-asset download endpoint.
-  const [assetPreviewUrls, setAssetPreviewUrls] = useState<Record<string, string>>({});
+  // Preview URLs keyed by `assetKey`, never part of the persisted layout: server-made private
+  // links for images the template already has (`initialAssetPreviewUrls`), plus a browser blob
+  // URL (`URL.createObjectURL`) for each image uploaded in this session.
+  const [assetPreviewUrls, setAssetPreviewUrls] = useState<Record<string, string>>(
+    initialAssetPreviewUrls ?? {},
+  );
 
   const readOnly = initial.readOnly;
   const { w, h } = pageDimensions(pageSize, orientation);

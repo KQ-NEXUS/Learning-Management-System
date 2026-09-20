@@ -348,6 +348,34 @@ export async function getObjectBytes(key: string): Promise<Uint8Array> {
   return result.Body.transformToByteArray();
 }
 
+/** How long a template-image preview link stays valid: long enough to keep an editor open. */
+const TEMPLATE_ASSET_VIEW_TTL_SECONDS = 300;
+
+/**
+ * Creates a short-lived, inline view link for one stored template image, so the template editor
+ * can show a design it has already saved. It signs only keys inside the FINAL template-asset
+ * folder: not staged uploads, generated certificates, submissions or anything else, and not a key
+ * that tries to climb out with `..`. Callers authorize (`certificates.manage`) before asking.
+ */
+export async function presignTemplateAssetViewUrl(input: { key: string }): Promise<string> {
+  const prefix = "certificate-template-assets/";
+  if (
+    !input.key.startsWith(prefix) ||
+    input.key.length === prefix.length ||
+    input.key.split("/").some((part) => part === "..")
+  ) {
+    throw new Error("Only a stored certificate template image can be previewed.");
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: input.key,
+    ResponseContentDisposition: "inline",
+  });
+
+  return getSignedUrl(presignClient, command, { expiresIn: TEMPLATE_ASSET_VIEW_TTL_SECONDS });
+}
+
 /**
  * Presigns a template image upload after applying the shared IMAGE MIME and
  * size rules. The asset stays staged until the existing generic inspect and

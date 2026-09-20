@@ -28,6 +28,7 @@ const {
   finalTemplateAssetKeyFor,
   presignCertificateObjectUrl,
   presignTemplateAssetUploadUrl,
+  presignTemplateAssetViewUrl,
   putGeneratedCertificateObject,
 } = await import("@/server/services/storage-service");
 
@@ -109,6 +110,34 @@ describe("certificate and template-asset presigning", () => {
       ResponseContentType: "application/pdf",
     });
     expect(options).toEqual({ expiresIn: 60 });
+  });
+
+  it("presigns a short-lived inline view of a stored template image", async () => {
+    mockGetSignedUrl.mockResolvedValue("https://storage.example/template-view");
+    await expect(
+      presignTemplateAssetViewUrl({ key: "certificate-template-assets/tpl-1/opaque" }),
+    ).resolves.toBe("https://storage.example/template-view");
+
+    const [, command, options] = mockGetSignedUrl.mock.calls[0];
+    expect(command).toBeInstanceOf(GetObjectCommand);
+    expect(command.input).toMatchObject({
+      Bucket: "lms-private",
+      Key: "certificate-template-assets/tpl-1/opaque",
+      ResponseContentDisposition: "inline",
+    });
+    expect(options).toEqual({ expiresIn: 300 });
+  });
+
+  it.each([
+    "certificates/cert-1/opaque",
+    "certificate-template-asset-uploads/tpl-1/opaque",
+    "submissions/sub-1/opaque",
+    "certificate-template-assets/../certificates/cert-1/opaque",
+    "certificate-template-assets",
+    "",
+  ])("refuses to sign a view of %j, which is not a stored template image", async (key) => {
+    await expect(presignTemplateAssetViewUrl({ key })).rejects.toThrow();
+    expect(mockGetSignedUrl).not.toHaveBeenCalled();
   });
 
   it("presigns an allowed raster image upload with its declared length", async () => {

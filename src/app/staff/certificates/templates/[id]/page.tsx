@@ -3,6 +3,7 @@ import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { certificateTemplateService } from "@/server/services/certificate-template-service";
 import { parseCertificateTemplateLayout } from "@/server/services/certificate-template-layout";
 import { TemplateEditorShell } from "../TemplateEditorShell";
+import { resolveTemplateAssetPreviews } from "../asset-previews";
 
 /**
  * The template editor, editing an existing (or archived, read-only) template
@@ -33,14 +34,20 @@ export default async function CertificateTemplateEditorPage({
   }
   if (!template) notFound();
 
+  const layout = parseCertificateTemplateLayout(template.layout);
+  // Show the template's saved images in the editor. Only reached once `get` above has authorized
+  // the actor to open this template.
+  const assetPreviewUrls = await resolveTemplateAssetPreviews(layout);
+
   return (
     <TemplateEditorShell
       initial={{
         id: template.id,
         name: template.name,
-        layout: parseCertificateTemplateLayout(template.layout),
+        layout,
         readOnly: template.archivedAt !== null,
       }}
+      initialAssetPreviewUrls={assetPreviewUrls}
     />
   );
 }
