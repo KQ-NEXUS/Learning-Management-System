@@ -61,6 +61,10 @@
 import { prisma } from "@/server/db";
 import { recordAudit } from "@/server/services/audit-service";
 import {
+  correlateReconciliationEvidenceAsSystem,
+  syncReconciliationEvidenceAsSystem,
+} from "@/server/services/reconciliation-case-service";
+import {
   writeDomainEvent,
   type DomainEventTxClient,
 } from "@/server/services/domain-event-service";
@@ -166,6 +170,8 @@ export type ReconcilePaymentsDeps = {
   lookupPaystackActualSettlement: (providerIntentId: string) => Promise<ActualSettlement>;
   /** Injected so no test ever performs a real Stripe network call. */
   lookupStripeActualSettlement: (paymentIntentId: string) => Promise<ActualSettlement>;
+  syncReconciliationEvidence?: typeof syncReconciliationEvidenceAsSystem;
+  correlateReconciliationEvidence?: typeof correlateReconciliationEvidenceAsSystem;
   now?: () => Date;
 };
 
@@ -354,6 +360,30 @@ export function createReconcilePayments(deps: ReconcilePaymentsDeps) {
           reason: exceptionNote,
         });
 
+        const evidence = {
+          provider: attempt.provider,
+          gatewayFeeActualMinor: actual.gatewayFeeActualMinor,
+          schoolSettlementActualMinor: actual.schoolSettlementActualMinor,
+          platformGrossActualMinor: actual.platformGrossActualMinor,
+          platformNetActualMinor,
+          exceptionNote,
+        };
+        if (hasVariance && deps.syncReconciliationEvidence) {
+          await deps.syncReconciliationEvidence({
+            subject: "PAYMENT",
+            paymentAttemptId: attempt.id,
+            risk: "SETTLEMENT_VARIANCE",
+            evidence,
+          });
+        } else if (deps.correlateReconciliationEvidence) {
+          await deps.correlateReconciliationEvidence({
+            action: "payment.reconciled",
+            paymentAttemptId: attempt.id,
+            orderId: attempt.orderId,
+            evidence,
+          });
+        }
+
         reconciled += 1;
       } catch (err) {
         // A failed provider lookup (or any other per-row error) leaves the
@@ -379,6 +409,8 @@ const built = createReconcilePayments({
     prisma.$transaction((tx) => fn(tx as unknown as ReconcileTxClient)),
   lookupPaystackActualSettlement: fetchPaystackActualSettlement,
   lookupStripeActualSettlement: fetchStripeActualSettlement,
+  syncReconciliationEvidence: syncReconciliationEvidenceAsSystem,
+  correlateReconciliationEvidence: correlateReconciliationEvidenceAsSystem,
 });
 
 /**

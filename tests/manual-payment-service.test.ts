@@ -190,6 +190,7 @@ describe("confirmManualPayment — a valid confirmation (PAY-03, D-15, PAY-10)",
       orderId: "order-1",
       provider: "MANUAL",
       providerIntentId: "REF-001",
+      providerRef: "REF-001",
       amountMinor: 45_675_000,
       currency: "NGN",
       eventId: "manual:order-1:REF-001",
@@ -210,39 +211,33 @@ describe("confirmManualPayment — a valid confirmation (PAY-03, D-15, PAY-10)",
     });
   });
 
-  it("produces exactly one PaymentAttempt carrying the manual evidence and the confirming actor id", async () => {
+  it("delegates PaymentAttempt creation and manual evidence to the shared transaction", async () => {
     const h = harness();
     const service = createManualPaymentService(h.deps);
 
     await service.confirmManualPayment(VALID_INPUT);
 
-    expect(h.paymentAttempts).toHaveLength(1);
-    expect(h.paymentAttempts[0]).toMatchObject({
-      provider: "MANUAL",
-      manualChannel: "bank_transfer",
-      manualReference: "REF-001",
-      manualPaidAt: NOW,
-      manualEvidenceKey: "evidence/order-1/ref-001.pdf",
-      confirmedById: "user-1",
-      reason: VALID_INPUT.reason,
-      status: "PROCESSING",
+    expect(h.paymentAttempts).toHaveLength(0);
+    expect(h.activateCalls[0]).toMatchObject({
+      manualConfirmation: {
+        manualChannel: "bank_transfer",
+        manualReference: "REF-001",
+        manualPaidAt: NOW,
+        manualEvidenceKey: "evidence/order-1/ref-001.pdf",
+        confirmedById: "user-1",
+        reason: VALID_INPUT.reason,
+      },
     });
   });
 
-  it("recomputes the Order snapshot to the D-15 manual shape — zero gateway fee, provider MANUAL", async () => {
+  it("does not mutate the Order snapshot outside the shared transaction", async () => {
     const h = harness();
     const service = createManualPaymentService(h.deps);
 
     await service.confirmManualPayment(VALID_INPUT);
 
-    expect(h.orderUpdates).toHaveLength(1);
-    expect(h.orderUpdates[0].data).toMatchObject({
-      amountMinor: 45_675_000,
-      platformFeeMinor: 675_000,
-      gatewayFeeEstimateMinor: 0,
-      selectedProvider: "MANUAL",
-      schoolSettlementExpectedMinor: 45_000_000,
-    });
+    expect(h.orderUpdates).toHaveLength(0);
+    expect(h.activateCalls).toHaveLength(1);
   });
 
   it("throws OrderNotFoundError for a non-existent order", async () => {

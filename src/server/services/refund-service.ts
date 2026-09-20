@@ -37,6 +37,10 @@ import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
+import {
+  correlateReconciliationEvidenceAsSystem,
+  syncReconciliationEvidenceAsSystem,
+} from "@/server/services/reconciliation-case-service";
 import { orderCohortScope } from "@/server/services/cohort-scope";
 // Value imports only (PAY-09) — mirrors checkout-service.ts's own
 // `initiatePaystackTransaction`/`buildCheckoutSessionParams` precedent. No
@@ -314,6 +318,8 @@ export type RefundServiceDeps = {
   orderScope: (orderId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   audit: Audit;
+  syncReconciliationEvidence?: typeof syncReconciliationEvidenceAsSystem;
+  correlateReconciliationEvidence?: typeof correlateReconciliationEvidenceAsSystem;
   now?: () => Date;
 };
 
@@ -475,6 +481,33 @@ export function createRefundService(deps: RefundServiceDeps) {
       },
     });
 
+    const reconciliationEvidence = {
+      orderId: input.orderId,
+      paymentAttemptId: attempt.id,
+      refundId,
+      provider: attempt.provider,
+      amountMinor: input.amountMinor,
+      status,
+      providerRef,
+      providerOutcome,
+    };
+    if (status === "FAILED" && deps.syncReconciliationEvidence) {
+      await deps.syncReconciliationEvidence({
+        subject: "REFUND",
+        refundId,
+        risk: "MISSING_PROVIDER_DATA",
+        evidence: reconciliationEvidence,
+      });
+    } else if (deps.correlateReconciliationEvidence) {
+      await deps.correlateReconciliationEvidence({
+        action: "refund.recorded",
+        refundId,
+        paymentAttemptId: attempt.id,
+        orderId: input.orderId,
+        evidence: reconciliationEvidence,
+      });
+    }
+
     return { id: refundId, status, amountMinor: input.amountMinor, components };
   });
 
@@ -492,6 +525,7 @@ export function createPrismaBackedRefundService(
   client: AnyPrisma,
   withPermission: WithPermission,
   audit: Audit = recordAudit,
+  options: Pick<RefundServiceDeps, "syncReconciliationEvidence" | "correlateReconciliationEvidence"> = {},
 ) {
   return createRefundService({
     db: {
@@ -544,10 +578,14 @@ export function createPrismaBackedRefundService(
     orderScope: orderCohortScope,
     withPermission,
     audit,
+    ...options,
   });
 }
 
-const built = createPrismaBackedRefundService(prisma, liveWithPermission);
+const built = createPrismaBackedRefundService(prisma, liveWithPermission, recordAudit, {
+  syncReconciliationEvidence: syncReconciliationEvidenceAsSystem,
+  correlateReconciliationEvidence: correlateReconciliationEvidenceAsSystem,
+});
 
 export const recordRefund = built.recordRefund;
 

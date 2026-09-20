@@ -115,6 +115,7 @@ export async function POST(req: Request): Promise<Response> {
         orderId,
         provider: "PAYSTACK",
         providerIntentId: verified.reference,
+        providerRef: verified.reference,
         amountMinor: verified.amount,
         currency: verified.currency,
         eventId: providerEventId,

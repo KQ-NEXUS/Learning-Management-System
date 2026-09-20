@@ -36,16 +36,10 @@ Progress: [██████████] 99%
 
 **Velocity:**
 
-- Total plans completed (via GSD workflow): 0
-- Average duration: N/A
-- Total execution time: N/A
-
-Note: Phase 1's work (foundation, authorization core, Courses reference slice — 84 tests across 10 files) was implemented directly by the dev team prior to this roadmap's creation, not tracked through GSD plan execution. It is marked Complete in ROADMAP.md on the strength of `.planning/codebase/*.md` evidence, not plan-completion timing.
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
 | 1. Foundation | Retroactive | - | - |
 | 2 | 8 | - | - |
 | 06 | 9 | - | - |

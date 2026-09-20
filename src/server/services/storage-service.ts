@@ -19,6 +19,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
+import { Upload } from "@aws-sdk/lib-storage";
 import {
   S3Client,
   GetObjectCommand,
@@ -373,4 +375,57 @@ export async function presignTemplateAssetUploadUrl(input: {
     }),
     { expiresIn: UPLOAD_URL_TTL_SECONDS },
   );
+}
+
+const EXPORT_KEY_PATTERN = /^exports\/[A-Za-z0-9_-]{8,128}\/[A-Za-z0-9._-]{1,32}\.csv$/;
+
+/** Stable across background retries, with no learner or original filename data. */
+export function buildExportStorageKey(jobId: string, datasetVersion: string): string {
+  const key = `exports/${jobId}/${datasetVersion}.csv`;
+  if (!EXPORT_KEY_PATTERN.test(key)) throw new Error("Invalid export storage identity.");
+  return key;
+}
+
+function assertExportKey(key: string): void {
+  if (!EXPORT_KEY_PATTERN.test(key)) throw new Error("Invalid export storage key.");
+}
+
+export async function uploadExportObject(input: { key: string; body: Readable }): Promise<void> {
+  assertExportKey(input.key);
+  const upload = new Upload({
+    client: s3,
+    params: {
+      Bucket: bucketName(),
+      Key: input.key,
+      Body: input.body,
+      ContentType: "text/csv; charset=utf-8",
+    },
+    queueSize: 2,
+    partSize: 5 * 1024 * 1024,
+    leavePartsOnError: false,
+  });
+  await upload.done();
+}
+
+export async function deleteExportObject(key: string): Promise<void> {
+  assertExportKey(key);
+  await s3.send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));
+}
+
+function exportDownloadTtl(): number {
+  const configured = Number(process.env.EXPORT_DOWNLOAD_TTL_SECONDS ?? 60);
+  return Number.isInteger(configured) ? Math.min(120, Math.max(30, configured)) : 60;
+}
+
+/** Called only after the download service rechecks current grants and expiry. */
+export async function presignExportObjectUrl(input: { key: string; filename: string }): Promise<string> {
+  assertExportKey(input.key);
+  const safeName = input.filename.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 100) || "export.csv";
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: input.key,
+    ResponseContentDisposition: `attachment; filename="${safeName}"`,
+    ResponseContentType: "text/csv; charset=utf-8",
+  });
+  return getSignedUrl(presignClient, command, { expiresIn: exportDownloadTtl() });
 }

@@ -166,4 +166,44 @@ describe("confirmManualPayment — real Postgres (PAY-03, PAY-04, PAY-10)", () =
     });
     expect(actorAudits).toHaveLength(1);
   }, 30_000);
+
+  it("serializes concurrent confirmations with the same reference into one activation and one idempotent ALREADY_PAID result", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+      capacity: 2,
+      seatsTaken: 0,
+      priceNgnMinor: BASE_AMOUNT_MINOR,
+      priceUsdMinor: null,
+      currency: "NGN",
+      holdMinutes: 30,
+    });
+    const { userId: learnerUserId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+    const { orderId } = await checkoutServiceModule.startCheckout({ userId: learnerUserId }, cohortId, "NGN");
+    const expectedTotalMinor = BASE_AMOUNT_MINOR + calculatePlatformFeeMinor(BASE_AMOUNT_MINOR);
+    const service = serviceWithGrants(staffUserId);
+    const input = {
+      orderId,
+      amountMinor: expectedTotalMinor,
+      currency: "NGN" as const,
+      manualPaidAt: new Date(),
+      manualChannel: "bank_transfer",
+      manualReference: `CONCURRENT-${orderId}`,
+      manualEvidenceKey: `evidence/${orderId}.pdf`,
+      reason: "Confirmed against the school's bank statement.",
+    };
+
+    const settled = await Promise.all([
+      service.confirmManualPayment(input),
+      service.confirmManualPayment(input),
+    ]);
+
+    expect(settled.map((result) => result.outcome).sort()).toEqual(["ACTIVATED", "ALREADY_PAID"]);
+    expect(await testDb.prisma.paymentAttempt.count({ where: { orderId } })).toBe(1);
+    expect(await testDb.prisma.enrolment.count({ where: { orderId, status: "ACTIVE" } })).toBe(1);
+    expect(
+      await testDb.prisma.auditEvent.count({
+        where: { actorId: staffUserId, action: "payment.manual_confirmed", targetId: orderId },
+      }),
+    ).toBe(1);
+  }, 30_000);
 });
