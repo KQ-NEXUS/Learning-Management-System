@@ -4,6 +4,16 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  BTN as DIALOG_BTN,
+  BTN_ON_NAVY,
+  BTN_PRIMARY as DIALOG_BTN_PRIMARY,
+  DIALOG_PANEL,
+  DIALOG_SCRIM,
+  FIELD,
+  NOTE_SUCCESS,
+  TEXTAREA,
+} from "@/components/primitives/controls";
 import type { AuditRow, AuditFilterOptions } from "@/server/services/audit-read-service";
 import { formatDateTimeShort, formatTimestamp } from "@/lib/format-timestamp";
 import { getExportDatasetDefinition } from "@/server/services/report-registry";
@@ -215,7 +225,17 @@ export function AuditTable({
 
   const header = (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Audit" subtitle="Who did what, and when." />
+      <PageHeader
+        title="Audit"
+        subtitle="Who did what, and when."
+        actions={
+          canExport ? (
+            <button ref={exportButton} type="button" className={BTN_ON_NAVY} onClick={() => { setExportMessage(""); setExportOpen(true); }}>
+              Export audit CSV
+            </button>
+          ) : undefined
+        }
+      />
 
       {filterOptions && filters && (
         <div className="flex flex-wrap items-center gap-4 border-b border-border py-3">
@@ -328,20 +348,28 @@ export function AuditTable({
     <div className="flex flex-col gap-4">
       {header}
 
-      {canExport && <div className="flex flex-wrap items-center gap-4">
-        <button ref={exportButton} type="button" className={BTN} onClick={() => { setExportMessage(""); setExportOpen(true); }}>Export audit CSV</button>
-        {!exportOpen && exportMessage && <p role="status" className="text-sm text-foreground">{exportMessage} {exportJobId && <Link href="/staff/reports/exports" className="font-semibold text-accent underline">View export history</Link>}</p>}
-      </div>}
+      {canExport && !exportOpen && exportMessage && (
+        <p role="status" className={NOTE_SUCCESS}>{exportMessage} {exportJobId && <Link href="/staff/reports/exports" className="font-semibold text-accent hover:underline">View export history</Link>}</p>
+      )}
 
-      {canExport && exportOpen && <div ref={exportDialog} role="dialog" aria-modal="true" aria-label="Audit CSV options" className="max-w-xl rounded-xl border border-border bg-surface p-4 shadow-xs">
-        <h3 className="font-semibold">Audit CSV options</h3>
-        <p className="mt-1 text-sm text-muted-foreground">The current actor, action and date filters will be frozen with this request. Values in investigative context are withheld; safe field names and correlation references remain.</p>
-        <p className="mt-4 text-sm">Safe columns: {auditColumns.safeColumns.map((column) => column.label).join(", ")}</p>
-        {canExportSensitive && <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={includeIdentity} onChange={(event) => setIncludeIdentity(event.target.checked)} /> Include actor name and email</label>}
-        {canExportSensitive && includeIdentity && <label className="mt-4 flex flex-col gap-1 text-sm">Operational reason<textarea value={exportReason} onChange={(event) => setExportReason(event.target.value)} maxLength={2000} className="min-h-20 rounded-lg border border-border bg-background p-2" /></label>}
-        {exportMessage && <p role="alert" className="mt-4 text-sm text-danger">{exportMessage}</p>}
-        <div className="mt-4 flex flex-wrap gap-2"><button type="button" className={BTN} onClick={() => { setExportOpen(false); queueMicrotask(() => exportButton.current?.focus()); }}>Cancel</button><button type="button" className={BTN} disabled={exportPending || (includeIdentity && !exportReason.trim())} onClick={queueAuditExport}>{exportPending ? "Queuing audit export…" : "Queue audit export"}</button></div>
-      </div>}
+      {canExport && exportOpen && (
+        <div className={DIALOG_SCRIM}>
+          <div ref={exportDialog} role="dialog" aria-modal="true" aria-label="Audit CSV options" className={DIALOG_PANEL}>
+            <div>
+              <h3 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em]">Audit CSV options</h3>
+              <p className="mt-2 text-sm text-muted-foreground">The current actor, action and date filters will be frozen with this request. Values in investigative context are withheld; safe field names and correlation references remain.</p>
+            </div>
+            <p className="text-sm">Safe columns: {auditColumns.safeColumns.map((column) => column.label).join(", ")}</p>
+            {canExportSensitive && <label className="flex items-center gap-3 text-sm"><input type="checkbox" className="size-4 accent-accent" checked={includeIdentity} onChange={(event) => setIncludeIdentity(event.target.checked)} /> Include actor name and email</label>}
+            {canExportSensitive && includeIdentity && <label className={FIELD}>Operational reason<textarea value={exportReason} onChange={(event) => setExportReason(event.target.value)} maxLength={2000} className={TEXTAREA} /></label>}
+            {exportMessage && <p role="alert" className="border-l-2 border-danger py-1 pl-4 text-sm text-danger">{exportMessage}</p>}
+            <div className="flex flex-wrap justify-end gap-3">
+              <button type="button" className={DIALOG_BTN} onClick={() => { setExportOpen(false); queueMicrotask(() => exportButton.current?.focus()); }}>Cancel</button>
+              <button type="button" className={DIALOG_BTN_PRIMARY} disabled={exportPending || (includeIdentity && !exportReason.trim())} onClick={queueAuditExport}>{exportPending ? "Queuing audit export…" : "Queue audit export"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {validationError && (
         <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">

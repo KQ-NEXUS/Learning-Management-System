@@ -216,12 +216,12 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         inert={!desktop && !mobileOpen}
         aria-hidden={!desktop && !mobileOpen ? true : undefined}
         aria-label="Workspace navigation"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-hidden [@media(max-height:620px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-hidden [@media(max-height:691px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand block */}
-        <div className="flex items-center gap-3 px-3 pt-6 pb-7 [@media(min-height:701px)_and_(max-height:820px)]:pt-4 [@media(min-height:701px)_and_(max-height:820px)]:pb-4 [@media(min-height:621px)_and_(max-height:700px)]:pt-3 [@media(min-height:621px)_and_(max-height:700px)]:pb-3 [@media(max-height:620px)]:pt-2 [@media(max-height:620px)]:pb-2">
+        <div className="flex items-center gap-3 px-3 pt-6 pb-7 [@media(min-height:780px)_and_(max-height:899px)]:pt-4 [@media(min-height:780px)_and_(max-height:899px)]:pb-4 [@media(min-height:692px)_and_(max-height:779px)]:pt-3 [@media(min-height:692px)_and_(max-height:779px)]:pb-3 [@media(max-height:691px)]:pt-2 [@media(max-height:691px)]:pb-2">
           <BrandMark />
           <div className="flex min-w-0 flex-col">
             <span className="truncate text-base leading-tight font-semibold text-white">
@@ -233,11 +233,11 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
           </div>
         </div>
 
-        <nav aria-label="Workspace" className="flex flex-1 flex-col gap-6 [@media(min-height:701px)_and_(max-height:820px)]:gap-4 [@media(min-height:621px)_and_(max-height:700px)]:gap-3 [@media(max-height:620px)]:gap-2">
+        <nav aria-label="Workspace" className="flex flex-1 flex-col gap-6 [@media(min-height:780px)_and_(max-height:899px)]:gap-4 [@media(min-height:692px)_and_(max-height:779px)]:gap-3 [@media(max-height:691px)]:gap-2">
           {groups.map((group) => (
             <div key={group.label ?? "top"} className="flex flex-col gap-1">
               {group.label && (
-                <span className="px-3 pb-2 text-[12px] font-semibold tracking-[0.06em] text-sidebar-muted uppercase [@media(max-height:700px)]:pb-1 [@media(max-height:620px)]:pb-0">
+                <span className="px-3 pb-2 text-[12px] font-semibold tracking-[0.06em] text-sidebar-muted uppercase [@media(max-height:779px)]:pb-1 [@media(max-height:691px)]:pb-0">
                   {group.label}
                 </span>
               )}
@@ -251,7 +251,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
                     onClick={() => setOpen(false)}
                     aria-current={active ? "page" : undefined}
                     title={item.label}
-                    className={`flex min-h-10 min-w-0 items-center gap-3 rounded-md px-3 text-sm font-medium [@media(min-height:701px)_and_(max-height:820px)]:min-h-9 [@media(min-height:621px)_and_(max-height:700px)]:min-h-8 [@media(max-height:620px)]:min-h-7 ${
+                    className={`flex min-h-10 min-w-0 items-center gap-3 rounded-md px-3 text-sm font-medium [@media(min-height:780px)_and_(max-height:899px)]:min-h-9 [@media(min-height:692px)_and_(max-height:779px)]:min-h-8 [@media(max-height:691px)]:min-h-7 ${
                       active
                         ? "bg-sidebar-accent text-white"
                         : "text-sidebar-fg hover:bg-sidebar-hover hover:text-white"
@@ -267,7 +267,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         </nav>
 
         {/* Footer identity chip. */}
-        <div className="mt-auto pt-4 [@media(max-height:820px)]:pt-2 [@media(max-height:560px)]:hidden">
+        <div className="mt-auto pt-4 [@media(max-height:899px)]:pt-2 [@media(max-height:599px)]:hidden">
           <div
             className="flex items-center gap-3 px-3"
             aria-label={display ? undefined : "Signed in"}

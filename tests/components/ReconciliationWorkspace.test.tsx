@@ -158,7 +158,7 @@ describe("ReconciliationCaseDetailView", () => {
     expect(screen.getByRole("link", { name: "Open refund controls" }).getAttribute("href")).toBe(detail.links.refundHref);
     expect(screen.getByRole("link", { name: "Open cohort enrolments" }).getAttribute("href")).toBe(detail.links.cohortHref);
     expect(screen.getAllByText(/0\.00/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("â€” (pending reconciliation)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("— (pending reconciliation)").length).toBeGreaterThan(0);
   });
 
   it("requires category and note and preserves both after a failed resolution", async () => {
