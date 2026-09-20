@@ -32,9 +32,9 @@ import type { CertificateColumn } from "@/server/services/enrolment-dashboard-se
 
 export type CertificateSlotProps = { certificate: CertificateColumn };
 
-const CARD = "flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs";
-const TITLE = "text-sm font-semibold text-foreground";
-const BODY = "text-[11px] text-muted-foreground";
+const CARD = "flex flex-col gap-2 border-b border-border py-4";
+const TITLE = "sr-only";
+const BODY = "text-sm text-muted-foreground";
 
 function CertificateReference({ verificationRef }: { verificationRef: string }) {
   return (
@@ -46,7 +46,7 @@ function DownloadLink({ certificateId }: { certificateId: string }) {
   return (
     <a
       href={`/api/certificates/${certificateId}/download`}
-      className="inline-flex w-fit items-center gap-2 text-[11px] font-semibold text-accent underline underline-offset-2"
+      className="inline-flex w-fit items-center gap-2 text-xs font-semibold text-accent underline underline-offset-2"
     >
       <Download aria-hidden size={14} />
       Download certificate

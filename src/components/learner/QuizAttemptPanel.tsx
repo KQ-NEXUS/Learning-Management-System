@@ -6,7 +6,7 @@ import { StatusPill } from "@/components/primitives/ResourceTable";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { LearnerQuizView, SafeQuizAttempt } from "@/server/services/learner-quiz-service";
 import type { AttemptResultView } from "@/server/services/attempt-service";
-import { startAttemptAction, submitAttemptAction, saveAttemptAnswersAction } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions";
+import { startAttemptAction, submitAttemptAction, saveAttemptAnswersAction } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions";
 
 type Props = LearnerQuizView & {
   enrolmentId: string; lessonId: string;
@@ -70,10 +70,10 @@ export function QuizAttemptPanel(props: Props) {
     });
   }
 
-  return <section className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-card" aria-label="Quiz">
-    <h2 className="flex items-center gap-2 text-lg font-semibold"><ListChecks aria-hidden size={20} />{props.title}</h2>
+  return <section className="flex flex-col gap-6" aria-label="Quiz">
+    <h2 className="sr-only"><ListChecks aria-hidden size={20} />{props.title}</h2>
     {props.instructions && <p className="whitespace-pre-wrap text-sm">{props.instructions}</p>}
-    <dl className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+    <dl className="grid grid-cols-2 border-y-0 border-t border-foreground text-[13px] text-muted-foreground sm:grid-cols-[repeat(auto-fit,minmax(140px,1fr))] [&>div]:border-b [&>div]:border-border [&>div]:py-4 [&>div:not(:first-child)]:sm:border-l [&>div:not(:first-child)]:sm:pl-6 [&_dd]:text-base [&_dd]:font-semibold [&_dd]:text-foreground">
       <div><dt>Attempts</dt><dd>{props.maxAttempts ?? "Unlimited"}</dd></div>
       <div><dt>Remaining</dt><dd>{remaining ?? "Unlimited"}</dd></div>
       <div><dt>Pass mark</dt><dd>{props.passMark ?? "No threshold"}</dd></div>
@@ -82,22 +82,28 @@ export function QuizAttemptPanel(props: Props) {
     </dl>
 
     {active ? <form onSubmit={e => { e.preventDefault(); submit(); }} className="flex flex-col gap-6">
-      <p role="status" className="sticky top-0 z-10 bg-surface py-2 text-sm font-semibold">{answered} of {active.questions.length} answered</p>
+      <div role="status" className="sticky top-0 z-10 bg-surface py-3 font-semibold">
+        <span className="text-accent">{answered} of {active.questions.length} answered</span>
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-accent-wash"><div className="h-full rounded-full bg-progress-fill" style={{ width: `${Math.round((answered / Math.max(1, active.questions.length)) * 100)}%` }} /></div>
+      </div>
       <fieldset disabled={pending} className="flex flex-col gap-6">
         {active.questions.map((q, index) => <fieldset key={q.id} className="flex flex-col gap-2">
-          <legend className="text-base font-semibold">{index + 1}. {q.prompt}</legend>
-          <p className="text-sm text-muted-foreground">{q.marks} marks</p>
-          {q.options.map(o => <label key={o.id} className="flex items-center gap-2 text-sm">
+          <legend className="pb-3 text-[20px] leading-[1.35] font-semibold tracking-[-0.015em]"><span className="mr-3 font-mono text-[14px] text-accent">{index + 1}</span>{q.prompt}</legend>
+          <p className="-mt-2 text-sm text-muted-foreground">{q.marks} {q.marks === 1 ? "mark" : "marks"}{q.type === "MULTI_CHOICE" ? " · choose all that apply" : ""}</p>
+          {q.options.map(o => <label key={o.id} className={`flex items-center gap-3 rounded-md border px-4 py-3 text-base ${answers[q.id]?.includes(o.id) ? "border-accent bg-accent-wash" : "border-border bg-surface"}`}>
             <input type={q.type === "MULTI_CHOICE" ? "checkbox" : "radio"} name={q.id} value={o.id}
               checked={answers[q.id]?.includes(o.id) ?? false}
-              className="size-4 border-[1.5px] border-input-border accent-accent"
+              className="size-5 accent-accent"
               onChange={e => { setSaved(false); setAnswers(old => ({ ...old, [q.id]: q.type === "MULTI_CHOICE"
                 ? e.target.checked ? [...(old[q.id] ?? []), o.id] : (old[q.id] ?? []).filter(id => id !== o.id) : [o.id] })); }} />{o.label}
           </label>)}
         </fieldset>)}
-        <div className="flex gap-2">
-          <button type="button" onClick={save} className="rounded-md border border-input-border px-4 py-2 text-sm">Save answers</button>
-          <button type="submit" className={BUTTON} disabled={pending || answered !== active.questions.length}>{pending ? "Saving…" : "Submit quiz"}</button>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-foreground pt-6">
+          <span className="text-sm text-muted-foreground">Your answers save as you go. Submit when every question is answered.</span>
+          <div className="flex gap-3">
+            <button type="button" onClick={save} className="inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-5 text-sm font-semibold text-foreground hover:bg-surface-2">Save answers</button>
+            <button type="submit" className={BUTTON} disabled={pending || answered !== active.questions.length}>{pending ? "Saving…" : "Submit quiz"}</button>
+          </div>
         </div>
         {saved && <p role="status" className="text-sm text-muted-foreground">Answers saved.</p>}
       </fieldset>

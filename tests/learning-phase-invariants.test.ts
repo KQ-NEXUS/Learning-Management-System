@@ -102,6 +102,9 @@ function hasLeadingDirective(sourceFile: ts.SourceFile, text: string): boolean {
 const SRC_ROOT = path.resolve(process.cwd(), "src");
 const SERVICES_ROOT = path.join(SRC_ROOT, "server", "services");
 const LEARNER_APP_ROOT = path.join(SRC_ROOT, "app", "(learner)");
+// The lesson reading pane lives in its own route group (a focus layout) but is learner-facing all the same.
+const LESSON_APP_ROOT = path.join(SRC_ROOT, "app", "(lesson)");
+const learnerRouteFiles = () => [...walkSourceFiles(LEARNER_APP_ROOT), ...walkSourceFiles(LESSON_APP_ROOT)];
 const LEARNER_COMPONENTS_ROOT = path.join(SRC_ROOT, "components", "learner");
 
 describe("phase 9 invariant: pure-module import-freedom (INV-1, T-09-47)", () => {
@@ -226,7 +229,7 @@ describe("phase 9 invariant: DD-6 — completion-service.ts never writes Enrolme
 
 describe("phase 9 invariant: meetingUrl never leaves the D-24 gate onto a learner surface (INV-4, T-09-04)", () => {
   it("no file under src/app/(learner)/ or src/components/learner/ contains the identifier meetingUrl, except SessionCard.tsx (which may reference it only inside a conditional render)", () => {
-    const files = [...walkSourceFiles(LEARNER_APP_ROOT), ...walkSourceFiles(LEARNER_COMPONENTS_ROOT)];
+    const files = [...learnerRouteFiles(), ...walkSourceFiles(LEARNER_COMPONENTS_ROOT)];
     expect(files.length).toBeGreaterThan(0);
 
     const unguardedViolations: string[] = [];
@@ -289,7 +292,7 @@ describe("phase 9 invariant: zero-client-JS lesson content (INV-5, D-30/NFR-02)"
 describe("phase 9 invariant: zero raw hex colour literals outside globals.css (INV-6, 04.1 precedent)", () => {
   it("no file under src/app/(learner)/ or src/components/learner/ contains a raw hex colour literal", () => {
     const HEX_PATTERN = /#[0-9a-fA-F]{3,8}\b/;
-    const files = [...walkSourceFiles(LEARNER_APP_ROOT), ...walkSourceFiles(LEARNER_COMPONENTS_ROOT)].filter(
+    const files = [...learnerRouteFiles(), ...walkSourceFiles(LEARNER_COMPONENTS_ROOT)].filter(
       (f) => path.basename(f) !== "globals.css",
     );
     expect(files.length).toBeGreaterThan(0);
@@ -376,7 +379,7 @@ describe("phase 9 invariant: DomainEventType gained exactly its three Phase-9 me
 
 describe("phase 9 invariant: learner Server Actions never trust a client-supplied identity field (INV-8, T-09-02)", () => {
   it("every \"use server\" file under src/app/(learner)/ begins with the directive and calls no formData.get(\"userId\")/formData.get(\"actorId\")", () => {
-    const files = walkSourceFiles(LEARNER_APP_ROOT);
+    const files = learnerRouteFiles();
     const serverActionFiles = files.filter((file) => hasLeadingDirective(parse(file), "use server"));
 
     expect(

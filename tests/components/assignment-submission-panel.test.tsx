@@ -2,10 +2,10 @@ import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AssignmentSubmissionPanel } from "@/components/learner/AssignmentSubmissionPanel";
-import type { AssignmentSubmissionClientView } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
+import type { AssignmentSubmissionClientView } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
 import type { SubmissionReceipt } from "@/server/services/submission-service";
 
-vi.mock("@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions", () => ({
+vi.mock("@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions", () => ({
   beginSubmissionUploadAction: vi.fn(),
   completeSubmissionUploadAction: vi.fn(),
   failSubmissionUploadAction: vi.fn(),

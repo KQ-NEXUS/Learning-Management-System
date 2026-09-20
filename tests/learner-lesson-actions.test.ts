@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * `src/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts`
+ * `src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts`
  * (09-11 Task 2).
  *
  * Mirrors `tests/staff-progress-override.test.ts`'s convention of a full
@@ -88,7 +88,7 @@ import {
   markLessonCompleteAction,
   undoLessonCompleteAction,
   recordWatchProgressAction,
-} from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions";
+} from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions";
 
 const ACTOR = { userId: "user-a", roles: [] };
 

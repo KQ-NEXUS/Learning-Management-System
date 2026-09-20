@@ -17,9 +17,9 @@ export type DeferredSlotProps = {
 
 export function DeferredSlot({ title, copy }: DeferredSlotProps) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs">
+    <div className="flex flex-col gap-1 border-b border-border py-3">
       <p className="text-sm font-semibold text-muted-foreground">{title}</p>
-      <p className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
+      <p className="inline-flex items-center gap-2 text-xs text-muted-foreground">
         <span aria-hidden className="font-mono">
           •
         </span>

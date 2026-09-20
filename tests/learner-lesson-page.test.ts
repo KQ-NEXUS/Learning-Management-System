@@ -72,7 +72,7 @@ vi.mock("@/server/services/lesson-progress-service", () => ({
   countLessonsRelockedBy: mocks.countLessonsRelockedBy,
   getOwnWatchProgress: mocks.getOwnWatchProgress,
 }));
-vi.mock("@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions", () => ({
+vi.mock("@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions", () => ({
   markLessonCompleteAction: mocks.markLessonCompleteAction,
   undoLessonCompleteAction: mocks.undoLessonCompleteAction,
 }));
@@ -104,7 +104,7 @@ vi.mock("@/components/learner/VideoWatchTracker", () => ({
     ),
 }));
 
-import Page from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/page";
+import Page from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/page";
 import { undoRelockNotice } from "@/components/learner/LessonCompleteControl";
 
 type Over = Record<string, unknown>;
@@ -353,7 +353,7 @@ describe("/learn/[enrolmentId]/lessons/[lessonId]", () => {
 
     const html = await renderPage();
 
-    expect(html).toMatch(/<a href="\/learn\/enrolment-1"[^>]*>← Course One<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/learn\/enrolment-1"[^>]*>[\s\S]*?Course One(<\/span>)?<\/a>/);
   });
 });
 

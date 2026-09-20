@@ -22,7 +22,7 @@ type Props = { results: LearnerResultCard[] };
 
 function TypeIcon({ type }: { type: LearnerResultCard["type"] }) {
   const Icon = type === "QUIZ" ? ListChecks : ClipboardList;
-  return <Icon aria-hidden size={20} className="shrink-0 text-muted-foreground" />;
+  return <Icon aria-hidden size={24} className="shrink-0 text-muted-foreground" />;
 }
 
 function scoreLine(result: LearnerResultCard): string | null {
@@ -55,25 +55,28 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
   const historyLabel = result.type === "QUIZ" ? "Attempt history" : "Submission history";
 
   return (
-    <article className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-6 shadow-xs">
-      <div className="flex items-center gap-2">
+    <article className="border-b border-border py-8">
+      <div className="flex flex-wrap items-center gap-4">
         <TypeIcon type={result.type} />
-        <h2 className="text-[16px] font-semibold text-foreground">{result.title}</h2>
-      </div>
-
-      {line && (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-mono text-sm font-semibold text-foreground">{line}</span>
-          {result.passed !== null && (
+        <h2 className="grow text-[22px] leading-[1.2] font-semibold tracking-[-0.02em] text-foreground">
+          {result.title}
+        </h2>
+        {line && <span className="font-mono text-[22px] font-medium tabular-nums text-foreground">{line}</span>}
+        {result.passed !== null && (
+          <span className="min-w-[120px] text-right font-medium">
             <StatusPill
               tone={result.passed ? "success" : "warning"}
               label={result.passed ? "Passed" : "Not yet passed"}
             />
-          )}
-        </div>
-      )}
+          </span>
+        )}
+      </div>
 
-      {result.feedback && <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-sm text-muted-foreground">{result.feedback}</p>}
+      {result.feedback && (
+        <p className="mt-4 max-h-48 max-w-[760px] overflow-y-auto break-words whitespace-pre-wrap text-foreground-soft">
+          {result.feedback}
+        </p>
+      )}
 
       {/* Unmet pass requirement (ASM-07, §6.1) — only meaningful for a quiz,
           the only type an attempt-limited "remaining" count applies to; never
@@ -81,17 +84,60 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
       {result.passed === false &&
         result.type === "QUIZ" &&
         (result.attemptsRemaining === 0 ? (
-          <p className="text-sm text-warning">You&apos;ve used all your attempts for {result.title}.</p>
+          <p className="mt-4 text-sm text-warning">You&apos;ve used all your attempts for {result.title}.</p>
         ) : (
-          <p className="text-sm text-warning">
+          <p className="mt-4 text-sm text-warning">
             You haven&apos;t yet passed {result.title}. {result.attemptsRemaining ?? "Unlimited"} attempt(s)
             remaining.
           </p>
         ))}
 
+      {/* Always rendered as a table, even at length 1 — no singular/plural
+          structural branch (UI-SPEC §8 zero-one-many resolution). */}
+      <table className="mt-4 w-full border-collapse text-sm">
+        <caption className="sr-only">
+          {historyLabel} ({result.history.length})
+        </caption>
+        <thead>
+          <tr className="border-b border-foreground text-left text-[13px] font-medium text-muted-foreground">
+            <th scope="col" className="pr-4 pb-3 font-medium">
+              {result.type === "QUIZ" ? "Attempt" : "Submission"}
+            </th>
+            <th scope="col" className="pr-4 pb-3 font-medium">
+              When
+            </th>
+            <th scope="col" className="pr-4 pb-3 text-right font-medium">
+              Score
+            </th>
+            <th scope="col" className="pb-3 text-right font-medium">
+              Outcome
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.history.map((entry) => (
+            <tr key={entry.ref} className="border-b border-border">
+              <td className="h-14 pr-4 font-mono">{entry.number}</td>
+              <td className="pr-4 font-mono tabular-nums">
+                {formatTimestamp(new Date(entry.at))}
+                {entry.isLate && (
+                  <span data-tone="warning" className="ml-2 font-sans font-medium text-warning">
+                    · Late
+                  </span>
+                )}
+              </td>
+              <td className="pr-4 text-right font-mono tabular-nums">{entry.score ?? "—"}</td>
+              <td className="text-right whitespace-nowrap">
+                <HistoryStatus entry={entry} passMark={result.passMark} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
       {result.overrides.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <h3 className="text-sm font-semibold text-foreground">Grade overrides</h3>
+        <div className="mt-4 flex flex-col gap-1">
+          <h3 className="sr-only">Grade overrides</h3>
           <ul className="flex flex-col gap-1">
             {result.overrides.map((override, index) => (
               <li key={index} className="text-sm text-muted-foreground">
@@ -103,31 +149,13 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
           </ul>
         </div>
       )}
-
-      {/* Always rendered as a list, even at length 1 — no singular/plural
-          structural branch (UI-SPEC §8 zero-one-many resolution). */}
-      <details className="rounded-lg border border-border bg-surface-2 px-4 py-2">
-        <summary className="cursor-pointer text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
-          {historyLabel} ({result.history.length})
-        </summary>
-        <ul className="mt-2 flex flex-col gap-2">
-          {result.history.map((entry) => (
-            <li key={entry.ref} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-mono text-muted-foreground">{formatTimestamp(new Date(entry.at))}</span>
-              <HistoryStatus entry={entry} passMark={result.passMark} />
-              <span className="font-mono">{entry.score ?? "—"}</span>
-              {entry.isLate && <StatusPill tone="warning" label="Late" />}
-            </li>
-          ))}
-        </ul>
-      </details>
     </article>
   );
 }
 
 export function ResultsList({ results }: Props) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="border-t border-foreground">
       {results.map((result) => (
         <ResultCard key={result.assessmentId} result={result} />
       ))}

@@ -15,6 +15,8 @@ import {
 } from "@/server/services/lesson-progress-service";
 import { LessonContent } from "@/components/catalogue/LessonContent";
 import { LessonCompleteControl } from "@/components/learner/LessonCompleteControl";
+import { LessonOutline } from "@/components/learner/LessonOutline";
+import { LessonFrame } from "@/components/learner/LessonFrame";
 import { VideoWatchTracker } from "@/components/learner/VideoWatchTracker";
 import { QuizAttemptPanel } from "@/components/learner/QuizAttemptPanel";
 import { AssignmentSubmissionPanel } from "@/components/learner/AssignmentSubmissionPanel";
@@ -87,20 +89,14 @@ export default async function LessonReadingPage({
     // title, module structure, or body text leaks through this branch
     // (T-09-38).
     return (
-      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4">
-        <Link
-          href={`/learn/${enrolmentId}`}
-          className="w-fit text-sm text-accent underline underline-offset-2"
-        >
-          ← Back to course
-        </Link>
-        <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
-          <p className="text-sm font-semibold text-foreground">Your access window has ended</p>
+      <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
+        <div className="flex flex-col gap-2 border-t border-foreground py-12">
+          <p className="text-base font-semibold text-foreground">Your access window has ended</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             You can no longer open lesson content, but your progress and results stay on record.
           </p>
         </div>
-      </div>
+      </LessonFrame>
     );
   }
 
@@ -155,22 +151,58 @@ export default async function LessonReadingPage({
     />
   );
 
+  const outlineCourses = path.courses.map((course) => ({
+    id: course.courseId,
+    title: course.courseTitle,
+    modules: course.modules.map((mod) => ({
+      id: mod.id,
+      title: mod.title,
+      lessons: mod.lessons.map((l) => ({ id: l.id, title: l.title, completed: l.completed, locked: l.locked })),
+    })),
+  }));
+
+  // Position within the module ("Lesson 1 of 3") and overall required-lesson progress for the header.
+  let moduleTitle = current.moduleTitle;
+  let lessonNumber = 1;
+  let lessonsInModule = 1;
+  let requiredTotal = 0;
+  let requiredDone = 0;
+  for (const course of path.courses) {
+    for (const mod of course.modules) {
+      const at = mod.lessons.findIndex((l) => l.id === lessonId);
+      if (at >= 0) {
+        moduleTitle = mod.title;
+        lessonNumber = at + 1;
+        lessonsInModule = mod.lessons.length;
+      }
+      for (const l of mod.lessons) {
+        if (l.required) {
+          requiredTotal += 1;
+          if (l.completed) requiredDone += 1;
+        }
+      }
+    }
+  }
+
+  const NAV_BTN =
+    "inline-flex min-h-[46px] items-center gap-2 rounded-md border border-input-border bg-surface px-5 text-sm font-semibold text-foreground hover:bg-surface-2";
+  const NAV_BTN_PRIMARY =
+    "inline-flex min-h-[46px] items-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
+  const NAV_BTN_OFF = "inline-flex min-h-[46px] items-center gap-2 px-5 text-sm text-muted-foreground";
+
   return (
-    <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <Link
-          href={`/learn/${enrolmentId}`}
-          className="w-fit text-sm text-accent underline underline-offset-2"
-        >
-          ← {current.courseTitle}
-        </Link>
-        {current.moduleTitle && (
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {current.moduleTitle}
-          </p>
-        )}
-        <h1 className="text-[25px] font-semibold leading-[1.2] text-foreground">{content.title}</h1>
-      </header>
+    <LessonFrame
+      backHref={`/learn/${enrolmentId}`}
+      backLabel={current.courseTitle}
+      progress={requiredTotal > 0 ? { done: requiredDone, total: requiredTotal } : undefined}
+      outline={<LessonOutline enrolmentId={enrolmentId} courses={outlineCourses} currentLessonId={lessonId} />}
+    >
+      <p className="text-sm text-muted-foreground">
+        {moduleTitle ? `${moduleTitle} · ` : ""}Lesson {lessonNumber} of {lessonsInModule}
+      </p>
+      <h1 className="text-[36px] leading-[1.06] font-bold tracking-[-0.04em] break-words text-foreground md:text-[48px]">
+        {content.title}
+      </h1>
 
       {isVideoLesson ? (
         <VideoWatchTracker
@@ -195,16 +227,13 @@ export default async function LessonReadingPage({
         relockCount={relockCount}
       />
 
-      <nav className="flex items-center justify-between border-t border-border pt-4 text-sm">
+      <nav className="flex items-center justify-between pt-4 text-sm">
         {prev ? (
-          <Link
-            href={`/learn/${enrolmentId}/lessons/${prev.lesson.id}`}
-            className="text-accent underline underline-offset-2"
-          >
+          <Link href={`/learn/${enrolmentId}/lessons/${prev.lesson.id}`} className={NAV_BTN}>
             ← Previous lesson
           </Link>
         ) : (
-          <span className="text-muted-foreground">← Previous lesson</span>
+          <span className={NAV_BTN_OFF}>← Previous lesson</span>
         )}
 
         {/* "Next lesson" is NOT gated on this lesson's own completion
@@ -212,16 +241,13 @@ export default async function LessonReadingPage({
             A locked next lesson (or none — the last lesson) renders muted,
             non-interactive text with no href, never hidden. */}
         {next && !next.lesson.locked ? (
-          <Link
-            href={`/learn/${enrolmentId}/lessons/${next.lesson.id}`}
-            className="text-accent underline underline-offset-2"
-          >
+          <Link href={`/learn/${enrolmentId}/lessons/${next.lesson.id}`} className={NAV_BTN_PRIMARY}>
             Next lesson →
           </Link>
         ) : (
-          <span className="text-muted-foreground">Next lesson →</span>
+          <span className={NAV_BTN_OFF}>Next lesson →</span>
         )}
       </nav>
-    </div>
+    </LessonFrame>
   );
 }

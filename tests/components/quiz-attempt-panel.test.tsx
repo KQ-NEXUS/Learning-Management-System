@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QuizAttemptPanel } from "@/components/learner/QuizAttemptPanel";
 import type { LearnerQuizView, SafeQuizAttempt } from "@/server/services/learner-quiz-service";
-vi.mock("@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions", () => ({ startAttemptAction: vi.fn(), submitAttemptAction: vi.fn(), saveAttemptAnswersAction: vi.fn() }));
+vi.mock("@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions", () => ({ startAttemptAction: vi.fn(), submitAttemptAction: vi.fn(), saveAttemptAnswersAction: vi.fn() }));
 afterEach(cleanup);
 const active: SafeQuizAttempt = { id: "a", attemptNumber: 1, responses: [], questions: [
   { id: "q1", prompt: "One?", type: "SINGLE_CHOICE", marks: 1, options: [{ id: "x", label: "First option" }, { id: "y", label: "Second option" }] },
@@ -53,7 +53,7 @@ describe("QuizAttemptPanel", () => {
   it("explains exhausted attempts without a start control", () => { setup({ attemptsRemaining: 0 }); expect(screen.getByText(/used all 2/)).toBeTruthy(); expect(screen.queryByText("Start quiz")).toBeNull(); });
   it("explains the closed window", () => { setup({ availableUntil: "2000-01-01" }); expect(screen.getByText(/window for this assessment has closed/)).toBeTruthy(); expect(screen.queryByText("Start quiz")).toBeNull(); });
   it("uses one form, native inputs and a live answered count; submits raw selections once", async () => {
-    const { container, onSubmit } = setup(); fireEvent.click(screen.getByText("Start quiz")); await screen.findByText("1. One?");
+    const { container, onSubmit } = setup(); fireEvent.click(screen.getByText("Start quiz")); await screen.findByText("One?");
     await screen.findByRole("button", { name: "Submit quiz" });
     expect(container.querySelectorAll("form")).toHaveLength(1); expect(screen.getAllByRole("radio")).toHaveLength(2); expect(screen.getAllByRole("checkbox")).toHaveLength(1);
     expect((screen.getByText("Submit quiz") as HTMLButtonElement).disabled).toBe(true); expect(screen.getByText("0 of 2 answered")).toBeTruthy();
@@ -73,7 +73,7 @@ describe("QuizAttemptPanel", () => {
   });
   it("keeps the form on submit failure and offers retry", async () => {
     render(<QuizAttemptPanel {...base} enrolmentId="e" lessonId="l" onStart={async () => ({ ok: true, attempt: active, history: [], attemptsRemaining: 1 })} onSubmit={async () => ({ ok: false, message: "Your quiz couldn't be submitted", body: "Your answers are saved — try submitting again." })} />);
-    fireEvent.click(screen.getByText("Start quiz")); await screen.findByText("1. One?"); fireEvent.click(screen.getByLabelText("First option")); fireEvent.click(screen.getByLabelText("Third option")); fireEvent.click(screen.getByText("Submit quiz"));
+    fireEvent.click(screen.getByText("Start quiz")); await screen.findByText("One?"); fireEvent.click(screen.getByLabelText("First option")); fireEvent.click(screen.getByLabelText("Third option")); fireEvent.click(screen.getByText("Submit quiz"));
     await waitFor(() => expect(screen.getByText("Try again")).toBeTruthy()); expect(screen.getByText(/answers are saved/)).toBeTruthy(); expect(screen.getByLabelText("First option")).toBeTruthy();
   });
 });

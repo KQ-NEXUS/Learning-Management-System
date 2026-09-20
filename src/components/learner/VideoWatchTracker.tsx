@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { recordWatchProgressAction } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions";
+import { recordWatchProgressAction } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions";
 
 /**
  * VideoWatchTracker — the D-09/D-08 auto-completion client island (09-12

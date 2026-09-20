@@ -47,7 +47,7 @@ export function SessionCard({ session, timezone, isPast }: SessionCardProps) {
   const attendancePill = ATTENDANCE_PILL[session.attendance];
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs">
+    <div className="flex flex-col gap-2 border-b border-border py-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3
           className={`text-[16px] font-semibold text-foreground ${isCancelled ? "line-through decoration-muted-foreground" : ""}`}
@@ -66,7 +66,7 @@ export function SessionCard({ session, timezone, isPast }: SessionCardProps) {
         <p className="break-words text-sm text-muted-foreground">{session.cancellationReason}</p>
       )}
 
-      <p className="inline-flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+      <p className="inline-flex items-center gap-2 font-mono text-xs text-muted-foreground">
         <Clock aria-hidden className="size-3.5 shrink-0" />
         {startLabel} → {endLabel}
       </p>

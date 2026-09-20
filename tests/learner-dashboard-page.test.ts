@@ -40,6 +40,9 @@ vi.mock("next/link", () => ({
     createElement("a", { href, ...rest }, children),
 }));
 vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurrentActor }));
+vi.mock("@/server/services/profile-service", () => ({
+  profileService: { getOwnProfile: async () => ({ name: "Ada Okafor" }) },
+}));
 vi.mock("@/server/services/enrolment-dashboard-service", () => ({
   loadLearnerDashboard: mocks.loadLearnerDashboard,
 }));
@@ -135,10 +138,10 @@ describe("/dashboard", () => {
 
     expect(html).toContain("Intro to Testing");
     expect(html).toContain("in Foundations");
-    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/lessons\/lesson-9"[^>]*>Continue learning<\/a>/);
+    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/lessons\/lesson-9"[^>]*>(Resume|Start) lesson/);
   });
 
-  it("renders exactly two progressbars when an attendance threshold applies", async () => {
+  it("renders one progressbar, and the attendance figure in the side rail, when a threshold applies", async () => {
     mocks.loadLearnerDashboard.mockResolvedValue({
       cards: [
         card({
@@ -159,8 +162,8 @@ describe("/dashboard", () => {
     const html = await renderPage();
     const count = (html.match(/role="progressbar"/g) ?? []).length;
 
-    expect(count).toBe(2);
-    expect(html).toContain("Attendance: 80% of 75% required");
+    expect(count).toBe(1);
+    expect(html).toContain("80% of 75% required");
   });
 
   it("renders exactly one progressbar when the cohort has no attendance rule", async () => {
@@ -227,7 +230,6 @@ describe("/dashboard", () => {
     const gapStrings = [
       "Assignments and quizzes — arriving in a future update",
       "Results — arriving in a future update",
-      "Support tickets — arriving in a future update",
     ];
 
     for (const anchor of anchors) {
@@ -265,9 +267,10 @@ describe("/dashboard", () => {
     const html = await renderPage();
 
     expect(html).not.toContain("meetingUrl");
-    expect(html.match(/https?:\/\//)).toBeNull();
+    // Icon SVGs carry an xmlns URL; strip them so only real link/text URLs are checked.
+    expect(html.replace(/<svg[\s\S]*?<\/svg>/g, "").match(/https?:\/\//)).toBeNull();
     expect(html).toContain("Kickoff call");
-    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/sessions"[^>]*>View all<\/a>/);
+    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/sessions"[^>]*>View all sessions<\/a>/);
   });
 
   it("renders the ending-access warning tone, not danger, and the two-line ended copy separately", async () => {
@@ -278,8 +281,8 @@ describe("/dashboard", () => {
     });
     const endingHtml = await renderPage();
     expect(endingHtml).toContain("Your access ends 2026-10-01");
-    expect(endingHtml).toContain("bg-warning-surface");
-    expect(endingHtml).not.toContain("bg-danger-surface");
+    expect(endingHtml).toContain("border-warning");
+    expect(endingHtml).not.toContain("border-danger");
 
     mocks.loadLearnerDashboard.mockResolvedValue({
       cards: [card({ enrolmentId: "e-ended", accessNotice: { kind: "ended" } })],
@@ -341,7 +344,8 @@ describe("/dashboard", () => {
     expect(html).toContain("Cohort One");
     expect(html).toContain("Next up");
     expect(html).toContain("Your progress");
-    expect(html).toContain("Support tickets");
+    // The unshipped Support tickets placeholder is no longer offered to learners.
+    expect(html).not.toContain("Support tickets");
     // Omitted: sections and links the COMPLETED enrolment cannot open.
     expect(html).not.toContain("Upcoming sessions");
     expect(html).not.toContain("Wrap-up call");
@@ -378,7 +382,7 @@ describe("/dashboard", () => {
     const html = await renderPage();
 
     expect(html).toContain("Upcoming sessions");
-    expect(html).toContain("Assessments");
+    expect(html).toContain("Assessment due");
     expect(html).toContain("Results");
     expect(html).toContain('href="/learn/enrolment-1/sessions"');
     expect(html).toContain('href="/learn/enrolment-1/results"');
