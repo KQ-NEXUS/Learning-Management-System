@@ -186,14 +186,14 @@ describe("HoldCountdown", () => {
     expect(screen.getByText("9:46")).toBeTruthy();
   });
 
-  it("uses the default ink above five minutes remaining, at the Label type size", () => {
+  it("uses the default ink above five minutes remaining, at the display size", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-10T12:00:00.000Z"));
     render(
       <HoldCountdown holdExpiresAt="2026-09-10T12:09:47.000Z" initialRemainingMs={587_000} />,
     );
     expect(screen.getByText("9:47").className).toContain("text-foreground");
-    expect(screen.getByText("9:47").closest("p")!.className).toContain("text-sm");
+    expect(screen.getByText("9:47").className).toContain("text-[48px]");
   });
 
   it("escalates to the warning tone between five minutes and one minute remaining", () => {
@@ -215,7 +215,7 @@ describe("HoldCountdown", () => {
     );
     const value = screen.getByText("0:59");
     expect(value.className).toContain("text-danger");
-    expect(value.closest("p")!.className).toContain("text-sm");
+    expect(value.className).toContain("text-[48px]");
   });
 
   it("stops at zero and keeps rendering 0:00 without throwing once the hold instant has passed", () => {

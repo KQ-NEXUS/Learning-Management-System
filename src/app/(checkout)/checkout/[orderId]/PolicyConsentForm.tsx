@@ -57,7 +57,7 @@ export function PolicyConsentForm({
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="orderId" value={orderId} />
 
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-6 shadow-card">
+      <div className="flex flex-col gap-3 border-t border-foreground pt-5">
         <label className="flex items-start gap-2 text-sm text-foreground">
           <input
             name="acceptedTerms"
@@ -69,7 +69,7 @@ export function PolicyConsentForm({
           />
           <span>
             I agree to the{" "}
-            <a href="/policies/terms" className="text-accent underline underline-offset-2">
+            <a href="/policies/terms" target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">
               Terms of Service
             </a>
           </span>
@@ -86,7 +86,7 @@ export function PolicyConsentForm({
           />
           <span>
             I agree to the{" "}
-            <a href="/policies/refund-cancellation" className="text-accent underline underline-offset-2">
+            <a href="/policies/refund-cancellation" target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">
               Refund &amp; Cancellation Policy
             </a>
           </span>

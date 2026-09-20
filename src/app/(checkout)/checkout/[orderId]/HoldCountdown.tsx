@@ -53,11 +53,13 @@ export function HoldCountdown({
     totalSeconds < 60 ? "text-danger" : totalSeconds < 300 ? "text-warning" : "text-foreground";
 
   return (
-    <p className="flex items-baseline gap-1 text-sm">
-      <span className="text-muted-foreground">Seat held for</span>
-      <span className={`font-mono font-semibold tabular-nums ${valueColorClass}`}>
+    <div className="flex flex-col gap-1">
+      <p className="text-sm text-muted-foreground">Seat held for</p>
+      <p
+        className={`font-mono text-[48px] leading-[1.1] font-medium tracking-[-0.04em] tabular-nums ${valueColorClass}`}
+      >
         {formatRemaining(remainingMs)}
-      </span>
-    </p>
+      </p>
+    </div>
   );
 }

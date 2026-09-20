@@ -3,6 +3,7 @@ import { getCurrentActor } from "@/server/auth/current-actor";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { profileService } from "@/server/services/profile-service";
 import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
+import { LearnerAccountSlot } from "@/components/shell/LearnerAccountSlot";
 
 /**
  * The checkout route-group layout — mirrors `src/app/account/layout.tsx`'s
@@ -13,7 +14,8 @@ import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShe
  */
 
 const NAV: LearnerNavItem[] = [
-  { label: "Catalogue", href: "/courses" },
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Courses", href: "/courses" },
   { label: "Account", href: "/account" },
 ];
 
@@ -49,32 +51,10 @@ export default async function CheckoutLayout({
   const profile = await profileService.getOwnProfile(actor);
   const display = deriveAvatarDisplay(profile ? { name: profile.name, email: profile.email } : null);
 
-  const rightSlot = (
-    <>
-      <span
-        role="img"
-        aria-label={display ? `Signed in as ${display.label}` : "Signed in"}
-        title={display?.label ?? "Signed in"}
-        className="flex size-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-accent-contrast"
-        style={{
-          background: "linear-gradient(140deg, var(--color-teal-fill), var(--color-teal-deep))",
-        }}
-      >
-        {display?.initials ?? ""}
-      </span>
-      <form action={signOutAction}>
-        <button
-          type="submit"
-          className="text-sm font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground"
-        >
-          Sign out
-        </button>
-      </form>
-    </>
-  );
+  const rightSlot = <LearnerAccountSlot display={display} signOut={signOutAction} />;
 
   return (
-    <LearnerShell nav={NAV} rightSlot={rightSlot}>
+    <LearnerShell nav={NAV} homeHref="/dashboard" rightSlot={rightSlot}>
       {children}
     </LearnerShell>
   );

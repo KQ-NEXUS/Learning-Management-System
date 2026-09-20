@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { notFound } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { getOwnOrderByReference } from "@/server/services/checkout-service";
@@ -12,7 +13,8 @@ import { SUPPORT_CONTACT_EMAIL } from "@/server/support-contact";
 export const dynamic = "force-dynamic";
 
 const NAV: LearnerNavItem[] = [
-  { label: "Catalogue", href: "/courses" },
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Courses", href: "/courses" },
   { label: "Account", href: "/account" },
 ];
 
@@ -110,7 +112,7 @@ export default async function OrderReceiptPage({
     <form action={signOutAction}>
       <button
         type="submit"
-        className="text-sm font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        className="rounded-md px-2 py-2 text-sm font-medium text-sidebar-soft hover:text-white"
       >
         Sign out
       </button>
@@ -118,9 +120,9 @@ export default async function OrderReceiptPage({
   );
 
   return (
-    <LearnerShell nav={NAV} rightSlot={rightSlot}>
-      <article className="mx-auto flex w-full max-w-[640px] flex-col gap-6">
-        <h1 className="text-[25px] font-semibold leading-[1.2] text-foreground">{heading}</h1>
+    <LearnerShell nav={NAV} homeHref="/dashboard" rightSlot={rightSlot}>
+      <article className="flex flex-col gap-8">
+        <LearnerPageHeader title={heading} />
 
         {!active && !hasRefund && (
           <p className="max-w-prose text-sm text-muted-foreground">
@@ -131,24 +133,24 @@ export default async function OrderReceiptPage({
         )}
 
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-[20px] font-semibold tracking-[-0.015em] text-foreground">
             Order details
           </h2>
-          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <dl className="grid max-w-[720px] grid-cols-1 gap-0">
+            <div className="flex min-w-0 flex-col gap-1 border-b border-border py-3">
+              <dt className="text-sm text-muted-foreground">
                 Order reference
               </dt>
-              <dd className="break-words font-mono text-sm text-foreground">{order.reference}</dd>
+              <dd className="break-words font-mono text-base text-foreground">{order.reference}</dd>
             </div>
-            <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="flex min-w-0 flex-col gap-1 border-b border-border py-3">
+              <dt className="text-sm text-muted-foreground">
                 Cohort
               </dt>
-              <dd className="break-words text-sm text-foreground">{order.cohort.title}</dd>
+              <dd className="break-words text-base font-medium text-foreground">{order.cohort.title}</dd>
             </div>
-            <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="flex min-w-0 flex-col gap-1 border-b border-border py-3">
+              <dt className="text-sm text-muted-foreground">
                 Payment
               </dt>
               <dd className="break-words text-sm">
@@ -158,8 +160,8 @@ export default async function OrderReceiptPage({
                 />
               </dd>
             </div>
-            <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="flex min-w-0 flex-col gap-1 border-b border-border py-3">
+              <dt className="text-sm text-muted-foreground">
                 Enrolment
               </dt>
               <dd className="break-words text-sm">
@@ -198,10 +200,10 @@ export default async function OrderReceiptPage({
         </p>
 
         <Link
-          href="/account"
-          className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
+          href="/dashboard"
+          className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
         >
-          Go to your account
+          Go to your dashboard
         </Link>
       </article>
     </LearnerShell>

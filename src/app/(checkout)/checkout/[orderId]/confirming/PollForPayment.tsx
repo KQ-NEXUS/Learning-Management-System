@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { useRouter } from "next/navigation";
 
 /**
@@ -63,20 +64,16 @@ export function PollForPayment() {
       </span>
       {timedOut ? (
         <>
-          <h1 className="text-[16px] font-semibold leading-[1.3] text-foreground">
-            This is taking longer than usual
-          </h1>
-          <p className="max-w-prose text-center text-sm text-muted-foreground">
+          <LearnerPageHeader title="This is taking longer than usual" />
+          <p className="max-w-prose text-base text-muted-foreground">
             Your payment may still be processing. Refresh this page in a minute, or contact
             support below if it doesn&apos;t update.
           </p>
         </>
       ) : (
         <>
-          <h1 className="text-[16px] font-semibold leading-[1.3] text-foreground">
-            Confirming your payment
-          </h1>
-          <p className="max-w-prose text-center text-sm text-muted-foreground">
+          <LearnerPageHeader title="Confirming your payment" />
+          <p className="max-w-prose text-base text-muted-foreground">
             This usually takes a few seconds. Don&apos;t close this page.
           </p>
         </>
