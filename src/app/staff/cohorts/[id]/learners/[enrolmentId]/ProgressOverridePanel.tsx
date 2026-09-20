@@ -96,8 +96,8 @@ export function ProgressOverridePanel({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-card">
-      <h2 className="text-sm font-semibold text-foreground">Pinned lessons</h2>
+    <div className="flex flex-col gap-2">
+      <h2 className="sr-only">Pinned lessons</h2>
 
       {lessons.length === 0 ? (
         <p className="text-sm text-muted-foreground">This enrolment has no pinned lessons yet.</p>
@@ -110,10 +110,10 @@ export function ProgressOverridePanel({
             >
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-semibold text-foreground">{lesson.title}</span>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {lesson.moduleTitle} · {lesson.required ? "Required" : "Optional"}
                 </span>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {lesson.completed
                     ? `${SOURCE_LABEL[lesson.completedSource ?? ""] ?? lesson.completedSource} · ${
                         lesson.completedAt ? formatTimestamp(new Date(lesson.completedAt)) : "—"
@@ -124,7 +124,7 @@ export function ProgressOverridePanel({
               {canOverride && (
                 <button
                   type="button"
-                  className="text-[11px] font-semibold text-accent underline underline-offset-2"
+                  className="text-xs font-semibold text-accent underline underline-offset-2"
                   onClick={() =>
                     setTarget({
                       lessonId: lesson.id,

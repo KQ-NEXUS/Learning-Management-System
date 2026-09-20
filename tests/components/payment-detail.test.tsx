@@ -145,14 +145,14 @@ describe("PaymentDetailPage — RBAC-06", () => {
 });
 
 describe("PaymentDetailPage — sections and D-14 null-vs-zero (07-UI-SPEC §7.6)", () => {
-  it("renders all four section headings verbatim", async () => {
+  it("renders the section headings verbatim, and no empty Manual confirmation heading for a viewer who cannot use it", async () => {
     mocks.getPaymentDetailForStaff.mockResolvedValue(detail());
     mocks.can.mockResolvedValue(false);
     render(await run());
 
     expect(screen.getByText("Learner charge")).toBeTruthy();
     expect(screen.getByText("Settlement")).toBeTruthy();
-    expect(screen.getByText("Manual confirmation")).toBeTruthy();
+    expect(screen.queryByText("Manual confirmation")).toBeNull();
     expect(screen.getByText("Refunds")).toBeTruthy();
   });
 

@@ -56,7 +56,7 @@ export type GradeEntryClientProps = {
 const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Blank/non-integer/out-of-range all resolve to `null` — never silently
  * coerced to 0 (`Number("")` is `0` in JS, a real footgun for a blank
@@ -173,7 +173,7 @@ export function GradeEntryClient({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <h3 className="text-base font-semibold tracking-tight text-foreground">Score &amp; feedback</h3>
+        <h3 className="sr-only">Score &amp; feedback</h3>
         <StatusPill tone={released ? "success" : "neutral"} label={released ? "Released" : "Draft"} />
       </div>
 
@@ -191,15 +191,20 @@ export function GradeEntryClient({
         <div className="flex flex-col gap-4">
           <FormField name="score" label="Score" hint={`out of ${maxScore}`}>
             {(fieldProps) => (
-              <TextInput
-                {...fieldProps}
-                type="number"
-                min={0}
-                max={maxScore}
-                value={scoreInput}
-                disabled={pending}
-                onChange={(e) => setScoreInput(e.target.value)}
-              />
+              <div className="flex items-baseline gap-3">
+                <TextInput
+                  {...fieldProps}
+                  type="number"
+                  min={0}
+                  max={maxScore}
+                  value={scoreInput}
+                  disabled={pending}
+                  onChange={(e) => setScoreInput(e.target.value)}
+                  mono
+                  className="!h-16 w-32 !px-4 text-[36px] font-medium"
+                />
+                <span className="font-mono text-[20px] text-muted-foreground">/ {maxScore}</span>
+              </div>
             )}
           </FormField>
 
@@ -223,7 +228,7 @@ export function GradeEntryClient({
             override by just re-saving (10-RESEARCH.md Pitfall 5).
           */}
           <div className="flex flex-wrap items-center gap-4">
-            {draftStatus && <p className="font-mono text-[11px] text-muted-foreground">{draftStatus}</p>}
+            {draftStatus && <p className="font-mono text-xs text-muted-foreground">{draftStatus}</p>}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <button type="button" className={BTN} disabled={pending} onClick={handleSaveDraft}>
                 {pending ? "Saving…" : "Save draft"}
@@ -243,13 +248,13 @@ export function GradeEntryClient({
         <div className="flex flex-col gap-4">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
             <div className="flex flex-col gap-1">
-              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Score</dt>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Score</dt>
               <dd className="font-mono text-sm tabular-nums text-foreground">
                 {score ?? "—"} / {maxScore}
               </dd>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Feedback</dt>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Feedback</dt>
               <dd className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground">{feedback || "—"}</dd>
             </div>
           </dl>

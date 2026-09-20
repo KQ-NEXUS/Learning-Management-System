@@ -59,7 +59,7 @@ export function ProgrammeForm(
       )}
 
       <ResourceForm
-        title={props.mode === "create" ? "New programme" : "Programme details"}
+        title={"Details"}
         submitLabel={props.mode === "create" ? "Create programme" : "Save changes"}
         errors={!state.ok ? state.errors : []}
         pending={pending}

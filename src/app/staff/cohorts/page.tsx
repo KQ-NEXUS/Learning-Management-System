@@ -1,7 +1,7 @@
-import { cohortService } from "@/server/services/cohort-service";
+import { cohortService, loadCohortInstructors } from "@/server/services/cohort-service";
 import { courseService } from "@/server/services/course-service";
 import { programmeService } from "@/server/services/programme-service";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { CohortsTable, type CohortRow } from "./CohortsTable";
 
 export const metadata = { title: "Cohorts" };
@@ -16,6 +16,7 @@ type CohortListRow = {
   timezone: string;
   enrolmentOpensAt: Date;
   enrolmentClosesAt: Date;
+  startsAt: Date;
   capacity: number;
   seatsTaken: number;
   status: string;
@@ -40,6 +41,21 @@ export default async function CohortsPage() {
     const courseTitles = new Map(courses.map((c) => [c.id, c.title]));
     const programmeTitles = new Map(programmes.map((p) => [p.id, p.title]));
 
+    // One permission-checked lookup per cohort; a cohort whose instructors this viewer cannot read
+    // simply shows none, rather than failing the whole list.
+    const instructorNames = new Map<string, string[]>(
+      await Promise.all(
+        cohorts.map(async (c) => {
+          try {
+            const found = await loadCohortInstructors({ cohortId: c.id });
+            return [c.id, found.map((r) => r.user.name)] as [string, string[]];
+          } catch {
+            return [c.id, []] as [string, string[]];
+          }
+        }),
+      ),
+    );
+
     rows = cohorts.map((c) => {
       const isCourse = c.courseId != null;
       const offerTitle = isCourse
@@ -57,6 +73,8 @@ export default async function CohortsPage() {
         timezone: c.timezone,
         enrolmentOpensAt: c.enrolmentOpensAt.toISOString(),
         enrolmentClosesAt: c.enrolmentClosesAt.toISOString(),
+        startsAt: c.startsAt.toISOString(),
+        instructors: instructorNames.get(c.id) ?? [],
         capacity: c.capacity,
         seatsTaken: c.seatsTaken,
         status: c.status,
@@ -74,5 +92,7 @@ export default async function CohortsPage() {
     throw error;
   }
 
-  return <CohortsTable rows={rows} />;
+  // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
+  const canCreate = await can("cohorts.manage", {});
+  return <CohortsTable rows={rows} canCreate={canCreate} />;
 }

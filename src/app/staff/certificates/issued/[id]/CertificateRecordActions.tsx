@@ -30,6 +30,10 @@ import { revokeCertificateAction, reissueCertificateAction } from "./certificate
 export type CertificateRecordActionsProps = {
   certificateId: string;
   displayStatus: CertificateDisplayStatus;
+  /** Show "Revoke" (needs certificates.revoke). Default true. */
+  canRevoke?: boolean;
+  /** Show "Reissue" (needs certificates.issue). Default true. */
+  canReissue?: boolean;
   revoke?: typeof revokeCertificateAction;
   reissue?: typeof reissueCertificateAction;
 };
@@ -42,6 +46,8 @@ const BTN_ACCENT =
 export function CertificateRecordActions({
   certificateId,
   displayStatus,
+  canRevoke = true,
+  canReissue = true,
   revoke = revokeCertificateAction,
   reissue = reissueCertificateAction,
 }: CertificateRecordActionsProps) {
@@ -77,9 +83,14 @@ export function CertificateRecordActions({
   // Superseded — a read-only historical record, no actions at all.
   if (displayStatus === "superseded") return null;
 
+  // Each action shows only for staff who hold the permission its server action enforces.
+  const showReissue = displayStatus === "revoked" && canReissue;
+  const showRevoke = displayStatus !== "revoked" && canRevoke;
+  if (!showReissue && !showRevoke) return null;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {displayStatus === "revoked" ? (
+      {showReissue ? (
         <button
           type="button"
           className={BTN_ACCENT}

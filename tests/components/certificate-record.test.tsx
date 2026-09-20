@@ -267,6 +267,12 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pageMocks.push, refresh: pageMocks.refresh }),
 }));
 
+// The page asks whether the actor may revoke / reissue; the tests exercise the rendering, so allow both.
+vi.mock("@/server/permissions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/permissions")>();
+  return { ...actual, can: vi.fn(async () => true) };
+});
+
 vi.mock("@/server/services/cohort-scope", () => ({
   enrolmentCohortScope: pageMocks.enrolmentScope,
 }));

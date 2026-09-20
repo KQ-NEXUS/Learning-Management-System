@@ -230,7 +230,7 @@ export function ElementInspector({ element, onChange, templateId, onAssetUploade
               onClick={() => {
                 if (chosenFile) void uploadChosenFile(chosenFile, imageElement);
               }}
-              className="rounded-md border border-input-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-2"
+              className="rounded-md border border-input-border bg-surface px-2 py-1 text-xs font-semibold text-foreground hover:bg-surface-2"
             >
               Retry
             </button>

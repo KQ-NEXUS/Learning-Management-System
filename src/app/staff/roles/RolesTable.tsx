@@ -74,10 +74,13 @@ const BTN_PRIMARY =
   "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90";
 
 export function RolesTable({
+  canCreate = true,
   rows,
   denied,
 }: {
   rows?: RoleRow[];
+  /** Hide the create button for staff who cannot create. Default true. */
+  canCreate?: boolean;
   denied?: { permission: string };
 }) {
   const [search, setSearch] = useState("");
@@ -127,6 +130,7 @@ export function RolesTable({
 
   return (
     <ResourceTable<RoleRow>
+      asPage
       noun="roles"
       title="Roles"
       columns={columns}
@@ -152,9 +156,11 @@ export function RolesTable({
         )
       }
       headerActions={
-        <Link href="/staff/roles/new" className={BTN_PRIMARY}>
-          New role
-        </Link>
+        canCreate ? (
+          <Link href="/staff/roles/new" className={BTN_PRIMARY}>
+            New role
+          </Link>
+        ) : undefined
       }
     />
   );

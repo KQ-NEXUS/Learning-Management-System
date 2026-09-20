@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Ban, AlertTriangle } from "lucide-react";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import {
   certificateService,
   certificateDisplayStatus,
@@ -134,49 +133,79 @@ export default async function CertificateDetailPage({
       : []),
   ];
 
-  return (
-    <div className="flex flex-col gap-4">
-      {displayStatus === "revoked" && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
-        >
-          <Ban aria-hidden size={16} className="mt-0.5 shrink-0" />
-          <span>
-            Revoked {certificate.revokedAt ? formatTimestamp(certificate.revokedAt) : "—"} by{" "}
-            {revokedByName ?? "Unknown"} — &ldquo;{certificate.revocationReason}&rdquo;
-          </span>
-        </div>
-      )}
-      {displayStatus === "flagged" && (
-        <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-surface px-4 py-2 text-sm text-warning">
-          <AlertTriangle aria-hidden size={16} className="mt-0.5 shrink-0" />
-          <span>
-            This certificate was flagged for review on{" "}
-            {certificate.reviewFlaggedAt ? formatTimestamp(certificate.reviewFlaggedAt) : "—"}, following a
-            correction to the learner&apos;s grade or attendance record. Confirm it should remain active, or
-            revoke it.
-          </span>
-        </div>
-      )}
+  const certificateScope = await enrolmentCohortScope(certificate.enrolmentId).catch(() => ({}));
+  const [canRevoke, canReissue] = await Promise.all([
+    can("certificates.revoke", certificateScope),
+    can("certificates.issue", certificateScope),
+  ]);
 
-      <DetailLayout
-        mode="stacked"
-        breadcrumbs={[
-          { label: "Certificates", href: "/staff/certificates" },
-          { label: "All certificates", href: "/staff/certificates/issued" },
-          { label: `${certificate.learnerName}'s certificate` },
-        ]}
-        title={`${certificate.learnerName}'s certificate`}
-        actions={<CertificateRecordActions certificateId={certificate.id} displayStatus={displayStatus} />}
-        sections={[
-          {
-            id: "details",
-            label: "Certificate details",
-            content: <DetailFacts facts={facts} />,
-          },
-        ]}
-      />
-    </div>
+  // A revoked or flagged certificate leads with its status, as a section of the page (the banner used
+  // to sit above the header and cover the navy band).
+  const statusSection =
+    displayStatus === "revoked"
+      ? {
+          id: "status",
+          label: "Revoked",
+          content: (
+            <p role="alert" className="py-4 text-base text-foreground">
+              Revoked {certificate.revokedAt ? formatTimestamp(certificate.revokedAt) : "—"} by{" "}
+              {revokedByName ?? "Unknown"} — &ldquo;{certificate.revocationReason}&rdquo;
+            </p>
+          ),
+        }
+      : displayStatus === "flagged"
+        ? {
+            id: "status",
+            label: "Flagged for review",
+            content: (
+              <p className="max-w-[600px] py-4 text-base text-foreground">
+                This certificate was flagged for review on{" "}
+                {certificate.reviewFlaggedAt ? formatTimestamp(certificate.reviewFlaggedAt) : "—"}, following a
+                correction to the learner&apos;s grade or attendance record. Confirm it should remain active, or
+                revoke it.
+              </p>
+            ),
+          }
+        : null;
+
+  return (
+    <DetailLayout
+      mode="stacked"
+      breadcrumbs={[
+        { label: "Certificates", href: "/staff/certificates" },
+        { label: "All certificates", href: "/staff/certificates/issued" },
+        { label: `${certificate.learnerName}'s certificate` },
+      ]}
+      title={`${certificate.learnerName}'s certificate`}
+      badges={
+        displayStatus === "revoked" ? (
+          <span data-tone="danger" className="text-sm font-medium">
+            <span aria-hidden className="mr-2 inline-block size-[7px] rounded-full bg-current" />
+            Revoked
+          </span>
+        ) : displayStatus === "flagged" ? (
+          <span data-tone="warning" className="text-sm font-medium">
+            <span aria-hidden className="mr-2 inline-block size-[7px] rounded-full bg-current" />
+            Flagged for review
+          </span>
+        ) : undefined
+      }
+      actions={
+        <CertificateRecordActions
+          certificateId={certificate.id}
+          displayStatus={displayStatus}
+          canRevoke={canRevoke}
+          canReissue={canReissue}
+        />
+      }
+      sections={[
+        ...(statusSection ? [statusSection] : []),
+        {
+          id: "details",
+          label: "Certificate details",
+          content: <DetailFacts facts={facts} />,
+        },
+      ]}
+    />
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 import { Type, ImageIcon, Square } from "lucide-react";
@@ -97,9 +98,9 @@ const PALETTE: { kind: "text" | "image" | "border"; label: string; icon: ReactNo
   { kind: "border", label: "Border", icon: <Square aria-hidden className="size-4" /> },
 ];
 
-const PANEL = "flex flex-col gap-3 border-border bg-surface p-6";
+const PANEL = "flex flex-col gap-3 bg-surface py-1";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
 
 export function TemplateEditorShell({
   initial,
@@ -192,7 +193,7 @@ export function TemplateEditorShell({
   function palettePanel() {
     return (
       <div className={PANEL}>
-        <h2 className="text-[16px] leading-[1.3] font-semibold text-foreground">Elements</h2>
+        <h2 className="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">Add element</h2>
         <div className="flex flex-col gap-2">
           {PALETTE.map((entry) => (
             <button
@@ -206,6 +207,39 @@ export function TemplateEditorShell({
             </button>
           ))}
         </div>
+
+        <h2 className="pt-6 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">Elements</h2>
+        {elements.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing on the page yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {elements.map((element, index) => {
+              const label =
+                element.kind === "text"
+                  ? (element.literal?.trim() || element.field.replace(/([A-Z])/g, " $1").toLowerCase())
+                  : element.kind === "image"
+                    ? "Image"
+                    : "Border";
+              return (
+                <li key={index}>
+                  <button
+                    type="button"
+                    aria-pressed={selectedIndex === index}
+                    onClick={() => setSelectedIndex(index)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm ${
+                      selectedIndex === index
+                        ? "bg-accent-wash font-semibold text-foreground"
+                        : "text-foreground-soft hover:bg-surface-2"
+                    }`}
+                  >
+                    <span className="min-w-0 truncate first-letter:uppercase">{label}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground capitalize">{element.kind}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     );
   }
@@ -228,12 +262,22 @@ export function TemplateEditorShell({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-xs">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight text-foreground">
-            {name || "New template"}
-          </h1>
-          <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title={name || "New template"}
+        breadcrumbs={[
+          { label: "Certificates", href: "/staff/certificates" },
+          { label: "Templates", href: "/staff/certificates/templates" },
+          { label: name || "New template" },
+        ]}
+        meta={
+          dirty && !readOnly ? (
+            <span data-tone="warning" className="text-sm font-medium">
+              Unsaved changes
+            </span>
+          ) : undefined
+        }
+        actions={
+          <>
             {!readOnly && (
               <button type="button" onClick={handleSave} disabled={!dirty || pending} className={BTN_PRIMARY}>
                 {pending ? "Saving…" : "Save template"}
@@ -247,12 +291,15 @@ export function TemplateEditorShell({
                   setPendingHref("/staff/certificates/templates");
                 }
               }}
-              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover"
             >
-              Cancel
+              {readOnly ? "Back to templates" : "Cancel"}
             </Link>
-          </div>
-        </div>
+          </>
+        }
+      />
+
+      <div className="flex flex-col gap-4">
 
         {saveError && (
           <p role="alert" className="text-sm text-danger">
@@ -263,7 +310,7 @@ export function TemplateEditorShell({
         <div className="flex flex-wrap items-end gap-4">
           {readOnly ? (
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Name</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</span>
               <span className="text-sm text-foreground">{name}</span>
             </div>
           ) : (
@@ -283,7 +330,7 @@ export function TemplateEditorShell({
 
           {readOnly ? (
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Page size
               </span>
               <span className="text-sm text-foreground">{pageSize === "A4" ? "A4" : "Letter"}</span>
@@ -310,7 +357,7 @@ export function TemplateEditorShell({
 
           {readOnly ? (
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Orientation
               </span>
               <span className="text-sm text-foreground capitalize">{orientation}</span>
@@ -348,17 +395,17 @@ export function TemplateEditorShell({
       <div className="flex flex-col gap-4 lg:flex-row">
         {!readOnly && (
           <>
-            <details className="rounded-xl border border-border shadow-xs lg:hidden" open>
-              <summary className="cursor-pointer px-6 py-3 text-sm font-semibold text-foreground">Elements</summary>
+            <details className="border-b border-border lg:hidden" open>
+              <summary className="cursor-pointer px-0 py-3 text-sm font-semibold text-foreground">Elements</summary>
               {palettePanel()}
             </details>
-            <aside className="hidden w-64 shrink-0 rounded-xl border border-border shadow-xs lg:block">
+            <aside className="hidden w-64 shrink-0 border-r border-border pr-6 lg:block">
               {palettePanel()}
             </aside>
           </>
         )}
 
-        <div className="flex flex-1 flex-col items-center gap-2 rounded-xl border border-border bg-surface-2 p-6">
+        <div className="flex flex-1 flex-col items-center gap-2 rounded-lg bg-surface-2 p-6">
           <TemplateCanvas
             elements={elements}
             selectedIndex={selectedIndex}
@@ -374,11 +421,11 @@ export function TemplateEditorShell({
           />
         </div>
 
-        <details className="rounded-xl border border-border shadow-xs lg:hidden" open>
-          <summary className="cursor-pointer px-6 py-3 text-sm font-semibold text-foreground">Properties</summary>
+        <details className="border-b border-border lg:hidden" open>
+          <summary className="cursor-pointer px-0 py-3 text-sm font-semibold text-foreground">Properties</summary>
           {propertiesPanel()}
         </details>
-        <aside className="hidden w-64 shrink-0 rounded-xl border border-border shadow-xs lg:block">
+        <aside className="hidden w-64 shrink-0 border-l border-border pl-6 lg:block">
           {propertiesPanel()}
         </aside>
       </div>

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import { assessmentService } from "@/server/services/assessment-service";
 import { AssessmentsTable, type AssessmentRow } from "./AssessmentsTable";
@@ -56,5 +56,7 @@ export default async function AssessmentsListPage({
     }
     throw error;
   }
-  return <AssessmentsTable courseId={courseId} rows={assessments} />;
+  // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
+  const canCreate = await can("assessments.create", { courseIds: [courseId] });
+  return <AssessmentsTable courseId={courseId} rows={assessments} canCreate={canCreate} />;
 }

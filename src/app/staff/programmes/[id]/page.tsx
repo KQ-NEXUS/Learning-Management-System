@@ -98,7 +98,7 @@ export default async function ProgrammeDetailPage({
         <ol className="flex flex-col gap-1">
           {composition.members.map((member) => (
             <li key={member.membershipId} className="flex items-baseline gap-2 text-sm">
-              <span className="font-mono text-[11px] text-muted-foreground">{member.position + 1}</span>
+              <span className="font-mono text-xs text-muted-foreground">{member.position + 1}</span>
               <Link
                 href={`/staff/courses/${member.courseId}`}
                 className="text-accent underline underline-offset-2"
@@ -106,7 +106,7 @@ export default async function ProgrammeDetailPage({
                 {member.title}
               </Link>
               {member.status !== "PUBLISHED" && (
-                <span className="text-[11px] uppercase tracking-wide text-warning">{member.status}</span>
+                <span className="text-xs uppercase tracking-wide text-warning">{member.status}</span>
               )}
             </li>
           ))}

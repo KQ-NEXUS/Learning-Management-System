@@ -47,6 +47,7 @@ export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertif
   return (
     <>
       <ResourceTable
+        asPage
         noun="certificates awaiting issuance"
         columns={[
           { key: "learner", header: "Learner", render: (row) => row.learnerName },
@@ -72,7 +73,7 @@ export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertif
                   setError(null);
                   setTarget(row);
                 }}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
               >
                 Issue certificate
               </button>

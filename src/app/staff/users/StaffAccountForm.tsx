@@ -66,7 +66,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
 
   if (state.created) {
     return (
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface px-4 py-4 shadow-card">
+      <div className="flex flex-col gap-4 border-t border-foreground pt-5">
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-semibold tracking-tight">Staff account created</h2>
           <p className="text-sm text-muted-foreground">
@@ -75,7 +75,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
         </div>
 
         <div className="flex flex-col gap-1 rounded-md border border-border bg-surface-2 px-4 py-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Temporary password
           </span>
           <div className="flex items-center gap-2">
@@ -91,7 +91,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Shown only once — relay this to the new staff member out of band.
           </p>
         </div>
@@ -118,7 +118,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
 
   return (
     <ResourceForm
-      title="New staff account"
+      title="Details"
       errors={formErrors}
       pending={pending}
       submitLabel="Create account & assign role"
@@ -206,7 +206,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
           {(props) =>
             scopeTargets.length === 0 && !scopeQuery && !scopePending && !scopeError ? (
               <div className="flex flex-col gap-1">
-                <p className="text-[11px] text-muted-foreground">{EMPTY_STATE_COPY[scopeType]}</p>
+                <p className="text-xs text-muted-foreground">{EMPTY_STATE_COPY[scopeType]}</p>
                 {/* Kept visible (not hidden) so a `required` field stays a
                     focusable, submittable control — a hidden required field
                     blocks native form submission entirely in most browsers. */}

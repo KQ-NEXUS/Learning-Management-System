@@ -59,7 +59,7 @@ function attendanceFactValue(
   attendance: Awaited<ReturnType<typeof loadCohortRoster>>[number]["attendance"],
 ): string {
   if (attendance.kind === "computed") {
-    return `${attendance.earnedPct}% / ${attendance.requiredPct}%`;
+    return `${attendance.earnedPct}% of ${attendance.requiredPct}% required`;
   }
   return attendance.kind === "no-rule" ? "No attendance rule" : "No countable sessions yet";
 }
@@ -137,19 +137,43 @@ export default async function LearnerProgressPage({
                   {
                     label: "Attendance",
                     value: attendanceFactValue(rosterRow.attendance),
-                    mono: true,
                   },
                   {
                     label: "Required lessons",
                     value:
-                      rosterRow.progress.kind === "tracked"
-                        ? `${rosterRow.progress.completed} of ${rosterRow.progress.total}`
-                        : "Not tracked — cohort is unpinned",
-                    mono: true,
+                      rosterRow.progress.kind === "tracked" ? (
+                        <span className="flex items-center gap-4 tabular-nums">
+                          <span>
+                            {rosterRow.progress.completed} of {rosterRow.progress.total}
+                          </span>
+                          <span aria-hidden className="h-1 w-36 overflow-hidden rounded-full bg-accent-wash">
+                            <span
+                              className="block h-full rounded-full bg-progress-fill"
+                              style={{
+                                width: `${Math.min(100, Math.round((rosterRow.progress.completed / Math.max(rosterRow.progress.total, 1)) * 100))}%`,
+                              }}
+                            />
+                          </span>
+                        </span>
+                      ) : (
+                        "Not tracked — cohort is unpinned"
+                      ),
                   },
                 ]}
               />
-
+            </div>
+          ),
+        },
+        {
+          id: "override",
+          label: "Lesson override",
+          aside: true,
+          content: (
+            <div className="flex flex-col gap-2">
+              <p className="pt-4 text-muted-foreground">
+                Mark a lesson complete on the learner&apos;s behalf. A reason is required and the change is
+                recorded in the audit history.
+              </p>
               <ProgressOverridePanel
                 cohortId={cohortId}
                 enrolmentId={enrolmentId}

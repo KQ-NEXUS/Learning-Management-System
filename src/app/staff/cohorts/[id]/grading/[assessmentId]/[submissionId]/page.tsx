@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { GraduationCap } from "lucide-react";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { cohortService } from "@/server/services/cohort-service";
 import {
@@ -14,12 +13,7 @@ import { GradeEntryClient } from "./GradeEntryClient";
 /**
  * The grade-entry screen (ASM-05, ASM-06) — `10-UI-SPEC.md` §7.2.4.
  *
- * The Cohort-scope banner (D-05, §7.2.1) is written INLINE here rather than
- * imported from the sibling `[assessmentId]/page.tsx` queue route, which
- * runs in the SAME wave (plan 10-12) — see this plan's Task 1 banner note.
- * It is the exact three-line markup that route already established:
- * `GraduationCap` + "Grading: {Cohort} · {Assessment}" in
- * `rounded-md border border-accent/30 bg-accent/5 px-4 py-2` accent text.
+ * The Cohort and Assessment are named in the header breadcrumbs (D-05, §7.2.1).
  *
  * `detail.cohortId`/`detail.submission.assessmentId` are cross-checked
  * against this route's OWN `[id]`/`[assessmentId]` params — mirroring
@@ -95,11 +89,6 @@ export default async function GradeEntryPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-4 py-2 text-sm font-semibold text-accent">
-        <GraduationCap aria-hidden size={20} />
-        Grading: {cohort.title} · {detail.assessment.title}
-      </div>
-
       <DetailLayout
         mode="stacked"
         breadcrumbs={[
@@ -145,6 +134,7 @@ export default async function GradeEntryPage({
           {
             id: "grade",
             label: "Score & feedback",
+            aside: true,
             content: (
               <GradeEntryClient
                 cohortId={cohortId}

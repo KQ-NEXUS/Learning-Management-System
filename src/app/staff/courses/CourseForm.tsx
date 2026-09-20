@@ -75,7 +75,7 @@ export function CourseForm(
       )}
 
       <ResourceForm
-        title={mode === "create" ? "New course" : "Course details"}
+        title={"Details"}
         submitLabel={mode === "create" ? "Create course" : "Save changes"}
         errors={!state.ok ? state.errors : []}
         pending={pending}

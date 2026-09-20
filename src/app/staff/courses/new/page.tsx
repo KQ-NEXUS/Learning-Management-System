@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { listSelectableTemplates } from "@/server/services/certificate-template-service";
 import { CourseForm } from "../CourseForm";
@@ -28,10 +29,7 @@ export default async function NewCoursePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-muted-foreground">Staff / Courses</p>
-        <h1 className="text-lg font-semibold tracking-tight">New course</h1>
-      </div>
+      <PageHeader title="New course" breadcrumbs={[{ label: "Courses", href: "/staff/courses" }, { label: "New" }]} />
       <CourseForm mode="create" templates={templates} />
     </div>
   );

@@ -52,10 +52,10 @@ export function PermissionPicker({
         return (
           <details key={group.id} className="rounded-xl border border-border bg-surface">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+              <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
                 {group.label}
               </span>
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
                 {selectedCount}/{group.permissions.length}
               </span>
             </summary>

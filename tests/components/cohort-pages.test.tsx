@@ -1,5 +1,5 @@
 function usd(amount: number): string {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amount);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(amount);
 }
 
 import { expect, it, vi } from "vitest";
@@ -63,13 +63,15 @@ type FactRow = { label: string; value: string };
 function overviewFacts(page: Awaited<ReturnType<typeof DetailPage>>): FactRow[] {
   const overviewSection = page.props.sections[0];
   const overviewContent = overviewSection.content;
-  return overviewContent.props.children[0].props.facts as FactRow[];
+  // children[0] is the "Cohort details" section: heading, then a div wrapping <DetailFacts>.
+  return overviewContent.props.children[0].props.children[1].props.children.props.facts as FactRow[];
 }
 
 function readinessItemsProp(page: Awaited<ReturnType<typeof DetailPage>>) {
   const overviewSection = page.props.sections[0];
   const overviewContent = overviewSection.content;
-  return overviewContent.props.children[1].props.items as Array<{ id: string; state: string; label: string }>;
+  // children[1] is the right-hand column: readiness panel first, then instructors.
+  return overviewContent.props.children[1].props.children[1].props.items as Array<{ id: string; state: string; label: string }>;
 }
 
 it("renders 'Not set' for both price facts when neither rail is priced — never an empty cell, never 0", async () => {
@@ -86,7 +88,7 @@ it("renders the formatted amount for a priced rail and 'Not set' for the unprice
   const facts = overviewFacts(page);
   const ngnFact = facts.find((f) => f.label === "NGN price");
   expect(ngnFact?.value).not.toBe("Not set");
-  expect(ngnFact?.value).toContain("450,000.00");
+  expect(ngnFact?.value).toContain("450,000");
   expect(facts.find((f) => f.label === "USD price")?.value).toBe("Not set");
 });
 

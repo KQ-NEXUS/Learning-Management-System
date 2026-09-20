@@ -1,4 +1,5 @@
 import { roleService } from "@/server/services/role-service";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthorizationError, AuthenticationError } from "@/server/permissions";
 import { ResourceForm } from "@/components/primitives";
 import { RoleForm, type CloneSource } from "../RoleForm";
@@ -40,5 +41,10 @@ export default async function NewRolePage() {
     throw error;
   }
 
-  return <RoleForm cloneSources={cloneSources} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <PageHeader title="New role" breadcrumbs={[{ label: "Roles", href: "/staff/roles" }, { label: "New" }]} />
+      <RoleForm cloneSources={cloneSources} />
+    </div>
+  );
 }

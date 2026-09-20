@@ -68,7 +68,7 @@ export function RoleForm({
 
   return (
     <ResourceForm
-      title={isEdit ? `Edit ${role?.name ?? ""}` : "New role"}
+      title="Details"
       errors={errors}
       pending={pending}
       submitLabel={isEdit ? "Save changes" : "Create role"}

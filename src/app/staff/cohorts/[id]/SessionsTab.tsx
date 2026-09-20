@@ -17,6 +17,7 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ResourceTable, StatusPill, ConfirmModal, type Column, type ResourceTableState } from "@/components/primitives";
 import {
@@ -55,12 +56,43 @@ export type SessionsTabProps = {
   denied?: { permission: string };
   /** Present only for a Programme cohort (D-24) — omitted for a Course cohort. */
   courseOptions?: { id: string; title: string }[];
+  /** Show add / repeat / cancel (needs cohorts.manage). Default true. */
+  canManage?: boolean;
+  /** Instructor names by user id, so the Facilitator column shows a person rather than an id. */
+  facilitatorNames?: Record<string, string>;
 };
 
 const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+
+/** A location of "Virtual" is an online session; anything else is a place to attend in person. */
+function whereLabel(s: SessionRow): string {
+  const place = s.location?.trim();
+  if (place && /^virtual$/i.test(place)) return "Virtual";
+  if (place) return `In person, ${place}`;
+  return s.hasMeetingLink ? "Virtual" : "—";
+}
+
+/** "Mon 7 Sep, 09:00 to 12:00" in the session's own timezone (the end repeats the date only if it differs). */
+function formatWhen(s: SessionRow): string {
+  const zone = s.timezone || "UTC";
+  try {
+    const day = (iso: string) =>
+      new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: zone }).format(
+        new Date(iso),
+      );
+    const time = (iso: string) =>
+      new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone }).format(
+        new Date(iso),
+      );
+    const sameDay = day(s.startsAt) === day(s.endsAt);
+    return `${day(s.startsAt)}, ${time(s.startsAt)} to ${sameDay ? "" : `${day(s.endsAt)}, `}${time(s.endsAt)}`;
+  } catch {
+    return s.startsAtLabel;
+  }
+}
 
 function formatDuration(startsAt: string, endsAt: string): string {
   const ms = new Date(endsAt).getTime() - new Date(startsAt).getTime();
@@ -79,6 +111,8 @@ export function SessionsTab({
   sessions,
   denied,
   courseOptions,
+  canManage = true,
+  facilitatorNames,
 }: SessionsTabProps) {
   const router = useRouter();
 
@@ -139,44 +173,37 @@ export function SessionsTab({
   const columns: Column<SessionRow>[] = [
     {
       key: "title",
-      header: "Title",
+      header: "Session",
       render: (s) => s.title,
-      subtitle: (s) => (s.location ? s.location : undefined),
-      width: "22%",
+      width: "16%",
     },
     {
       key: "startsAt",
-      header: "Starts",
-      render: (s) => s.startsAtLabel,
-      mono: true,
+      header: "When",
+      render: (s) => formatWhen(s),
+      subtitle: (s) => `${formatDuration(s.startsAt, s.endsAt)} · ${s.timezone}`,
       width: "22%",
       sortable: true,
     },
     {
-      key: "duration",
-      header: "Duration",
-      render: (s) => formatDuration(s.startsAt, s.endsAt),
-      mono: true,
-      width: "10%",
+      key: "where",
+      header: "Where",
+      render: (s) => whereLabel(s),
+      subtitle: (s) => (s.hasMeetingLink ? "Link configured" : undefined),
+      width: "14%",
     },
     {
       key: "facilitatorId",
       header: "Facilitator",
-      render: (s) => s.facilitatorId ?? "—",
-      width: "14%",
+      render: (s) => (s.facilitatorId ? (facilitatorNames?.[s.facilitatorId] ?? "—") : "—"),
+      width: "11%",
       hideOnMobile: true,
     },
     {
-      key: "hasMeetingLink",
-      header: "Mode/link",
-      render: (s) => (s.hasMeetingLink ? "Link configured" : "No link"),
-      width: "12%",
-    },
-    {
       key: "attendanceExpected",
-      header: "Attendance expected",
+      header: "Attendance",
       render: (s) => (s.attendanceExpected ? "Expected" : "Not expected"),
-      width: "12%",
+      width: "10%",
       hideOnMobile: true,
     },
     {
@@ -197,18 +224,28 @@ export function SessionsTab({
         s.cancelledAt ? (
           "—"
         ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setCancelTarget(s);
-              setCancelError(null);
-            }}
-            className="text-[11px] font-semibold text-danger underline underline-offset-2"
-          >
-            Cancel
-          </button>
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link
+              href={`/staff/cohorts/${s.cohortId}/sessions/${s.id}/attendance`}
+              className="text-sm font-semibold whitespace-nowrap text-accent hover:underline"
+            >
+              Mark attendance
+            </Link>
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelTarget(s);
+                  setCancelError(null);
+                }}
+                className="text-sm font-semibold text-danger hover:underline"
+              >
+                Cancel
+              </button>
+            )}
+          </span>
         ),
-      width: "10%",
+      width: "19%",
     },
   ];
 
@@ -233,7 +270,7 @@ export function SessionsTab({
         emptyHeading="No sessions scheduled"
         emptyBody="Add a session, or set delivery mode to self-paced if this cohort has no live meetings."
         headerActions={
-          !denied && (
+          !denied && canManage && (
             <>
               <button type="button" className={BTN} onClick={() => openPanel("repeat")}>
                 Repeat weekly…
@@ -247,7 +284,7 @@ export function SessionsTab({
       />
 
       {panel !== "none" && (
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <div className="flex flex-col gap-4 border-t border-foreground pt-5">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold tracking-tight text-foreground">
               {panel === "add" ? "Add session" : "Repeat weekly"}

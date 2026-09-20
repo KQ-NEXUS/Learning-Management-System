@@ -1,4 +1,5 @@
 import { roleService } from "@/server/services/role-service";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthorizationError, AuthenticationError } from "@/server/permissions";
 import { ResourceForm } from "@/components/primitives";
 import { StaffAccountForm, type RoleOption } from "../StaffAccountForm";
@@ -29,5 +30,10 @@ export default async function NewStaffAccountPage() {
     throw error;
   }
 
-  return <StaffAccountForm roles={roles} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <PageHeader title="New staff account" breadcrumbs={[{ label: "Users", href: "/staff/users" }, { label: "New" }]} />
+      <StaffAccountForm roles={roles} />
+    </div>
+  );
 }

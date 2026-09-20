@@ -81,9 +81,9 @@ export type SessionFormFieldsProps = {
 /** A field label with the cohort's IANA zone appended in mono (D-23). */
 function ZonedLabel({ label, timezone }: { label: string; timezone: string }) {
   return (
-    <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
       {label}
-      <span className="font-mono text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
+      <span className="font-mono text-xs font-normal normal-case tracking-normal text-muted-foreground">
         {timezone}
       </span>
     </span>

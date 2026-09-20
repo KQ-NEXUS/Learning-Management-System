@@ -4,14 +4,14 @@
  * A pure function rather than an inline conditional in each caller — the
  * redirect target is exactly the kind of value that gets duplicated across
  * `signInAction`, `registerAction`'s post-verification flow, and any future
- * caller, then drifts. `LEARNER_LANDING_PATH` will change once Phase 9 ships
- * a real learner dashboard; this is the one place that update needs to land.
+ * caller, then drifts. A signed-in learner lands on their dashboard (Phase 9); this is
+ * the one place that destination is defined.
  */
 
 import { HOLD_MINUTES_DEFAULT } from "@/server/services/seat-accounting";
 
-export const STAFF_LANDING_PATH = "/staff/courses";
-export const LEARNER_LANDING_PATH = "/account";
+export const STAFF_LANDING_PATH = "/staff";
+export const LEARNER_LANDING_PATH = "/dashboard";
 
 export function landingPathFor(user: { isStaff?: boolean | null }): string {
   return user.isStaff === true ? STAFF_LANDING_PATH : LEARNER_LANDING_PATH;

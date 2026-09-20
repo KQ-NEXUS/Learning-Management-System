@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import Link from "next/link";
-import { Award } from "lucide-react";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import {
   certificateService,
@@ -53,23 +53,19 @@ export default async function CertificatesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-base font-semibold text-foreground">
-          <Award aria-hidden size={20} className="text-accent" />
-          <h1>Certificates</h1>
-        </div>
-        <div className="flex flex-wrap gap-4 text-sm">
-          <Link href="/staff/certificates/issued" className="text-accent underline underline-offset-2">
-            All certificates
-          </Link>
-          <Link
-            href="/staff/certificates/templates"
-            className="text-accent underline underline-offset-2"
-          >
-            Certificate templates
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Certificates"
+        actions={
+          <>
+            <Link href="/staff/certificates/issued" className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover">
+              All certificates
+            </Link>
+            <Link href="/staff/certificates/templates" className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover">
+              Certificate templates
+            </Link>
+          </>
+        }
+      />
       <CertificateQueueTable rows={rows} />
       <RecentlyIssuedList rows={recent} sources={sources} />
     </div>

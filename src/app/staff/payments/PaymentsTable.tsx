@@ -54,7 +54,12 @@ const SETTLEMENT_TONE: Record<string, "success" | "neutral" | "warning" | "dange
 
 function formatAmount(amountMinor: number, currency: string): string {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amountMinor / 100);
+    return new Intl.NumberFormat(currency === "NGN" ? "en-NG" : "en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amountMinor / 100);
   } catch {
     return `${amountMinor} minor units ${currency}`;
   }
@@ -65,16 +70,21 @@ const columns: Column<PaymentRow>[] = [
     key: "order",
     header: "Order",
     render: (r) => r.reference,
-    subtitle: (r) => r.cohortTitle,
     mono: true,
-    width: "20%",
+    width: "14%",
   },
   {
     key: "learner",
     header: "Learner",
     render: (r) => r.learnerName,
     subtitle: (r) => r.learnerEmail,
-    width: "22%",
+    width: "20%",
+  },
+  {
+    key: "cohort",
+    header: "Cohort",
+    render: (r) => r.cohortTitle,
+    width: "20%",
   },
   {
     key: "amount",
@@ -82,14 +92,14 @@ const columns: Column<PaymentRow>[] = [
     render: (r) => formatAmount(r.amountMinor, r.currency),
     mono: true,
     align: "right",
-    width: "14%",
+    width: "12%",
   },
   {
     key: "provider",
     header: "Provider",
     // Plain text, never a StatusPill — provider isn't a status (§5's guard note).
     render: (r) => (r.provider ? (PROVIDER_LABEL[r.provider] ?? r.provider) : "—"),
-    width: "14%",
+    width: "10%",
   },
   {
     key: "payment",
@@ -115,22 +125,22 @@ const columns: Column<PaymentRow>[] = [
   },
 ];
 
-const STATUS_OPTIONS = [
-  { value: "", label: "Any" },
-  { value: "PENDING", label: "Pending" },
+// Status tabs, with counts; a tab only shows once at least one order is in that status.
+const STATUS_TABS = [
+  { value: "PENDING", label: "Awaiting confirmation" },
   { value: "PAID", label: "Paid" },
+  { value: "PARTIALLY_REFUNDED", label: "Partially refunded" },
+  { value: "REFUNDED", label: "Refunded" },
+  { value: "EXCEPTION", label: "Exception" },
   { value: "FAILED", label: "Failed" },
   { value: "CANCELLED", label: "Cancelled" },
-  { value: "REFUNDED", label: "Refunded" },
-  { value: "PARTIALLY_REFUNDED", label: "Partially refunded" },
-  { value: "EXCEPTION", label: "Exception" },
 ];
 
 // Exactly 4 options (including "All") — `ResourceTable`'s own `isSegmented`
 // threshold (`options.length <= 4`) applies automatically; no new
 // segmented-vs-select logic is written here.
 const PROVIDER_OPTIONS = [
-  { value: "", label: "All" },
+  { value: "", label: "All providers" },
   { value: "PAYSTACK", label: "Paystack" },
   { value: "STRIPE", label: "Stripe" },
   { value: "MANUAL", label: "Manual" },
@@ -198,6 +208,7 @@ export function PaymentsTable({
 
   return (
     <ResourceTable<PaymentRow>
+      asPage
       noun="payments"
       title="Payments"
       columns={columns}
@@ -214,18 +225,24 @@ export function PaymentsTable({
       emptyBody="Payments appear here once a learner completes checkout or staff record a manual payment."
       filters={[
         {
+          kind: "tabs",
+          name: "status",
+          label: "Status",
+          value: status,
+          options: [
+            { value: "", label: "All", count: rows?.length ?? 0 },
+            ...STATUS_TABS.map((tab) => ({
+              ...tab,
+              count: rows?.filter((r) => r.status === tab.value).length ?? 0,
+            })).filter((tab) => tab.count > 0),
+          ],
+        },
+        {
           kind: "search",
           name: "search",
           label: "Search",
           value: search,
-          placeholder: "Learner, email or order reference",
-        },
-        {
-          kind: "select",
-          name: "status",
-          label: "Status",
-          value: status,
-          options: STATUS_OPTIONS,
+          placeholder: "Search by reference or learner",
         },
         {
           kind: "select",
@@ -233,6 +250,7 @@ export function PaymentsTable({
           label: "Provider",
           value: provider,
           options: PROVIDER_OPTIONS,
+          variant: "select",
         },
       ]}
       onFilterChange={(name, value) => {

@@ -100,7 +100,7 @@ export function QuestionBuilder({ assessmentId, initialQuestions, readinessInput
   return <ResourceForm title="Quiz questions" submitLabel="Save questions" pending={pending}
     errors={error ? [{name:"questions",message:error}] : []} onSubmit={save}>
     <div role="status" aria-live="polite" aria-label="Question order" className="sr-only">{announcement}</div>
-    {dirty && <p className="w-fit rounded-full border border-warning/30 bg-warning/10 px-4 py-1 text-[11px] font-semibold text-warning">Unsaved changes</p>}
+    {dirty && <p className="w-fit rounded-full border border-warning/30 bg-warning/10 px-4 py-1 text-xs font-semibold text-warning">Unsaved changes</p>}
     {questions.length === 0 && <p className="text-sm text-muted-foreground">No questions yet. Add a question to get started.</p>}
     <fieldset disabled={pending} className="min-w-0">
       <DragDropContext onDragEnd={dragEnd}>

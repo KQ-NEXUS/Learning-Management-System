@@ -20,6 +20,7 @@
  */
 
 import { useActionState, useState } from "react";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { useRouter } from "next/navigation";
 import {
   ResourceForm,
@@ -104,7 +105,7 @@ const FEEDBACK_LABELS: Record<string, string> = {
 };
 
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_DANGER =
   "rounded-md border border-danger/40 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -185,14 +186,11 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        {mode === "edit" && (
-          <p className="font-mono text-[11px] text-muted-foreground">{props.assessmentId}</p>
-        )}
-        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">
-          {mode === "create" ? "New assessment" : "Edit assessment"}
-        </h1>
-      </div>
+      <PageHeader
+        title={mode === "create" ? "New assessment" : "Edit assessment"}
+        identifier={mode === "edit" ? props.assessmentId : undefined}
+        breadcrumbs={[{ label: "Courses", href: "/staff/courses" }, { label: "Assessments" }]}
+      />
 
       {state.ok === true && (
         <p
@@ -227,7 +225,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
         <div className="flex flex-col gap-1">
           <label
             htmlFor="assessment-type"
-            className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
           >
             Type
           </label>
@@ -303,7 +301,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
       {mode === "edit" && <ReadinessPanel items={props.readinessItems} />}
 
       {mode === "edit" && (
-        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-4 py-4 shadow-card">
+        <div className="flex flex-col items-start gap-2 border-t border-foreground pt-5">
           <p className="text-sm font-semibold">Publish</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             {published
@@ -322,7 +320,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
       )}
 
       {mode === "edit" && !archived && (
-        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-4 py-4 shadow-card">
+        <div className="flex flex-col items-start gap-2 border-t border-foreground pt-5">
           <p className="text-sm font-semibold">Archive this assessment</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             It leaves every staff authoring list. It cannot be deleted — archiving is the only
@@ -470,7 +468,7 @@ function AssignmentFields({
       <div className="flex flex-col gap-1">
         <span className="text-sm font-semibold text-foreground">
           Allowed file types
-          <span className="ml-1 text-[11px] font-normal text-muted-foreground" aria-hidden>
+          <span className="ml-1 text-xs font-normal text-muted-foreground" aria-hidden>
             required
           </span>
         </span>
@@ -487,7 +485,7 @@ function AssignmentFields({
                     active ? fileTypes.filter((value) => value !== extension) : [...fileTypes, extension],
                   )
                 }
-                className={`rounded-full border px-3 py-1 font-mono text-[11px] ${
+                className={`rounded-full border px-3 py-1 font-mono text-xs ${
                   active
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-input-border bg-surface text-muted-foreground hover:text-foreground"

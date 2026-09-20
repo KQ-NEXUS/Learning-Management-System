@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import {
@@ -74,12 +75,7 @@ export default async function EditCoursePage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-muted-foreground">
-          Staff / Courses / {course.title}
-        </p>
-        <h1 className="text-lg font-semibold tracking-tight">Edit course</h1>
-      </div>
+      <PageHeader title="Edit course" breadcrumbs={[{ label: "Courses", href: "/staff/courses" }, { label: course.title, href: `/staff/courses/${id}` }, { label: "Edit" }]} />
       <CourseForm
         mode="edit"
         courseId={id}

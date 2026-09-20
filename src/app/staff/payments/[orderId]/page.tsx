@@ -201,14 +201,11 @@ export default async function PaymentDetailPage({
           content: (
             <div className="flex flex-col gap-4">
               {detail.settlementState === "EXCEPTION" && (
-                <div
-                  role="alert"
-                  className="rounded-md border border-warning/30 bg-warning-surface px-4 py-2"
-                >
+                <div role="alert" className="flex flex-col gap-1 border-l-2 border-warning py-1 pl-4">
                   <p className="text-sm font-semibold text-warning">
                     Settlement doesn&apos;t match the expected amount
                   </p>
-                  <p className="mt-1 max-w-prose text-sm text-warning">
+                  <p className="max-w-prose text-sm text-foreground-soft">
                     This has been flagged for review. The learner&apos;s charge and enrolment are unaffected.
                   </p>
                 </div>
@@ -253,30 +250,32 @@ export default async function PaymentDetailPage({
         {
           id: "manual-confirmation",
           label: "Manual confirmation",
+          aside: true,
           content: alreadyPaid ? (
-            <div className="rounded-md border border-warning/30 bg-warning-surface px-4 py-2">
-              <p className="text-sm font-semibold text-warning">This order is already paid</p>
-              <p className="mt-1 max-w-prose text-sm text-warning">
-                A payment was already recorded for this order on {formatDate(detail.existingAttempt?.confirmedAt ?? null)}{" "}
-                via {PROVIDER_LABEL[detail.existingAttempt?.provider ?? ""] ?? "—"}. See the existing transaction
-                below before taking any further action.
-              </p>
-              <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
-                <div className="flex flex-col">
-                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Provider</dt>
-                  <dd>{PROVIDER_LABEL[detail.existingAttempt?.provider ?? ""] ?? "—"}</dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Date</dt>
-                  <dd className="font-mono tabular-nums">{formatDate(detail.existingAttempt?.confirmedAt ?? null)}</dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Reference</dt>
-                  <dd className="max-w-prose break-words font-mono">
-                    {detail.existingAttempt?.providerRef ?? detail.existingAttempt?.providerIntentId ?? "—"}
-                  </dd>
-                </div>
-              </dl>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1 border-l-2 border-warning py-1 pl-4">
+                <p className="text-sm font-semibold text-warning">
+                  {detail.existingAttempt ? "This order is already paid" : "This order can’t be confirmed manually"}
+                </p>
+                <p className="max-w-prose text-sm text-foreground-soft">
+                  {detail.existingAttempt
+                    ? `A payment was already recorded for this order on ${formatDate(detail.existingAttempt.confirmedAt ?? null)} via ${PROVIDER_LABEL[detail.existingAttempt.provider ?? ""] ?? "—"}. Check the existing transaction before taking any further action.`
+                    : "It is already paid or under review, and no payment transaction is recorded against it yet."}
+                </p>
+              </div>
+              {detail.existingAttempt && (
+                <DetailFacts
+                  facts={[
+                    { label: "Provider", value: PROVIDER_LABEL[detail.existingAttempt.provider ?? ""] ?? "—" },
+                    { label: "Date", value: formatDate(detail.existingAttempt.confirmedAt ?? null), mono: true },
+                    {
+                      label: "Reference",
+                      value: detail.existingAttempt.providerRef ?? detail.existingAttempt.providerIntentId ?? "—",
+                      mono: true,
+                    },
+                  ]}
+                />
+              )}
             </div>
           ) : showManualConfirm ? (
             <ManualPaymentDialog orderId={detail.id} currency={detail.currency} />
@@ -291,7 +290,7 @@ export default async function PaymentDetailPage({
               {detail.refunds.length > 0 && (
                 <table className="w-full border-collapse text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="py-2 pr-2 font-semibold">Reference</th>
                       <th className="py-2 pr-2 font-semibold">Amount</th>
                       <th className="py-2 pr-2 font-semibold">Status</th>

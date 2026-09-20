@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { certificateTemplateService } from "@/server/services/certificate-template-service";
 import { TemplatesTable, type TemplateRow } from "./TemplatesTable";
 
@@ -25,5 +25,7 @@ export default async function CertificateTemplatesPage() {
     throw error;
   }
 
-  return <TemplatesTable rows={templates} />;
+  // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
+  const canCreate = await can("certificates.manage", {});
+  return <TemplatesTable rows={templates} canCreate={canCreate} />;
 }

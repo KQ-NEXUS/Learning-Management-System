@@ -71,7 +71,7 @@ function BodyProse({ html }: { html: string }) {
   if (!html.trim()) return null;
   return (
     <div
-      className="prose-sm max-w-prose [&_a]:text-accent [&_a]:underline"
+      className="max-w-none text-[18px] leading-[1.65] text-foreground-soft [&_a]:text-accent [&_a]:underline [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-[22px] [&_h2]:leading-[1.2] [&_h2]:font-semibold [&_h2]:tracking-[-0.015em] [&_h2]:text-foreground [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:text-[20px] [&_h3]:font-semibold [&_h3]:text-foreground [&_li]:mb-1 [&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mb-4 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6"
       // D-30: the write-time sanitisation pass is NOT the last defence — a row
       // written before a sanitiser bug was fixed, or through a path since
       // removed, or by a direct DB edit, must still be safe when read. This
@@ -152,7 +152,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
               className="inline-flex items-center gap-2 rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2"
             >
               <span>Download {first.filename}</span>
-              <span className="text-[11px] text-muted-foreground">{humanSize(first.sizeBytes)}</span>
+              <span className="text-xs text-muted-foreground">{humanSize(first.sizeBytes)}</span>
             </a>
           ) : (
             <UploadUnavailable status={first.uploadStatus} />
@@ -183,7 +183,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
                   className="h-full w-full max-w-full object-contain"
                 />
               </div>
-              <figcaption className="text-[11px] text-muted-foreground">{first.title || first.filename}</figcaption>
+              <figcaption className="text-xs text-muted-foreground">{first.title || first.filename}</figcaption>
             </figure>
           ) : (
             <UploadUnavailable status={first.uploadStatus} />
@@ -229,7 +229,7 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
   return (
     <article className="flex flex-col gap-4">
       {withdrawn && (
-        <p className="inline-flex w-fit items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warning">
+        <p className="inline-flex w-fit items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-warning">
           Withdrawn — kept visible for cohorts pinned to a version that still includes it
         </p>
       )}

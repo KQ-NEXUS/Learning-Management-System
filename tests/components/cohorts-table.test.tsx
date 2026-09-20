@@ -27,6 +27,8 @@ const row = (overrides: Partial<CohortRow> = {}): CohortRow => ({
   timezone: "Africa/Lagos",
   enrolmentOpensAt: "2026-01-01T00:00:00.000Z",
   enrolmentClosesAt: "2026-01-15T00:00:00.000Z",
+  startsAt: "2026-02-01T00:00:00.000Z",
+  instructors: [],
   capacity: 20,
   seatsTaken: 1,
   status: "PUBLISHED",
@@ -84,7 +86,7 @@ describe("Cohorts — six render states", () => {
 
   it("filtered-empty (cohorts exist, none match the active filters)", () => {
     render(<CohortsTable rows={[row()]} />);
-    fireEvent.change(screen.getByPlaceholderText("Code or title"), {
+    fireEvent.change(screen.getByPlaceholderText("Search by code or title"), {
       target: { value: "no-such-cohort" },
     });
     expect(screen.getByText("No cohorts match these filters")).toBeTruthy();
@@ -95,7 +97,7 @@ describe("Cohorts — six render states", () => {
     // Desktop table + mobile card both render the same data.
     expect(screen.getAllByText("1/20").length).toBeGreaterThan(0);
 
-    const links = screen.getAllByRole("link", { name: "CH-2601" }) as HTMLAnchorElement[];
+    const links = screen.getAllByRole("link", { name: "Foundations Cohort" }) as HTMLAnchorElement[];
     expect(links.length).toBeGreaterThan(0);
     for (const link of links) {
       expect(link.getAttribute("href")).toBe("/staff/cohorts/c1");

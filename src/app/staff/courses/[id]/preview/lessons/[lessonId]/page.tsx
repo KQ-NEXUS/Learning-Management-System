@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import Link from "next/link";
 import { Eye } from "lucide-react";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
@@ -76,7 +77,8 @@ export default async function LearnerLessonPreviewPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex w-full items-start gap-2 rounded-md border border-border bg-surface-2 px-4 py-2">
+      <PageHeader title={lesson.title} subtitle={moduleTitle ?? undefined} />
+      <div className="flex w-full items-start gap-2 border-y border-border py-3">
         <Eye aria-hidden className="mt-1 size-4 shrink-0 text-muted-foreground" />
         <div className="flex flex-col gap-1">
           <p className="text-sm font-semibold text-foreground">
@@ -91,14 +93,6 @@ export default async function LearnerLessonPreviewPage({
         </div>
       </div>
 
-      <header className="flex flex-col gap-1">
-        {moduleTitle && (
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {moduleTitle}
-          </p>
-        )}
-        <h1 className="text-[22px] font-semibold tracking-tight">{lesson.title}</h1>
-      </header>
 
       <LessonContent
         lesson={{

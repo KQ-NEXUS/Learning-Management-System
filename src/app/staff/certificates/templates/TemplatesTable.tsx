@@ -29,6 +29,8 @@ export type TemplateRow = {
 
 type Props = {
   rows: TemplateRow[];
+  /** Hide the New template button for staff who cannot manage templates. Default true. */
+  canCreate?: boolean;
   onArchive?: typeof archiveTemplateAction;
   onSetDefault?: typeof setDefaultTemplateAction;
 };
@@ -41,6 +43,7 @@ const DANGER_ACTION =
 
 export function TemplatesTable({
   rows,
+  canCreate = true,
   onArchive = archiveTemplateAction,
   onSetDefault = setDefaultTemplateAction,
 }: Props) {
@@ -133,19 +136,19 @@ export function TemplatesTable({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight text-foreground">
-          Certificate templates
-        </h1>
-        <Link
-          href="/staff/certificates/templates/new"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90"
-        >
-          New template
-        </Link>
-      </div>
-
       <ResourceTable<TemplateRow>
+        asPage
+        title="Certificate templates"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/staff/certificates/templates/new"
+              className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+            >
+              New template
+            </Link>
+          ) : undefined
+        }
         noun="templates"
         columns={columns}
         state={

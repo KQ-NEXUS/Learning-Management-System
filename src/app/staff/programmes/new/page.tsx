@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { listSelectableTemplates } from "@/server/services/certificate-template-service";
 import { ProgrammeForm } from "../ProgrammeForm";
@@ -29,10 +30,7 @@ export default async function NewProgrammePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-muted-foreground">Staff · Programmes</p>
-        <h1 className="text-lg font-semibold tracking-tight">New programme</h1>
-      </div>
+      <PageHeader title="New programme" breadcrumbs={[{ label: "Programmes", href: "/staff/programmes" }, { label: "New" }]} />
       <ProgrammeForm mode="create" templates={templates} />
     </div>
   );

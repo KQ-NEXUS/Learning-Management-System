@@ -105,11 +105,11 @@ export default async function CourseDetailPage({
                       >
                         {lesson.title}
                       </Link>
-                      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
                         {lesson.type}
                       </span>
                       {lesson.required && (
-                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
                           required
                         </span>
                       )}

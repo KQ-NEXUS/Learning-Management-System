@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import Link from "next/link";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
@@ -53,7 +54,8 @@ export default async function CoursePublicPreviewPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 px-4 py-4">
+      <PageHeader title={course.title} identifier={course.slug} subtitle={course.summary ?? undefined} />
+      <div className="flex flex-col gap-2 border-y border-border py-4">
         <p className="text-sm font-semibold text-warning">
           Preview — this is how the public page will look. It is not the live page.
         </p>
@@ -71,11 +73,6 @@ export default async function CoursePublicPreviewPage({
         </Link>
       </div>
 
-      <header className="flex flex-col gap-2">
-        <p className="font-mono text-[11px] text-muted-foreground">{course.slug}</p>
-        <h1 className="break-words text-[33px] font-semibold leading-[1.12]">{course.title}</h1>
-        {course.summary && <p className="max-w-prose text-sm text-muted-foreground">{course.summary}</p>}
-      </header>
 
       {course.outcomes && (
         <section className="flex flex-col gap-1">
@@ -89,8 +86,8 @@ export default async function CoursePublicPreviewPage({
       {facts.length > 0 && (
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {facts.map(([label, value]) => (
-            <div key={label} className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-4 shadow-xs">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+            <div key={label} className="flex min-w-0 flex-col gap-1 border-t border-foreground pt-5">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
               <dd className="break-words text-sm text-foreground">{value}</dd>
             </div>
           ))}
@@ -115,7 +112,7 @@ export default async function CoursePublicPreviewPage({
                       >
                         {lesson.title}
                       </Link>
-                      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
                         {lesson.type}
                       </span>
                     </li>

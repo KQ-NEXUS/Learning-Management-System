@@ -197,8 +197,8 @@ export function ExceptionsTab({
   return (
     <div className="flex flex-col gap-4">
       {!denied && (
-        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-4 border-b border-border py-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Category
           </span>
           {EXCEPTION_CATEGORY_OPTIONS.map((option) => (

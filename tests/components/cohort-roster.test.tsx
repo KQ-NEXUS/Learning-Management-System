@@ -64,12 +64,13 @@ type Dummy = { id: string };
 const dummyColumns: Column<Dummy>[] = [{ key: "id", header: "ID", render: (d) => d.id }];
 
 describe("RosterTab", () => {
-  it("renders the three deferred columns with their named Phase text and no numeric or blank fallback", () => {
+  it("no longer draws the Assessment and Completion columns, whose Phase 10/11 placeholders had shipped", () => {
     render(<RosterTab cohortId="c1" rows={[row()]} />);
 
-    expect(screen.getAllByText(/· Phase 9/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/· Phase 10/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/· Phase 11/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/not tracked yet · Phase 10/)).toBeNull();
+    expect(screen.queryByText(/not tracked yet · Phase 11/)).toBeNull();
+    expect(screen.queryByText("Assessment")).toBeNull();
+    expect(screen.queryByText("Completion")).toBeNull();
     expect(screen.queryByText("0%")).toBeNull();
   });
 
@@ -81,7 +82,7 @@ describe("RosterTab", () => {
     expect(screen.queryByText(/0% \/ /)).toBeNull();
   });
 
-  it("renders a computed attendance component as earned/required percent, in mono", () => {
+  it("renders a computed attendance component as the earned percent", () => {
     render(
       <RosterTab
         cohortId="c1"
@@ -99,7 +100,7 @@ describe("RosterTab", () => {
         ]}
       />,
     );
-    expect(screen.getAllByText("80% / 70%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("80%").length).toBeGreaterThan(0);
   });
 
   it("pairs the status pill with a text label, never colour alone", () => {
