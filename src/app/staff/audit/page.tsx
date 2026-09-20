@@ -1,6 +1,9 @@
 import { auditReadService } from "@/server/services/audit-read-service";
 import { AuthorizationError, AuthenticationError } from "@/server/permissions";
 import { AuditTable, type AuditTableFilters } from "./AuditTable";
+import { getCurrentActor } from "@/server/auth/current-actor";
+import { loadGrantsForUser } from "@/server/services/grant-service";
+import { collectionScopeFromGrants } from "@/server/permissions/collection-scope";
 
 export const metadata = { title: "Audit" };
 
@@ -38,6 +41,8 @@ export default async function AuditPage({
 
   let rows: Awaited<ReturnType<typeof auditReadService.list>>;
   let filterOptions: Awaited<ReturnType<typeof auditReadService.filterOptions>>;
+  let canExport = false;
+  let canExportSensitive = false;
 
   try {
     [rows, filterOptions] = await Promise.all([
@@ -49,6 +54,12 @@ export default async function AuditPage({
       }),
       auditReadService.filterOptions(),
     ]);
+    const actor = await getCurrentActor();
+    if (actor) {
+      const grants = await loadGrantsForUser(actor.userId);
+      canExport = collectionScopeFromGrants(grants, "audit.view")?.kind === "GLOBAL" && collectionScopeFromGrants(grants, "audit.export")?.kind === "GLOBAL";
+      canExportSensitive = canExport && collectionScopeFromGrants(grants, "users.view")?.kind === "GLOBAL";
+    }
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return <p className="text-sm">Your session has ended. Sign in again.</p>;
@@ -66,6 +77,8 @@ export default async function AuditPage({
       filterOptions={filterOptions}
       filters={filters}
       validationError={validationError}
+      canExport={canExport}
+      canExportSensitive={canExportSensitive}
     />
   );
 }

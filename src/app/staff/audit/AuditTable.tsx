@@ -1,9 +1,12 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import type { AuditRow, AuditFilterOptions } from "@/server/services/audit-read-service";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import Link from "next/link";
+import { getExportDatasetDefinition } from "@/server/services/report-registry";
+import { requestAuditExportAction } from "./actions";
 
 /**
  * A sibling of ResourceTable, not a consumer of it — expand-in-place is the
@@ -121,6 +124,8 @@ export function AuditTable({
   filterOptions,
   filters,
   validationError,
+  canExport = false,
+  canExportSensitive = false,
 }: {
   rows?: AuditRow[];
   denied?: { permission: string };
@@ -128,12 +133,57 @@ export function AuditTable({
   filterOptions?: AuditFilterOptions;
   filters?: AuditTableFilters;
   validationError?: { message: string } | null;
+  canExport?: boolean;
+  canExportSensitive?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [includeIdentity, setIncludeIdentity] = useState(false);
+  const [exportReason, setExportReason] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
+  const [exportJobId, setExportJobId] = useState("");
+  const [exportPending, startExport] = useTransition();
+  const exportButton = useRef<HTMLButtonElement>(null);
+  const exportDialog = useRef<HTMLDivElement>(null);
+  const auditColumns = getExportDatasetDefinition("audit");
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const dialog = exportDialog.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled])') ?? []);
+    focusable()[0]?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); setExportOpen(false); queueMicrotask(() => exportButton.current?.focus()); }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0]; const last = items.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [exportOpen]);
+
+  function queueAuditExport() {
+    if (!filters) return;
+    setExportMessage(""); setExportJobId("");
+    startExport(async () => {
+      const result = await requestAuditExportAction({
+        filters: Object.fromEntries(Object.entries(filters).filter(([, value]) => value)),
+        columns: [...auditColumns.safeColumns.map((column) => column.key), ...(includeIdentity ? auditColumns.sensitiveColumns.map((column) => column.key) : [])],
+        ...(includeIdentity ? { reason: exportReason } : {}),
+      });
+      if (!result.ok) { setExportMessage(result.message); return; }
+      setExportOpen(false); setExportJobId(result.jobId);
+      setExportMessage("Export queued. You can leave this page and follow its progress in Export History.");
+      queueMicrotask(() => exportButton.current?.focus());
+    });
+  }
 
   function setParam(name: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -269,6 +319,21 @@ export function AuditTable({
   return (
     <div className="flex flex-col gap-4">
       {header}
+
+      {canExport && <div className="flex flex-wrap items-center gap-4">
+        <button ref={exportButton} type="button" className={BTN} onClick={() => { setExportMessage(""); setExportOpen(true); }}>Export audit CSV</button>
+        {!exportOpen && exportMessage && <p role="status" className="text-sm text-foreground">{exportMessage} {exportJobId && <Link href="/staff/reports/exports" className="font-semibold text-accent underline">View export history</Link>}</p>}
+      </div>}
+
+      {canExport && exportOpen && <div ref={exportDialog} role="dialog" aria-modal="true" aria-label="Audit CSV options" className="max-w-xl rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <h3 className="font-semibold">Audit CSV options</h3>
+        <p className="mt-1 text-sm text-muted-foreground">The current actor, action and date filters will be frozen with this request. Values in investigative context are withheld; safe field names and correlation references remain.</p>
+        <p className="mt-4 text-sm">Safe columns: {auditColumns.safeColumns.map((column) => column.label).join(", ")}</p>
+        {canExportSensitive && <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={includeIdentity} onChange={(event) => setIncludeIdentity(event.target.checked)} /> Include actor name and email</label>}
+        {canExportSensitive && includeIdentity && <label className="mt-4 flex flex-col gap-1 text-sm">Operational reason<textarea value={exportReason} onChange={(event) => setExportReason(event.target.value)} maxLength={2000} className="min-h-20 rounded-lg border border-border bg-background p-2" /></label>}
+        {exportMessage && <p role="alert" className="mt-4 text-sm text-danger">{exportMessage}</p>}
+        <div className="mt-4 flex flex-wrap gap-2"><button type="button" className={BTN} onClick={() => { setExportOpen(false); queueMicrotask(() => exportButton.current?.focus()); }}>Cancel</button><button type="button" className={BTN} disabled={exportPending || (includeIdentity && !exportReason.trim())} onClick={queueAuditExport}>{exportPending ? "Queuing audit export…" : "Queue audit export"}</button></div>
+      </div>}
 
       {validationError && (
         <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">

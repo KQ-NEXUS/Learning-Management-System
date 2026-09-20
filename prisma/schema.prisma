@@ -165,6 +165,39 @@ enum RefundStatus {
   RECORDED_MANUALLY
 }
 
+enum ReconciliationSubject {
+  PAYMENT
+  REFUND
+}
+
+enum ReconciliationRisk {
+  CAPTURED_MONEY
+  SETTLEMENT_VARIANCE
+  MISSING_PROVIDER_DATA
+}
+
+enum ReconciliationCaseStatus {
+  OPEN
+  RESOLVED
+  REOPENED
+}
+
+enum ReconciliationCaseEventType {
+  OPENED
+  EVIDENCE_CHANGED
+  ASSIGNED
+  RESOLVED
+  REOPENED
+}
+
+enum ReconciliationResolutionReason {
+  MATCHED_PROVIDER_EVIDENCE
+  CORRECTED_UPSTREAM
+  DUPLICATE_RECORD
+  ACCEPTED_VARIANCE
+  OTHER
+}
+
 enum WebhookStatus {
   RECEIVED
   PROCESSED
@@ -249,6 +282,9 @@ model User {
   facilitatorOf      ScheduledSession[]
   gradesGiven        Grade[]            @relation("Grader")
   exportJobs         ExportJob[]
+  reconciliationCasesAssigned ReconciliationCase[]      @relation("ReconciliationCaseAssignee")
+  reconciliationCasesResolved ReconciliationCase[]      @relation("ReconciliationCaseResolver")
+  reconciliationCaseEvents    ReconciliationCaseEvent[] @relation("ReconciliationCaseEventActor")
 
   // CAT-06 — publish attribution. Named relations disambiguate the two
   // publication models that both point at User.
@@ -1355,6 +1391,7 @@ model PaymentAttempt {
 
   order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   refunds Refund[]
+  reconciliationCases ReconciliationCase[]
 
   @@index([orderId, status])
   @@index([provider, status])
@@ -1391,9 +1428,72 @@ model Refund {
 
   order          Order          @relation(fields: [orderId], references: [id])
   paymentAttempt PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
+  reconciliationCases ReconciliationCase[]
 
   @@index([orderId])
   @@index([status])
+}
+
+// Phase 8 investigation ledger. This observes payment/refund facts; it never
+// replaces or mutates either domain state machine. PostgreSQL partial unique
+// indexes in the named migration enforce one durable case per subject row.
+model ReconciliationCase {
+  id      String                @id @default(cuid())
+  subject ReconciliationSubject
+  risk    ReconciliationRisk
+  status  ReconciliationCaseStatus @default(OPEN)
+
+  paymentAttemptId String?
+  refundId         String?
+
+  evidence            Json
+  evidenceFingerprint String
+  lastEvidenceAt      DateTime
+
+  assignedToId String?
+  assignedAt   DateTime?
+
+  resolutionReason ReconciliationResolutionReason?
+  resolutionNote   String?
+  resolvedAt       DateTime?
+  resolvedById     String?
+
+  openedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  paymentAttempt PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  refund         Refund?         @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  assignedTo     User?           @relation("ReconciliationCaseAssignee", fields: [assignedToId], references: [id])
+  resolvedBy     User?           @relation("ReconciliationCaseResolver", fields: [resolvedById], references: [id])
+  events         ReconciliationCaseEvent[]
+
+  @@index([status, risk, openedAt])
+  @@index([paymentAttemptId])
+  @@index([refundId])
+  @@index([assignedToId])
+}
+
+// Append-only application history for a reconciliation investigation.
+model ReconciliationCaseEvent {
+  id       String                      @id @default(cuid())
+  caseId   String
+  type     ReconciliationCaseEventType
+  actorId  String?
+  actorType String                     @default("SYSTEM")
+
+  evidence         Json?
+  fingerprint      String?
+  resolutionReason ReconciliationResolutionReason?
+  note             String?
+  correlationId    String?
+  createdAt        DateTime @default(now())
+
+  case  ReconciliationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actor User?              @relation("ReconciliationCaseEventActor", fields: [actorId], references: [id])
+
+  @@index([caseId, createdAt])
+  @@index([correlationId])
+  @@index([actorId, createdAt])
 }
 
 // PAY-07 — the replay guard. providerEventId is unique, so a duplicate or
@@ -1505,19 +1605,48 @@ model ExportJob {
   id            String    @id @default(cuid())
   requestedById String
   dataset       String
+  datasetVersion String   @default("1.0")
   filters       Json?
+  asOf          DateTime  @default(now())
+  timezone      String    @default("Africa/Lagos")
+  scopeSnapshot Json?
+  columnSnapshot Json?
+  sensitiveReason String?
+  idempotencyKey String?  @unique
+  retryOfId     String?
   status        JobStatus @default(QUEUED)
-  rowCount      Int?
+  rowCount      Int?      @default(0)
   storageKey    String?
   expiresAt     DateTime?
   error         String?
+  errorCode     String?
+  errorMessage  String?
   createdAt     DateTime  @default(now())
+  startedAt     DateTime?
   completedAt   DateTime?
   downloadedAt  DateTime?
+  updatedAt     DateTime  @updatedAt
 
   requestedBy User @relation(fields: [requestedById], references: [id])
+  retryOf     ExportJob? @relation("ExportRetry", fields: [retryOfId], references: [id])
+  retries     ExportJob[] @relation("ExportRetry")
+  snapshotRows ExportSnapshotRow[]
 
   @@index([requestedById, status])
+  @@index([status, createdAt])
+  @@index([retryOfId])
+}
+
+model ExportSnapshotRow {
+  id        String   @id @default(cuid())
+  jobId     String
+  ordinal   Int
+  data      Json
+  createdAt DateTime @default(now())
+
+  job ExportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, ordinal])
 }
 
 // COM-02 — repeated events within one correlation produce at most one

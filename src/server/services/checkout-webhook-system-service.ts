@@ -61,6 +61,10 @@
 
 import { prisma } from "@/server/db";
 import { recordAudit } from "@/server/services/audit-service";
+import {
+  correlateReconciliationEvidenceAsSystem,
+  syncOrderReconciliationEvidenceAsSystem,
+} from "@/server/services/reconciliation-case-service";
 import { writeDomainEvent } from "@/server/services/domain-event-service";
 // Imported from enrolment-transitions.ts, NOT enrolment-service.ts — that
 // file's own import graph pulls in the permission choke point and
@@ -477,6 +481,8 @@ export type SettlementDeps = {
   };
   /** `emailDispatchService.dispatch`, imported by name at the call site (D-18). */
   dispatchEmail: (params: DispatchParams) => Promise<unknown>;
+  syncOrderReconciliationEvidence?: typeof syncOrderReconciliationEvidenceAsSystem;
+  correlateReconciliationEvidence?: typeof correlateReconciliationEvidenceAsSystem;
   baseUrl?: () => string;
   now?: () => Date;
 };
@@ -1027,6 +1033,35 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
       });
     }
 
+    const operationalEvidence = {
+      provider: input.provider,
+      outcome: result.outcome,
+      reason: result.reason,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      providerIntentId: input.providerIntentId,
+      enrolmentId: result.enrolmentId,
+    };
+    if (result.outcome === "EXCEPTION" && deps.syncOrderReconciliationEvidence) {
+      await deps.syncOrderReconciliationEvidence({
+        orderId: input.orderId,
+        risk:
+          result.reason === "duplicate_active_enrolment" || result.reason === "illegal_enrolment_transition"
+            ? "CAPTURED_MONEY"
+            : result.reason === "amount_mismatch"
+              ? "SETTLEMENT_VARIANCE"
+              : "MISSING_PROVIDER_DATA",
+        evidence: operationalEvidence,
+      });
+    } else if (deps.correlateReconciliationEvidence) {
+      await deps.correlateReconciliationEvidence({
+        action: result.outcome === "ACTIVATED" ? "enrolment.activated" : "order.paid",
+        orderId: input.orderId,
+        enrolmentId: result.enrolmentId,
+        evidence: operationalEvidence,
+      });
+    }
+
     // D-18 — the confirmation email, strictly AFTER the settlement
     // transaction has committed and both audit writes above have run (the
     // same post-commit ordering `hold-release-system-service.ts` uses for
@@ -1399,6 +1434,8 @@ const settlementDeps: SettlementDeps = {
     },
   },
   dispatchEmail: emailDispatchService.dispatch,
+  syncOrderReconciliationEvidence: syncOrderReconciliationEvidenceAsSystem,
+  correlateReconciliationEvidence: correlateReconciliationEvidenceAsSystem,
 };
 
 const built = {

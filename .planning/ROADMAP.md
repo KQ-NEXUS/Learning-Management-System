@@ -383,33 +383,35 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — Reconciliation case-ledger tracer and live schema proof
-- [ ] 08-03-PLAN.md — Collection scope, report registry, and Reports hub
-- [ ] 08-06-PLAN.md — Managed-upload package legitimacy checkpoint
+- [x] 08-01-PLAN.md — Reconciliation case-ledger tracer and live schema proof
+- [x] 08-03-PLAN.md — Collection scope, report registry, and Reports hub
+- [x] 08-06-PLAN.md — Managed-upload package legitimacy checkpoint
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 08-02-PLAN.md — Complete exceptions-first reconciliation workflow
-- [ ] 08-04-PLAN.md — Ten fixed operational dashboards and drill-down parity
+- [x] 08-02-PLAN.md — Complete exceptions-first reconciliation workflow
+- [x] 08-04-PLAN.md — Ten fixed operational dashboards and drill-down parity
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 08-05-PLAN.md — Immutable export snapshots, stable CSV, and request lifecycle
+- [x] 08-05-PLAN.md — Immutable export snapshots, stable CSV, and request lifecycle
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 08-07-PLAN.md — Private export storage, background worker, and expiry service
-- [ ] 08-12-PLAN.md — Provider-filtered refund reconciliation CSV entry point
+- [x] 08-07-PLAN.md — Private export storage, background worker, and expiry service
+- [x] 08-12-PLAN.md — Provider-filtered refund reconciliation CSV entry point
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 08-08-PLAN.md — Export History and authorized short-lived downloads
-- [ ] 08-09-PLAN.md — Filtered redacted audit export
-- [ ] 08-11-PLAN.md — Authenticated scheduled dispatch and Netlify deployment adapters
+- [x] 08-08-PLAN.md — Export History and authorized short-lived downloads
+- [x] 08-09-PLAN.md — Filtered redacted audit export
+- [x] 08-11-PLAN.md — Authenticated scheduled dispatch and Netlify deployment adapters
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 08-10-PLAN.md — Navigation, UI backstops, and phase-wide verification
+- [x] 08-10-PLAN.md — Navigation, UI backstops, and phase-wide verification
+
+All 12 Phase 08 plans are implemented. `08-VERIFICATION.md` is `human_needed`; the deployed export lifecycle and visual zoom checks remain in `08-UAT.md` before phase completion.
 
 **UI hint**: yes
 

@@ -1,84 +1,42 @@
 ---
 phase: "08"
 slug: "finance-reconciliation-dashboards-reporting-exports"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: human_needed
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-15"
+updated: "2026-09-16"
 ---
 
-# Phase 08 — Validation Strategy
+# Phase 08 — Validation Map
 
-> Per-phase validation contract for feedback sampling during execution.
+Vitest 4.1.11 uses Node and jsdom projects from `vitest.config.mts`. PostgreSQL integration tests use disposable Testcontainers databases with all 12 checked-in migrations. The implementation and summaries remain uncommitted for review.
 
----
+| Requirement | Plans | Automated evidence | Focused result |
+|---|---|---|---|
+| PAY-06, PAY-12 | 08-01, 02, 04, 05, 12 | `reconciliation-case-service.test.ts`, `reconciliation-case.integration.test.ts`, `report-scope.integration.test.ts`, `components/ReconciliationWorkspace.test.tsx`, `reconciliation-export-action.test.ts` | Green in plan checks |
+| RPT-01 | 08-03, 04, 10 | `report-registry.test.ts`, `components/Reports.test.tsx`, `components/finance-reporting-ui.test.tsx` | Green; 24 named UI consideration checks |
+| RPT-02 | 08-03, 04, 05, 08, 12 | `report-scope.integration.test.ts`, `export-service.integration.test.ts`, `export-download-route.test.ts`, `components/ExportHistory.test.tsx` | Green, including retry lineage and current-scope download checks |
+| RPT-03 | 08-03, 05, 09 | `report-registry.test.ts`, `csv-service.test.ts`, `export-service.integration.test.ts`, `export-snapshot-load.test.ts`, `audit-export-service.test.ts` | Green in focused runs |
+| RPT-04 | 08-07, 08, 11 | `aws-sdk-lockfile.test.ts`, `export-storage.test.ts`, `export-worker.integration.test.ts`, `netlify-export-functions.test.ts`, `export-download-route.test.ts`, `phase8-invariants.test.ts` | Green in focused runs |
+| RPT-05 | 08-09 | `audit-export-service.test.ts`, `audit-append-only.integration.test.ts`, `components/audit-table.test.tsx` | Green; append-only PostgreSQL fixture passed |
 
-## Test Infrastructure
+## Cross-surface gates
 
-| Property | Value |
-|----------|-------|
-| **Framework** | Vitest 4.1.11 with Node/jsdom projects; Testcontainers 12.1.0 for PostgreSQL integration |
-| **Config file** | `vitest.config.ts` |
-| **Quick run command** | `npx vitest run tests/<target>.test.ts` |
-| **Full suite command** | `npm test` |
-| **Estimated runtime** | Targeted checks generally under 30 seconds; full suite timing measured during execution |
+- `phase8-invariants.test.ts`: seven source/AST boundaries for navigation, server-only code, private downloads, database-authoritative queue processing, currency separation, and dependency/style prohibitions.
+- `components/finance-reporting-ui.test.tsx`: 22 named state considerations plus two source-level zoom/large-value backstops. Focused component tests provide interaction evidence; jsdom does not measure visual geometry.
+- Current authorization, exact expiry, denial equivalence, audit-before-presign and no-store redirect are exercised in `export-download-route.test.ts`.
+- Snapshot bounds, worker claims/replay/expiry, secret-gated dispatch and audit append-only behavior have database/function tests.
 
----
+## Final regression gate
 
-## Sampling Rate
+- All 162 test files were exercised successfully in segmented runs: 99 Node unit files (1,520 passing assertions), 22 PostgreSQL integration files (188 passing assertions), and 41 jsdom component files (384 passing assertions, one pre-existing skip). The node count includes `schema-cohort.test.ts` and the 25,000-row snapshot load file rerun in isolation. Focused reruns resolved audit single-writer, request-only import, legacy Cohort price, spacing, and stale package assertions.
+- A single `npm.cmd test` process did **not** exit green. Windows Vitest twice exited with access violation `-1073741819` after many files, and grouped PostgreSQL runs intermittently hit Docker HTTP 409 during disposable-container setup. Every skipped/setup-blocked file subsequently passed as a separate process. The segmented evidence covers both configured projects and every file; it does not establish that the monolithic command is stable on this Windows host.
+- `npx.cmd tsc --noEmit`: passed on the corrected source. `npm.cmd run lint`: passed with 0 errors and only pre-existing warnings; the one new warning was removed. `npm.cmd run build`: passed on the corrected source, including Next.js TypeScript and page generation. `git diff --check`: passed with a line-ending normalization notice for `audit/page.tsx`.
 
-- **After every task commit:** Run the new or changed targeted test file(s).
-- **After every plan wave:** Run all Phase 8 tests plus affected payment, permission/scope, audit, storage, and function-boundary regression tests.
-- **Before `$gsd-verify-work`:** Run `npm test`, `npm run lint`, `npx tsc --noEmit`, `npm run build`, PostgreSQL/MinIO integration tests, and the deployed background-function smoke test.
-- **Max feedback latency:** 30 seconds for targeted task checks; integration/build gates may take longer and belong at wave/phase boundaries.
+## Manual evidence still needed
 
----
+1. Configure Netlify `EXPORT_DISPATCH_SECRET` for the scheduled dispatcher and Background Function, then queue a large scoped export in a deployed test environment. Leave the page, return after processing, download within the availability window, and confirm later expiry. Local tests do not prove the deployed Netlify/S3 lifecycle.
+2. Inspect reconciliation, reports, and history at desktop and mobile widths and 200% zoom with long text and large NGN/USD amounts. The automated backstops check markup and data states, not pixel geometry.
 
-## Per-Task Verification Map
-
-| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 08-W0-01 | 08-01/02/04/05/12 | 1–4 | PAY-06, PAY-12 | V4 | Scoped payment/refund reconciliation totals and provider-filtered refund CSV rows match; provider/manual fields remain honest; permission-gated payment/refund/enrolment corrective links and correlated operational history satisfy D-07 without resolution side effects | integration + component | `npx vitest run tests/reconciliation-case.integration.test.ts tests/reconciliation-case-service.test.ts tests/report-scope.integration.test.ts tests/export-service.integration.test.ts tests/components/ReconciliationWorkspace.test.tsx` | ❌ W0 | ⬜ pending |
-| 08-W0-02 | 08-03/04 | 1–2 | RPT-01 | V4 | Fixed definitions expose correct availability, date basis, refresh, empty, and error states | unit + component | `npx vitest run tests/report-registry.test.ts tests/components/Reports.test.tsx` | ❌ W0 | ⬜ pending |
-| 08-W0-03 | 08-03/04/05/08/12 | 1–5 | RPT-02 | V4 | Scope applies before aggregates, rows, filters, identifiers, export snapshots, and downloads | integration + route | `npx vitest run tests/report-scope.integration.test.ts tests/export-download-route.test.ts` | ❌ W0 | ⬜ pending |
-| 08-W0-04 | 08-03/05/09 | 1–5 | RPT-03 | V5 | Metadata-only registry and server-only trusted producers reject browser rows/scope; stable columns, frozen metadata, row reconciliation, spreadsheet-safe cells, and measured snapshot bounds | unit + integration/load | `npx vitest run tests/report-registry.test.ts tests/csv-service.test.ts tests/export-service.integration.test.ts tests/export-snapshot-load.test.ts tests/audit-export-service.test.ts` | ❌ W0 | ⬜ pending |
-| 08-W0-05 | 08-07/08/11 | 4–5 | RPT-04 | V4, V12 | Claim/retry/expiry are idempotent; authenticated scheduled dispatch reaches processing without caller instructions; current authorization gates downloads | integration + function + route | `npx vitest run tests/aws-sdk-lockfile.test.ts tests/export-worker.integration.test.ts tests/netlify-export-functions.test.ts tests/export-download-route.test.ts` | ❌ W0 | ⬜ pending |
-| 08-W0-06 | 08-09 | 5 | RPT-05 | V4, V7 | Audit export remains append-only, permission-gated, correlated, and secret-redacted | unit + integration | `npx vitest run tests/audit-export-service.test.ts tests/audit-append-only.integration.test.ts` | ❌/partial W0 | ⬜ pending |
-
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
-
----
-
-## Wave 0 Requirements
-
-- [ ] `tests/reconciliation-case-service.test.ts` and `tests/reconciliation-case.integration.test.ts` — payment/refund lifecycle, payment timeline and corrective links, reopen, assignment, resolution isolation, and provider-filtered refund parity.
-- [ ] `tests/report-registry.test.ts` and `tests/report-scope.integration.test.ts` — fixed definitions, availability, scope unions, and totals/rows/filter parity.
-- [ ] `tests/csv-service.test.ts` — stable columns and spreadsheet-safe serialization.
-- [ ] `tests/export-service.integration.test.ts`, `tests/export-snapshot-load.test.ts`, and `tests/export-worker.integration.test.ts` — immutable snapshot, 25,000-row/25-MiB measured bounds, claim races, retry lineage, expiry, and idempotency.
-- [ ] `tests/export-download-route.test.ts` — current authorization, expiry, ownership/scope, and no-store redirect behavior.
-- [ ] `tests/audit-export-service.test.ts` — safe/sensitive columns, operational reason, redaction, and correlation.
-- [ ] `tests/aws-sdk-lockfile.test.ts` — exact direct/lockfile `@aws-sdk/lib-storage@3.1125.0` plus unchanged sibling AWS dependencies.
-- [ ] `tests/netlify-export-functions.test.ts` — one-minute authenticated dispatcher, instruction-resistant Background Function, and expiry boundaries.
-- [ ] `tests/components/ReconciliationWorkspace.test.tsx`, `tests/components/Reports.test.tsx`, and `tests/components/ExportHistory.test.tsx` — required UI states and interactions.
-
----
-
-## Manual-Only Verifications
-
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| Deployed asynchronous export completes outside the request lifecycle | RPT-04 | Local/unit tests cannot prove the production Netlify background runtime and deployed storage integration | Request a large scoped export in a deployed test environment, leave the page, return to Export History, observe lifecycle completion, download within 24 hours, and confirm expiry afterward. |
-| Finance workspace and reports remain understandable across desktop and mobile | PAY-06, RPT-01 | Visual hierarchy and responsive usability require human inspection | Exercise exception tabs/detail/resolution and all Reports hub states at desktop and mobile widths with representative data. |
-
----
-
-## Validation Sign-Off
-
-- [ ] All tasks have `<automated>` verification or explicit Wave 0 dependencies.
-- [ ] Sampling continuity: no three consecutive implementation tasks without an automated check.
-- [ ] Wave 0 covers every currently missing test reference.
-- [ ] No watch-mode flags appear in verification commands.
-- [ ] Targeted feedback latency remains under 30 seconds where practical.
-- [ ] `nyquist_compliant: true` is set after test references exist and the map is assigned to concrete plans/tasks.
-
-**Approval:** pending
+Automated coverage is complete through segmented runs. Phase sign-off awaits the deployed lifecycle and visual UAT items in `08-UAT.md`.

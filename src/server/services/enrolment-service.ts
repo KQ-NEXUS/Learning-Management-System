@@ -40,6 +40,7 @@ import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { correlateReconciliationEvidenceAsSystem } from "@/server/services/reconciliation-case-service";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
 import {
   lockOpenCohort,
@@ -293,6 +294,7 @@ export type EnrolmentServiceDeps = {
   cohortScope: (cohortId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   audit: Audit;
+  correlateReconciliationEvidence?: typeof correlateReconciliationEvidenceAsSystem;
   now?: () => Date;
 };
 
@@ -384,6 +386,12 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
           heldSeat: takesSeat,
         },
       });
+      await deps.correlateReconciliationEvidence?.({
+        action: "enrolment.created",
+        enrolmentId: created.id,
+        cohortId: input.cohortId,
+        evidence: { status: input.target, heldSeat: takesSeat },
+      });
 
       return { id: created.id, status: input.target, heldSeat: takesSeat };
     },
@@ -423,6 +431,11 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
         reason,
         before: { status: result.before },
         after: { status: "ACTIVE" },
+      });
+      await deps.correlateReconciliationEvidence?.({
+        action: "enrolment.approved",
+        enrolmentId: result.id,
+        evidence: { before: result.before, status: "ACTIVE" },
       });
 
       return { id: result.id, status: "ACTIVE" as const, claimedSeat: result.claimedSeat };
@@ -478,6 +491,11 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
         reason,
         before: { status: result.before },
         after: { status: toStatus },
+      });
+      await deps.correlateReconciliationEvidence?.({
+        action: eventType,
+        enrolmentId: result.id,
+        evidence: { before: result.before, status: toStatus },
       });
 
       return { id: result.id, status: toStatus };
@@ -614,6 +632,13 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
           targetCohortId: input.targetCohortId,
         },
       });
+
+      await deps.correlateReconciliationEvidence?.({
+        action: "enrolment.transferred",
+        enrolmentId: result.sourceId,
+        cohortId: input.targetCohortId,
+        evidence: { sourceEnrolmentId: result.sourceId, targetEnrolmentId: result.targetId },
+      });
       await deps.audit({
         action: "enrolment.transferred",
         targetType: "Enrolment",
@@ -688,6 +713,7 @@ export function createPrismaBackedEnrolmentService(
   client: AnyPrisma,
   withPermission: WithPermission,
   audit: Audit = liveAudit,
+  options: Pick<EnrolmentServiceDeps, "correlateReconciliationEvidence"> = {},
 ) {
   return createEnrolmentService({
     db: {
@@ -717,10 +743,13 @@ export function createPrismaBackedEnrolmentService(
     cohortScope: cohortResourceScope,
     withPermission,
     audit,
+    ...options,
   });
 }
 
-const built = createPrismaBackedEnrolmentService(prisma, liveWithPermission);
+const built = createPrismaBackedEnrolmentService(prisma, liveWithPermission, liveAudit, {
+  correlateReconciliationEvidence: correlateReconciliationEvidenceAsSystem,
+});
 
 export const addEnrolment = built.addEnrolment;
 export const approveEnrolment = built.approveEnrolment;
