@@ -52,7 +52,7 @@ const { mocks, AuthorizationError, AuthenticationError, AssessmentNotPublishable
 
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("@/server/permissions", () => ({ AuthorizationError, AuthenticationError }));
+vi.mock("@/server/permissions", () => ({ AuthorizationError, AuthenticationError, can: async () => true }));
 vi.mock("@/server/services/course-service", () => ({
   courseService: { get: mocks.courseGet },
 }));

@@ -123,6 +123,44 @@ export function validateUpload(input: ValidateUploadInput): ValidateUploadResult
 }
 
 /**
+ * Certificate-template image assets (CR-02). Narrower than
+ * `UPLOAD_LIMITS.IMAGE` on purpose: the certificate renderer embeds only PNG
+ * and JPEG (pdf-lib has no WebP or GIF decoder), so an asset of any other type
+ * would be uploaded and "verified" yet never appear on a certificate. Lesson
+ * image uploads keep their wider list and are unaffected.
+ */
+export const CERTIFICATE_TEMPLATE_ASSET_MIME_TYPES: readonly string[] = Object.freeze([
+  "image/png",
+  "image/jpeg",
+]);
+
+export type ValidateTemplateAssetUploadInput = {
+  mimeType: string;
+  sizeBytes: number;
+};
+
+/**
+ * Checks a declared (presign) or server-observed (confirm) template asset
+ * against the PNG/JPEG allow-list, then delegates the byte-count and size-cap
+ * checks to the shared IMAGE limit so the two never drift apart.
+ */
+export function validateTemplateAssetUpload(
+  input: ValidateTemplateAssetUploadInput,
+): ValidateUploadResult {
+  if (!CERTIFICATE_TEMPLATE_ASSET_MIME_TYPES.includes(input.mimeType)) {
+    return {
+      ok: false,
+      message: "Certificate template images must be a PNG or JPEG file.",
+    };
+  }
+  return validateUpload({
+    lessonType: "IMAGE",
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+  });
+}
+
+/**
  * Presigned-GET lifetime, in seconds, per content type (D-37).
  *
  * FILE and IMAGE resolve in a single request, so the tight 60-second window

@@ -152,6 +152,23 @@ describe("The manual paste-in from 003_cohort_operations.sql was actually applie
     }
   });
 
+  it("guard: the one-live-enrolment index covers ACTIVE and COMPLETED and is created before the old one is dropped (CR-06)", () => {
+    const dir = "20260919120000_enrolment_one_live_per_learner_cohort";
+    const sql = readFileSync(path.join(migrationsDir, dir, "migration.sql"), "utf8")
+      .split(/\r?\n/)
+      .filter((line) => !line.trimStart().startsWith("--"))
+      .join("\n");
+
+    expect(allMigrationSql).toContain("enrolment_one_live_per_learner_cohort");
+    expect(sql).toMatch(/WHERE\s+status\s+IN\s*\(\s*'ACTIVE'\s*,\s*'COMPLETED'\s*\)/);
+
+    const create = sql.search(/CREATE\s+UNIQUE\s+INDEX\s+enrolment_one_live_per_learner_cohort/);
+    const drop = sql.search(/DROP\s+INDEX\s+enrolment_one_active_per_learner_cohort/);
+    expect(create).toBeGreaterThan(-1);
+    expect(drop).toBeGreaterThan(-1);
+    expect(create).toBeLessThan(drop);
+  });
+
   it("never introduces a DEFERRABLE clause (init-migration regression guard)", () => {
     expect(allMigrationSql).not.toMatch(/DEFERRABLE/);
   });

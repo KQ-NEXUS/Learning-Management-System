@@ -40,6 +40,9 @@ vi.mock("next/link", () => ({
     createElement("a", { href, ...rest }, children),
 }));
 vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurrentActor }));
+vi.mock("@/server/services/profile-service", () => ({
+  profileService: { getOwnProfile: async () => ({ name: "Ada Okafor" }) },
+}));
 vi.mock("@/server/services/enrolment-dashboard-service", () => ({
   loadLearnerDashboard: mocks.loadLearnerDashboard,
 }));
@@ -72,7 +75,12 @@ function card(over: Over = {}) {
     assessmentObligations: { kind: "deferred", phase: 10 },
     results: { kind: "deferred", phase: 10 },
     tickets: { kind: "deferred", phase: 12 },
-    certificate: { kind: "deferred", phase: 11 },
+    // Plan 11-13 — certificate is no longer a DeferredColumn; "not-complete"
+    // is the no-certificate-yet state. WR-06: CertificateSlot renders it as a
+    // normal card ("will appear here once you have completed all
+    // requirements"), no longer the Phase 9 "arriving in a future update"
+    // named gap, and "not-applicable" renders nothing at all.
+    certificate: { kind: "not-complete" },
     progress: progress(),
     accessNotice: accessNotice(),
     upcomingSessions: [],
@@ -130,10 +138,10 @@ describe("/dashboard", () => {
 
     expect(html).toContain("Intro to Testing");
     expect(html).toContain("in Foundations");
-    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/lessons\/lesson-9"[^>]*>Continue learning<\/a>/);
+    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/lessons\/lesson-9"[^>]*>(Resume|Start) lesson/);
   });
 
-  it("renders exactly two progressbars when an attendance threshold applies", async () => {
+  it("renders one progressbar, and the attendance figure in the side rail, when a threshold applies", async () => {
     mocks.loadLearnerDashboard.mockResolvedValue({
       cards: [
         card({
@@ -154,8 +162,8 @@ describe("/dashboard", () => {
     const html = await renderPage();
     const count = (html.match(/role="progressbar"/g) ?? []).length;
 
-    expect(count).toBe(2);
-    expect(html).toContain("Attendance: 80% of 75% required");
+    expect(count).toBe(1);
+    expect(html).toContain("80% of 75% required");
   });
 
   it("renders exactly one progressbar when the cohort has no attendance rule", async () => {
@@ -202,7 +210,19 @@ describe("/dashboard", () => {
     expect(count).toBe(0);
   });
 
-  it("never renders any of the four named-gap strings inside a link element", async () => {
+  it("renders no certificate surface at all when the card's certificate is not-applicable (WR-06)", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [card({ certificate: { kind: "not-applicable" } })],
+    });
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("being finalized");
+    expect(html).not.toContain("Certificate");
+    expect(html).not.toContain("certificate will appear");
+  });
+
+  it("never renders any of the remaining named-gap strings inside a link element", async () => {
     mocks.loadLearnerDashboard.mockResolvedValue({ cards: [card()] });
 
     const html = await renderPage();
@@ -210,8 +230,6 @@ describe("/dashboard", () => {
     const gapStrings = [
       "Assignments and quizzes — arriving in a future update",
       "Results — arriving in a future update",
-      "Support tickets — arriving in a future update",
-      "Certificate — arriving in a future update",
     ];
 
     for (const anchor of anchors) {
@@ -249,9 +267,10 @@ describe("/dashboard", () => {
     const html = await renderPage();
 
     expect(html).not.toContain("meetingUrl");
-    expect(html.match(/https?:\/\//)).toBeNull();
+    // Icon SVGs carry an xmlns URL; strip them so only real link/text URLs are checked.
+    expect(html.replace(/<svg[\s\S]*?<\/svg>/g, "").match(/https?:\/\//)).toBeNull();
     expect(html).toContain("Kickoff call");
-    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/sessions"[^>]*>View all<\/a>/);
+    expect(html).toMatch(/<a href="\/learn\/enrolment-1\/sessions"[^>]*>View all sessions<\/a>/);
   });
 
   it("renders the ending-access warning tone, not danger, and the two-line ended copy separately", async () => {
@@ -262,8 +281,8 @@ describe("/dashboard", () => {
     });
     const endingHtml = await renderPage();
     expect(endingHtml).toContain("Your access ends 2026-10-01");
-    expect(endingHtml).toContain("bg-warning-surface");
-    expect(endingHtml).not.toContain("bg-danger-surface");
+    expect(endingHtml).toContain("border-warning");
+    expect(endingHtml).not.toContain("border-danger");
 
     mocks.loadLearnerDashboard.mockResolvedValue({
       cards: [card({ enrolmentId: "e-ended", accessNotice: { kind: "ended" } })],
@@ -271,5 +290,102 @@ describe("/dashboard", () => {
     const endedHtml = await renderPage();
     expect(endedHtml).toContain("Your access window has ended");
     expect(endedHtml).toContain("your progress and results stay on record");
+  });
+
+  // ---- Plan 11-18: COMPLETED cards (UAT tests 10 and 19, decision G-01) ----
+
+  const issuedAt = new Date("2026-09-10T00:00:00.000Z");
+  function completedCard(over: Over = {}) {
+    return card({
+      enrolmentStatus: "COMPLETED",
+      nextAction: { kind: "complete" },
+      certificate: {
+        kind: "issued",
+        certificateId: "cert-1",
+        verificationRef: "CERT-ABC",
+        issuedAt,
+      },
+      // A COMPLETED card carries these to-the-page-hostile fields on purpose:
+      // if the page rendered them the omitted-section assertions would catch it.
+      assessmentObligations: {
+        kind: "tracked",
+        items: [{ assessmentId: "a-1", title: "Final quiz", lessonId: "lesson-7" }],
+      },
+      results: {
+        kind: "tracked",
+        recent: [{ assessmentId: "a-1", title: "Final quiz", effectiveScore: 8, maxScore: 10 }],
+      },
+      upcomingSessions: [
+        {
+          id: "session-1",
+          title: "Wrap-up call",
+          startsAt: new Date("2026-09-20T09:00:00.000Z"),
+          endsAt: new Date("2026-09-20T10:00:00.000Z"),
+          mode: "unknown",
+          location: null,
+          cancelledAt: null,
+        },
+      ],
+      hasMoreSessions: true,
+      accessNotice: { kind: "ended" },
+      ...over,
+    });
+  }
+
+  it("G-01: a COMPLETED card shows the certificate download and reference and no dead links", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({ cards: [completedCard()] });
+
+    const html = await renderPage();
+
+    expect(html).toContain('href="/api/certificates/cert-1/download"');
+    expect(html).toContain("Download certificate");
+    expect(html).toContain("CERT-ABC");
+    // Still present.
+    expect(html).toContain("Cohort One");
+    expect(html).toContain("Next up");
+    expect(html).toContain("Your progress");
+    // The unshipped Support tickets placeholder is no longer offered to learners.
+    expect(html).not.toContain("Support tickets");
+    // Omitted: sections and links the COMPLETED enrolment cannot open.
+    expect(html).not.toContain("Upcoming sessions");
+    expect(html).not.toContain("Wrap-up call");
+    expect(html).not.toContain("Assessments");
+    expect(html).not.toContain("Results");
+    expect(html).not.toContain("Continue learning");
+    expect(html).not.toContain("Your access window has ended");
+    expect(html).not.toContain("/learn/enrolment-1/");
+  });
+
+  it("the Next-up 'complete' copy no longer promises certificates are yet to ship", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [card({ nextAction: { kind: "complete" } })],
+    });
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("certificates ship");
+    expect(html).not.toContain("once certificates");
+    expect(html).toContain("Certificate section below");
+  });
+
+  it("guard: an ACTIVE card still renders Assessments, Results and Upcoming sessions", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [
+        completedCard({
+          enrolmentStatus: "ACTIVE",
+          nextAction: { kind: "none" },
+          accessNotice: { kind: "none" },
+        }),
+      ],
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("Upcoming sessions");
+    expect(html).toContain("Assessment due");
+    expect(html).toContain("Results");
+    expect(html).toContain('href="/learn/enrolment-1/sessions"');
+    expect(html).toContain('href="/learn/enrolment-1/results"');
+    expect(html).toContain('href="/learn/enrolment-1/lessons/lesson-7"');
   });
 });

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { ClipboardList, ListChecks } from "lucide-react";
 import { ResourceTable, StatusPill, type Column } from "@/components/primitives";
@@ -72,18 +71,18 @@ const columns: Column<AssessmentRow>[] = [
   },
 ];
 
-const UNAVAILABLE = "Not available on this screen";
-
 export function AssessmentsTable({
   courseId,
+  canCreate = true,
   rows,
   denied,
 }: {
   courseId: string;
   rows?: AssessmentRow[];
+  /** Hide the create button for staff who cannot create assessments. Default true. */
+  canCreate?: boolean;
   denied?: { permission: string };
 }) {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const state = denied
     ? ({ status: "denied", permission: denied.permission } as const)
@@ -93,6 +92,7 @@ export function AssessmentsTable({
 
   return (
     <ResourceTable<AssessmentRow>
+      asPage
       noun="assessments"
       title="Assessments"
       columns={columns}
@@ -105,25 +105,15 @@ export function AssessmentsTable({
       totalCount={denied ? undefined : rows?.length}
       emptyHeading="No assessments yet"
       emptyBody="Create a quiz or assignment to get started."
-      selection={{
-        selectedIds,
-        onChange: setSelectedIds,
-        // Archive replaces delete throughout (PRD CAT-08). This mirrors
-        // `CoursesTable.tsx`'s own still-open Archive action rather than
-        // inventing a second unimplemented pattern — the only real bulk
-        // action this phase ships is plan 10-12's batch release, and that
-        // lives on the grading queue, not here.
-        actions: [
-          { label: "Archive…", onClick: () => {}, disabled: true, description: UNAVAILABLE },
-        ],
-      }}
       headerActions={
-        <Link
-          href={`/staff/courses/${courseId}/assessments/new`}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
-        >
-          New assessment
-        </Link>
+        canCreate ? (
+          <Link
+            href={`/staff/courses/${courseId}/assessments/new`}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
+          >
+            New assessment
+          </Link>
+        ) : undefined
       }
     />
   );

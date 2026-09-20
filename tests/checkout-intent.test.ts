@@ -162,7 +162,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
     expect(fakeJar.delete).toHaveBeenCalledWith(CHECKOUT_INTENT_COOKIE);
   });
 
-  it("redirects to /account when no intent cookie is present (pre-existing behaviour unchanged)", async () => {
+  it("redirects to /dashboard when no intent cookie is present (pre-existing behaviour unchanged)", async () => {
     mocks.signIn.mockResolvedValue({
       ok: true,
       token: "tok",
@@ -171,11 +171,11 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
     });
 
     await expect(signInAction({ error: null }, signInForm())).rejects.toThrow(
-      "redirect:/account",
+      "redirect:/dashboard",
     );
   });
 
-  it("redirects to /staff/courses for staff, whatever the intent value, and still clears the cookie", async () => {
+  it("redirects to /staff for staff, whatever the intent value, and still clears the cookie", async () => {
     fakeJar.store.set(CHECKOUT_INTENT_COOKIE, { value: "clh3x9f9a0000356k2j5g8h2q.NGN" });
     mocks.signIn.mockResolvedValue({
       ok: true,
@@ -185,7 +185,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
     });
 
     await expect(signInAction({ error: null }, signInForm())).rejects.toThrow(
-      "redirect:/staff/courses",
+      "redirect:/staff",
     );
 
     expect(fakeJar.delete).toHaveBeenCalledWith(CHECKOUT_INTENT_COOKIE);
@@ -204,7 +204,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
     );
     expect(fakeJar.store.has(CHECKOUT_INTENT_COOKIE)).toBe(false);
 
-    // A second, unrelated sign-in with no intent left behind lands on /account.
+    // A second, unrelated sign-in with no intent left behind lands on /dashboard.
     mocks.signIn.mockResolvedValue({
       ok: true,
       token: "tok-2",
@@ -212,7 +212,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
       isStaff: false,
     });
     await expect(signInAction({ error: null }, signInForm())).rejects.toThrow(
-      "redirect:/account",
+      "redirect:/dashboard",
     );
   });
 
@@ -236,7 +236,7 @@ describe("signInAction — consumes and clears the checkout-intent cookie", () =
     });
 
     await expect(signInAction({ error: null }, signInForm())).rejects.toThrow(
-      "redirect:/account",
+      "redirect:/dashboard",
     );
 
     expect(fakeJar.set).toHaveBeenCalledWith(

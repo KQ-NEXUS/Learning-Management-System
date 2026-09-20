@@ -1,5 +1,7 @@
-/** Staff corrections apply only to released grades. Certificate impact is
- * evaluated by Phase 11 from the unconditional grade.overridden event. */
+/** Staff corrections apply only to released grades. Phase 11 hooks this
+ * transaction directly via `reactToGradeOverride` (plan 11-10), immediately
+ * after `writeEvent` and before the final read — not by polling the outbox
+ * (DD-12/DD-13). */
 import { prisma } from "@/server/db";
 import { withPermission } from "@/server/permissions";
 import type { createWithPermission } from "@/server/permissions/with-permission";
@@ -8,6 +10,11 @@ import { enrolmentCohortScope } from "./cohort-scope";
 import { recordAudit } from "./audit-service";
 import type { ResourceAuditEntry } from "./resource-service";
 import { writeDomainEvent, type DomainEventTxClient } from "./domain-event-service";
+import {
+  flagCertificatesForGradeCorrection,
+  liveIssuanceDeps,
+  type CertificateIssuanceTxClient,
+} from "./certificate-issuance-service";
 
 export class GradeNotReleasedError extends Error {
   constructor() { super("Only a released grade can be corrected. Edit a draft grade directly."); this.name = "GradeNotReleasedError"; }
@@ -40,6 +47,18 @@ export type GradeOverrideDeps = {
   runInTransaction<R>(fn: (tx: GradeOverrideTx) => Promise<R>): Promise<R>;
   writeEvent: typeof writeDomainEvent;
   audit(entry: ResourceAuditEntry): Promise<void>;
+  /**
+   * CRD-06's grade half (plan 11-10): flags the enrolment's certificate for
+   * review inside this same transaction — never re-derives a completion
+   * verdict (grades carry no `completionRule` v1 key). `actorId` is the
+   * overriding staff member, not `SYSTEM` (T-11-42) — deviates from the
+   * plan's literal 3-field args shape by adding this required field; without
+   * it the certificate audit row cannot carry an attributable actor.
+   */
+  reactToGradeOverride(
+    tx: GradeOverrideTx,
+    args: { enrolmentId: string; assessmentId: string; passedChanged: boolean; actorId: string },
+  ): Promise<void>;
 };
 
 export function createGradeOverrideService(deps: GradeOverrideDeps) {
@@ -64,6 +83,7 @@ export function createGradeOverrideService(deps: GradeOverrideDeps) {
       const override = await tx.gradeOverride.create({ data: { gradeId: before.id, previousScore: before.score, newScore: input.newScore, reason, actorId: ctx.actor.userId } });
       const grade = { ...before, score: input.newScore, passed };
       await deps.writeEvent(tx, { type: "grade.overridden", payload: { gradeId: before.id, assessmentId: before.assessmentId, enrolmentId: before.enrolmentId, previousScore: before.score, newScore: input.newScore, passedChanged: before.passed !== passed } });
+      await deps.reactToGradeOverride(tx, { enrolmentId: before.enrolmentId, assessmentId: before.assessmentId, passedChanged: before.passed !== passed, actorId: ctx.actor.userId });
       const overrides = await tx.gradeOverride.findMany({ where: { gradeId: before.id }, orderBy: { createdAt: "asc" } });
       return { override, grade, overrides, before };
     });
@@ -80,5 +100,17 @@ const built = createGradeOverrideService({
   runInTransaction: (fn) => prisma.$transaction((tx) => fn(tx as unknown as GradeOverrideTx)),
   writeEvent: writeDomainEvent,
   audit: (entry) => recordAudit(entry),
+  // `tx` is narrowed to `CertificateIssuanceTxClient` via a structural cast
+  // through `unknown` — the same idiom the certificate-issuance module's own
+  // completion-and-issue wrapper and `enrolment-transitions.ts`'s
+  // `applyEnrolmentActivation` use for their own tx-client narrowing (plan
+  // 11-10). This path never re-derives a completion verdict — grades carry
+  // no key the v1 completion rule recognises, so it only flags.
+  reactToGradeOverride: (tx, args) =>
+    flagCertificatesForGradeCorrection(
+      tx as unknown as CertificateIssuanceTxClient,
+      { ...args, now: new Date() },
+      liveIssuanceDeps,
+    ),
 });
 export const overrideGrade = built.overrideGrade;

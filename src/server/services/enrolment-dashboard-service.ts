@@ -26,8 +26,9 @@
  * with in-memory fakes only, no Prisma. The deferred inhabitant is still
  * reachable for a card with no pinned course structure (mirrors Progress's
  * own `"unpinned"` branch — no computable obligation set is a named gap, not
- * a fake empty list). `tickets` and `certificate` are UNTOUCHED — Phase 11
- * and Phase 12's own gaps to close.
+ * a fake empty list). `tickets` remains untouched — Phase 12's own gap to
+ * close. `certificate` was ALSO untouched through Plan 10-15 but is no
+ * longer a named gap at all — see the Plan 11-13 header block below.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * DD-19 — THE "UPCOMING SESSIONS" CARD NEVER READS THE PRIVATE JOIN-LINK
@@ -47,9 +48,15 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * `loadLearnerDashboard` takes only `actor` — there is no enrolment-id or
  * user-id parameter to tamper with. Every enrolment comes from
- * `learner-access.ts`'s `listOwnActiveEnrolments`, which filters on
+ * `learner-access.ts`'s `listOwnDashboardEnrolments`, which filters on
  * `actor.userId` (DD-10's ownership-comparison model, not a permission
- * check — see that module's own header for why). Progress is computed by
+ * check — see that module's own header for why). It lists the actor's
+ * ACTIVE enrolments and then their COMPLETED ones: issuance itself moves an
+ * enrolment to COMPLETED (D-05), so hiding COMPLETED would hide the card —
+ * and its certificate slot — exactly when the certificate becomes ACTIVE
+ * (UAT test 10). Decision G-01: a COMPLETED enrolment is VISIBLE here but
+ * NOT OPERABLE (no lesson content, no writes; see `learner-access.ts`).
+ * Progress is computed by
  * calling the SAME `evaluateCompletion` + `parseCompletionRule` pair
  * `completion-service.ts` uses, over the SAME pinned-obligation evidence
  * (`learner-access.ts`'s decorated `LearnerPath`), so the dashboard's
@@ -62,12 +69,37 @@
  * functions it composes (both unit-testable without Postgres), and a live
  * singleton is built at the bottom of the file from `prisma` and the real
  * `learner-access.ts` exports.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * PLAN 11-13 — `certificate` WIDENED FROM `DeferredColumn` TO A REAL
+ * `CertificateColumn`, PHASE 9'S NAMED GAP CLOSED.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Same DD-32 precedent Plan 10-15 used for `assessmentObligations`/`results`:
+ * the deferred inhabitant is gone from this column entirely (not widened to a
+ * union with it), replaced by a five-branch `CertificateColumn` derived by
+ * the pure, independently-tested `deriveCertificateColumn`. The branch
+ * precedence for an existing certificate is NEVER reimplemented here — it
+ * delegates to `certificate-service.ts`'s own `certificateDisplayStatus`
+ * (the single owner of "flagged beats active, revoked beats everything") so
+ * this card and the staff-facing certificate surfaces can never disagree.
+ *
+ * The reads (`completionRecord.findMany`, `certificate.findMany`, and — WR-06 —
+ * `course.findMany` / `programme.findMany` for `certificateEnabled`) are
+ * batched ONCE per `loadLearnerDashboard` call across every enrolment id /
+ * distinct award id — not once per card inside `buildCardContext` — so a
+ * 3-enrolment dashboard issues exactly the same four additional batched
+ * queries a 1-enrolment dashboard does (the course or programme read is skipped
+ * when no card needs it), never N+1. Results are looked up per enrolment by an
+ * `${enrolmentId}:${scope}` key, matching the enrolment's OWN cohort scope
+ * (COURSE vs PROGRAMME) so a programme-cohort's internal per-member-course
+ * `CompletionRecord` rows (D-01, the same distinction `listPendingIssuance`
+ * applies) are never mistaken for the card's own completion signal.
  */
 
 import { prisma } from "@/server/db";
 import type { Actor } from "@/server/permissions/with-permission";
 import {
-  listOwnActiveEnrolments,
+  listOwnDashboardEnrolments,
   loadLearnerCourseStructure,
   loadLearnerPath,
   loadPinnedCompletionRuleSource,
@@ -79,6 +111,7 @@ import {
   type LearnerPath,
   type PinnedCompletionRuleSource,
   type LessonOpenResult,
+  type LoadLearnerPathOptions,
 } from "@/server/services/learner-access";
 import type { AccessWindow } from "@/server/services/access-window";
 import {
@@ -104,6 +137,12 @@ import {
   type AssessmentObligation,
   type LearnerResultCard,
 } from "@/server/services/learner-results-service";
+// Plan 11-13 — a real (non-type-only) import for the SAME reason the
+// learner-results import above is real, not type-only: this module now
+// CALLS `certificateDisplayStatus` to derive the certificate column's
+// existing-certificate branches, rather than re-implementing its
+// revoked-beats-flagged-beats-active precedence a second time.
+import { certificateDisplayStatus } from "@/server/services/certificate-service";
 
 // ---------------------------------------------------------------------------
 // Named-gap constants (DD-18) — phase numbers match this plan's ruling.
@@ -112,7 +151,6 @@ import {
 const ASSESSMENT_OBLIGATIONS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
 const RESULTS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
 const TICKETS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 12 };
-const CERTIFICATE_DEFERRED: DeferredColumn = { kind: "deferred", phase: 11 };
 
 /**
  * Plan 10-15 — DD-32-precedent second inhabitant for the two columns Phase
@@ -124,6 +162,33 @@ export type AssessmentObligationsColumn =
   | DeferredColumn
   | { kind: "tracked"; items: AssessmentObligation[] };
 export type ResultsColumn = DeferredColumn | { kind: "tracked"; recent: LearnerResultCard[] };
+
+/**
+ * Plan 11-13 / 11-28 — UI-SPEC §7.6's five branches. An existing certificate
+ * decides first (a superseded completion record never withdraws a
+ * certificate, D-06/CRD-06; the query already excludes SUPERSEDED
+ * certificates): `revoked` — carries NO certificate id, because there is no
+ * download affordance to build; `flagged` — a flagged-but-current
+ * certificate, STILL carrying `certificateId` because the download stays
+ * available (a flag never withdraws earned access); `issued` — an unflagged,
+ * current certificate. With no certificate at all: `pending-issuance` — an
+ * unsuperseded completion record exists but nothing has been issued yet
+ * (MANUAL-mode's D-04 queue, or an AUTOMATIC-mode issuance not yet
+ * reflected); otherwise `not-complete` — no unsuperseded `CompletionRecord`
+ * for the enrolment's own scope. WR-06: `not-applicable` — the award's own
+ * `certificateEnabled` is false and no certificate row exists, so the card
+ * renders NO certificate surface at all rather than promising one that will
+ * never be issued. Unlike `AssessmentObligationsColumn`/`ResultsColumn`,
+ * this is NOT `DeferredColumn | …` — Phase 9's named gap is closed outright,
+ * not widened to keep a still-reachable deferred inhabitant.
+ */
+export type CertificateColumn =
+  | { kind: "not-applicable" }
+  | { kind: "not-complete" }
+  | { kind: "pending-issuance" }
+  | { kind: "issued"; certificateId: string; verificationRef: string; issuedAt: Date }
+  | { kind: "flagged"; certificateId: string; verificationRef: string; issuedAt: Date }
+  | { kind: "revoked" };
 
 /** A window closing within this many days surfaces the "ending" notice. */
 const ACCESS_ENDING_SOON_MS = 14 * 24 * 60 * 60 * 1000;
@@ -159,12 +224,63 @@ export type DashboardAttendanceRecordStoreRow = {
   state: AttendanceStateValue;
 };
 
+/** Plan 11-13 — the narrow slice of `CompletionRecord` the certificate
+ *  column needs: only whether an unsuperseded record exists for a given
+ *  enrolment+scope pair. */
+export type DashboardCompletionRecordStoreRow = {
+  enrolmentId: string;
+  scope: "COURSE" | "PROGRAMME";
+};
+
+/** Plan 11-13 — the narrow slice of `Certificate` the certificate column
+ *  needs, structurally compatible with `certificate-service.ts`'s
+ *  `certificateDisplayStatus` input so this module never re-derives that
+ *  precedence itself. */
+export type DashboardCertificateStoreRow = {
+  enrolmentId: string;
+  scope: "COURSE" | "PROGRAMME";
+  id: string;
+  status: "ACTIVE" | "REVOKED" | "SUPERSEDED";
+  reviewFlaggedAt: Date | null;
+  verificationRef: string;
+  issuedAt: Date;
+};
+
 export type EnrolmentDashboardStore = {
   scheduledSession: {
     findMany(args: { where: { cohortId: string } }): Promise<DashboardSessionStoreRow[]>;
   };
   attendanceRecord: {
     findMany(args: { where: { enrolmentId: string } }): Promise<DashboardAttendanceRecordStoreRow[]>;
+  };
+  /** Plan 11-13 — batched ONCE per `loadLearnerDashboard` call across every
+   *  enrolment id (never per card) so the certificate column cannot regress
+   *  the dashboard into an N+1. */
+  completionRecord: {
+    findMany(args: {
+      where: { enrolmentId: { in: string[] }; supersededAt: null };
+    }): Promise<DashboardCompletionRecordStoreRow[]>;
+  };
+  certificate: {
+    findMany(args: {
+      where: { enrolmentId: { in: string[] }; status: { not: "SUPERSEDED" } };
+    }): Promise<DashboardCertificateStoreRow[]>;
+  };
+  /** WR-06 — `Course.certificateEnabled`, batched ONCE per call across every
+   *  distinct course-cohort `courseId` (skipped when there are none). */
+  course: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; certificateEnabled: true };
+    }): Promise<{ id: string; certificateEnabled: boolean }[]>;
+  };
+  /** WR-06 — `Programme.certificateEnabled`, batched ONCE per call across every
+   *  distinct programme-cohort `programmeId` (skipped when there are none). */
+  programme: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; certificateEnabled: true };
+    }): Promise<{ id: string; certificateEnabled: boolean }[]>;
   };
 };
 
@@ -175,9 +291,14 @@ export type EnrolmentDashboardStore = {
  * `loadLearnerDashboard` with no Postgres and no module mocking.
  */
 export type EnrolmentDashboardLearnerAccess = {
-  listOwnActiveEnrolments(actor: Actor): Promise<OwnEnrolmentSnapshot[]>;
+  /** ACTIVE then COMPLETED own enrolments (G-01) — the dashboard's only enrolment source. */
+  listOwnDashboardEnrolments(actor: Actor): Promise<OwnEnrolmentSnapshot[]>;
   loadLearnerCourseStructure(enrolment: OwnEnrolmentSnapshot): Promise<LearnerCourseStructure>;
-  loadLearnerPath(actor: Actor, enrolmentId: string): Promise<LearnerPath | null>;
+  loadLearnerPath(
+    actor: Actor,
+    enrolmentId: string,
+    options?: LoadLearnerPathOptions,
+  ): Promise<LearnerPath | null>;
   loadPinnedCompletionRuleSource(
     enrolment: OwnEnrolmentSnapshot,
     courseId: string,
@@ -258,6 +379,9 @@ export type NextAction =
 
 export type LearnerDashboardCard = {
   enrolmentId: string;
+  /** G-01: a COMPLETED card is visible but not operable — its Assessments/Results
+   *  slots are not loaded and its next action is always `complete`. */
+  enrolmentStatus: "ACTIVE" | "COMPLETED";
   /** `Cohort.title` — 09-08 Task 3 heads each dashboard section with it. */
   cohortTitle: string;
   /** `Cohort.timezone` (IANA) — 09-08's session/date rendering reads this
@@ -267,7 +391,7 @@ export type LearnerDashboardCard = {
   assessmentObligations: AssessmentObligationsColumn;
   results: ResultsColumn;
   tickets: DeferredColumn;
-  certificate: DeferredColumn;
+  certificate: CertificateColumn;
   progress: LearnerDashboardProgress;
   accessNotice: AccessNotice;
   upcomingSessions: UpcomingSessionCard[];
@@ -350,6 +474,53 @@ export function buildUpcomingSessions(
     hasMoreSessions: futureNonCancelled.length > MAX_UPCOMING_SESSIONS,
     futureNonCancelled,
   };
+}
+
+/**
+ * Plan 11-13 / 11-28 — pure and total, unit-testable with no store fake at all
+ * (mirrors `deriveNextAction`'s own standalone-testability). An existing
+ * certificate decides the column FIRST: an attendance or completion
+ * correction supersedes the completion record (that is what raises the CRD-06
+ * flag), so consulting `hasCompletionRecord` before the certificate would hide
+ * a flagged certificate and its download (D-06/CRD-06 — a flag never
+ * withdraws earned access). Only when no certificate exists does the
+ * completion record choose between `not-complete` and `pending-issuance`.
+ * Delegates the existing-certificate precedence to `certificateDisplayStatus`
+ * rather than re-deriving "revoked beats flagged beats active" a second time.
+ * The batched query already excludes SUPERSEDED certificates.
+ *
+ * WR-06: `certificateEnabled` (the enrolment's OWN award — Course or Programme
+ * per its cohort scope, D-01) only suppresses the no-certificate branches: an
+ * award that issues none returns `not-applicable` instead of promising a
+ * certificate. It never hides an existing certificate row — an earned or
+ * revoked certificate stays visible even if the award was later switched off.
+ *
+ * Still out of scope (WR-06 in 11-REVIEW.md, separate item): row selection when
+ * REVOKED and ACTIVE rows coexist.
+ */
+export function deriveCertificateColumn(input: {
+  certificateEnabled: boolean;
+  hasCompletionRecord: boolean;
+  certificate: DashboardCertificateStoreRow | null;
+}): CertificateColumn {
+  if (!input.certificate) {
+    if (!input.certificateEnabled) return { kind: "not-applicable" };
+    return input.hasCompletionRecord ? { kind: "pending-issuance" } : { kind: "not-complete" };
+  }
+
+  const displayStatus = certificateDisplayStatus(input.certificate);
+  if (displayStatus === "revoked") return { kind: "revoked" };
+
+  const shared = {
+    certificateId: input.certificate.id,
+    verificationRef: input.certificate.verificationRef,
+    issuedAt: input.certificate.issuedAt,
+  };
+  if (displayStatus === "flagged") return { kind: "flagged", ...shared };
+  // "active" (the normal case) and the defensive "superseded" fallback (the
+  // batched query already excludes SUPERSEDED rows, so this never actually
+  // occurs) both render as the plain issued branch.
+  return { kind: "issued", ...shared };
 }
 
 function computeAttendanceComponentForCard(
@@ -526,6 +697,11 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     actor: Actor,
     enrolment: OwnEnrolmentSnapshot,
     nowDate: Date,
+    certificateContext: {
+      certificateEnabled: boolean;
+      hasCompletionRecord: boolean;
+      certificate: DashboardCertificateStoreRow | null;
+    },
   ): Promise<EnrolmentCardContext> {
     const [sessions, records, structure] = await Promise.all([
       store.scheduledSession.findMany({ where: { cohortId: enrolment.cohortId } }),
@@ -540,27 +716,31 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       ? { id: futureNonCancelled[0].id, title: futureNonCancelled[0].title, startsAt: futureNonCancelled[0].startsAt }
       : null;
 
+    const isCompleted = enrolment.status === "COMPLETED";
     const base = {
       enrolmentId: enrolment.id,
+      enrolmentStatus: (isCompleted ? "COMPLETED" : "ACTIVE") as "ACTIVE" | "COMPLETED",
       cohortTitle: enrolment.cohort.title,
       timezone: enrolment.cohort.timezone,
       assessmentObligations: ASSESSMENT_OBLIGATIONS_DEFERRED,
       results: RESULTS_DEFERRED,
       tickets: TICKETS_DEFERRED,
-      certificate: CERTIFICATE_DEFERRED,
+      certificate: deriveCertificateColumn(certificateContext),
       accessNotice,
       upcomingSessions,
       hasMoreSessions,
     };
 
     if (structure.kind === "unpinned") {
-      const nextAction = deriveNextAction({
-        enrolmentId: enrolment.id,
-        now: nowDate,
-        nearestFutureSession,
-        path: null,
-        verdict: null,
-      });
+      const nextAction: NextAction = isCompleted
+        ? { kind: "complete" }
+        : deriveNextAction({
+            enrolmentId: enrolment.id,
+            now: nowDate,
+            nearestFutureSession,
+            path: null,
+            verdict: null,
+          });
       return {
         card: { ...base, progress: unpinnedProgress(attendance), nextAction },
         verdict: null,
@@ -569,20 +749,24 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       };
     }
 
-    // Defensive fallback only — `getOwnActiveEnrolment` (inside
-    // `loadLearnerPath`) cannot legitimately return null here: `enrolment`
-    // was just confirmed ACTIVE and owned by `actor` by `listOwnActiveEnrolments`
-    // itself. Treated identically to "unpinned" rather than throwing, since a
-    // learner's dashboard must never hard-fail on one enrolment.
-    const path = await learnerAccess.loadLearnerPath(actor, enrolment.id);
+    // Defensive fallback only — `loadLearnerPath` cannot legitimately return
+    // null here: `enrolment` was just confirmed ACTIVE-or-COMPLETED and owned
+    // by `actor` by `listOwnDashboardEnrolments` itself, and `includeCompleted`
+    // is what lets a COMPLETED one resolve (G-01: visible, not operable — this
+    // is the ONLY caller that opts in). Treated identically to "unpinned"
+    // rather than throwing, since a learner's dashboard must never hard-fail
+    // on one enrolment.
+    const path = await learnerAccess.loadLearnerPath(actor, enrolment.id, { includeCompleted: true });
     if (!path) {
-      const nextAction = deriveNextAction({
-        enrolmentId: enrolment.id,
-        now: nowDate,
-        nearestFutureSession,
-        path: null,
-        verdict: null,
-      });
+      const nextAction: NextAction = isCompleted
+        ? { kind: "complete" }
+        : deriveNextAction({
+            enrolmentId: enrolment.id,
+            now: nowDate,
+            nearestFutureSession,
+            path: null,
+            verdict: null,
+          });
       return {
         card: { ...base, progress: unpinnedProgress(attendance), nextAction },
         verdict: null,
@@ -625,13 +809,33 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       }
     }
 
-    const nextAction = deriveNextAction({
-      enrolmentId: enrolment.id,
-      now: nowDate,
-      nearestFutureSession,
-      path,
-      verdict,
-    });
+    // A COMPLETED enrolment is not operable (G-01), so its session and lesson
+    // branches would surface links the learner cannot use: always `complete`.
+    const nextAction: NextAction = isCompleted
+      ? { kind: "complete" }
+      : deriveNextAction({
+          enrolmentId: enrolment.id,
+          now: nowDate,
+          nearestFutureSession,
+          path,
+          verdict,
+        });
+
+    const progress: LearnerDashboardProgress = {
+      requiredLessonsComplete,
+      requiredLessonsTotal: requiredLessonIds.length,
+      attendance,
+      structure: "structure",
+    };
+
+    // A COMPLETED card does not load Assessments/Results: those reads share
+    // ACTIVE-only ownership resolvers with the write paths (G-01), so they
+    // would return nothing and read as a false "No results yet". The
+    // dashboard page (plan 11-18) does not render those two slots for a
+    // COMPLETED card; `base`'s deferred constants stand in.
+    if (isCompleted) {
+      return { card: { ...base, progress, nextAction }, verdict, path, futureNonCancelled };
+    }
 
     // Plan 10-15 — tracked only once a course structure is pinned (`path`
     // resolved above), mirroring Progress's own unpinned/pinned split: an
@@ -648,12 +852,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
         ...base,
         assessmentObligations: { kind: "tracked", items: obligations },
         results: { kind: "tracked", recent: mostRecentFirst(results).slice(0, MAX_RECENT_RESULTS) },
-        progress: {
-          requiredLessonsComplete,
-          requiredLessonsTotal: requiredLessonIds.length,
-          attendance,
-          structure: "structure",
-        },
+        progress,
         nextAction,
       },
       verdict,
@@ -662,15 +861,85 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     };
   }
 
-  /** One card per own ACTIVE enrolment (T-09-01), most-recently-activated
-   *  first — `listOwnActiveEnrolments` already returns that order, so no
+  /** One card per own ACTIVE or COMPLETED enrolment (T-09-01, G-01), ACTIVE
+   *  first then COMPLETED, each most-recently-activated first —
+   *  `listOwnDashboardEnrolments` already returns that order, so no
    *  additional sort happens here. Zero enrolments returns `{ cards: [] }`;
    *  this service never fabricates a placeholder card. */
   async function loadLearnerDashboard(actor: Actor): Promise<LearnerDashboard> {
-    const enrolments = await learnerAccess.listOwnActiveEnrolments(actor);
+    const enrolments = await learnerAccess.listOwnDashboardEnrolments(actor);
     const nowDate = now();
+
+    // Plan 11-13 — batched ONCE across every enrolment id (never per card):
+    // a 3-enrolment dashboard issues the exact same two extra queries a
+    // 1-enrolment dashboard does. `enrolmentIds` is already ownership-scoped
+    // (it comes straight from `listOwnDashboardEnrolments`), so this can never
+    // surface another learner's certificate (T-11-61).
+    const enrolmentIds = enrolments.map((e) => e.id);
+
+    // WR-06 — the award whose `certificateEnabled` governs each card is the
+    // enrolment's OWN scope (D-01): a programme cohort reads the Programme, a
+    // course cohort reads the Course, never a member course. Distinct ids only,
+    // one query per award type, skipped when the list is empty.
+    const courseIds = [
+      ...new Set(
+        enrolments
+          .filter((e) => !e.cohort.programmeId && e.cohort.courseId)
+          .map((e) => e.cohort.courseId as string),
+      ),
+    ];
+    const programmeIds = [
+      ...new Set(enrolments.filter((e) => e.cohort.programmeId).map((e) => e.cohort.programmeId as string)),
+    ];
+
+    const [completionRecords, certificates, courseAwards, programmeAwards] = enrolmentIds.length
+      ? await Promise.all([
+          store.completionRecord.findMany({
+            where: { enrolmentId: { in: enrolmentIds }, supersededAt: null },
+          }),
+          store.certificate.findMany({
+            where: { enrolmentId: { in: enrolmentIds }, status: { not: "SUPERSEDED" } },
+          }),
+          courseIds.length
+            ? store.course.findMany({
+                where: { id: { in: courseIds } },
+                select: { id: true, certificateEnabled: true },
+              })
+            : Promise.resolve([] as { id: string; certificateEnabled: boolean }[]),
+          programmeIds.length
+            ? store.programme.findMany({
+                where: { id: { in: programmeIds } },
+                select: { id: true, certificateEnabled: true },
+              })
+            : Promise.resolve([] as { id: string; certificateEnabled: boolean }[]),
+        ])
+      : [[], [], [], []];
+
+    // Keyed by scope + id. An award row that cannot be found is treated as NOT
+    // enabled (`?? false` below): never promise a certificate we cannot confirm.
+    const awardEnabled = new Map<string, boolean>([
+      ...courseAwards.map((a) => [`COURSE:${a.id}`, a.certificateEnabled] as const),
+      ...programmeAwards.map((a) => [`PROGRAMME:${a.id}`, a.certificateEnabled] as const),
+    ]);
+
+    // Keyed by `${enrolmentId}:${scope}` — a Programme-cohort enrolment also
+    // owns internal per-member-course COURSE-scope `CompletionRecord` rows
+    // (D-01); only the record matching the enrolment's OWN cohort scope may
+    // ever drive this card's certificate column.
+    const completionKeys = new Set(completionRecords.map((r) => `${r.enrolmentId}:${r.scope}`));
+    const certificateByKey = new Map(certificates.map((c) => [`${c.enrolmentId}:${c.scope}`, c]));
+
     const contexts = await Promise.all(
-      enrolments.map((enrolment) => buildCardContext(actor, enrolment, nowDate)),
+      enrolments.map((enrolment) => {
+        const scope = enrolment.cohort.programmeId ? "PROGRAMME" : "COURSE";
+        const key = `${enrolment.id}:${scope}`;
+        const awardId = scope === "PROGRAMME" ? enrolment.cohort.programmeId : enrolment.cohort.courseId;
+        return buildCardContext(actor, enrolment, nowDate, {
+          certificateEnabled: awardId ? (awardEnabled.get(`${scope}:${awardId}`) ?? false) : false,
+          hasCompletionRecord: completionKeys.has(key),
+          certificate: certificateByKey.get(key) ?? null,
+        });
+      }),
     );
     return { cards: contexts.map((c) => c.card) };
   }
@@ -689,7 +958,7 @@ const liveStore = prisma as unknown as EnrolmentDashboardStore;
 const built = createEnrolmentDashboardService({
   store: liveStore,
   learnerAccess: {
-    listOwnActiveEnrolments,
+    listOwnDashboardEnrolments,
     loadLearnerCourseStructure,
     loadLearnerPath,
     loadPinnedCompletionRuleSource,

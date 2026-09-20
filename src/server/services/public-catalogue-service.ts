@@ -70,6 +70,14 @@ export type PublicCohort = {
   seatsAvailable: number;
 };
 
+/** A live module of a public course, by title only, with how many live lessons it holds. */
+export type PublicCourseModule = { title: string; lessonCount: number };
+
+/** What the catalogue list shows per course: the course plus its soonest bookable cohort. */
+export type PublicCourseListing = Omit<PublicCourse, "upcomingCohorts" | "modules"> & {
+  nextCohort: PublicCohort | null;
+};
+
 export type PublicCourse = {
   slug: string;
   title: string;
@@ -79,7 +87,13 @@ export type PublicCourse = {
   prerequisites: string | null;
   durationHours: number | null;
   certificateEnabled: boolean;
+  modules: PublicCourseModule[];
   upcomingCohorts: PublicCohort[];
+};
+
+/** What the catalogue list shows per programme: the programme plus its soonest bookable cohort. */
+export type PublicProgrammeListing = Omit<PublicProgramme, "upcomingCohorts" | "memberCourseTitles"> & {
+  nextCohort: PublicCohort | null;
 };
 
 export type PublicProgramme = {
@@ -172,32 +186,60 @@ export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
       }));
   }
 
-  async function listPublicCourses(): Promise<Array<Omit<PublicCourse, "upcomingCohorts">>> {
+  async function listPublicCourses(): Promise<PublicCourseListing[]> {
     const rows = (await deps.courseDelegate.findMany({
       where: PUBLIC_VISIBILITY_WHERE,
-      select: COURSE_PUBLIC_SELECT,
+      select: { ...COURSE_PUBLIC_SELECT, id: true },
       orderBy: { title: "asc" },
-    })) as Array<Omit<PublicCourse, "upcomingCohorts">>;
-    return rows;
+    })) as Array<Omit<PublicCourseListing, "nextCohort"> & { id: string }>;
+    return Promise.all(
+      rows.map(async ({ id, ...rest }) => ({
+        ...rest,
+        nextCohort: (await upcomingCohorts({ courseId: id }))[0] ?? null,
+      })),
+    );
   }
 
-  async function listPublicProgrammes(): Promise<Array<Omit<PublicProgramme, "upcomingCohorts" | "memberCourseTitles">>> {
+  async function listPublicProgrammes(): Promise<PublicProgrammeListing[]> {
     const rows = (await deps.programmeDelegate.findMany({
       where: PUBLIC_VISIBILITY_WHERE,
-      select: PROGRAMME_PUBLIC_SELECT,
+      select: { ...PROGRAMME_PUBLIC_SELECT, id: true },
       orderBy: { title: "asc" },
-    })) as Array<Omit<PublicProgramme, "upcomingCohorts" | "memberCourseTitles">>;
-    return rows;
+    })) as Array<Omit<PublicProgrammeListing, "nextCohort"> & { id: string }>;
+    return Promise.all(
+      rows.map(async ({ id, ...rest }) => ({
+        ...rest,
+        nextCohort: (await upcomingCohorts({ programmeId: id }))[0] ?? null,
+      })),
+    );
   }
 
   async function getPublicCourseBySlug(slug: string): Promise<PublicCourse | null> {
     const row = (await deps.courseDelegate.findFirst({
       where: { slug, ...PUBLIC_VISIBILITY_WHERE },
-      select: { ...COURSE_PUBLIC_SELECT, id: true },
-    })) as (Omit<PublicCourse, "upcomingCohorts"> & { id: string }) | null;
+      select: {
+        ...COURSE_PUBLIC_SELECT,
+        id: true,
+        // Titles and lesson counts of LIVE modules only: withdrawn ones are soft-deleted.
+        modules: {
+          where: { withdrawnAt: null },
+          orderBy: { position: "asc" },
+          select: { title: true, lessons: { where: { withdrawnAt: null }, select: { id: true } } },
+        },
+      },
+    })) as
+      | (Omit<PublicCourse, "upcomingCohorts" | "modules"> & {
+          id: string;
+          modules?: Array<{ title: string; lessons: unknown[] }>;
+        })
+      | null;
     if (!row) return null;
-    const { id, ...rest } = row;
-    return { ...rest, upcomingCohorts: await upcomingCohorts({ courseId: id }) };
+    const { id, modules, ...rest } = row;
+    return {
+      ...rest,
+      modules: (modules ?? []).map((m) => ({ title: m.title, lessonCount: m.lessons.length })),
+      upcomingCohorts: await upcomingCohorts({ courseId: id }),
+    };
   }
 
   async function getPublicProgrammeBySlug(slug: string): Promise<PublicProgramme | null> {

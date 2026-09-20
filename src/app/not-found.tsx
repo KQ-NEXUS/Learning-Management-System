@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { SearchX } from "lucide-react";
+import { LearnerShell } from "@/components/shell/LearnerShell";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 
 /**
  * The repository's root 404 (a carried gap in STATE.md until now).
@@ -10,32 +11,27 @@ import { SearchX } from "lucide-react";
  *
  * Copy is the approved recovery text from 04.1-UI-SPEC §6.2 (verbatim, straight
  * apostrophe per 04.1-MOCKUP-SOURCE.html) — deliberately non-enumerating: it
- * names no record and confirms no existence.
+ * names no record and confirms no existence. It sits in the shared frame with
+ * no nav, so it also reveals nothing about who is signed in.
  */
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-2 px-6 py-8">
-      <div className="flex w-full max-w-2xl flex-col items-center gap-4 rounded-xl border border-border bg-surface px-6 py-12 text-center shadow-card">
-        <span
-          aria-hidden
-          className="flex size-12 items-center justify-center rounded-lg bg-surface-2 text-muted-foreground"
-        >
-          <SearchX className="size-[22px]" />
-        </span>
-        <p className="font-mono text-[11px] font-semibold tracking-widest text-muted-foreground">
-          404
-        </p>
-        <h1 className="text-[25px] font-semibold leading-[1.2]">We can&apos;t find that page</h1>
-        <p className="max-w-prose text-sm text-muted-foreground">
+    <LearnerShell nav={[]} rightSlot={null}>
+      <div className="flex flex-col gap-8">
+        <LearnerPageHeader title="We can't find that page" />
+        <div className="flex flex-col gap-4 pb-12">
+        <p className="font-mono text-sm text-muted-foreground">404</p>
+        <p className="max-w-prose text-base text-foreground-soft">
           The course or programme may have been archived, or the link may be out of date.
         </p>
         <Link
           href="/courses"
-          className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+          className="inline-flex min-h-11 w-fit items-center rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
         >
           Back to the catalogue
         </Link>
+        </div>
       </div>
-    </main>
+    </LearnerShell>
   );
 }

@@ -1,4 +1,4 @@
-import { AuthorizationError, AuthenticationError } from "@/server/permissions";
+import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { listProgrammesForIndex, type ProgrammeIndexRow } from "@/server/services/programme-service";
 import { ProgrammesTable } from "./ProgrammesTable";
 
@@ -21,5 +21,7 @@ export default async function ProgrammesPage() {
     throw error;
   }
 
-  return <ProgrammesTable rows={programmes} />;
+  // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
+  const canCreate = await can("programmes.manage", {});
+  return <ProgrammesTable rows={programmes} canCreate={canCreate} />;
 }

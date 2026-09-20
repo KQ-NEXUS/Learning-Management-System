@@ -32,7 +32,7 @@ const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_DANGER =
   "rounded-md bg-danger px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
-const FIELD_LABEL = "text-[11px] font-semibold uppercase tracking-wide text-foreground";
+const FIELD_LABEL = "text-xs font-semibold uppercase tracking-wide text-foreground";
 const FIELD_INPUT =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:bg-surface-2";
 
@@ -182,7 +182,7 @@ function RefundDialogBody({
         className="flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-card"
       >
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Integrity action
           </span>
           <h2 id={titleId} className="text-base font-semibold tracking-tight">
@@ -192,7 +192,7 @@ function RefundDialogBody({
 
         {error && (
           <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">Action not applied</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-danger">Action not applied</p>
             <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}
@@ -254,7 +254,7 @@ function RefundDialogBody({
           />
           <p
             aria-live="polite"
-            className={`font-mono text-[11px] ${reasonValid ? "text-muted-foreground" : "text-danger"}`}
+            className={`font-mono text-xs ${reasonValid ? "text-muted-foreground" : "text-danger"}`}
           >
             {reason.trim().length} / {MIN_REASON} minimum
           </p>
@@ -267,7 +267,7 @@ function RefundDialogBody({
           <button type="button" onClick={onCancel} disabled={pending} className={BTN}>
             Cancel
           </button>
-          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+          <span className="ml-auto font-mono text-xs text-muted-foreground">
             {pending ? "ESC suppressed" : "ESC cancels"}
           </span>
         </div>

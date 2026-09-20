@@ -32,9 +32,9 @@ export default async function ConfirmingPaymentPage({
   }
 
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-      <Loader2 aria-hidden className="size-8 animate-spin text-accent" />
+    <div className="flex flex-col items-start gap-6">
       <PollForPayment />
+      <Loader2 aria-hidden className="size-8 animate-spin text-accent" />
     </div>
   );
 }

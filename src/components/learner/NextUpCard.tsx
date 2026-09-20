@@ -27,7 +27,7 @@ export type NextUpCardProps = {
 
 export function NextUpCard({ action, enrolmentId, timezone }: NextUpCardProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-6 shadow-xs">
+    <div className="flex flex-col gap-3 border-t border-foreground pt-5">
       <h3 className="text-[16px] font-semibold text-foreground">Next up</h3>
       {action.kind === "lesson" && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -58,8 +58,8 @@ export function NextUpCard({ action, enrolmentId, timezone }: NextUpCardProps) {
 
       {action.kind === "complete" && (
         <p className="text-sm text-foreground">
-          You&apos;ve completed everything required here — your certificate slot below will
-          reflect this once certificates ship.
+          You&apos;ve completed everything required here. Your certificate, if this course
+          issues one, is shown in the Certificate section below.
         </p>
       )}
 

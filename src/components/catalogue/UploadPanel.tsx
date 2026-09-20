@@ -211,9 +211,9 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
   return (
     <fieldset
       aria-label={`${noun} resources`}
-      className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-xs"
+      className="flex flex-col gap-4 border-t border-foreground pt-5"
     >
-      <legend className="px-1 text-[11px] font-semibold uppercase tracking-wide text-foreground">
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-foreground">
         Resources
       </legend>
 

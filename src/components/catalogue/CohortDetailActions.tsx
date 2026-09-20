@@ -47,7 +47,7 @@ export type CohortDetailActionsProps = {
 const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
 // Danger secondary — kept as its own string, not `${BTN} text-danger`, so the
 // destructive colour isn't left to Tailwind source order against BTN's own
 // `text-foreground` / `border-input-border`.
@@ -254,7 +254,7 @@ function PublishCohortDialogBody({
         className="flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-card"
       >
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Publish cohort
           </span>
           <h2 id={titleId} className="text-base font-semibold tracking-tight">
@@ -277,7 +277,7 @@ function PublishCohortDialogBody({
 
         {error && (
           <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">Action not applied</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-danger">Action not applied</p>
             <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}

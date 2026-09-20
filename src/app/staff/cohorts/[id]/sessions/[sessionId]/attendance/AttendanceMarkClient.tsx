@@ -45,8 +45,6 @@ export type AttendanceMarkClientProps = {
   cohortId: string;
   sessionId: string;
   sessionTitle: string;
-  startsAtLabel: string | null;
-  endsAtLabel: string | null;
   /** ISO instant — the marking window's close time (D-06). */
   windowClosesAt: string;
   /** Courtesy echo of `!isBeforeSessionStart` (D-09) — not the enforcement. */
@@ -57,6 +55,15 @@ export type AttendanceMarkClientProps = {
 const STATE_ORDER: AttendanceStateValue[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED", "NOT_RECORDED"];
 
 const LIVE_STATES: ReadonlySet<AttendanceStateValue> = new Set(["PRESENT", "ABSENT", "LATE"]);
+
+/** How a chosen state reads at a glance: each state is its own colour, checked via the hidden radio. */
+const STATE_SELECTED: Record<AttendanceStateValue, string> = {
+  PRESENT: "has-checked:border-accent has-checked:bg-accent has-checked:text-accent-contrast",
+  ABSENT: "has-checked:border-danger has-checked:bg-danger has-checked:text-white",
+  LATE: "has-checked:border-warning has-checked:bg-warning has-checked:text-white",
+  EXCUSED: "has-checked:border-muted-foreground has-checked:bg-muted-foreground has-checked:text-white",
+  NOT_RECORDED: "has-checked:border-foreground has-checked:font-semibold",
+};
 
 const STATE_META: Record<AttendanceStateValue, { label: string; glyph: string }> = {
   PRESENT: { label: "Present", glyph: "✓" },
@@ -84,8 +91,6 @@ export function AttendanceMarkClient({
   cohortId,
   sessionId,
   sessionTitle,
-  startsAtLabel,
-  endsAtLabel,
   windowClosesAt,
   canSetLiveStates,
   roster,
@@ -188,16 +193,6 @@ export function AttendanceMarkClient({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-muted-foreground">{sessionId}</p>
-        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight text-foreground">{sessionTitle}</h1>
-        {startsAtLabel && endsAtLabel && (
-          <p className="font-mono text-[11px] text-muted-foreground">
-            {startsAtLabel} → {endsAtLabel}
-          </p>
-        )}
-      </div>
-
       {!canSetLiveStates && (
         <div role="status" className="rounded-md border border-warning/30 bg-warning/10 px-4 py-2 text-sm text-foreground">
           {PRE_START_HINT}
@@ -218,7 +213,7 @@ export function AttendanceMarkClient({
       )}
 
       {roster.length === 0 ? (
-        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-xs">
+        <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
           <p className="text-sm font-semibold text-foreground">Nothing to mark yet</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             Attendance opens when the session starts. Before then you can only mark excused or
@@ -227,9 +222,29 @@ export function AttendanceMarkClient({
         </div>
       ) : (
         <>
-          <p aria-live="polite" className="text-[11px] text-muted-foreground">
-            {roster.length} {roster.length === 1 ? "learner" : "learners"} · {changedRows.length} changed
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <dl className="flex flex-wrap gap-9">
+              {(
+                [
+                  ["PRESENT", "Present"],
+                  ["ABSENT", "Absent"],
+                  ["LATE", "Late"],
+                  ["EXCUSED", "Excused"],
+                  ["NOT_RECORDED", "Not recorded"],
+                ] as const
+              ).map(([value, label]) => (
+                <div key={value}>
+                  <dd className="font-mono text-[28px] leading-[1.2] font-medium tabular-nums text-foreground">
+                    {roster.filter((row) => (draft[row.enrolmentId]?.state ?? row.state) === value).length}
+                  </dd>
+                  <dt className="text-[13px] text-muted-foreground">{label}</dt>
+                </div>
+              ))}
+            </dl>
+            <p aria-live="polite" className="text-[13px] text-muted-foreground">
+              {roster.length} {roster.length === 1 ? "learner" : "learners"} · {changedRows.length} changed
+            </p>
+          </div>
 
           <ul className="flex flex-col gap-2">
             {roster.map((row) => {
@@ -237,13 +252,13 @@ export function AttendanceMarkClient({
               return (
                 <li
                   key={row.enrolmentId}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-4 py-4 shadow-xs sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-foreground pt-5"
                 >
                   <fieldset className="flex flex-col gap-1">
                     <legend className="text-sm font-semibold text-foreground">{row.learnerName}</legend>
-                    <span className="text-[11px] text-muted-foreground">{row.learnerEmail}</span>
+                    <span className="text-[13px] text-muted-foreground">{row.learnerEmail}</span>
                     {row.isCorrection && (
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Corrected
                       </span>
                     )}
@@ -256,12 +271,13 @@ export function AttendanceMarkClient({
                       return (
                         <label
                           key={state}
-                          className={`flex items-center gap-2 rounded-md border px-2 py-1 text-[11px] ${
-                            disabled ? "border-border text-muted-foreground" : "border-input-border text-foreground"
+                          className={`flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
+                            disabled ? "border-border text-muted-foreground" : `cursor-pointer border-input-border text-foreground hover:bg-surface-2 ${STATE_SELECTED[state]}`
                           }`}
                         >
                           <input
                             type="radio"
+                            className="sr-only"
                             name={`state-${row.enrolmentId}`}
                             value={state}
                             checked={current === state}
@@ -285,12 +301,12 @@ export function AttendanceMarkClient({
                 type="button"
                 onClick={handleSave}
                 disabled={!dirty || saving}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save attendance"}
               </button>
               {dirty && !saving && (
-                <span className="text-[11px] text-muted-foreground">Unsaved changes — nothing is written until you save.</span>
+                <span className="text-xs text-muted-foreground">Unsaved changes — nothing is written until you save.</span>
               )}
             </div>
           )}

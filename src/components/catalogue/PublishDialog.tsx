@@ -170,7 +170,7 @@ function PublishDialogBody({
         className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-card"
       >
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Publish content
           </span>
           <h2 id={titleId} className="text-base font-semibold tracking-tight">
@@ -188,7 +188,7 @@ function PublishDialogBody({
 
         {error && (
           <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
+            <p className="text-xs font-semibold uppercase tracking-wide text-danger">
               Not published
             </p>
             <p className="mt-1 text-sm text-danger">{error}</p>
@@ -196,7 +196,7 @@ function PublishDialogBody({
         )}
 
         <section className="flex flex-col gap-1">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
             Changes this will publish
           </h3>
           {unpublishedChanges.length === 0 ? (
@@ -213,7 +213,7 @@ function PublishDialogBody({
         </section>
 
         <section className="flex flex-col gap-1">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
             Running cohorts on this course
           </h3>
           {affectedCohorts.length === 0 ? (
@@ -228,7 +228,7 @@ function PublishDialogBody({
               </p>
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="py-2 pr-2 font-semibold">Migrate</th>
                     <th className="py-2 pr-2 font-semibold">Code</th>
                     <th className="py-2 pr-2 font-semibold">Learners</th>
@@ -270,7 +270,7 @@ function PublishDialogBody({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={reasonId}
-            className="text-[11px] font-semibold uppercase tracking-wide text-foreground"
+            className="text-xs font-semibold uppercase tracking-wide text-foreground"
           >
             Reason
             {reasonRequired && (
@@ -296,7 +296,7 @@ function PublishDialogBody({
           {reasonRequired && (
             <p
               aria-live="polite"
-              className={`font-mono text-[11px] ${reasonValid ? "text-muted-foreground" : "text-danger"}`}
+              className={`font-mono text-xs ${reasonValid ? "text-muted-foreground" : "text-danger"}`}
             >
               {reason.trim().length} / {MIN_REASON} minimum
             </p>

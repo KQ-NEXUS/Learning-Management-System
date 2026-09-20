@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthorizationError } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import {
@@ -86,20 +87,23 @@ export default async function ArrangePage({
   return (
     <UnsavedOrderProvider>
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1">
-          <p className="font-mono text-[11px] text-muted-foreground">
-            {course.slug ?? course.id}
-          </p>
-          <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">
-            {course.title ?? "Course"} — structure
-          </h1>
-          <GuardedLink
-            href={`/staff/courses/${id}`}
-            className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
-          >
-            Back to course
-          </GuardedLink>
-        </div>
+        <PageHeader
+          title="Arrange"
+          breadcrumbs={[
+            { label: "Courses", href: "/staff/courses" },
+            { label: course.title ?? "Course", href: `/staff/courses/${id}` },
+            { label: "Arrange" },
+          ]}
+          subtitle="Set the order of modules and lessons"
+          actions={
+            <GuardedLink
+              href={`/staff/courses/${id}`}
+              className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover"
+            >
+              Back to course
+            </GuardedLink>
+          }
+        />
 
         <ArrangeClient
           key={structureKey}

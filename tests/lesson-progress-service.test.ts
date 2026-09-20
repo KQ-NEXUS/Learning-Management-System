@@ -14,6 +14,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createLessonProgressService,
+  createPrismaBackedLessonProgressService,
   countLessonsRelockedBy,
   LessonNotOpenableError,
   ManualCompletionNotPermittedError,
@@ -27,6 +28,7 @@ import {
   type LessonWatchProgressRow,
 } from "@/server/services/lesson-progress-service";
 import { writeDomainEvent } from "@/server/services/domain-event-service";
+import { registerPendingCertificateFile } from "@/server/services/certificate-file-service";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import { createTestWithPermission, grant } from "./support/harness";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
@@ -1161,6 +1163,109 @@ describe("DD-15 — exactly one withPermission-wrapped export", () => {
 
     // markLessonComplete/undoLessonComplete/recordWatchProgress never call
     // withPermission at all — they succeed with zero grants.
+    await expect(
+      service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
+    ).resolves.toMatchObject({ completed: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 11-31 (CR-01b) — the Prisma-backed composition root settles certificate
+// files AFTER the transaction commits, and a settle failure never fails the write
+// ---------------------------------------------------------------------------
+
+describe("createPrismaBackedLessonProgressService — post-commit certificate file settle", () => {
+  function rootHarness(opts: {
+    register?: boolean;
+    bodyThrows?: boolean;
+    settle?: (tx: object) => Promise<void>;
+  }) {
+    const path = makePath({ lessons: [makeLesson({ id: "les-1", allowManualComplete: true })] });
+    const h = buildTxHarness();
+    const order: string[] = [];
+
+    const client = {
+      enrolment: { findUnique: async () => ({ userId: "learner-1" }) },
+      $transaction: async <R,>(cb: (tx: unknown) => Promise<R>): Promise<R> => {
+        order.push("tx-begin");
+        const result = await cb(h.rawTx);
+        order.push("tx-commit");
+        return result;
+      },
+    };
+
+    const recalcTxs: unknown[] = [];
+    const recalc: LessonProgressServiceDeps["recalculateCompletion"] = async (tx) => {
+      recalcTxs.push(tx);
+      if (opts.register) registerPendingCertificateFile(tx as object, "cert-1");
+      if (opts.bodyThrows) throw new Error("rollback me");
+      return { kind: "evaluated", results: [] } as CompletionRecalculationResult;
+    };
+
+    const settleCalls: object[] = [];
+    const settle = async (tx: object) => {
+      order.push("settle");
+      settleCalls.push(tx);
+      if (opts.settle) await opts.settle(tx);
+    };
+
+    const service = createPrismaBackedLessonProgressService(
+      client as never,
+      createTestWithPermission([grant("enrolments.manage")]).withPermission,
+      async () => {},
+      recalc,
+      async () => path,
+      settle,
+    );
+    return { service, order, settleCalls, recalcTxs, rawTx: h.rawTx };
+  }
+
+  it("settles exactly once, after $transaction resolved, with the same tx object issuance registered against", async () => {
+    const r = rootHarness({ register: true });
+    await r.service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" });
+    expect(r.order).toEqual(["tx-begin", "tx-commit", "settle"]);
+    expect(r.settleCalls).toHaveLength(1);
+    expect(r.settleCalls[0]).toBe(r.rawTx);
+    expect(r.recalcTxs).toHaveLength(1);
+    expect(r.recalcTxs[0]).toBe(r.settleCalls[0]);
+  });
+
+  it("a rolled-back transaction triggers no settle and the original error propagates", async () => {
+    const r = rootHarness({ register: true, bodyThrows: true });
+    await expect(
+      r.service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
+    ).rejects.toThrow("rollback me");
+    expect(r.settleCalls).toHaveLength(0);
+    expect(r.order).not.toContain("settle");
+  });
+
+  it("a rejecting settle never fails the learner's already-committed write", async () => {
+    const r = rootHarness({
+      register: true,
+      settle: async () => {
+        throw new Error("object store down");
+      },
+    });
+    await expect(
+      r.service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
+    ).resolves.toMatchObject({ completed: true });
+    expect(r.order).toEqual(["tx-begin", "tx-commit", "settle"]);
+  });
+
+  it("with the live settle and nothing registered, an ordinary write resolves normally through the live settle (a no-op, nothing registered)", async () => {
+    const path = makePath({ lessons: [makeLesson({ id: "les-1", allowManualComplete: true })] });
+    const h = buildTxHarness();
+    const client = {
+      enrolment: { findUnique: async () => ({ userId: "learner-1" }) },
+      $transaction: async <R,>(cb: (tx: unknown) => Promise<R>): Promise<R> => cb(h.rawTx),
+    };
+    const service = createPrismaBackedLessonProgressService(
+      client as never,
+      createTestWithPermission([grant("enrolments.manage")]).withPermission,
+      async () => {},
+      async () => ({ kind: "evaluated", results: [] }) as CompletionRecalculationResult,
+      async () => path,
+    );
     await expect(
       service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
     ).resolves.toMatchObject({ completed: true });

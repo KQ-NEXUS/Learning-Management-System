@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { cohortService } from "@/server/services/cohort-service";
 import { courseService } from "@/server/services/course-service";
@@ -74,10 +75,7 @@ export default async function EditCohortPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-muted-foreground">Staff · Cohorts</p>
-        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">Edit {cohort.title}</h1>
-      </div>
+      <PageHeader title={`Edit ${cohort.title}`} breadcrumbs={[{ label: "Cohorts", href: "/staff/cohorts" }, { label: cohort.title, href: `/staff/cohorts/${id}` }, { label: "Edit" }]} />
       <CohortForm
         mode="edit"
         cohortId={id}

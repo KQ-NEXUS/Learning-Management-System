@@ -1,5 +1,5 @@
 import { roleService } from "@/server/services/role-service";
-import { AuthorizationError, AuthenticationError } from "@/server/permissions";
+import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { RolesTable, type RoleRow } from "./RolesTable";
 
 export const metadata = { title: "Roles" };
@@ -19,5 +19,7 @@ export default async function RolesPage() {
     throw error;
   }
 
-  return <RolesTable rows={roles} />;
+  // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
+  const canCreate = await can("roles.manage", {});
+  return <RolesTable rows={roles} canCreate={canCreate} />;
 }

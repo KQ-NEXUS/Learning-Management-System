@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { resetPasswordAction, type ResetPasswordState } from "./actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/identity";
+import { PasswordInput } from "@/components/primitives/PasswordInput";
 
 const INITIAL: ResetPasswordState = { error: null };
 
@@ -24,21 +25,20 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-semibold text-foreground">New password</span>
-        <input
+        <PasswordInput
           name="password"
-          type="password"
           autoComplete="new-password"
           required
           minLength={MIN_PASSWORD_LENGTH}
-          className="h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
+          className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
         />
-        <span className="text-[11px] text-muted-foreground">At least 10 characters.</span>
+        <span className="text-xs text-muted-foreground">At least 10 characters.</span>
       </label>
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:opacity-50"
+        className="h-12 w-full rounded-md bg-accent px-4 text-base font-semibold text-accent-contrast hover:bg-accent-deep disabled:opacity-50"
       >
         {pending ? "Resetting…" : "Update password"}
       </button>

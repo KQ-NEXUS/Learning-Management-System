@@ -6,7 +6,7 @@ import { CheckCircle2 } from "lucide-react";
 import {
   markLessonCompleteAction,
   undoLessonCompleteAction,
-} from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/actions";
+} from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions";
 
 /**
  * LessonCompleteControl — the lesson reading pane's mark/undo island
@@ -110,7 +110,7 @@ function CompletedState({
       </div>
 
       {completedSource === "AUTO_VIDEO" && (
-        <p className="text-[11px] text-teal-text">Marked complete automatically</p>
+        <p className="text-xs text-progress-text">Marked complete automatically</p>
       )}
 
       {confirming && relockCount > 0 && (

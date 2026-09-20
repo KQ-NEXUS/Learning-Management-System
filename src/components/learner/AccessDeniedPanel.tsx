@@ -29,7 +29,7 @@ export type AccessDeniedPanelProps = {
 
 export function AccessDeniedPanel({ orderHref }: AccessDeniedPanelProps) {
   return (
-    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+    <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
       <p className="text-sm font-semibold text-foreground">{DENIED_HEADING}</p>
       <p className="max-w-prose text-sm text-muted-foreground">
         Your enrolment status doesn&apos;t currently grant entry here.

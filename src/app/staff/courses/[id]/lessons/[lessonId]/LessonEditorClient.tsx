@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { useRouter } from "next/navigation";
 import { ConfirmModal, ResourceForm } from "@/components/primitives";
 import { LessonFormFields, type LessonFieldValues } from "@/components/catalogue";
@@ -64,12 +66,36 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-muted-foreground">{courseId}</p>
-        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">
-          {props.mode === "create" ? "New lesson" : "Edit lesson"}
-        </h1>
-      </div>
+      <PageHeader
+        title={props.mode === "create" ? "New lesson" : "Edit lesson"}
+        breadcrumbs={[{ label: "Courses", href: "/staff/courses" }, { label: "Course", href: `/staff/courses/${courseId}` }, { label: "Lesson" }]}
+        actions={
+          <>
+            {props.mode === "edit" && (
+              <Link
+                href={`/staff/courses/${courseId}/preview/lessons/${props.lessonId}`}
+                className="inline-flex min-h-[46px] items-center rounded-md border border-sidebar-line px-5 text-sm font-semibold text-white hover:bg-sidebar-hover"
+              >
+                Preview
+              </Link>
+            )}
+            <Link
+              href={`/staff/courses/${courseId}/arrange`}
+              className="inline-flex min-h-[46px] items-center rounded-md border border-sidebar-line px-5 text-sm font-semibold text-white hover:bg-sidebar-hover"
+            >
+              Cancel
+            </Link>
+            <button
+              type="submit"
+              form="lesson-form"
+              disabled={pending}
+              className="inline-flex min-h-[46px] items-center rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:opacity-50"
+            >
+              {pending ? "Saving…" : props.mode === "create" ? "Create lesson" : "Save lesson"}
+            </button>
+          </>
+        }
+      />
 
       {state.ok === true && (
         <p
@@ -89,7 +115,10 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
       )}
 
       <ResourceForm
-        title={props.mode === "create" ? "New lesson" : "Edit lesson"}
+        sectioned
+        formId="lesson-form"
+        hideFooter
+        title="Lesson details"
         subtitle={
           props.mode === "create"
             ? "Pick a type, then fill in its fields. The lesson takes its place at the end of the module."
@@ -109,28 +138,35 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
           <input type="hidden" name="moduleId" value={props.moduleId} />
         )}
 
-        <div className="flex flex-col gap-1">
-          <label
-            htmlFor="lesson-type"
-            className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-          >
-            Lesson type
-          </label>
-          <select
-            id="lesson-type"
-            value={type}
-            onChange={(event) => setType(event.target.value as LessonType)}
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
-          >
-            {TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <LessonFormFields
+          typeControl={
+            <div className="flex flex-col gap-1">
+              <span id="lesson-type-label" className="text-sm font-semibold text-foreground">
+                Content
+              </span>
+              <div
+                role="group"
+                aria-labelledby="lesson-type-label"
+                className="flex w-fit max-w-full flex-wrap overflow-hidden rounded-md border border-input-border"
+              >
+                {TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={type === option.value}
+                    onClick={() => setType(option.value)}
+                    className={`min-h-10 border-r border-input-border px-4 text-sm font-medium last:border-r-0 ${
+                      type === option.value
+                        ? "bg-foreground text-surface"
+                        : "bg-surface text-foreground-soft hover:bg-surface-2"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          }
           lessonType={type}
           lessonId={props.mode === "edit" ? props.lessonId : undefined}
           values={values}
@@ -139,7 +175,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
       </ResourceForm>
 
       {props.mode === "edit" && (
-        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-4 py-4 shadow-card">
+        <div className="flex flex-col items-start gap-2 border-t border-foreground pt-5">
           <p className="text-sm font-semibold">Withdraw this lesson</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             A withdrawn lesson leaves published cohorts untouched and can be restored from the

@@ -16,6 +16,10 @@ import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { programmeService } from "@/server/services/programme-service";
 import { assertSlugMutable, SlugFrozenError } from "@/server/services/catalogue-guards";
+import {
+  assertTemplateSelectable,
+  TemplateNotSelectableError,
+} from "@/server/services/certificate-template-service";
 
 export type ProgrammeFormError = { name: string; message: string };
 export type ProgrammeActionResult =
@@ -36,6 +40,11 @@ const baseSchema = z.object({
   outcomes: z.string().trim().max(4000).optional(),
   audience: z.string().trim().max(2000).optional(),
   sequential: z.boolean().default(true),
+  // Absent from FormData entirely when the controls render `disabled`
+  // (certificateEnabled false) — a disabled input is never submitted, so
+  // both stay optional exactly as on the Course side (plan 11-08).
+  certificateIssuanceMode: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
+  certificateTemplateId: z.string().min(1).nullable().optional(),
 });
 
 function fields(form: FormData) {
@@ -45,6 +54,13 @@ function fields(form: FormData) {
     const trimmed = raw.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   };
+  /** "" (the "Use the default template" option) maps to `null`; an absent key maps to `undefined`. */
+  const templateId = (): string | null | undefined => {
+    const raw = form.get("certificateTemplateId");
+    if (typeof raw !== "string") return undefined;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
   return {
     title: value("title"),
     slug: value("slug"),
@@ -52,6 +68,8 @@ function fields(form: FormData) {
     outcomes: value("outcomes"),
     audience: value("audience"),
     sequential: form.get("sequential") === "on",
+    certificateIssuanceMode: value("certificateIssuanceMode"),
+    certificateTemplateId: templateId(),
   };
 }
 
@@ -68,6 +86,13 @@ function toFailure(error: unknown): Extract<ProgrammeActionResult, { ok: false }
   }
   if (error instanceof SlugFrozenError) {
     return { ok: false, errors: [{ name: "slug", message: error.message }], message: null };
+  }
+  if (error instanceof TemplateNotSelectableError) {
+    return {
+      ok: false,
+      errors: [{ name: "certificateTemplateId", message: error.message }],
+      message: null,
+    };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
@@ -86,6 +111,9 @@ export async function createProgrammeAction(
   let id: string | null = null;
   try {
     const parsed = baseSchema.parse(fields(form));
+    // Pitfall 5 / T-11-33: re-resolve against the live selectable-template
+    // list server-side — the client's <option> list is never trusted.
+    await assertTemplateSelectable(parsed.certificateTemplateId);
     const created = (await programmeService.create(parsed)) as { id: string };
     id = created.id;
   } catch (error) {
@@ -108,6 +136,11 @@ export async function updateProgrammeAction(
 
   try {
     const parsed = updateSchema.parse({ ...fields(form), programmeId });
+    // Pitfall 5 / T-11-33: re-resolve against the live selectable-template
+    // list server-side — the client's <option> list is never trusted. A key
+    // absent from the submission (undefined) means "leave unchanged" and is
+    // never re-validated; only an explicit id or explicit null is checked.
+    await assertTemplateSelectable(parsed.certificateTemplateId);
     const data: Record<string, unknown> = { ...parsed };
     delete data.programmeId;
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * `src/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions.ts`
+ * `src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions.ts`
  * (10-14 Task 1/3).
  *
  * Mirrors `tests/learner-lesson-actions.test.ts`'s convention: a full mock
@@ -61,7 +61,7 @@ import {
   completeSubmissionUploadAction,
   failSubmissionUploadAction,
   loadAssignmentSubmissionView,
-} from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
+} from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
 
 const ACTOR = { userId: "learner-1", roles: [] };
 

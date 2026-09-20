@@ -140,6 +140,9 @@ function buildOverrideService(grants: RawGrant[], opts?: { userId?: string }) {
     runInTransaction: (fn) => testDb.prisma.$transaction((tx) => fn(tx as unknown as GradeOverrideTx)),
     writeEvent: writeDomainEvent,
     audit: auditSink,
+    // Plan 11-10's certificate-flag hook is out of this file's scope
+    // (grading behaviour only) — a no-op fake keeps this suite compiling.
+    reactToGradeOverride: async () => {},
   });
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDateShort } from "@/lib/format-timestamp";
 import { useState } from "react";
 import { ConfirmModal } from "@/components/primitives";
 import {
@@ -24,7 +25,7 @@ export type AssignmentRow = {
 
 function fmtDate(value: Date | string | null): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString();
+  return formatDateShort(new Date(value));
 }
 
 function scopeLabel(row: AssignmentRow): string {
@@ -50,7 +51,9 @@ export function AssignmentsPanel({
   assignments,
   roles,
   minReasonLength,
+  canManage = true,
 }: {
+  canManage?: boolean;
   userId: string;
   userName: string;
   userEmail: string;
@@ -92,21 +95,27 @@ export function AssignmentsPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <button type="button" onClick={() => setDrawerOpen(true)} className={BTN_PRIMARY}>
-          Assign role
-        </button>
-      </div>
-
-      {active.length === 0 ? (
-        <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
-          <p className="text-sm font-semibold text-foreground">No active role assignments</p>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            This account currently has no access. Assign a role to grant permissions.
-          </p>
+      {canManage && (
+        <div className="flex justify-end">
           <button type="button" onClick={() => setDrawerOpen(true)} className={BTN_PRIMARY}>
             Assign role
           </button>
+        </div>
+      )}
+
+      {active.length === 0 ? (
+        <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
+          <p className="text-sm font-semibold text-foreground">No active role assignments</p>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            {canManage
+              ? "This account currently has no access. Assign a role to grant permissions."
+              : "This account currently has no access."}
+          </p>
+          {canManage && (
+            <button type="button" onClick={() => setDrawerOpen(true)} className={BTN_PRIMARY}>
+              Assign role
+            </button>
+          )}
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -117,16 +126,18 @@ export function AssignmentsPanel({
             >
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-semibold text-foreground">{row.role.name}</span>
-                <span className="text-[11px] text-muted-foreground">{scopeLabel(row)}</span>
+                <span className="text-xs text-muted-foreground">{scopeLabel(row)}</span>
               </div>
               <div className="flex items-center gap-2 font-mono text-sm tabular-nums text-muted-foreground">
                 <span>{fmtDate(row.startsAt)}</span>
                 <span>→</span>
                 <span>{fmtDate(row.endsAt)}</span>
               </div>
-              <button type="button" onClick={() => setRevokeTarget(row)} className={BTN_DANGER}>
-                Revoke
-              </button>
+              {canManage && (
+                <button type="button" onClick={() => setRevokeTarget(row)} className={BTN_DANGER}>
+                  Revoke
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -134,7 +145,7 @@ export function AssignmentsPanel({
 
       {revoked.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Revoked
           </span>
           <ul className="flex flex-col gap-1">
@@ -142,9 +153,9 @@ export function AssignmentsPanel({
               <li key={row.id} className="rounded-xl border border-border bg-surface-2 px-4 py-2 opacity-70">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-foreground">{row.role.name}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">{fmtDate(row.revokedAt)}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{fmtDate(row.revokedAt)}</span>
                 </div>
-                {row.reason && <p className="mt-1 text-[11px] text-muted-foreground">{row.reason}</p>}
+                {row.reason && <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>}
               </li>
             ))}
           </ul>

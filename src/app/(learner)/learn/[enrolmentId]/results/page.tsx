@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { loadLearnerPath } from "@/server/services/learner-access";
 import { getOwnResults } from "@/server/services/learner-results-service";
@@ -36,10 +37,15 @@ export default async function ResultsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-[25px] leading-[1.2] font-semibold text-foreground">Your results</h1>
+      <LearnerPageHeader
+        size="hero"
+        title="Your results"
+        subtitle={path.enrolment?.cohort?.title}
+        back={{ label: "Back to course", href: `/learn/${enrolmentId}` }}
+      />
 
       {results.length === 0 ? (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-2 px-4 py-6 text-center">
+        <div className="flex flex-col gap-2 border-t border-foreground py-8">
           <p className="text-[16px] font-semibold text-foreground">No results yet</p>
           <p className="text-sm text-muted-foreground">
             Complete a quiz or submit an assignment to see your results here.

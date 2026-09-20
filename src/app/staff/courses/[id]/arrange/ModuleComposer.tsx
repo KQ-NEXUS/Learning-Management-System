@@ -207,9 +207,9 @@ export function ModuleComposer({
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-border bg-surface px-4 py-4 shadow-xs">
+    <section className="flex max-w-[720px] flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold tracking-tight">Modules</h2>
+        <h2 className="text-xl font-semibold tracking-tight">Modules</h2>
         {hasNoModules && (
           <p className="max-w-prose text-sm text-muted-foreground">
             This course has no modules yet. A module has to exist before a lesson

@@ -29,7 +29,7 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
 - [x] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion. (completed 2026-09-15)
 - [x] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides. (completed 2026-09-16)
-- [ ] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly.
+- [x] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly. (completed 2026-09-19)
 - [ ] **Phase 12: Support Tickets** *(Track B, depends on Phase 2)* - Learners raise tickets; staff (including a non-Administrator Support role) triage, reply, escalate, and report.
 - [ ] **Phase 13: Transactional Communications & Notifications** *(Shared, depends on Phases 3, 5, 6, 7, 10, 11, 12)* - Every lifecycle event across the system sends exactly one deduplicated transactional email; in-product alerts surface important state.
 - [ ] **Phase 14: Software Licence & Deployment Control** *(Track A, depends on Phase 2; contingent — see note below)* - Provider-signed licence verification, status visibility, and expiry-driven read-only enforcement.
@@ -545,7 +545,97 @@ Plans:
   3. Authorized staff can revoke and reissue a certificate with reason, linking old and new versions while preserving history. (CRD-05)
   4. A later grade, attendance, or completion correction flags affected certificates for review without silently altering or destroying the original record. (CRD-06)
 
-**Plans**: TBD
+**Plans**: 34 plans across 13 waves (16 original plans in waves 1-6, then 8 UAT gap-closure plans 11-17..11-24 in waves 7-8, then 10 code-review/UAT second-pass gap-closure plans 11-25..11-34 in waves 9-13 (11-34 was split out of 11-29 so the font-independent CR-02 fix runs in the first wave of the pass); foundation-first: the schema/migration, the human package + permission gates, and the pure primitives all land in wave 1 so every later plan builds on settled ground; the public verification surface ships in wave 2, before issuance exists, so its disclosure contract is tested in isolation)
+
+Plans:
+**Wave 1**
+
+- [x] 11-01-PLAN.md — Additive schema, migration, the `certificate_one_active_per_enrolment_scope` partial unique index, and the reversible `COMPLETED -> ACTIVE` transition (CRD-01, CRD-02, CRD-05, CRD-06)
+- [x] 11-02-PLAN.md — Blocking human gates: PDF-library legitimacy approval + install + render probe, and the template-authoring permission decision (CRD-03)
+- [x] 11-03-PLAN.md — Pure primitives: versioned layout parser, high-entropy `verificationRef`, and the storage-service certificate/template-asset function group (CRD-03, CRD-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 11-04-PLAN.md — `certificate-pdf-renderer.ts`: the single PDF-construction surface in the repository (CRD-03)
+- [x] 11-05-PLAN.md — `CertificateTemplate` CRUD on the resource factory, layout validation at the write boundary, single-default invariant, seeded default template (CRD-03)
+- [x] 11-06-PLAN.md — Public verification: the closed three-outcome lookup and the standalone `/verify` route group (CRD-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 11-07-PLAN.md — `certificate-issuance-service.ts`: AUTOMATIC issuance, the D-01 Programme-cohort exclusion, D-05 completion, P2002 idempotency, and the superseded review-flag branch (CRD-01, CRD-02, CRD-03, CRD-06)
+- [x] 11-08-PLAN.md — Course/Programme certificate settings: issuance mode and template picker (CRD-01, CRD-02, CRD-03)
+- [x] 11-09-PLAN.md — Template library list and the editor shell: header bar, three-panel frame, click-to-add palette, dirty-state save (CRD-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 11-10-PLAN.md — CRD-06's two hooks: the composition-root dependency swap, the grade-override hook, and the import-closure guard (CRD-01, CRD-02, CRD-06)
+- [x] 11-11-PLAN.md — `certificate-service.ts`: scoped read model, pending-issuance evaluator, manual issue, revoke, reissue (CRD-01, CRD-02, CRD-03, CRD-05, CRD-06)
+- [x] 11-12-PLAN.md — Template editor canvas and property inspector, keyboard-accessible positioning, image-asset upload (CRD-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 11-13-PLAN.md — Download route with denial parity, and the learner dashboard certificate slot closing Phase 9's named gap (CRD-03, CRD-06)
+- [x] 11-14-PLAN.md — Certificates nav entry and the MANUAL-mode pending-issuance queue (CRD-01, CRD-02)
+- [x] 11-15-PLAN.md — Issued list, certificate detail with the flagged/revoked banners and supersede chain, revoke and reissue actions (CRD-03, CRD-05, CRD-06)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 11-16-PLAN.md — Phase close: real-Postgres/MinIO integration suites, seven executable phase invariants, validation reconciliation, and the ten-step browser walkthrough (all six requirements)
+
+**Gap closure — from `11-UAT.md` (7 failed tests + 1 observation)** *(`gap_closure: true`; run with `/gsd:execute-phase 11 --gaps-only`)*
+
+Wave 7 *(independent of each other, no shared files)*
+
+- [x] 11-17-PLAN.md — BLOCKER (UAT 10): COMPLETED enrolments visible-but-not-operable on the learner dashboard; `listOwnDashboardEnrolments`, `includeCompleted`, regression tests using a COMPLETED fixture (CRD-03)
+- [x] 11-19-PLAN.md — MAJOR (UAT 11): PDF renderer converts top-origin layout to pdf-lib space and fits images; position-asserting tests read coordinates back out of the PDF (CRD-03)
+- [x] 11-20-PLAN.md — MAJOR (UAT 6): Course edit page, strict `updateCourseAction`, edit-mode `CourseForm` reusing `CertificateSettingsFields`; Programme edit certificate settings proven by test (CRD-01, CRD-02, CRD-03)
+- [x] 11-21-PLAN.md — MINOR (UAT 4, 13): drag-safe template canvas image; public `/verify-certificate` reference-entry page that does not collide with the IAM-02 `/verify` page (CRD-03, CRD-04)
+- [x] 11-22-PLAN.md — MINOR (UAT 8, data): batched `listCertificateIssuanceSources` and an Issued-by column and filter on All certificates (CRD-01, CRD-02)
+- [x] 11-24-PLAN.md — MINOR (UAT 18 observation): one review-flag audit entry per correction (D-01 guard on the superseded branch) attributed to the correcting staff member (CRD-06)
+
+Wave 8 *(blocked on Wave 7)*
+
+- [x] 11-18-PLAN.md — BLOCKER surface + MINOR (UAT 10, 19): COMPLETED-aware dashboard card without dead links, corrected Next-up copy, real-Postgres issue-then-dashboard regression (CRD-03)
+- [x] 11-23-PLAN.md — MINOR (UAT 8, landing): Recently issued section on the Certificates landing page so automatic issuances are visible (CRD-01, CRD-02)
+
+**Gap closure, second pass — from `11-REVIEW.md` (CR-01..CR-06) and the two open `11-UAT.md` gaps** *(`gap_closure: true`; run with `/gsd:execute-phase 11 --gaps-only`; warnings WR-01..WR-10 and info items stay logged in 11-REVIEW.md, except WR-01 which is fixed as the natural part of CR-01; CR-05 is deferred by user decision and only documented)*
+
+Wave 9 *(independent of each other, no shared files)*
+
+- [x] 11-25-PLAN.md — CR-03 + CR-04: non-ACTIVE/COMPLETED enrolments are not certificate-eligible (typed not-eligible, eligible-only queue); a REVOKED certificate blocks every automatic and queue issuance until staff Reissue, which supersedes every REVOKED row for the enrolment and scope so legacy double-revoked data can still be reissued (CRD-01, CRD-02, CRD-04, CRD-05)
+- [x] 11-26-PLAN.md — CR-01 precondition: BLOCKING human gate to supply, licence-check and hash-pin the bundled Unicode font asset; README records the exact .ttf filename, licence, source and SHA-256 (no executor download) (CRD-03)
+- [x] 11-27-PLAN.md — CR-06: additive migration widening the one-live-enrolment index to ACTIVE + COMPLETED with a violation preflight, proven on real Postgres and never applied to the remote DB by the executor; CR-05 recorded as deliberately deferred (CRD-05, CRD-06)
+- [x] 11-28-PLAN.md — Open UAT gap (test 17): certificate-first `deriveCertificateColumn` so a superseded completion no longer hides a flagged certificate or its download (CRD-03, CRD-06)
+- [x] 11-34-PLAN.md — CR-02 (split out of 11-29, no dependency on the font gate): format-sniffing renderer image guard and template assets restricted to PNG/JPEG at presign, confirm and the inspector picker (CRD-03)
+
+Wave 10 *(blocked on Wave 9; 11-29 also waits on 11-34 because both edit the renderer)*
+
+- [x] 11-29-PLAN.md — CR-01 (renderer): fontkit Unicode font with a never-throw text sanitiser and a font loader whose filename is pinned to the README record (needs the 11-26 font) (CRD-03)
+- [x] 11-30-PLAN.md — CR-01(b): two-phase issuance; the caller's transaction writes rows only, the PDF is rendered and stored after commit by a never-throwing, bounded (6 s default), idempotent file service (also fixes WR-01) (CRD-01, CRD-02, CRD-03)
+
+Wave 11 *(blocked on Wave 10)*
+
+- [x] 11-31-PLAN.md — Wire the post-commit settle into the lesson-progress, attendance and certificate-service roots (an injectable `settle` dep inside `createCertificateService`); the download route produces a missing file on demand behind unchanged denial parity (CRD-01, CRD-03)
+
+Wave 12 *(blocked on Wave 11)*
+
+- [x] 11-32-PLAN.md — Real Postgres + MinIO proof: Unicode names end to end, failure containment, CR-03/CR-04/CR-06 lifecycle guards (CRD-01, CRD-02, CRD-03, CRD-05, CRD-06)
+
+Wave 13 *(blocked on Wave 12; human-only)*
+
+- [x] 11-33-PLAN.md — Human checkpoints: visual check of Yoruba/Polish/CJK certificates, and the human-owned application (or deferral) of the enrolment-index migration on shared databases (CRD-03, CRD-05, CRD-06)
+
+**Cross-cutting constraints:**
+
+- A Programme-cohort enrolment issues exactly one PROGRAMME certificate and never a Course certificate for a member course, even though the completion engine records member-course evidence internally (D-01, enforced by two independent guards in 11-07).
+- `Enrolment.status = "COMPLETED"` is written by exactly one module, `certificate-issuance-service.ts`, and only after a `Certificate` row exists (D-05, invariant 7 in 11-16).
+- A correction flags a certificate for review and reverts the enrolment to ACTIVE; it never alters, revokes or destroys the credential (D-06, CRD-06).
+- The PDF library is imported by exactly one file and no browser-automation package appears in `src/` (D-08, invariants 1-2 in 11-16).
+- `verificationRef` carries at least 128 bits of entropy, diverging from `generateOrderReference()`'s 32-bit convention, because the public verify route is unauthenticated and no rate-limiting infrastructure exists anywhere in this codebase (RESEARCH Pitfall 1/2).
+- The public verification page discloses exactly four fields and its not-found branch shares no DOM structure with a real result (CRD-04, RESEARCH Pitfall 3).
+- No route under `src/app/verify/` or `src/app/api/certificates/` may export `dynamic`, `revalidate` or `fetchCache`, or wrap its lookup in `'use cache'` — Next 16 Cache Components would otherwise freeze a revocation verdict or a presigned URL (RESEARCH Pitfall 6).
+- Certificates are never hard-deleted; revoke flips status and reissue links via `supersedesId` (CAT-08, CRD-05).
+
 **UI hint**: yes
 
 ---
@@ -635,7 +725,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
-| 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
+| 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |

@@ -81,7 +81,25 @@ export type DomainEventType =
   | "attempt.submitted"
   | "submission.created"
   | "grade.released"
-  | "grade.overridden";
+  | "grade.overridden"
+  // Phase 11 (CRD-01, CRD-02, CRD-06) — certificate-issuance-service.ts.
+  // "certificate.issued" fires once, inside the same transaction as the
+  // Certificate row create, carrying only ids/scope/verificationRef — never
+  // PDF bytes (T-11-32). "certificate.review_flagged" fires when a
+  // previously-issued certificate is flagged for review, either by a
+  // completion supersede (attendance/lesson correction) or a grade
+  // correction (plan 11-10) — never on revoke/reissue, which are their own
+  // distinct acts.
+  | "certificate.issued"
+  | "certificate.review_flagged"
+  // Plan 11-11 — the staff-triggered revoke/reissue mutations
+  // (certificate-service.ts). "certificate.revoked" carries ids and the
+  // verificationRef only, never revocationReason (T-11-50 — staff-internal
+  // text must not reach Phase 13's email templates or the public verify
+  // page). "certificate.reissued" carries both the old and new certificate
+  // ids/references, also never the reason text.
+  | "certificate.revoked"
+  | "certificate.reissued";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction

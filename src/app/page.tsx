@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
+import { landingPathFor } from "@/server/auth/landing";
 
 /**
- * The root route has no content of its own yet.
- *
- * It will become the public catalogue (PRD §10.1, screens P01–P05). Until
- * then it routes people somewhere useful rather than showing a placeholder.
+ * The root route has no content of its own: it sends each visitor where they belong.
+ * A signed-in person goes to their own landing page (staff to the workspace, a learner to
+ * their dashboard, exactly as after sign-in); an anonymous visitor goes to the public
+ * catalogue, which is the site's front door.
  */
 export default async function Home() {
   const actor = await getCurrentActor();
-  redirect(actor ? "/staff/courses" : "/signin");
+  redirect(actor ? landingPathFor(actor) : "/courses");
 }

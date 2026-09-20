@@ -67,7 +67,7 @@ function formatAccessWindow(startsAt: string | null, endsAt: string | null): str
   return `${fmt(startsAt)} → ${fmt(endsAt)}`;
 }
 
-const ACTION_BTN = "text-[11px] font-semibold underline underline-offset-2";
+const ACTION_BTN = "text-xs font-semibold underline underline-offset-2";
 
 export function EnrolmentsTable({
   rows,
@@ -235,6 +235,7 @@ export function EnrolmentsTable({
   return (
     <div className="flex flex-col gap-4">
       <ResourceTable<EnrolmentListRow>
+        asPage
         noun="enrolments"
         title="Enrolments"
         columns={columns}

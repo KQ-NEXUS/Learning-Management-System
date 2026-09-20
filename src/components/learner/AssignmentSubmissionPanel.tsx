@@ -4,12 +4,12 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { AlertTriangle, ClipboardList, Clock, FileCheck, Upload } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
 import { formatTimestamp } from "@/lib/format-timestamp";
-import type { AssignmentSubmissionClientView } from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
+import type { AssignmentSubmissionClientView } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
 import {
   beginSubmissionUploadAction,
   completeSubmissionUploadAction,
   failSubmissionUploadAction,
-} from "@/app/(learner)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
+} from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
 
 /**
  * The Assignment submission pane (ASM-03, ASM-04, D-03, D-04, 10-14 Task 2)
@@ -210,7 +210,7 @@ export function AssignmentSubmissionPanel(props: Props) {
 
   return (
     <section
-      className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-card"
+      className="flex flex-col gap-4 border-t border-foreground pt-5"
       aria-label="Assignment submission"
     >
       <h2 className="flex items-center gap-2 text-lg font-semibold">

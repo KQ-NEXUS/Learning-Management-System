@@ -1,6 +1,5 @@
-import Link from "next/link";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { listOwnCohortSessions } from "@/server/services/learner-session-service";
 import { SessionCard } from "@/components/learner/SessionCard";
@@ -41,18 +40,7 @@ export default async function SessionsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <Link
-          href={`/learn/${enrolmentId}`}
-          className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-accent"
-        >
-          <ChevronLeft aria-hidden className="size-4" />
-          Back to course
-        </Link>
-        <h1 className="text-[25px] leading-[1.2] font-semibold text-foreground">
-          Scheduled sessions
-        </h1>
-      </div>
+      <LearnerPageHeader title="Scheduled sessions" back={{ label: "Back to course", href: `/learn/${enrolmentId}` }} />
 
       {isEmpty ? (
         <p className="text-sm text-muted-foreground">No sessions are scheduled yet</p>

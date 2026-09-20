@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDateShort } from "@/lib/format-timestamp";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
@@ -27,9 +28,15 @@ const TONE: Record<string, "success" | "warning" | "neutral"> = {
   PENDING_VERIFICATION: "neutral",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "Active",
+  DEACTIVATED: "Deactivated",
+  PENDING_VERIFICATION: "Pending verification",
+};
+
 function fmtDate(value: Date | string | null): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString();
+  return formatDateShort(new Date(value));
 }
 
 const columns: Column<StaffUserRow>[] = [
@@ -52,7 +59,7 @@ const columns: Column<StaffUserRow>[] = [
   {
     key: "status",
     header: "Status",
-    render: (u) => <StatusPill label={u.status} tone={TONE[u.status] ?? "neutral"} />,
+    render: (u) => <StatusPill label={STATUS_LABEL[u.status] ?? u.status} tone={TONE[u.status] ?? "neutral"} />,
     width: "14%",
   },
   {
@@ -79,10 +86,13 @@ const BTN_PRIMARY =
   "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90";
 
 export function UsersTable({
+  canCreate = true,
   rows,
   denied,
 }: {
   rows?: StaffUserRow[];
+  /** Hide the create button for staff who cannot create. Default true. */
+  canCreate?: boolean;
   denied?: { permission: string };
 }) {
   const [search, setSearch] = useState("");
@@ -135,6 +145,7 @@ export function UsersTable({
 
   return (
     <ResourceTable<StaffUserRow>
+      asPage
       noun="staff accounts"
       title="Users"
       columns={columns}
@@ -172,9 +183,11 @@ export function UsersTable({
         )
       }
       headerActions={
-        <Link href="/staff/users/new" className={BTN_PRIMARY}>
-          New staff account
-        </Link>
+        canCreate ? (
+          <Link href="/staff/users/new" className={BTN_PRIMARY}>
+            New staff account
+          </Link>
+        ) : undefined
       }
     />
   );

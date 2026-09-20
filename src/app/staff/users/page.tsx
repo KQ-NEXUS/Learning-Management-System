@@ -1,5 +1,5 @@
 import { staffAccountService } from "@/server/services/staff-account-service";
-import { AuthorizationError, AuthenticationError } from "@/server/permissions";
+import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { UsersTable, type StaffUserRow } from "./UsersTable";
 
 export const metadata = { title: "Staff accounts" };
@@ -19,5 +19,7 @@ export default async function UsersPage() {
     throw error;
   }
 
-  return <UsersTable rows={users} />;
+  // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
+  const canCreate = await can("users.manage", {});
+  return <UsersTable rows={users} canCreate={canCreate} />;
 }

@@ -83,10 +83,12 @@ export class CapacityExceededError extends Error {
 }
 
 /**
- * The learner already has an ACTIVE enrolment in this cohort — a translation
- * of the P2002 raised by the `enrolment_one_active_per_learner_cohort` partial
+ * The learner already has a live enrolment in this cohort — a translation
+ * of the P2002 raised by the `enrolment_one_live_per_learner_cohort` partial
  * unique index, so the caller sees a typed outcome instead of a raw Prisma
- * error or a 500 (D-15).
+ * error or a 500 (D-15). The index covers ACTIVE and COMPLETED, so a learner
+ * with a COMPLETED enrolment cannot be re-enrolled in the same cohort either;
+ * WITHDRAWN, CANCELLED and TRANSFERRED do not block (REG-03).
  */
 export class AlreadyEnrolledError extends Error {
   readonly userId: string;
@@ -241,7 +243,8 @@ export function holdExpiryFrom(
  *      `cohort_capacity_not_exceeded` CHECK, is the guard, and nothing is
  *      inserted;
  *   4. create the enrolment, translating a P2002 from the partial unique
- *      index to `AlreadyEnrolledError` (D-15);
+ *      index `enrolment_one_live_per_learner_cohort` (ACTIVE and COMPLETED)
+ *      to `AlreadyEnrolledError` (D-15);
  *   5. increment `seatsTaken` by exactly 1 in the same transaction.
  */
 export async function takeSeat(

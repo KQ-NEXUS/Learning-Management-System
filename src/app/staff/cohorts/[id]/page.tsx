@@ -1,5 +1,9 @@
 import { notFound } from "next/navigation";
-import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
+import {
+  AuthenticationError,
+  AuthorizationError,
+  can,
+} from "@/server/permissions";
 import {
   cohortService,
   loadCohortReadinessAggregate,
@@ -27,7 +31,10 @@ import { GradingTab } from "./GradingTab";
 
 export const metadata = { title: "Cohort" };
 
-const STATUS_TONE: Record<string, "success" | "neutral" | "warning" | "danger"> = {
+const STATUS_TONE: Record<
+  string,
+  "success" | "neutral" | "warning" | "danger"
+> = {
   DRAFT: "neutral",
   PUBLISHED: "success",
   IN_PROGRESS: "success",
@@ -52,13 +59,31 @@ const DELIVERY_LABEL: Record<string, string> = {
 type TitleRow = { id: string; title: string };
 
 /** D-23: every date shown with its explicit zone label, in mono — `utcToWallParts` already bakes the `(timezone)` suffix into `label`. */
+/** "12 Sep 2026, 10:00" in the cohort's own timezone (the zone is shown once, after a range). */
 function zoned(date: Date, timezone: string): string {
-  return utcToWallParts(date, timezone).label;
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: timezone,
+    }).format(date);
+  } catch {
+    return utcToWallParts(date, timezone).label;
+  }
 }
 
 function formatPrice(priceMinor: number, currency: string): string {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(priceMinor / 100);
+    return new Intl.NumberFormat(currency === "NGN" ? "en-NG" : "en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(priceMinor / 100);
   } catch {
     return `${priceMinor} minor units ${currency}`;
   }
@@ -73,7 +98,7 @@ export default async function CohortDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ categories?: string; search?: string }>;
+  searchParams: Promise<{ categories?: string; search?: string; tab?: string }>;
 }) {
   const { id: cohortId } = await params;
   const sp = await searchParams;
@@ -85,14 +110,20 @@ export default async function CohortDetailPage({
   // The core load — a denial here must be indistinguishable from a missing
   // cohort (RBAC-06, matching `courses/[id]/page.tsx:52-56`).
   let cohort: Awaited<ReturnType<typeof cohortService.get>>;
-  let readinessAggregate: Awaited<ReturnType<typeof loadCohortReadinessAggregate>>;
+  let readinessAggregate: Awaited<
+    ReturnType<typeof loadCohortReadinessAggregate>
+  >;
   try {
     cohort = await cohortService.get(cohortId);
     if (!cohort) notFound();
     readinessAggregate = await loadCohortReadinessAggregate(cohortId);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return (
+        <p className="text-sm text-foreground">
+          Your session has ended. Sign in again.
+        </p>
+      );
     }
     if (error instanceof AuthorizationError) {
       notFound();
@@ -131,8 +162,12 @@ export default async function CohortDetailPage({
       hasMeetingLink: r.hasMeetingLink,
     }));
   } catch (error) {
-    if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-      sessionsErrorMessage = "You do not have access to this cohort's sessions.";
+    if (
+      error instanceof AuthorizationError ||
+      error instanceof AuthenticationError
+    ) {
+      sessionsErrorMessage =
+        "You do not have access to this cohort's sessions.";
     } else {
       throw error;
     }
@@ -166,7 +201,10 @@ export default async function CohortDetailPage({
       completion: r.completion,
     }));
   } catch (error) {
-    if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
+    if (
+      error instanceof AuthorizationError ||
+      error instanceof AuthenticationError
+    ) {
       rosterErrorMessage = "You do not have access to this cohort's roster.";
     } else {
       throw error;
@@ -176,7 +214,11 @@ export default async function CohortDetailPage({
   let exceptionRows: AttendanceExceptionView[] | undefined;
   let exceptionsErrorMessage: string | null = null;
   try {
-    const rows = await loadAttendanceExceptions({ cohortId, categories, search });
+    const rows = await loadAttendanceExceptions({
+      cohortId,
+      categories,
+      search,
+    });
     exceptionRows = rows.map((r): AttendanceExceptionView => {
       if (r.category === "missing-register") {
         return {
@@ -209,17 +251,24 @@ export default async function CohortDetailPage({
       };
     });
   } catch (error) {
-    if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-      exceptionsErrorMessage = "You do not have access to this cohort's attendance exceptions.";
+    if (
+      error instanceof AuthorizationError ||
+      error instanceof AuthenticationError
+    ) {
+      exceptionsErrorMessage =
+        "You do not have access to this cohort's attendance exceptions.";
     } else {
       throw error;
     }
   }
 
-  const activeEnrolmentCount = rosterRows?.filter((r) => r.status === "ACTIVE").length ?? 0;
+  const activeEnrolmentCount =
+    rosterRows?.filter((r) => r.status === "ACTIVE").length ?? 0;
 
   const offerId = cohort.courseId ?? cohort.programmeId;
-  const offerKind: "Course" | "Programme" = cohort.courseId ? "Course" : "Programme";
+  const offerKind: "Course" | "Programme" = cohort.courseId
+    ? "Course"
+    : "Programme";
   const offerTitle = offerId
     ? await (cohort.courseId ? courseService : programmeService)
         .get(offerId)
@@ -228,9 +277,10 @@ export default async function CohortDetailPage({
     : "—";
 
   const resource = await cohortResourceScope(cohortId);
-  const [canPublish, canManage] = await Promise.all([
+  const [canPublish, canManage, canManageEnrolments] = await Promise.all([
     can("cohorts.publish", resource),
     can("cohorts.manage", resource),
+    can("enrolments.manage", resource),
   ]);
 
   let instructorRows: InstructorRow[] = [];
@@ -243,7 +293,10 @@ export default async function CohortDetailPage({
       userEmail: r.user.email,
     }));
   } catch (error) {
-    if (!(error instanceof AuthorizationError || error instanceof AuthenticationError)) {
+    if (!(
+      error instanceof AuthorizationError ||
+      error instanceof AuthenticationError
+    )) {
       throw error;
     }
   }
@@ -251,6 +304,7 @@ export default async function CohortDetailPage({
   return (
     <DetailLayout
       mode="tabbed"
+      initialSectionId={sp.tab}
       breadcrumbs={[
         { label: "Workspace", href: "/staff/cohorts" },
         { label: "Cohorts", href: "/staff/cohorts" },
@@ -272,8 +326,13 @@ export default async function CohortDetailPage({
       }
       badges={
         <>
-          <StatusPill label={STATUS_LABEL[cohort.status] ?? cohort.status} tone={STATUS_TONE[cohort.status] ?? "neutral"} />
-          <StatusPill label={DELIVERY_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode} />
+          <StatusPill
+            label={STATUS_LABEL[cohort.status] ?? cohort.status}
+            tone={STATUS_TONE[cohort.status] ?? "neutral"}
+          />
+          <StatusPill
+            label={DELIVERY_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode}
+          />
         </>
       }
       sections={[
@@ -281,64 +340,103 @@ export default async function CohortDetailPage({
           id: "overview",
           label: "Overview",
           content: (
-            <div className="flex flex-col gap-4">
-              <DetailFacts
-                facts={[
-                  { label: "Offer", value: `${offerKind}: ${offerTitle}` },
-                  {
-                    label: "Enrolment window",
-                    value: `${zoned(cohort.enrolmentOpensAt, cohort.timezone)} → ${zoned(cohort.enrolmentClosesAt, cohort.timezone)}`,
-                    mono: true,
-                  },
-                  {
-                    label: "Dates",
-                    value: `${zoned(cohort.startsAt, cohort.timezone)} → ${zoned(cohort.endsAt, cohort.timezone)}`,
-                    mono: true,
-                  },
-                  {
-                    label: "Seats",
-                    value: `${cohort.seatsTaken} / ${cohort.capacity}`,
-                    mono: true,
-                  },
-                  {
-                    label: "NGN price",
-                    value:
-                      cohort.priceNgnMinor != null
-                        ? formatPrice(cohort.priceNgnMinor, "NGN")
-                        : "Not set",
-                    mono: true,
-                  },
-                  {
-                    label: "USD price",
-                    value:
-                      cohort.priceUsdMinor != null
-                        ? formatPrice(cohort.priceUsdMinor, "USD")
-                        : "Not set",
-                    mono: true,
-                  },
-                  { label: "Delivery mode", value: DELIVERY_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode },
-                  {
-                    label: "Seat-hold minutes",
-                    value:
-                      cohort.holdMinutes && cohort.holdMinutes > 0
-                        ? `${cohort.holdMinutes} min`
-                        : "No hold — seat taken only on activation",
-                    mono: true,
-                  },
-                  {
-                    label: "Attendance threshold",
-                    value:
-                      cohort.attendanceThresholdPct != null ? `${cohort.attendanceThresholdPct}%` : "Not set",
-                    mono: true,
-                  },
-                ]}
-              />
-              <ReadinessPanel items={readinessItems} />
-              <InstructorsPanel
-                cohortId={cohortId}
-                instructors={instructorRows}
-                canManage={canManage}
-              />
+            <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_380px]">
+              <section aria-label="Cohort details" className="min-w-0 lg:pr-14">
+                <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+                  Cohort details
+                </h2>
+                <div className="border-t border-foreground">
+                  <DetailFacts
+                    facts={[
+                      // A viewer without access to the offer's own list sees the kind only, not a dash.
+                      {
+                        label: "Offer",
+                        value:
+                          offerTitle === "—"
+                            ? offerKind
+                            : `${offerKind}: ${offerTitle}`,
+                      },
+                      {
+                        label: "Enrolment window",
+                        value: `${zoned(cohort.enrolmentOpensAt, cohort.timezone)} to ${zoned(cohort.enrolmentClosesAt, cohort.timezone)} (${cohort.timezone})`,
+                        mono: true,
+                      },
+                      {
+                        label: "Dates",
+                        value: `${zoned(cohort.startsAt, cohort.timezone)} to ${zoned(cohort.endsAt, cohort.timezone)} (${cohort.timezone})`,
+                        mono: true,
+                      },
+                      {
+                        label: "Seats",
+                        value: (
+                          <span className="flex items-center gap-4 font-sans tabular-nums">
+                            <span>
+                              {cohort.seatsTaken} of {cohort.capacity} taken
+                            </span>
+                            <span
+                              aria-hidden
+                              className="h-1 w-36 overflow-hidden rounded-full bg-accent-wash"
+                            >
+                              <span
+                                className="block h-full rounded-full bg-progress-fill"
+                                style={{
+                                  width: `${Math.min(100, Math.round((cohort.seatsTaken / Math.max(cohort.capacity, 1)) * 100))}%`,
+                                }}
+                              />
+                            </span>
+                          </span>
+                        ),
+                      },
+                      {
+                        label: "NGN price",
+                        value:
+                          cohort.priceNgnMinor != null
+                            ? formatPrice(cohort.priceNgnMinor, "NGN")
+                            : "Not set",
+                        mono: true,
+                      },
+                      {
+                        label: "USD price",
+                        value:
+                          cohort.priceUsdMinor != null
+                            ? formatPrice(cohort.priceUsdMinor, "USD")
+                            : "Not set",
+                        mono: true,
+                      },
+                      {
+                        label: "Delivery mode",
+                        value:
+                          DELIVERY_LABEL[cohort.deliveryMode] ??
+                          cohort.deliveryMode,
+                      },
+                      {
+                        label: "Seat-hold minutes",
+                        value:
+                          cohort.holdMinutes && cohort.holdMinutes > 0
+                            ? `${cohort.holdMinutes} min`
+                            : "No hold — seat taken only on activation",
+                        mono: true,
+                      },
+                      {
+                        label: "Attendance threshold",
+                        value:
+                          cohort.attendanceThresholdPct != null
+                            ? `${cohort.attendanceThresholdPct}%`
+                            : "Not set",
+                        mono: true,
+                      },
+                    ]}
+                  />
+                </div>
+              </section>
+              <div className="flex flex-col gap-12 lg:border-l lg:border-border lg:pl-10">
+                <InstructorsPanel
+                  cohortId={cohortId}
+                  instructors={instructorRows}
+                  canManage={canManage}
+                />
+                <ReadinessPanel items={readinessItems} />
+              </div>
             </div>
           ),
         },
@@ -346,15 +444,33 @@ export default async function CohortDetailPage({
           id: "sessions",
           label: "Sessions",
           badge: sessions?.length,
-          content: <SessionsTab cohortId={cohortId} cohortTimezone={cohort.timezone} sessions={sessions} />,
-          error: sessionsErrorMessage ? { message: sessionsErrorMessage } : undefined,
+          content: (
+            <SessionsTab
+              facilitatorNames={Object.fromEntries(instructorRows.map((row) => [row.userId, row.userName]))}
+              cohortId={cohortId}
+              cohortTimezone={cohort.timezone}
+              sessions={sessions}
+              canManage={canManage}
+            />
+          ),
+          error: sessionsErrorMessage
+            ? { message: sessionsErrorMessage }
+            : undefined,
         },
         {
           id: "roster",
           label: "Roster",
           badge: rosterRows?.length,
-          content: <RosterTab cohortId={cohortId} rows={rosterRows} />,
-          error: rosterErrorMessage ? { message: rosterErrorMessage } : undefined,
+          content: (
+            <RosterTab
+              cohortId={cohortId}
+              rows={rosterRows}
+              canManage={canManageEnrolments}
+            />
+          ),
+          error: rosterErrorMessage
+            ? { message: rosterErrorMessage }
+            : undefined,
         },
         {
           id: "exceptions",
@@ -368,9 +484,15 @@ export default async function CohortDetailPage({
               search={search}
             />
           ),
-          error: exceptionsErrorMessage ? { message: exceptionsErrorMessage } : undefined,
+          error: exceptionsErrorMessage
+            ? { message: exceptionsErrorMessage }
+            : undefined,
         },
-        { id: "grading", label: "Grading", content: <GradingTab cohortId={cohortId} /> },
+        {
+          id: "grading",
+          label: "Grading",
+          content: <GradingTab cohortId={cohortId} />,
+        },
       ]}
     />
   );

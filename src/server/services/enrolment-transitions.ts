@@ -60,8 +60,9 @@ export type EnrolmentStatusValue =
 
 /**
  * The only legal status moves. `COMPLETED` is reachable solely from the
- * Phase 9/11 completion engine and is NOT exposed as a Phase-5 action; every
- * terminal status has an empty allow-list.
+ * Phase 9/11 completion engine and is NOT exposed as a Phase-5 staff action.
+ * Phase 11's certificate re-evaluation path may reverse it to `ACTIVE`
+ * (D-06, CRD-06); no staff-facing enrolment action may perform that reversal.
  */
 export const VALID_TRANSITIONS: Record<
   EnrolmentStatusValue,
@@ -72,7 +73,7 @@ export const VALID_TRANSITIONS: Record<
   WITHDRAWN: [],
   TRANSFERRED: [],
   CANCELLED: [],
-  COMPLETED: [],
+  COMPLETED: ["ACTIVE"],
 };
 
 /** A status move that is not in `VALID_TRANSITIONS`. */

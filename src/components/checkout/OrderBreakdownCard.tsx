@@ -47,7 +47,7 @@ export function OrderBreakdownCard({
   return (
     <section
       aria-label="Charge breakdown"
-      className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-6 shadow-card"
+      className="flex flex-col gap-3 border-t border-foreground pt-5"
     >
       <dl className="flex flex-col gap-2">
         <div className="flex items-center justify-between text-sm">

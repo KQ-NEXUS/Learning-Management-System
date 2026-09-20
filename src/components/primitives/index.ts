@@ -8,7 +8,7 @@ export type {
   BulkSelection,
 } from "./ResourceTable";
 
-export { ResourceForm, FormField, TextInput } from "./ResourceForm";
+export { ResourceForm, FormField, FormSection, FormGrid, TextInput } from "./ResourceForm";
 export type { FieldError, ResourceFormState, ResourceFormProps } from "./ResourceForm";
 
 export { DetailLayout, DetailFacts } from "./DetailLayout";
@@ -16,3 +16,5 @@ export type { DetailSection, DetailLayoutState, DetailLayoutProps } from "./Deta
 
 export { ConfirmModal } from "./ConfirmModal";
 export type { ConfirmModalProps } from "./ConfirmModal";
+
+export { PasswordInput } from "./PasswordInput";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { PasswordInput } from "@/components/primitives/PasswordInput";
 import {
   updateProfileAction,
   requestEmailChangeAction,
@@ -18,11 +19,12 @@ const INPUT =
 const LABEL = "text-sm font-semibold text-foreground";
 const BTN_PRIMARY =
   "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
-const CARD = "flex flex-col rounded-xl border border-border bg-surface shadow-card";
-const CARD_HEADER = "flex flex-col gap-1 border-b border-border px-6 py-4";
-const CARD_TITLE = "text-base font-semibold text-foreground";
-const CARD_SUBCOPY = "text-[11px] text-muted-foreground";
-const CARD_BODY = "flex flex-col gap-4 px-6 py-6";
+// Each section is one row: a 280px title + description column beside the form, over a hairline.
+const CARD = "grid gap-6 border-t border-border py-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-14";
+const CARD_HEADER = "flex flex-col gap-2";
+const CARD_TITLE = "text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground";
+const CARD_SUBCOPY = "text-sm text-muted-foreground";
+const CARD_BODY = "flex max-w-[420px] flex-col gap-4";
 const ERROR_BANNER =
   "rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger";
 
@@ -40,14 +42,10 @@ export function ProfileForm({
   marketingOptIn: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 items-start gap-6 sm:grid-cols-[1fr_300px]">
-      <div className="flex flex-col gap-6">
-        <NameAndPhoneSection name={name} phone={phone} />
-        <EmailChangeSection email={email} pendingEmail={pendingEmail} />
-      </div>
-      <div className="flex flex-col gap-6">
-        <MarketingPreferenceSection initialMarketingOptIn={marketingOptIn} />
-      </div>
+    <div className="flex max-w-[1000px] flex-col">
+      <NameAndPhoneSection name={name} phone={phone} />
+      <EmailChangeSection email={email} pendingEmail={pendingEmail} />
+      <MarketingPreferenceSection initialMarketingOptIn={marketingOptIn} />
     </div>
   );
 }
@@ -66,6 +64,7 @@ function NameAndPhoneSection({ name, phone }: { name: string; phone: string | nu
     <form action={action} className={CARD}>
       <div className={CARD_HEADER}>
         <h2 className={CARD_TITLE}>Your details</h2>
+        <p className={CARD_SUBCOPY}>The name shown on your certificates.</p>
       </div>
       <div className={CARD_BODY}>
         {state.error && (
@@ -156,14 +155,13 @@ function EmailChangeSection({ email, pendingEmail }: { email: string; pendingEma
 
             <label className="flex flex-col gap-2">
               <span className={LABEL}>Current password</span>
-              <input
+              <PasswordInput
                 name="currentPassword"
-                type="password"
                 autoComplete="current-password"
                 required
                 className={INPUT}
               />
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 Enter your current password to change your email address.
               </span>
             </label>
@@ -194,12 +192,11 @@ function MarketingPreferenceSection({ initialMarketingOptIn }: { initialMarketin
       className={CARD}
       onChange={(event) => event.currentTarget.requestSubmit()}
     >
-      <div className="flex flex-col gap-2 px-6 py-6">
+      <div className={CARD_HEADER}>
         <h2 className={CARD_TITLE}>Marketing emails</h2>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Occasional news about new programmes. Never affects your enrolment.
-        </p>
-
+        <p className={CARD_SUBCOPY}>Occasional news about new programmes. Never affects your enrolment.</p>
+      </div>
+      <div className={CARD_BODY}>
         {state.error && (
           <p role="alert" className={ERROR_BANNER}>
             {state.error}
@@ -229,7 +226,7 @@ function MarketingPreferenceSection({ initialMarketingOptIn }: { initialMarketin
             {state.accepted ? "On" : "Off"}
           </span>
         </label>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Transactional email — such as verification, password reset, and order or enrolment notices —
           is always sent regardless of this setting.
         </p>

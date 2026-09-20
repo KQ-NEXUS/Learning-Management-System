@@ -3,7 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ChevronRight, Menu, Search } from "lucide-react";
+import {
+  Award,
+  BookOpen,
+  ChevronRight,
+  CreditCard,
+  Layers,
+  LayoutGrid,
+  ListChecks,
+  Menu,
+  ShieldCheck,
+  User,
+  UserPlus,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { BrandMark } from "@/components/shell/BrandMark";
 
 /**
@@ -11,8 +25,9 @@ import { BrandMark } from "@/components/shell/BrandMark";
  *
  * `staff/layout.tsx` stays an async Server Component so the actor lookup and
  * its two redirects run before any of this ever mounts (RBAC-06 rendering
- * guard). This component owns only chrome: a 228px navy sidebar, a 48px
- * header bar with a section-level locator trail, and the content pane.
+ * guard). This component owns only chrome: a 248px navy rail with grouped nav, a
+ * navy header band with a section-level locator trail, and the white content
+ * sheet whose rounded top corners reveal the navy frame behind them.
  *
  * Chrome persistence (UI-SPEC 8.17): the sidebar, header bar and identity
  * chip are rendered here, outside `children`. A loading or erroring child
@@ -20,7 +35,32 @@ import { BrandMark } from "@/components/shell/BrandMark";
  * this file that replaces the sidebar or header bar.
  */
 
-export type StaffNavItem = { label: string; href: string };
+export type StaffNavItem = { label: string; href: string; group?: string };
+
+const NAV_ICONS: Record<string, LucideIcon> = {
+  "/staff": LayoutGrid,
+  "/staff/cohorts": Users,
+  "/staff/enrolments": UserPlus,
+  "/staff/payments": CreditCard,
+  "/staff/courses": BookOpen,
+  "/staff/programmes": Layers,
+  "/staff/certificates": Award,
+  "/staff/users": User,
+  "/staff/roles": ShieldCheck,
+  "/staff/audit": ListChecks,
+};
+
+/** Groups consecutive items that share a group label, preserving nav order. */
+function groupNav(nav: StaffNavItem[]): { label: string | null; items: StaffNavItem[] }[] {
+  const groups: { label: string | null; items: StaffNavItem[] }[] = [];
+  for (const item of nav) {
+    const label = item.group ?? null;
+    const last = groups.at(-1);
+    if (last && last.label === label) last.items.push(item);
+    else groups.push({ label, items: [item] });
+  }
+  return groups;
+}
 
 /** Only what the footer chip needs — never the full profile snapshot. */
 export type StaffIdentity = { name: string; email: string } | null;
@@ -63,6 +103,8 @@ function deriveIdentityDisplay(
 
 function isActiveNavItem(pathname: string | null, href: string): boolean {
   if (!pathname) return false;
+  // /staff is the overview: every other staff route starts with it, so it must match exactly.
+  if (href === "/staff") return pathname === "/staff";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -150,18 +192,20 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
   const trailLabel = currentNavItem?.label ?? "Workspace";
   const display = deriveIdentityDisplay(identity);
 
+  const groups = groupNav(nav);
+
   return (
     // No `overflow-x` clip on this row wrapper: `overflow-x: hidden` forces
     // `overflow-y` to compute to `auto`, turning it into a scroll container, and
     // the sidebar's `lg:sticky` would then anchor to this non-scrolling box
     // instead of the viewport — so it scrolled away with the page on tall
     // routes. Horizontal bleed is clipped on the content column instead.
-    <div className="flex min-h-screen bg-surface-2">
+    <div className="flex min-h-screen bg-sidebar-bg">
       {mobileOpen && (
         <div
           aria-hidden
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-foreground/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-foreground/50 lg:hidden"
         />
       )}
 
@@ -172,85 +216,70 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         inert={!desktop && !mobileOpen}
         aria-hidden={!desktop && !mobileOpen ? true : undefined}
         aria-label="Workspace navigation"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[228px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg pb-4 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-hidden [@media(max-height:691px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand block */}
-        <div className="flex items-center gap-2 px-4 pt-4 pb-4">
+        <div className="flex items-center gap-3 px-3 pt-6 pb-7 [@media(min-height:780px)_and_(max-height:899px)]:pt-4 [@media(min-height:780px)_and_(max-height:899px)]:pb-4 [@media(min-height:692px)_and_(max-height:779px)]:pt-3 [@media(min-height:692px)_and_(max-height:779px)]:pb-3 [@media(max-height:691px)]:pt-2 [@media(max-height:691px)]:pb-2">
           <BrandMark />
           <div className="flex min-w-0 flex-col">
-            <span className="truncate text-base font-semibold text-sidebar-fg">
+            <span className="truncate text-base leading-tight font-semibold text-white">
               KQ Nexus
             </span>
-            <span className="truncate text-[11px] text-sidebar-muted">
+            <span className="truncate text-[12px] text-sidebar-soft">
               Admin workspace
             </span>
           </div>
         </div>
 
-        {/* Decorative search chip — performs no search this phase (D-24
-            search wiring is out of scope). Never focusable, never announced:
-            a control that does nothing is a worse failure than no control. */}
-        <div className="px-2 pb-4">
-          <div
-            aria-hidden
-            className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/10 px-2 py-2"
-          >
-            <Search aria-hidden className="size-3.5 shrink-0 text-sidebar-muted" />
-            <span className="flex-1 truncate text-sm text-sidebar-muted">Search</span>
-            <span className="shrink-0 rounded-sm border border-sidebar-border px-1 font-mono text-[11px] text-sidebar-muted">
-              ⌘K
-            </span>
-          </div>
-        </div>
-
-        <nav aria-label="Workspace" className="flex flex-1 flex-col gap-1 px-2">
-          {nav.map((item) => {
-            const active = isActiveNavItem(pathname, item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                aria-current={active ? "page" : undefined}
-                title={item.label}
-                className={`flex min-w-0 items-center gap-2 rounded-sm px-2 py-2 text-sm ${
-                  active
-                    ? "bg-sidebar-accent font-semibold text-white"
-                    : "font-normal text-sidebar-muted hover:text-sidebar-fg"
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className={`size-1.5 shrink-0 rounded-full ${
-                    active ? "bg-pill-blue-dot" : "bg-sidebar-muted/50"
-                  }`}
-                />
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              </Link>
-            );
-          })}
+        <nav aria-label="Workspace" className="flex flex-1 flex-col gap-6 [@media(min-height:780px)_and_(max-height:899px)]:gap-4 [@media(min-height:692px)_and_(max-height:779px)]:gap-3 [@media(max-height:691px)]:gap-2">
+          {groups.map((group) => (
+            <div key={group.label ?? "top"} className="flex flex-col gap-1">
+              {group.label && (
+                <span className="px-3 pb-2 text-[12px] font-semibold tracking-[0.06em] text-sidebar-muted uppercase [@media(max-height:779px)]:pb-1 [@media(max-height:691px)]:pb-0">
+                  {group.label}
+                </span>
+              )}
+              {group.items.map((item) => {
+                const active = isActiveNavItem(pathname, item.href);
+                const Icon = NAV_ICONS[item.href];
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    aria-current={active ? "page" : undefined}
+                    title={item.label}
+                    className={`flex min-h-10 min-w-0 items-center gap-3 rounded-md px-3 text-sm font-medium [@media(min-height:780px)_and_(max-height:899px)]:min-h-9 [@media(min-height:692px)_and_(max-height:779px)]:min-h-8 [@media(max-height:691px)]:min-h-7 ${
+                      active
+                        ? "bg-sidebar-accent text-white"
+                        : "text-sidebar-fg hover:bg-sidebar-hover hover:text-white"
+                    }`}
+                  >
+                    {Icon && <Icon aria-hidden className="size-[18px] shrink-0" />}
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Footer identity chip. */}
-        <div className="mt-auto px-4 pt-4">
+        <div className="mt-auto pt-4 [@media(max-height:899px)]:pt-2 [@media(max-height:599px)]:hidden">
           <div
-            className="flex items-center gap-2 border-t border-sidebar-border pt-4"
+            className="flex items-center gap-3 px-3"
             aria-label={display ? undefined : "Signed in"}
           >
             <span
               aria-hidden
-              className="flex size-[27px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-accent-contrast"
-              style={{
-                background:
-                  "linear-gradient(140deg, var(--color-teal-fill), var(--color-teal-deep))",
-              }}
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-line text-[13px] font-semibold text-white"
             >
               {display?.initials ?? ""}
             </span>
             <span
-              className="min-w-0 flex-1 truncate text-sm font-semibold text-sidebar-fg"
+              className="min-w-0 flex-1 truncate text-sm font-semibold text-white"
               title={display?.label ?? "Signed in"}
             >
               {display?.label ?? "Signed in"}
@@ -260,7 +289,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
       </aside>
 
       <div ref={backgroundRef} className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6">
+        <header className="flex h-[68px] shrink-0 items-center justify-between gap-4 px-6 text-sidebar-fg lg:px-8">
           <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
@@ -268,19 +297,19 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
               aria-expanded={mobileOpen}
               aria-controls={sidebarId}
               onClick={() => setOpen((v) => !v)}
-              className="-ml-1.5 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-surface-2 lg:hidden"
+              className="-ml-2 flex size-11 shrink-0 items-center justify-center rounded-md text-white hover:bg-sidebar-hover lg:hidden"
             >
-              <Menu aria-hidden className="size-4" />
+              <Menu aria-hidden className="size-5" />
               <span className="sr-only">
                 {open ? "Close navigation" : "Open navigation"}
               </span>
             </button>
 
             <div className="flex min-w-0 items-center gap-2 text-sm">
-              <span className="shrink-0 text-muted-foreground">Admin workspace</span>
-              <ChevronRight aria-hidden className="size-3 shrink-0 text-border" />
+              <span className="hidden shrink-0 text-sidebar-soft sm:inline">Admin workspace</span>
+              <ChevronRight aria-hidden className="hidden size-3.5 shrink-0 text-sidebar-muted sm:block" />
               <span
-                className="min-w-0 truncate font-semibold text-foreground"
+                className="min-w-0 truncate font-semibold text-white"
                 title={trailLabel}
               >
                 {trailLabel}
@@ -288,15 +317,17 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-4">
-            <span className="font-mono text-[11px] text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-5">
+            <span className="hidden font-mono text-[12px] text-sidebar-soft sm:inline">
               Africa/Lagos
             </span>
             {signOut}
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 bg-surface-2 px-6 pt-6 pb-8">{children}</main>
+        <main className="min-w-0 flex-1 rounded-t-[28px] bg-surface px-6 pt-9 pb-14 lg:px-10">
+          {children}
+        </main>
       </div>
     </div>
   );

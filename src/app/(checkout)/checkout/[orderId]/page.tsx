@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { notFound } from "next/navigation";
 import { AlertCircle, ChevronLeft } from "lucide-react";
 import { getCurrentActor } from "@/server/auth/current-actor";
@@ -73,9 +74,11 @@ export default async function CheckoutOrderPage({
   if (holdExpired) {
     const backHref = await getCohortOfferPath(order.cohort.id);
     return (
-      <div className="mx-auto flex w-full max-w-[640px] flex-col items-start gap-3 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+      <div className="flex flex-col gap-8">
+        <LearnerPageHeader title="Review your order" />
+      <div className="flex w-full max-w-[640px] flex-col items-start gap-3 border-t border-foreground py-12">
         <AlertCircle aria-hidden className="size-6 text-danger" />
-        <h1 className="text-[25px] font-semibold leading-[1.2] text-foreground">
+        <h1 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
           Your seat hold has expired
         </h1>
         <p className="max-w-prose text-sm text-muted-foreground">
@@ -89,6 +92,7 @@ export default async function CheckoutOrderPage({
           <ChevronLeft aria-hidden className="size-4" />
           Back to cohort
         </Link>
+      </div>
       </div>
     );
   }
@@ -129,29 +133,22 @@ export default async function CheckoutOrderPage({
   const showDeclineBanner = !emailUnverified && declined === "1" && enrolment?.holdExpiresAt;
 
   return (
-    <article className="mx-auto flex w-full max-w-[640px] flex-col gap-6">
-      <h1 className="text-[25px] font-semibold leading-[1.2] text-foreground">Review your order</h1>
+    <article className="flex flex-col gap-8">
+      <LearnerPageHeader title="Review your order" />
 
-      <section className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-card">
-        {enrolment?.holdExpiresAt && (
-          <HoldCountdown
-            holdExpiresAt={new Date(enrolment.holdExpiresAt).toISOString()}
-            initialRemainingMs={Math.max(
-              new Date(enrolment.holdExpiresAt).getTime() - at.getTime(),
-              0,
-            )}
-          />
-        )}
-        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="flex max-w-[720px] flex-col gap-10">
+      <section className="flex flex-col gap-4 border-t border-foreground pt-5">
+        <dl className="grid grid-cols-1 gap-0">
           {facts.map(([label, value]) => (
             <div
               key={label}
-              className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-2 shadow-xs"
+              className="flex min-w-0 flex-col gap-1 border-b border-border py-3"
             >
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <dt className="text-sm text-muted-foreground">
                 {label}
               </dt>
-              <dd className="break-words text-sm text-foreground">{value}</dd>
+              <dd className="break-words text-base font-medium text-foreground">{value}</dd>
             </div>
           ))}
         </dl>
@@ -170,7 +167,7 @@ export default async function CheckoutOrderPage({
       />
 
       {emailUnverified && (
-        <div className="flex flex-col gap-1 rounded-md border border-warning/30 bg-warning-surface px-4 py-3">
+        <div className="flex flex-col gap-1 border-t-2 border-warning py-3">
           <p className="text-sm font-semibold text-warning">Verify your email to pay</p>
           <p className="text-sm text-warning">
             We sent a verification link to {verification.email}. Verify it, then come back to this
@@ -180,7 +177,7 @@ export default async function CheckoutOrderPage({
       )}
 
       {showDeclineBanner && (
-        <div className="flex flex-col gap-1 rounded-md border border-danger/30 bg-danger-surface px-4 py-3">
+        <div className="flex flex-col gap-1 border-t-2 border-danger py-3">
           <p className="text-sm font-semibold text-danger">Your card was declined</p>
           <p className="text-sm text-danger">
             Try a different card — your seat is still held for{" "}
@@ -195,6 +192,23 @@ export default async function CheckoutOrderPage({
         forceDisabled={emailUnverified}
         submitLabel={showDeclineBanner ? "Try again" : `Pay ${formatAmount(order.amountMinor, order.currency)}`}
       />
+      </div>
+
+      {enrolment?.holdExpiresAt && (
+        <aside aria-label="Seat hold" className="flex flex-col gap-3 lg:border-l lg:border-border lg:pl-10">
+              <HoldCountdown
+                holdExpiresAt={new Date(enrolment.holdExpiresAt).toISOString()}
+                initialRemainingMs={Math.max(
+                  new Date(enrolment.holdExpiresAt).getTime() - at.getTime(),
+                  0,
+                )}
+              />
+          <p className="text-sm text-muted-foreground">
+            After that the seat is released to other learners and you would need to start again.
+          </p>
+        </aside>
+      )}
+      </div>
     </article>
   );
 }

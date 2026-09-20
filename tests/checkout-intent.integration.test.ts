@@ -239,7 +239,7 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
     const secondSignInTarget = await captureRedirect(() =>
       signInAction({ error: null }, signInFormData(email)),
     );
-    expect(secondSignInTarget).toBe("/account");
+    expect(secondSignInTarget).toBe("/dashboard");
   }, 15_000);
 
   it("lands on /account when no intent cookie is present (pre-existing behaviour unchanged)", async () => {
@@ -247,7 +247,7 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
     await registerAndVerify(email);
 
     const target = await captureRedirect(() => signInAction({ error: null }, signInFormData(email)));
-    expect(target).toBe("/account");
+    expect(target).toBe("/dashboard");
   }, 15_000);
 
   it("lands on the cohort's public offer page with no Order created when the held cohort filled up in the meantime", async () => {

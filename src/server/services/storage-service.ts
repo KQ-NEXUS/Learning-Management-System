@@ -30,7 +30,11 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { downloadTtlFor, UPLOAD_URL_TTL_SECONDS } from "@/lib/upload-limits";
+import {
+  downloadTtlFor,
+  UPLOAD_URL_TTL_SECONDS,
+  validateUpload,
+} from "@/lib/upload-limits";
 
 function makeClient(endpoint: string | undefined): S3Client {
   return new S3Client({
@@ -241,6 +245,164 @@ export async function presignLessonObjectUrl(
   return getSignedUrl(presignClient, command, {
     expiresIn: downloadTtlFor(input.lessonType),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Certificate PDFs and certificate-template assets
+// ---------------------------------------------------------------------------
+
+/**
+ * The generated PDF key includes fresh randomness even when the certificate
+ * id is known, matching the no-predictable-path rule used by submissions.
+ */
+export function buildCertificateStorageKey({
+  certificateId,
+}: {
+  certificateId: string;
+}): string {
+  return `certificates/${certificateId}/${randomUUID()}`;
+}
+
+/** A final private key for an image used by a certificate template. */
+export function buildTemplateAssetStorageKey({
+  templateId,
+}: {
+  templateId: string;
+}): string {
+  return `certificate-template-assets/${templateId}/${randomUUID()}`;
+}
+
+/** A browser-writable staging key kept separate from final template assets. */
+export function buildStagedTemplateAssetStorageKey({
+  templateId,
+}: {
+  templateId: string;
+}): string {
+  return `certificate-template-asset-uploads/${templateId}/${randomUUID()}`;
+}
+
+/** Derives a retry-safe final template-asset key only from its own staging domain. */
+export function finalTemplateAssetKeyFor(stagedKey: string): string {
+  if (!stagedKey.startsWith("certificate-template-asset-uploads/")) {
+    throw new Error("A final key can only be derived from a staged certificate-template asset upload.");
+  }
+  return stagedKey.replace(
+    /^certificate-template-asset-uploads\//,
+    "certificate-template-assets/",
+  );
+}
+
+/** Writes a server-generated certificate directly to private object storage. */
+export async function putGeneratedCertificateObject(input: {
+  key: string;
+  body: Uint8Array;
+  contentType: string;
+}): Promise<void> {
+  if (input.contentType !== "application/pdf") {
+    throw new Error("Generated certificate objects must use application/pdf.");
+  }
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucketName(),
+      Key: input.key,
+      Body: input.body,
+      ContentType: input.contentType,
+    }),
+  );
+}
+
+/** Creates a short-lived download URL for one generated certificate PDF. */
+export async function presignCertificateObjectUrl(input: {
+  key: string;
+}): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: input.key,
+    ResponseContentDisposition: "attachment",
+    ResponseContentType: "application/pdf",
+  });
+
+  return getSignedUrl(presignClient, command, {
+    expiresIn: downloadTtlFor("FILE"),
+  });
+}
+
+/**
+ * Fetches a private object's full bytes directly, server-side only. Added for
+ * `certificate-issuance-service.ts`'s live `resolveTemplateAsset` binding
+ * (plan 11-07) — the PDF renderer never touches object storage itself
+ * (T-11-14, `certificate-pdf-renderer.ts`'s header); this is the one call
+ * site that resolves a template's image `assetKey` into bytes on its behalf
+ * so a logo/signature/background can be embedded into the rendered PDF. Not
+ * part of any browser-reachable flow — a browser only ever receives a
+ * presigned URL (`presignTemplateAssetUploadUrl`, `presignLessonObjectUrl`).
+ */
+export async function getObjectBytes(key: string): Promise<Uint8Array> {
+  const result = await s3.send(
+    new GetObjectCommand({ Bucket: bucketName(), Key: key }),
+  );
+  if (!result.Body) {
+    throw new Error(`No object body for key ${key}.`);
+  }
+  return result.Body.transformToByteArray();
+}
+
+/** How long a template-image preview link stays valid: long enough to keep an editor open. */
+const TEMPLATE_ASSET_VIEW_TTL_SECONDS = 300;
+
+/**
+ * Creates a short-lived, inline view link for one stored template image, so the template editor
+ * can show a design it has already saved. It signs only keys inside the FINAL template-asset
+ * folder: not staged uploads, generated certificates, submissions or anything else, and not a key
+ * that tries to climb out with `..`. Callers authorize (`certificates.manage`) before asking.
+ */
+export async function presignTemplateAssetViewUrl(input: { key: string }): Promise<string> {
+  const prefix = "certificate-template-assets/";
+  if (
+    !input.key.startsWith(prefix) ||
+    input.key.length === prefix.length ||
+    input.key.split("/").some((part) => part === "..")
+  ) {
+    throw new Error("Only a stored certificate template image can be previewed.");
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: input.key,
+    ResponseContentDisposition: "inline",
+  });
+
+  return getSignedUrl(presignClient, command, { expiresIn: TEMPLATE_ASSET_VIEW_TTL_SECONDS });
+}
+
+/**
+ * Presigns a template image upload after applying the shared IMAGE MIME and
+ * size rules. The asset stays staged until the existing generic inspect and
+ * promote operations verify it.
+ */
+export async function presignTemplateAssetUploadUrl(input: {
+  key: string;
+  contentType: string;
+  contentLength: number;
+}): Promise<string> {
+  const validation = validateUpload({
+    lessonType: "IMAGE",
+    mimeType: input.contentType,
+    sizeBytes: input.contentLength,
+  });
+  if (!validation.ok) throw new Error(validation.message);
+
+  return getSignedUrl(
+    presignClient,
+    new PutObjectCommand({
+      Bucket: bucketName(),
+      Key: input.key,
+      ContentType: input.contentType,
+      ContentLength: input.contentLength,
+    }),
+    { expiresIn: UPLOAD_URL_TTL_SECONDS },
+  );
 }
 
 const EXPORT_KEY_PATTERN = /^exports\/[A-Za-z0-9_-]{8,128}\/[A-Za-z0-9._-]{1,32}\.csv$/;

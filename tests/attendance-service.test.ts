@@ -10,13 +10,15 @@
  * schema.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
 import { writeDomainEvent } from "@/server/services/domain-event-service";
+import { registerPendingCertificateFile } from "@/server/services/certificate-file-service";
 import { ATTENDANCE_MARKING_WINDOW_HOURS } from "@/lib/attendance-window";
 import {
   CorrectionReasonRequiredError,
   createAttendanceService,
+  createPrismaBackedAttendanceService,
   LearnerNotOnRosterError,
   PreMarkingStateError,
   SessionCancelledError,
@@ -141,7 +143,12 @@ function harness(opts?: {
   );
   const events: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
-  const recalculateCompletionCalls: Array<{ enrolmentId: string; now: Date; tx: unknown }> = [];
+  const recalculateCompletionCalls: Array<{
+    enrolmentId: string;
+    now: Date;
+    tx: unknown;
+    actorId?: string | null;
+  }> = [];
 
   const now = opts?.now ?? DURING;
 
@@ -310,8 +317,16 @@ function harness(opts?: {
     },
     withPermission,
     now: () => now,
-    recalculateCompletion: (async (tx: unknown, args: { enrolmentId: string; now: Date }) => {
-      recalculateCompletionCalls.push({ enrolmentId: args.enrolmentId, now: args.now, tx });
+    recalculateCompletion: (async (
+      tx: unknown,
+      args: { enrolmentId: string; now: Date; actorId?: string | null },
+    ) => {
+      recalculateCompletionCalls.push({
+        enrolmentId: args.enrolmentId,
+        now: args.now,
+        tx,
+        actorId: args.actorId,
+      });
       return { kind: "evaluated", results: [] };
     }) as never,
   });
@@ -1036,5 +1051,163 @@ describe("D-11 — recalculateCompletion is called inside the same transaction",
       reason: "medical note produced",
     });
     expect(recalculateCompletionCalls).toHaveLength(1);
+  });
+
+  it("a within-window mark passes the acting staff member as actorId (plan 11-24, T-11-98)", async () => {
+    const { service, recalculateCompletionCalls } = harness({ now: DURING });
+    await service.markAttendance({ sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT" });
+    expect(recalculateCompletionCalls).toHaveLength(1);
+    expect(recalculateCompletionCalls[0].actorId).toBe("user-1");
+  });
+
+  it("a post-window correction passes the correcting staff member as actorId (plan 11-24, T-11-98)", async () => {
+    const { service, recalculateCompletionCalls } = harness({
+      now: JUST_AFTER_CLOSE,
+      records: [rec({ sessionId: "ses-1", enrolmentId: "enr-1", state: "ABSENT" })],
+    });
+    await service.markAttendance({
+      sessionId: "ses-1",
+      enrolmentId: "enr-1",
+      state: "PRESENT",
+      reason: "medical note produced",
+    });
+    expect(recalculateCompletionCalls).toHaveLength(1);
+    expect(recalculateCompletionCalls[0].actorId).toBe("user-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 11-31 (CR-01b) — the Prisma-backed composition root settles certificate
+// files AFTER the transaction commits, and a settle failure never fails the write
+// ---------------------------------------------------------------------------
+
+describe("createPrismaBackedAttendanceService — post-commit certificate file settle", () => {
+  function rootHarness(opts: {
+    register?: boolean;
+    bodyThrows?: boolean;
+    settle?: (tx: object) => Promise<void>;
+  }) {
+    const session = ses();
+    const order: string[] = [];
+    const events: Array<Record<string, unknown>> = [];
+    const txObject = {
+      attendanceRecord: {
+        findUnique: async () => null,
+        findMany: async () => [],
+        upsert: async ({ create }: { create: Record<string, unknown> }) => ({
+          ...rec({ sessionId: "ses-1", enrolmentId: "enr-1" }),
+          ...create,
+        }),
+      },
+      scheduledSession: { findMany: async () => [session] },
+      cohort: { findUnique: async () => ({ attendanceThresholdPct: 75 }) },
+      domainEvent: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          events.push(data);
+          return { id: "evt-1" };
+        },
+      },
+    };
+
+    const client = {
+      cohort: { findUnique: async () => null },
+      scheduledSession: { findUnique: async () => ({ ...session }) },
+      enrolment: {
+        findUnique: async () => ({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" }),
+        findMany: async () => [],
+      },
+      attendanceRecord: { findUnique: async () => null, findMany: async () => [] },
+      $transaction: async <R,>(cb: (tx: unknown) => Promise<R>): Promise<R> => {
+        order.push("tx-begin");
+        const result = await cb(txObject);
+        order.push("tx-commit");
+        return result;
+      },
+    };
+
+    const recalcTxs: unknown[] = [];
+    const settleCalls: object[] = [];
+    const service = createPrismaBackedAttendanceService(
+      client as never,
+      createTestWithPermission([grant("attendance.manage"), grant("attendance.view")]).withPermission,
+      async () => {},
+      (async (tx: unknown) => {
+        recalcTxs.push(tx);
+        if (opts.register) registerPendingCertificateFile(tx as object, "cert-1");
+        if (opts.bodyThrows) throw new Error("rollback me");
+        return { kind: "evaluated", results: [] };
+      }) as never,
+      async (tx: object) => {
+        order.push("settle");
+        settleCalls.push(tx);
+        if (opts.settle) await opts.settle(tx);
+      },
+    );
+    return { service, order, settleCalls, recalcTxs, txObject, events };
+  }
+
+  // The service's own clock is real here (no `now` injection), so the session
+  // must be inside its marking window: a far-future end keeps the mark on the
+  // normal (no-correction-reason) path only when the test freezes time.
+  const withClock = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DURING);
+    try {
+      return await fn();
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+  const mark = { sessionId: "ses-1", enrolmentId: "enr-1", state: "PRESENT" as const };
+
+  it("settles exactly once, after $transaction resolved, with the same tx object issuance registered against", async () => {
+    const r = rootHarness({ register: true });
+    await withClock(() => r.service.markAttendance(mark));
+    expect(r.order).toEqual(["tx-begin", "tx-commit", "settle"]);
+    expect(r.settleCalls).toHaveLength(1);
+    expect(r.settleCalls[0]).toBe(r.txObject);
+    expect(r.recalcTxs).toHaveLength(1);
+    expect(r.recalcTxs[0]).toBe(r.settleCalls[0]);
+  });
+
+  it("a rolled-back transaction triggers no settle and the original error propagates", async () => {
+    const r = rootHarness({ register: true, bodyThrows: true });
+    await expect(withClock(() => r.service.markAttendance(mark))).rejects.toThrow("rollback me");
+    expect(r.settleCalls).toHaveLength(0);
+    expect(r.order).not.toContain("settle");
+  });
+
+  it("a rejecting settle never fails the staff member's already-committed attendance write", async () => {
+    const r = rootHarness({
+      register: true,
+      settle: async () => {
+        throw new Error("object store down");
+      },
+    });
+    await expect(withClock(() => r.service.markAttendance(mark))).resolves.toMatchObject({
+      enrolmentId: "enr-1",
+      state: "PRESENT",
+    });
+    expect(r.order).toEqual(["tx-begin", "tx-commit", "settle"]);
+  });
+
+  it("with the live settle and nothing registered, an ordinary attendance write resolves normally (a no-op settle)", async () => {
+    const r = rootHarness({});
+    const service = createPrismaBackedAttendanceService(
+      {
+        cohort: { findUnique: async () => null },
+        scheduledSession: { findUnique: async () => ({ ...ses() }) },
+        enrolment: {
+          findUnique: async () => ({ id: "enr-1", cohortId: "cohort-1", status: "ACTIVE" }),
+          findMany: async () => [],
+        },
+        attendanceRecord: { findUnique: async () => null, findMany: async () => [] },
+        $transaction: async <R,>(cb: (tx: unknown) => Promise<R>): Promise<R> => cb(r.txObject),
+      } as never,
+      createTestWithPermission([grant("attendance.manage")]).withPermission,
+      async () => {},
+      (async () => ({ kind: "evaluated", results: [] })) as never,
+    );
+    await expect(withClock(() => service.markAttendance(mark))).resolves.toMatchObject({ state: "PRESENT" });
   });
 });

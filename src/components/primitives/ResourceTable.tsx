@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import {
   ArrowDown,
@@ -56,6 +57,16 @@ export type TableFilter =
       label: string;
       value: string;
       options: { value: string; label: string }[];
+      /** Force the plain dropdown even when there are few enough options for a segmented control. */
+      variant?: "select";
+    }
+  | {
+      /** A tab strip above the table (e.g. status with counts). One value is active at a time. */
+      kind: "tabs";
+      name: string;
+      label: string;
+      value: string;
+      options: { value: string; label: string; count?: number }[];
     };
 
 export type SortState = { key: string; direction: "asc" | "desc" };
@@ -88,6 +99,11 @@ export type ResourceTableProps<T> = {
   /** Describes the collection, e.g. "cohorts". Used in status messages. */
   noun: string;
   title?: string;
+  /**
+   * True on a top-level list page: the title is drawn as the page's h1 in the navy band
+   * (PageHeader) instead of an in-flow h2. Leave false for tables embedded in a tab or card.
+   */
+  asPage?: boolean;
   columns: Column<T>[];
   state: ResourceTableState<T>;
   getRowKey: (row: T) => string;
@@ -132,17 +148,17 @@ export type ResourceTableProps<T> = {
   emptyHeading?: string;
 };
 
-const CELL = "px-4 py-2 align-middle";
+const CELL = "px-3 py-4 align-middle first:pl-0 last:pr-0 lg:px-4";
 const HEAD =
-  "px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+  "px-3 py-3 text-left text-[13px] font-medium text-muted-foreground first:pl-0 last:pr-0 lg:px-4";
 const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
 
 function Panel({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-xs">
+    <div className="flex max-w-[640px] flex-col items-start gap-3 border-t border-foreground pt-12 pb-3">
       {children}
     </div>
   );
@@ -175,42 +191,11 @@ function SelectAll({
   );
 }
 
-/**
- * Per-row leading tile — a visual anchor, not information (T-04.1-09). It
- * derives its tone and initials from a value the primary column already
- * renders in full, so it discloses nothing the row does not already show,
- * and is always rendered `aria-hidden`.
- */
-const TILE_TONE_CLASSES = {
-  blue: "bg-pill-blue-bg text-pill-blue-ink",
-  green: "bg-pill-green-bg text-pill-green-ink",
-  amber: "bg-pill-amber-bg text-pill-amber-ink",
-  grey: "bg-pill-grey-bg text-pill-grey-ink",
-} as const;
-const TILE_TONE_KEYS = Object.keys(
-  TILE_TONE_CLASSES,
-) as (keyof typeof TILE_TONE_CLASSES)[];
-
-/** Deterministic per-row tone so the same record always gets the same tile color. */
-function tileToneFor(seed: string): keyof typeof TILE_TONE_CLASSES {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-  }
-  return TILE_TONE_KEYS[Math.abs(hash) % TILE_TONE_KEYS.length];
-}
-
-/** First letter of up to two words. */
-function initialsFor(text: string): string {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "";
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return (words[0][0] + words[1][0]).toUpperCase();
-}
 
 export function ResourceTable<T>({
   noun,
   title,
+  asPage = false,
   columns,
   state,
   getRowKey,
@@ -252,32 +237,77 @@ export function ResourceTable<T>({
 
   const header = (
     <div className="flex flex-col gap-4">
-      {(title || headerActions || shownCount !== undefined) && (
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            {title && (
-              <h2 className="text-base font-semibold tracking-tight text-foreground">
-                {title}
-              </h2>
-            )}
-            {shownCount !== undefined && (
-              <p className="text-sm text-muted-foreground">
-                {totalCount !== undefined
-                  ? `${shownCount} of ${totalCount}`
-                  : `${shownCount} ${noun}`}
-                {" · sort and filters are read from the URL"}
-              </p>
+      {asPage && title ? (
+        <PageHeader
+          title={title}
+          subtitle={
+            // The count only earns its place once a filter narrows the list.
+            shownCount !== undefined && totalCount !== undefined && shownCount !== totalCount
+              ? `${shownCount} of ${totalCount}`
+              : undefined
+          }
+          actions={headerActions}
+        />
+      ) : (
+        (title || headerActions || shownCount !== undefined) && (
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              {title && (
+                <h2 className="text-base font-semibold tracking-tight text-foreground">
+                  {title}
+                </h2>
+              )}
+              {shownCount !== undefined && (
+                <p className="text-sm text-muted-foreground">
+                  {totalCount !== undefined
+                    ? `${shownCount} of ${totalCount}`
+                    : `${shownCount} ${noun}`}
+                </p>
+              )}
+            </div>
+            {headerActions && (
+              <div className="flex flex-wrap gap-2">{headerActions}</div>
             )}
           </div>
-          {headerActions && (
-            <div className="flex flex-wrap gap-2">{headerActions}</div>
-          )}
-        </div>
+        )
       )}
 
-      {filters && filters.length > 0 && (
-        <div className="flex flex-wrap items-center gap-4 rounded-md border border-border bg-surface-2/60 px-4 py-2">
-          {filters.map((filter, index) => {
+      {filters?.map((filter) =>
+        filter.kind === "tabs" ? (
+          <div
+            key={filter.name}
+            role="group"
+            aria-label={filter.label}
+            className="flex gap-8 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {filter.options.map((option) => {
+              const active = option.value === filter.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onFilterChange?.(filter.name, option.value)}
+                  className={`-mb-px shrink-0 border-b-2 pb-3 font-medium whitespace-nowrap ${
+                    active
+                      ? "border-accent font-semibold text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {option.label}
+                  {option.count !== undefined && (
+                    <span className="ml-2 font-normal tabular-nums">{option.count}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : null,
+      )}
+
+      {filters && filters.some((f) => f.kind !== "tabs") && (
+        <div className="flex flex-wrap items-center gap-4 pb-2">
+          {filters.filter((f) => f.kind !== "tabs").map((filter, index) => {
             const filterId = `${controlId}-filter-${index}`;
             // A small option count lays out as the mockup's segmented
             // control; a filter with too many options to fit inline falls
@@ -285,11 +315,14 @@ export function ResourceTable<T>({
             // change only — both paths call the same onFilterChange prop,
             // so filters/sort keep reading from and writing to the URL.
             const isSegmented =
-              filter.kind === "select" && filter.options.length <= 4;
+              filter.kind === "select" && filter.variant !== "select" && filter.options.length <= 4;
 
             return (
               <div key={filter.name} className="flex items-center gap-2">
-                <label htmlFor={isSegmented ? undefined : filterId} className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <label
+                  htmlFor={isSegmented ? undefined : filterId}
+                  className={filter.kind === "search" ? "sr-only" : "text-[13px] text-muted-foreground"}
+                >
                   {filter.label}
                 </label>
                 {filter.kind === "search" ? (
@@ -306,14 +339,14 @@ export function ResourceTable<T>({
                       onChange={(e) =>
                         onFilterChange?.(filter.name, e.target.value)
                       }
-                      className="h-[38px] rounded-md border border-input-border bg-surface py-1 pr-2 pl-8 text-sm"
+                      className="h-11 w-[340px] max-w-full rounded-md border border-input-border bg-surface py-1 pr-2 pl-8 text-sm"
                     />
                   </div>
                 ) : isSegmented ? (
                   <div
                     role="group"
                     aria-label={filter.label}
-                    className="flex h-8 items-center gap-1 rounded-md border border-input-border bg-surface-2 p-1"
+                    className="flex h-8 max-w-full items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden rounded-md border border-input-border bg-surface-2 p-1"
                   >
                     {filter.options.map((option) => {
                       const active = option.value === filter.value;
@@ -325,7 +358,7 @@ export function ResourceTable<T>({
                           onClick={() =>
                             onFilterChange?.(filter.name, option.value)
                           }
-                          className={`rounded-md px-2 py-1 text-sm font-semibold ${
+                          className={`shrink-0 rounded-md px-2 py-1 text-sm font-semibold whitespace-nowrap ${
                             active
                               ? "bg-surface text-foreground shadow-xs"
                               : "text-muted-foreground hover:text-foreground"
@@ -357,7 +390,7 @@ export function ResourceTable<T>({
           })}
 
           {activeQuery && (
-            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 font-mono text-xs text-muted-foreground">
               {activeQuery}
               <button
                 type="button"
@@ -393,24 +426,20 @@ export function ResourceTable<T>({
           <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         )}
         <Panel>
-          <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
-          <p className="text-sm font-semibold text-foreground">
+          <span className="font-mono text-sm text-muted-foreground">403</span>
+          <h2 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
             You do not have access to {noun}
-          </p>
-          <p className="max-w-prose text-sm text-muted-foreground">
+          </h2>
+          <p className="max-w-prose text-base text-foreground-soft">
             Your role does not include{" "}
             {state.permission ? (
-              <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">
+              <code className="rounded-sm bg-accent-wash px-2 font-mono text-sm">
                 {state.permission}
               </code>
             ) : (
               "the required permission"
             )}{" "}
             at this scope. Ask a workspace administrator to grant it.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Same copy whether or not the record exists. No counts, titles or IDs
-            leak.
           </p>
         </Panel>
       </div>
@@ -436,7 +465,7 @@ export function ResourceTable<T>({
             </button>
           )}
           {(state.trace || state.attempt) && (
-            <p className="font-mono text-[11px] text-muted-foreground">
+            <p className="font-mono text-xs text-muted-foreground">
               {state.trace && `trace ${state.trace}`}
               {state.trace && state.attempt ? " · " : ""}
               {state.attempt &&
@@ -457,10 +486,10 @@ export function ResourceTable<T>({
       <div className="flex flex-col gap-4">
         {header}
         <Panel>
-          <p className="text-sm font-semibold text-foreground">
+          <h2 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
             {filtered ? `No ${noun} match these filters` : (emptyHeading ?? `No ${noun} yet`)}
-          </p>
-          <p className="max-w-prose text-sm text-muted-foreground">
+          </h2>
+          <p className="max-w-[480px] text-base text-muted-foreground">
             {filtered
               ? `${state.activeFilterCount} ${
                   state.activeFilterCount === 1 ? "filter is" : "filters are"
@@ -488,6 +517,9 @@ export function ResourceTable<T>({
               </button>
             )}
           </div>
+          {/* The board repeats the page's main action inside the empty panel, so a first-time
+              visitor sees what to do next right where the list would be. */}
+          {!filtered && headerActions && <div className="flex flex-wrap gap-3 pt-3">{headerActions}</div>}
         </Panel>
       </div>
     );
@@ -544,11 +576,10 @@ export function ResourceTable<T>({
         </div>
       )}
 
-      {/* Table — hidden below 640px in favour of the card list. Container is a
-          16px-radius card on the low (dense-surface) shadow; the table is clipped
-          to that radius so the first/last rows don't square off the corners. */}
-      <div className="hidden rounded-xl border border-border bg-surface shadow-xs sm:block">
-        <table className="w-full border-collapse overflow-hidden rounded-xl text-sm">
+      {/* Table — hidden below 640px in favour of the stacked row list; scrolls
+          sideways inside its own box rather than the page if it ever overflows. */}
+      <div className="hidden overflow-x-auto sm:block">
+        <table className="w-full border-collapse text-sm">
           <caption className="sr-only">
             {loading ? `Loading ${noun}` : `${rows.length} ${noun}`}
           </caption>
@@ -558,7 +589,7 @@ export function ResourceTable<T>({
               <col key={c.key} style={c.width ? { width: c.width } : undefined} />
             ))}
           </colgroup>
-          <thead className="bg-surface-2">
+          <thead className="border-b border-foreground">
             <tr>
               {selection && (
                 <th scope="col" className={HEAD}>
@@ -604,7 +635,7 @@ export function ResourceTable<T>({
                       <button
                         type="button"
                         onClick={() => onSortChange(c.key)}
-                        className="inline-flex items-center gap-1 uppercase hover:text-foreground"
+                        className="inline-flex items-center gap-1 hover:text-foreground"
                       >
                         {c.header}
                         <span aria-hidden className="text-muted-foreground">
@@ -648,8 +679,6 @@ export function ResourceTable<T>({
                   const href = getRowHref?.(row);
                   const checked = selection?.selectedIds.includes(id) ?? false;
                   const rowLabel = getRowLabel?.(row) ?? id;
-                  const tileClasses = TILE_TONE_CLASSES[tileToneFor(id)];
-                  const initials = initialsFor(rowLabel);
                   return (
                     <tr
                       key={id}
@@ -676,15 +705,9 @@ export function ResourceTable<T>({
                         i === 0 ? (
                           <td
                             key={c.key}
-                            className={`${CELL} ${c.mono ? "font-mono text-sm tabular-nums" : ""}`}
+                            className={`${CELL} ${c.mono ? "font-mono text-sm whitespace-nowrap tabular-nums" : ""}`}
                           >
                             <span className="flex items-center gap-2">
-                              <span
-                                aria-hidden
-                                className={`flex size-[34px] shrink-0 items-center justify-center rounded-md text-[11px] font-semibold ${tileClasses}`}
-                              >
-                                {initials}
-                              </span>
                               <span className="flex flex-col gap-1">
                                 {href ? (
                                   <Link
@@ -697,7 +720,7 @@ export function ResourceTable<T>({
                                   c.render(row)
                                 )}
                                 {c.subtitle && (
-                                  <span className="text-[11px] text-muted-foreground">
+                                  <span className="text-xs text-muted-foreground">
                                     {c.subtitle(row)}
                                   </span>
                                 )}
@@ -709,12 +732,12 @@ export function ResourceTable<T>({
                             key={c.key}
                             className={`${CELL} ${
                               c.align === "right" ? "text-right" : ""
-                            } ${c.mono ? "font-mono text-sm tabular-nums" : ""}`}
+                            } ${c.mono ? "font-mono text-sm whitespace-nowrap tabular-nums" : ""}`}
                           >
                             <span className="flex flex-col gap-1">
                               {c.render(row)}
                               {c.subtitle && (
-                                <span className="text-[11px] text-muted-foreground">
+                                <span className="text-xs text-muted-foreground">
                                   {c.subtitle(row)}
                                 </span>
                               )}
@@ -730,13 +753,10 @@ export function ResourceTable<T>({
       </div>
 
       {/* Cards — the same data below 640px, so nothing scrolls sideways. */}
-      <ul className="flex flex-col gap-2 sm:hidden">
+      <ul className="flex flex-col sm:hidden">
         {loading
           ? Array.from({ length: 3 }, (_, i) => (
-              <li
-                key={i}
-                className="rounded-xl border border-border bg-surface p-4 shadow-xs"
-              >
+              <li key={i} className="border-b border-border py-4">
                 <span className="block h-3 w-32 animate-pulse rounded-sm bg-surface-2" />
               </li>
             ))
@@ -748,12 +768,10 @@ export function ResourceTable<T>({
                 (c) => c.key !== primary.key && !c.hideOnMobile,
               );
               const rowLabel = getRowLabel?.(row) ?? getRowKey(row);
-              const tileClasses = TILE_TONE_CLASSES[tileToneFor(getRowKey(row))];
-              const initials = initialsFor(rowLabel);
               return (
                 <li
                   key={getRowKey(row)}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-xs"
+                  className="flex flex-col gap-2 border-b border-border py-4"
                 >
                   <div className="flex items-center gap-2">
                     {selection && (
@@ -771,12 +789,6 @@ export function ResourceTable<T>({
                         className="size-3.5 accent-accent"
                       />
                     )}
-                    <span
-                      aria-hidden
-                      className={`flex size-[34px] shrink-0 items-center justify-center rounded-md text-[11px] font-semibold ${tileClasses}`}
-                    >
-                      {initials}
-                    </span>
                     <div className="flex flex-col gap-1">
                       <span className="text-sm font-semibold text-foreground">
                         {href ? (
@@ -791,7 +803,7 @@ export function ResourceTable<T>({
                         )}
                       </span>
                       {primary.subtitle && (
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {primary.subtitle(row)}
                         </span>
                       )}
@@ -800,7 +812,7 @@ export function ResourceTable<T>({
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                     {rest.map((c) => (
                       <div key={c.key} className="flex flex-col">
-                        <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <dt className="text-xs text-muted-foreground">
                           {c.header}
                         </dt>
                         <dd className={c.mono ? "font-mono tabular-nums" : ""}>
@@ -822,10 +834,10 @@ export function ResourceTable<T>({
 }
 
 /**
- * Tinted pill — tint background, deep-ink label, mid-tone dot as pure visual
- * reinforcement. The label text (not the dot) carries the meaning: every
- * tone's ink-on-tint pair clears 4.5:1 (UI-SPEC 5.4), so no WCAG 1.4.11
- * exemption is claimed or needed here.
+ * Status — coloured text with a leading dot, no tinted background. The label
+ * carries the meaning; the dot only reinforces it (and inherits the text
+ * colour via `currentColor`). Every tone's ink clears 4.5:1 on white. The
+ * component keeps its old name and props so its 30+ call sites need no change.
  */
 export function StatusPill({
   label,
@@ -834,26 +846,20 @@ export function StatusPill({
   label: string;
   tone?: "neutral" | "success" | "warning" | "danger" | "accent";
 }) {
-  const classes = {
-    neutral: "bg-pill-grey-bg text-pill-grey-ink",
-    success: "bg-pill-green-bg text-pill-green-ink",
-    warning: "bg-pill-amber-bg text-pill-amber-ink",
-    danger: "bg-pill-red-bg text-pill-red-ink",
-    accent: "bg-pill-blue-bg text-pill-blue-ink",
-  }[tone];
-  const dot = {
-    neutral: "bg-pill-grey-dot",
-    success: "bg-pill-green-dot",
-    warning: "bg-pill-amber-dot",
-    danger: "bg-pill-red-dot",
-    accent: "bg-pill-blue-dot",
+  const ink = {
+    neutral: "text-pill-grey-ink",
+    success: "text-pill-green-ink",
+    warning: "text-pill-amber-ink",
+    danger: "text-pill-red-ink",
+    accent: "text-pill-blue-ink",
   }[tone];
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold whitespace-nowrap ${classes}`}
+      data-tone={tone}
+      className={`inline-flex items-center text-sm font-medium whitespace-nowrap ${ink}`}
     >
-      <span aria-hidden className={`size-1.5 rounded-full ${dot}`} />
+      <span aria-hidden className="mr-2 size-[7px] shrink-0 rounded-full bg-current" />
       {label}
     </span>
   );
