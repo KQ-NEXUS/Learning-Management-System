@@ -627,7 +627,13 @@ export function createTicketService(deps: TicketServiceDeps) {
   };
 }
 
-type AnyPrisma = typeof prisma & { [key: string]: any };
+type AnyPrisma = {
+  ticket: any;
+  ticketMessage: any;
+  ticketEvent: any;
+  $transaction: <R>(fn: (tx: any) => Promise<R>) => Promise<R>;
+  [key: string]: any;
+};
 
 function createPrismaTicketRepository(client: AnyPrisma): TicketRepository {
   const mapTicket = (ticket: any): TicketRecord => ticket as TicketRecord;

@@ -32,6 +32,7 @@ describe("ticket context service", () => {
     const resolved = await service.resolve(context);
 
     expect(resolved).toEqual({ kind, safeReference, href: null, locked: true });
+    if (resolved === null) throw new Error("Expected locked context projection.");
     expect(Object.keys(resolved).sort()).toEqual(["href", "kind", "locked", "safeReference"]);
     expect(JSON.stringify(resolved)).not.toMatch(/email|amount|grade|certificateRef|title|learner/i);
   });

@@ -19,8 +19,9 @@ describe("support ticket RBAC isolation", () => {
       "users.manage",
       "roles.manage",
       "payments.view",
-      "payments.manage",
-      "grades.view",
+      "payments.confirm",
+      "refunds.manage",
+      "submissions.view",
       "grades.manage",
     ] as const) {
       await expect(withPermission(permission, () => ({}))(vi.fn(async () => "denied"))({})).rejects.toBeInstanceOf(
