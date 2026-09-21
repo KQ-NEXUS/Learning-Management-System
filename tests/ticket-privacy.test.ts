@@ -52,6 +52,9 @@ describe("ticket learner privacy", () => {
     ]);
     expect(serialized).not.toContain("Private escalation note");
     expect(serialized).not.toContain("msg-private");
+    expect(serialized).not.toContain("staff-1");
+    expect(serialized).not.toContain("assigneeId");
+    expect(serialized).not.toContain("authorId");
     expect(serialized).not.toContain("internal-ledger.pdf");
     expect(serialized).not.toContain("private/tickets/internal");
     expect(serialized).not.toContain("events");

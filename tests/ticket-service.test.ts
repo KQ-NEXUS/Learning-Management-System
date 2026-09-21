@@ -22,8 +22,10 @@ describe("ticket service", () => {
       status: "NEW",
       priority: "NORMAL",
       queue: "GENERAL_SUPPORT",
-      context: { kind: "COURSE", id: "course-1" },
+      context: expect.objectContaining({ kind: "COURSE", href: null, locked: true }),
     });
+    expect(JSON.stringify(ticket)).not.toContain("course-1");
+    expect("assigneeId" in ticket).toBe(false);
     expect(harness.tickets).toHaveLength(1);
     expect(harness.messages).toEqual([
       expect.objectContaining({
@@ -81,7 +83,19 @@ describe("ticket service", () => {
       visibility: "INTERNAL",
       body: "Private note",
       createdAt: new Date("2026-09-21T12:01:00.000Z"),
-      attachments: [],
+      attachments: [{
+        id: "att-staff",
+        ticketId: created.id,
+        messageId: "msg-z",
+        uploadedById: "staff-1",
+        filename: "diagnostic.pdf",
+        storageKey: "private/raw/storage-key",
+        mimeType: "application/pdf",
+        sizeBytes: 123,
+        uploadStatus: "READY",
+        uploadedAt: new Date("2026-09-21T12:01:00.000Z"),
+        createdAt: new Date("2026-09-21T12:01:00.000Z"),
+      }],
     });
     harness.events.push({
       id: "evt-a",
@@ -109,6 +123,7 @@ describe("ticket service", () => {
       "EVENT:evt-a",
       "MESSAGE:msg-z",
     ]);
+    expect(JSON.stringify(detail)).not.toContain("private/raw/storage-key");
   });
 
   it("rejects stale command versions with one typed conflict", async () => {
@@ -144,6 +159,13 @@ describe("ticket service", () => {
       "ticket.created",
       "ticket.assigned",
       "ticket.public_reply_added",
+      "ticket.resolved",
+    ]);
+    expect(harness.audits.map((audit) => (audit as { action: string }).action)).toEqual([
+      "ticket.created",
+      "ticket.assigned",
+      "ticket.public_reply_added",
+      "ticket.internal_note_added",
       "ticket.resolved",
     ]);
     const serializedEvents = JSON.stringify(harness.domainEvents);
@@ -200,6 +222,15 @@ describe("ticket service", () => {
     expect(harness.domainEvents.map((event) => event.type)).toEqual([
       "ticket.created",
       "ticket.escalated",
+      "ticket.resolved",
+      "ticket.reopened",
+      "ticket.resolved",
+      "ticket.closed",
+    ]);
+    expect(harness.audits.map((audit) => (audit as { action: string }).action)).toEqual([
+      "ticket.created",
+      "ticket.escalated",
+      "ticket.escalation_accepted",
       "ticket.resolved",
       "ticket.reopened",
       "ticket.resolved",

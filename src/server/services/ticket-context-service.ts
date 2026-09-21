@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type TicketContextSource = Partial<{
   userId: string | null;
   courseId: string | null;
@@ -40,6 +42,15 @@ const CONTEXT_ORDER = [
   ["certificateId", "CERTIFICATE", "CRT"],
 ] as const satisfies readonly (readonly [keyof TicketContextSource, TicketContextKind, string])[];
 
+export function ticketSafeContextReference(kind: TicketContextKind, id: string): string {
+  const digest = createHash("sha256")
+    .update(`${kind}:${id}`)
+    .digest("hex")
+    .slice(0, 10)
+    .toUpperCase();
+  return `${kind.slice(0, 3)}-${digest}`;
+}
+
 export function createTicketContextService(deps: TicketContextServiceDeps) {
   async function resolve(source: TicketContextSource): Promise<TicketContextProjection | null> {
     const match = CONTEXT_ORDER.find(([key]) => {
@@ -48,9 +59,9 @@ export function createTicketContextService(deps: TicketContextServiceDeps) {
     });
     if (!match) return null;
 
-    const [key, kind, prefix] = match;
+    const [key, kind] = match;
     const id = source[key]!.trim();
-    const safeReference = `${prefix}-${id}`;
+    const safeReference = ticketSafeContextReference(kind, id);
     const authorized = await deps.authorize({ kind, id });
     if (!authorized) {
       return { kind, safeReference, href: null, locked: true };

@@ -19,6 +19,10 @@ import {
   type TicketPriorityValue,
   type TicketStatusValue,
 } from "@/server/services/ticket-lifecycle";
+import {
+  ticketSafeContextReference,
+  type TicketContextKind,
+} from "@/server/services/ticket-context-service";
 import { generateTicketReference } from "@/server/services/ticket-reference";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
@@ -164,6 +168,8 @@ export type TicketRepository = {
     mutate: (ticket: TicketRecord) => void | Promise<void>,
   ): Promise<TicketRecord | null>;
   runInTransaction<R>(fn: (tx: TicketRepository) => Promise<R>): Promise<R>;
+  audit(event: BusinessAuditEvent): Promise<void>;
+  writeDomainEvent(event: DomainEventInput): Promise<void>;
 };
 
 export type TicketServiceDeps = {
@@ -171,8 +177,6 @@ export type TicketServiceDeps = {
   getActor: () => Promise<Actor | null>;
   withPermission: WithPermission;
   generateReference?: () => string;
-  audit: (event: BusinessAuditEvent) => Promise<void>;
-  writeEvent: (tx: TicketRepository, event: DomainEventInput) => Promise<void>;
   now?: () => Date;
 };
 
@@ -213,12 +217,20 @@ function normalizeContext(context: TicketContextInput | undefined): TicketContex
 }
 
 function contextDto(ticket: TicketRecord) {
-  if (ticket.cohortId) return { kind: "COHORT" as const, id: ticket.cohortId };
-  if (ticket.courseId) return { kind: "COURSE" as const, id: ticket.courseId };
-  if (ticket.orderId) return { kind: "ORDER" as const, id: ticket.orderId };
-  if (ticket.submissionId) return { kind: "SUBMISSION" as const, id: ticket.submissionId };
-  if (ticket.certificateId) return { kind: "CERTIFICATE" as const, id: ticket.certificateId };
-  return null;
+  const context =
+    ticket.cohortId ? { kind: "COHORT" as TicketContextKind, id: ticket.cohortId }
+    : ticket.courseId ? { kind: "COURSE" as TicketContextKind, id: ticket.courseId }
+    : ticket.orderId ? { kind: "ORDER" as TicketContextKind, id: ticket.orderId }
+    : ticket.submissionId ? { kind: "SUBMISSION" as TicketContextKind, id: ticket.submissionId }
+    : ticket.certificateId ? { kind: "CERTIFICATE" as TicketContextKind, id: ticket.certificateId }
+    : null;
+  if (!context) return null;
+  return {
+    kind: context.kind,
+    safeReference: ticketSafeContextReference(context.kind, context.id),
+    href: null,
+    locked: true,
+  };
 }
 
 function attachmentDto(attachment: TicketAttachmentRecord) {
@@ -232,7 +244,7 @@ function attachmentDto(attachment: TicketAttachmentRecord) {
   };
 }
 
-function ticketSummaryDto(ticket: TicketRecord) {
+function learnerSummaryDto(ticket: TicketRecord) {
   return {
     id: ticket.id,
     reference: ticket.reference,
@@ -242,7 +254,6 @@ function ticketSummaryDto(ticket: TicketRecord) {
     status: ticket.status,
     queue: ticket.queue,
     version: ticket.version,
-    assigneeId: ticket.assigneeId,
     context: contextDto(ticket),
     createdAt: ticket.createdAt,
     updatedAt: ticket.updatedAt,
@@ -252,17 +263,66 @@ function ticketSummaryDto(ticket: TicketRecord) {
   };
 }
 
+function staffSummaryDto(ticket: TicketRecord) {
+  return {
+    ...learnerSummaryDto(ticket),
+    assigneeId: ticket.assigneeId,
+  };
+}
+
+function ticketSummaryDto(ticket: TicketRecord) {
+  return staffSummaryDto(ticket);
+}
+
 function learnerDetailDto(ticket: TicketRecord, messages: TicketMessageRecord[]) {
   return {
-    ...ticketSummaryDto(ticket),
+    ...learnerSummaryDto(ticket),
     messages: messages.map((message) => ({
       id: message.id,
       kind: message.kind,
-      authorId: message.authorId,
       body: message.body,
       createdAt: message.createdAt,
       attachments: message.attachments.map(attachmentDto),
     })),
+  };
+}
+
+function staffMessageDto(message: TicketMessageRecord) {
+  return {
+    id: message.id,
+    ticketId: message.ticketId,
+    authorId: message.authorId,
+    kind: message.kind,
+    visibility: message.visibility,
+    body: message.body,
+    createdAt: message.createdAt,
+    attachments: message.attachments.map(attachmentDto),
+  };
+}
+
+function isUniqueReferenceCollision(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002" &&
+    (!("meta" in error) || JSON.stringify(error.meta).includes("reference"))
+  );
+}
+
+function ticketAudit(
+  ticket: TicketRecord,
+  action: string,
+  actorId: string | null,
+  after: Record<string, unknown> = {},
+): BusinessAuditEvent {
+  return {
+    actorId,
+    action,
+    targetType: "Ticket",
+    targetId: ticket.id,
+    outcome: "SUCCESS",
+    after: { reference: ticket.reference, ...after },
   };
 }
 
@@ -276,7 +336,7 @@ function staffDetailDto(
       kind: "MESSAGE" as const,
       id: message.id,
       createdAt: message.createdAt,
-      message,
+      message: staffMessageDto(message),
     })),
     ...events.map((event) => ({
       kind: "EVENT" as const,
@@ -285,7 +345,7 @@ function staffDetailDto(
       event,
     })),
   ].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id));
-  return { ...ticketSummaryDto(ticket), timeline };
+  return { ...staffSummaryDto(ticket), timeline };
 }
 
 export function createTicketService(deps: TicketServiceDeps) {
@@ -306,8 +366,13 @@ export function createTicketService(deps: TicketServiceDeps) {
     return deps.repository.runInTransaction(async (tx) => {
       let ticket: TicketRecord | null = null;
       for (let attempt = 0; attempt < 3 && !ticket; attempt += 1) {
-        const reference = generateReferenceValue();
-        ticket = await tx.createTicket({ reference, userId: actor.userId, category: input.category, subject, context });
+        try {
+          const reference = generateReferenceValue();
+          ticket = await tx.createTicket({ reference, userId: actor.userId, category: input.category, subject, context });
+        } catch (error) {
+          if (isUniqueReferenceCollision(error)) continue;
+          throw error;
+        }
       }
       if (!ticket) throw new Error("Could not allocate a support ticket reference.");
 
@@ -319,7 +384,7 @@ export function createTicketService(deps: TicketServiceDeps) {
         body,
       });
       await tx.createEvent({ ticketId: ticket.id, actorId: actor.userId, type: "CREATED" });
-      await deps.audit({
+      await tx.audit({
         actorId: actor.userId,
         action: "ticket.created",
         targetType: "Ticket",
@@ -327,18 +392,18 @@ export function createTicketService(deps: TicketServiceDeps) {
         outcome: "SUCCESS",
         after: { reference: ticket.reference, category: ticket.category, context },
       });
-      await deps.writeEvent(tx, {
+      await tx.writeDomainEvent({
         type: "ticket.created",
         payload: { ticketId: ticket.id, reference: ticket.reference, requesterId: actor.userId },
         occurredAt: now(),
       });
-      return ticketSummaryDto(ticket);
+      return learnerSummaryDto(ticket);
     });
   }
 
   async function listOwnTickets() {
     const actor = requireActor(await deps.getActor());
-    return (await deps.repository.listOwn(actor.userId)).map(ticketSummaryDto);
+    return (await deps.repository.listOwn(actor.userId)).map(learnerSummaryDto);
   }
 
   async function getOwnTicketByReference(reference: string) {
@@ -373,7 +438,7 @@ export function createTicketService(deps: TicketServiceDeps) {
           operation(ticket, tx, ctx.actor),
         );
         if (!updated) throw new StaleTicketVersionError();
-        return ticketSummaryDto(updated);
+        return staffSummaryDto(updated);
       }),
     )(input);
   }
@@ -390,7 +455,7 @@ export function createTicketService(deps: TicketServiceDeps) {
         operation(ticket, tx, actor),
       );
       if (!updated) throw new StaleTicketVersionError();
-      return ticketSummaryDto(updated);
+      return learnerSummaryDto(updated);
     });
   }
 
@@ -410,6 +475,7 @@ export function createTicketService(deps: TicketServiceDeps) {
         assigneeBeforeId: before.assigneeId,
         assigneeAfterId: actor.userId,
       });
+      await tx.audit(ticketAudit(ticket, "ticket.claimed", actor.userId, { assigneeId: actor.userId }));
     });
   }
 
@@ -436,11 +502,12 @@ export function createTicketService(deps: TicketServiceDeps) {
         assigneeBeforeId: before.assigneeId,
         assigneeAfterId: input.assigneeId,
       });
-      await deps.writeEvent(tx, {
+      await tx.writeDomainEvent({
         type: "ticket.assigned",
         payload: { ticketId: ticket.id, reference: ticket.reference, assigneeId: input.assigneeId },
         occurredAt: now(),
       });
+      await tx.audit(ticketAudit(ticket, "ticket.assigned", actor.userId, { assigneeId: input.assigneeId }));
     });
   }
 
@@ -452,11 +519,12 @@ export function createTicketService(deps: TicketServiceDeps) {
       if (before !== after) ticket.status = after;
       if (!ticket.firstRespondedAt) ticket.firstRespondedAt = now();
       await tx.createMessage({ ticketId: ticket.id, authorId: actor.userId, kind: "REPLY", visibility: "PUBLIC", body });
-      await deps.writeEvent(tx, {
+      await tx.writeDomainEvent({
         type: "ticket.public_reply_added",
         payload: { ticketId: ticket.id, reference: ticket.reference, recipientId: ticket.userId },
         occurredAt: now(),
       });
+      await tx.audit(ticketAudit(ticket, "ticket.public_reply_added", actor.userId));
     });
   }
 
@@ -464,6 +532,7 @@ export function createTicketService(deps: TicketServiceDeps) {
     return mutateStaffTicket(input, async (ticket, tx, actor) => {
       const body = trimBounded(input.body, "Internal note", 1, 5_000);
       await tx.createMessage({ ticketId: ticket.id, authorId: actor.userId, kind: "INTERNAL_NOTE", visibility: "INTERNAL", body });
+      await tx.audit(ticketAudit(ticket, "ticket.internal_note_added", actor.userId));
     });
   }
 
@@ -485,6 +554,7 @@ export function createTicketService(deps: TicketServiceDeps) {
         priorityBefore: before,
         priorityAfter: input.priority,
       });
+      await tx.audit(ticketAudit(ticket, "ticket.priority_changed", actor.userId, { priority: input.priority }));
     });
   }
 
@@ -511,11 +581,12 @@ export function createTicketService(deps: TicketServiceDeps) {
         queueBefore: before.queue,
         queueAfter: ticket.queue,
       });
-      await deps.writeEvent(tx, {
+      await tx.writeDomainEvent({
         type: "ticket.escalated",
         payload: { ticketId: ticket.id, reference: ticket.reference, queue: ticket.queue },
         occurredAt: now(),
       });
+      await tx.audit(ticketAudit(ticket, "ticket.escalated", actor.userId, { queue: ticket.queue }));
     });
   }
 
@@ -534,6 +605,7 @@ export function createTicketService(deps: TicketServiceDeps) {
         assigneeBeforeId: before.assigneeId,
         assigneeAfterId: actor.userId,
       });
+      await tx.audit(ticketAudit(ticket, "ticket.escalation_accepted", actor.userId, { assigneeId: actor.userId }));
     });
   }
 
@@ -551,11 +623,12 @@ export function createTicketService(deps: TicketServiceDeps) {
         statusBefore: before,
         statusAfter: "RESOLVED",
       });
-      await deps.writeEvent(tx, {
+      await tx.writeDomainEvent({
         type: "ticket.resolved",
         payload: { ticketId: ticket.id, reference: ticket.reference, requesterId: ticket.userId },
         occurredAt: now(),
       });
+      await tx.audit(ticketAudit(ticket, "ticket.resolved", actor.userId));
     });
   }
 
@@ -577,11 +650,12 @@ export function createTicketService(deps: TicketServiceDeps) {
         statusBefore: before,
         statusAfter: after,
       });
-      await deps.writeEvent(tx, {
+      await tx.writeDomainEvent({
         type: "ticket.reopened",
         payload: { ticketId: ticket.id, reference: ticket.reference, ownerId: ticket.assigneeId },
         occurredAt: now(),
       });
+      await tx.audit(ticketAudit(ticket, "ticket.reopened", actor.userId));
     });
   }
 
@@ -600,11 +674,12 @@ export function createTicketService(deps: TicketServiceDeps) {
         statusBefore: before,
         statusAfter: "CLOSED",
       });
-      await deps.writeEvent(tx, {
+      await tx.writeDomainEvent({
         type: "ticket.closed",
         payload: { ticketId: ticket.id, reference: ticket.reference, requesterId: ticket.userId },
         occurredAt: now(),
       });
+      await tx.audit(ticketAudit(ticket, "ticket.closed", actor.userId));
     });
   }
 
@@ -680,7 +755,29 @@ function createPrismaTicketRepository(client: AnyPrisma): TicketRepository {
     }).then((rows: any[]) => rows.map(mapMessage)),
     listAllMessages: (ticketId) => client.ticketMessage.findMany({
       where: { ticketId },
-      include: { attachments: true },
+      select: {
+        id: true,
+        ticketId: true,
+        authorId: true,
+        kind: true,
+        visibility: true,
+        body: true,
+        createdAt: true,
+        attachments: {
+          select: {
+            id: true,
+            ticketId: true,
+            messageId: true,
+            uploadedById: true,
+            filename: true,
+            mimeType: true,
+            sizeBytes: true,
+            uploadStatus: true,
+            uploadedAt: true,
+            createdAt: true,
+          },
+        },
+      },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }).then((rows: any[]) => rows.map(mapMessage)),
     listEvents: (ticketId) => client.ticketEvent.findMany({
@@ -711,6 +808,8 @@ function createPrismaTicketRepository(client: AnyPrisma): TicketRepository {
       return client.ticket.findUnique({ where: { id: copy.id } }).then(mapTicket);
     },
     runInTransaction: (fn) => client.$transaction((tx: AnyPrisma) => fn(createPrismaTicketRepository(tx))),
+    audit: (event) => recordAuditInTransaction(client as never, event),
+    writeDomainEvent: (event) => writeDomainEvent(client as never, event),
   };
 }
 
@@ -721,8 +820,6 @@ const liveService = createTicketService({
     return getCurrentActor();
   },
   withPermission: liveWithPermission,
-  audit: async (event) => recordAuditInTransaction(prisma as never, event),
-  writeEvent: async (_tx, event) => writeDomainEvent(prisma as never, event),
 });
 
 export const createOwnTicket = liveService.createOwnTicket;

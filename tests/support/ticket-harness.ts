@@ -126,6 +126,12 @@ export function makeTicketHarness(opts: { actorId: string }) {
       return ticket;
     },
     runInTransaction: async (fn) => fn(repo),
+    audit: async (entry) => {
+      audits.push(entry);
+    },
+    writeDomainEvent: async (event) => {
+      domainEvents.push(event);
+    },
   };
 
   harness.deps = {
@@ -133,12 +139,6 @@ export function makeTicketHarness(opts: { actorId: string }) {
     getActor: async () => ({ userId: opts.actorId }),
     withPermission,
     generateReference: () => "KQT-20260921-ABCDEF12",
-    audit: async (entry) => {
-      audits.push(entry);
-    },
-    writeEvent: async (_tx, event) => {
-      domainEvents.push(event);
-    },
     now: () => now,
   };
 
