@@ -1,8 +1,8 @@
 ---
 phase: 12
 slug: support-tickets
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-09-21
 ---
@@ -56,6 +56,20 @@ created: 2026-09-21
 - [ ] `tests/components/support-workspace.test.tsx` and `tests/components/learner-support.test.tsx` — UI interaction and disclosure states.
 - [ ] Framework install: none; existing Vitest/jsdom/Testcontainers infrastructure is sufficient.
 
+## Plan Verification Map
+
+| Plan | Automated sampling | Requirements / decisions |
+|------|--------------------|--------------------------|
+| 12-01 | Prisma validate/migrate/generate/typecheck; lifecycle/reference unit tests | SUP-01, SUP-02, SUP-04, SUP-05; D-02, D-03, D-04, D-08, D-09, D-13, D-15, D-18 |
+| 12-02 | aggregate/privacy/context unit tests; Support Agent PostgreSQL RBAC | SUP-01–SUP-05; D-04–D-15, D-18 |
+| 12-03 | attachment service/route/cleanup and boundary tests | SUP-01, SUP-02; D-03, D-05, D-11, D-14 |
+| 12-04 | auto-close unit/boundary and PostgreSQL concurrency tests | SUP-02; D-04 |
+| 12-05 | learner support list/create/detail component and action tests | SUP-01, SUP-02, SUP-05; D-01–D-05, D-14 |
+| 12-06 | dashboard ticket summary and contextual-entry service/component tests | SUP-01, SUP-05; D-01, D-05, D-14, D-18 |
+| 12-07 | staff queue/detail/action/route component tests | SUP-02–SUP-05; D-06–D-15, D-18 |
+| 12-08 | report registry/query/component/export and PostgreSQL reconciliation tests | SUP-06; D-09, D-16–D-20 |
+| 12-09 | cross-surface attack matrix; full Prisma/type/lint/test/build gates; deployed human checkpoint | SUP-01–SUP-06; all security/privacy and external-state contracts |
+
 ## Manual-Only Verifications
 
 | Behavior | Requirement | Why Manual | Test Instructions |
@@ -66,11 +80,11 @@ created: 2026-09-21
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verification or explicit Wave 0 dependencies.
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verification.
-- [ ] Wave 0 covers all missing references.
-- [ ] No watch-mode flags.
-- [ ] Feedback latency under 30 seconds for targeted tests.
-- [ ] `nyquist_compliant: true` set after the final plan map is populated.
+- [x] All 25 planned tasks have an `<automated>` verification command; the deployed walkthrough additionally remains a blocking human checkpoint.
+- [x] Sampling continuity: no task lacks automated sampling, so no 3-task gap exists.
+- [x] Wave 0 names every missing test artifact and each artifact is assigned to a concrete plan.
+- [x] No watch-mode flags appear in the plan set.
+- [x] Ordinary unit/component task commands are scoped to the 30-second target; explicitly serial Docker/full-suite gates are final-wave exceptions.
+- [x] `nyquist_compliant: true` is set after mapping every validation row to plans 12-01 through 12-09.
 
-**Approval:** pending plan generation and UI-SPEC integration
+**Approval:** structurally complete for execution; `wave_0_complete` remains false until the planned files exist and execute. Plan 12-09 reconciles this document from actual evidence.

@@ -653,7 +653,41 @@ Wave 13 *(blocked on Wave 12; human-only)*
   4. Staff can escalate a ticket to another owner/queue with a reason, preserving history and visible in reporting; contextual links to learner/cohort/order/submission/certificate records re-check permission on open. (SUP-04, SUP-05)
   5. Ticket volume, age, priority, status, ownership, response, resolution, and escalation are reportable and exportable, excluding private notes. (SUP-06)
 
-**Plans**: TBD
+**Plans**: 9 plans
+
+**Wave 1**
+
+- [ ] 12-01-PLAN.md — establish ticket persistence, schema synchronization, and pure lifecycle/reference/upload contracts.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 12-02-PLAN.md — implement the authorized ticket aggregate, privacy-shaped projections, commands, context links, and durable events.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 12-03-PLAN.md — deliver private ticket attachment upload, completion, download, and stale-upload cleanup.
+- [ ] 12-04-PLAN.md — implement bounded automatic closure and prove scheduled/interactive concurrency safety.
+- [ ] 12-08-PLAN.md — activate reconciled support reporting and privacy-safe CSV export.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 12-05-PLAN.md — build the learner ticket list, creation, public chronology, reply, reopen, and close journey.
+- [ ] 12-07-PLAN.md — build the permission-gated staff support queue, detail workspace, and operational actions.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 12-06-PLAN.md — connect support to the learner dashboard and authorized contextual “Get help” entry points.
+
+**Wave 6** *(blocked on Waves 3–5 completion)*
+
+- [ ] 12-09-PLAN.md — run cross-surface attack tests, full quality gates, and the blocking deployed lifecycle walkthrough.
+
+**Cross-cutting constraints:**
+
+- Learner and staff projections remain structurally separate; internal notes, hidden events, attachment metadata, and their existence never reach learner or general-export payloads.
+- Every protected read and mutation is server-authorized, while contextual records independently re-check their own domain permissions.
+- Lifecycle mutations use version-guarded transactions that atomically persist state, attributable ticket history, security audit, and minimal redacted Phase 13 events.
+- Ticket attachments use private storage, strict type/count/size verification, denial-parity downloads, and bounded cleanup; no malware-scanner capability is implied.
 **UI hint**: yes
 
 ---
@@ -726,7 +760,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
-| 12. Support Tickets | 0/TBD | Not started | - |
+| 12. Support Tickets | 0/9 | Planned | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |
