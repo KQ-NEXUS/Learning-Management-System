@@ -27,7 +27,7 @@ export type InstructorsPanelProps = {
 const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
 
 export function InstructorsPanel({ cohortId, instructors, canManage }: InstructorsPanelProps) {
   const router = useRouter();
@@ -58,16 +58,35 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
   }
 
   return (
-    <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-xs">
-      <h2 className="text-sm font-semibold text-foreground">Instructors</h2>
+    <section aria-label="Instructors" className="flex flex-col">
+      <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+        Instructors
+      </h2>
       {instructors.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No instructor assigned to this cohort.</p>
+        <p className="border-t border-foreground pt-4 text-sm text-muted-foreground">
+          No instructor assigned to this cohort.
+        </p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul className="border-t border-foreground">
           {instructors.map((row) => (
-            <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
-              <span>
-                {row.userName} <span className="text-muted-foreground">{row.userEmail}</span>
+            <li key={row.id} className="flex items-center justify-between gap-4 border-b border-border py-4 text-sm">
+              <span className="flex min-w-0 items-center gap-4">
+                <span
+                  aria-hidden
+                  className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-wash text-[13px] font-semibold text-accent"
+                >
+                  {row.userName
+                    .split(/s+/)
+                    .map((part) => part[0])
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase()}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold text-foreground">{row.userName}</span>
+                  <span className="block truncate text-[13px] text-muted-foreground">{row.userEmail}</span>
+                </span>
               </span>
               {canManage ? (
                 <button
@@ -84,7 +103,7 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
         </ul>
       )}
       {canManage ? (
-        <div className="flex items-end gap-2 pt-1">
+        <div className="flex items-end gap-2 pt-4">
           <label className="flex flex-col gap-1 text-sm">
             Add instructor (user id)
             <input

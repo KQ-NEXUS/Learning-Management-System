@@ -41,10 +41,14 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 // Type scale — 04.1-UI-SPEC §4.3
 // ---------------------------------------------------------------------------
 
-/** Primitive / app-UI scale — exactly 4 sizes. */
-const PRIMITIVE_FONT_PX = new Set([25, 16, 14, 11]);
-/** Marketing / display scale — exactly 4 sizes, drawn once each on front-of-house screens. */
-const DISPLAY_FONT_PX = new Set([42, 33, 28, 22]);
+/**
+ * Primitive / app-UI scale (redesign): 48 and 36 are the page title (PageHeader), 20 a section
+ * heading, 16 emphasis, 14 body and table text, 13 captions and column labels, 12 mono times and
+ * eyebrow labels. The old 25px and 11px sizes are retired.
+ */
+const PRIMITIVE_FONT_PX = new Set([48, 36, 22, 20, 16, 14, 13, 12]);
+/** Marketing / display scale — front-of-house headlines. 48 and 36 join the original four. */
+const DISPLAY_FONT_PX = new Set([66, 56, 48, 42, 36, 34, 33, 28, 24, 22, 18]);
 
 /** Named Tailwind font-size utilities -> px (default theme). */
 const FONT_SIZE_KEYWORDS: Record<string, number> = {
@@ -74,14 +78,15 @@ const FONT_WEIGHTS: Record<string, number> = {
   "font-black": 900,
 };
 
-/** Exactly two weights are active this phase (UI-SPEC §4.3): 400 and 600. */
-const ACTIVE_WEIGHTS = new Set([400, 600]);
+/** Redesign weights: 400 body, 500 nav and table labels, 600 headings and buttons, 700 page titles. */
+const ACTIVE_WEIGHTS = new Set([400, 500, 600, 700]);
 
 // ---------------------------------------------------------------------------
-// Spacing grid — 04.1-UI-SPEC §3.1: 4, 8, 16, 24, 32, 48, 64px (plus 0)
+// Spacing grid — redesign: every multiple of 4px up to 64px (plus 0). The old grid skipped
+// 12, 20, 28, 40 and 56, which the new shells and page bands rely on.
 // ---------------------------------------------------------------------------
 
-const ALLOWED_SPACING_PX = new Set([0, 4, 8, 16, 24, 32, 48, 64]);
+const ALLOWED_SPACING_PX = new Set([0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]);
 
 const SPACING_PREFIXES = [
   "space-x",
@@ -470,7 +475,7 @@ const COLOR_ROLES = new Set([
   "foreground", "background", "surface", "surface-2", "muted-foreground",
   "border", "input-border",
   "accent", "accent-deep", "accent-contrast",
-  "teal-fill", "teal-text", "teal-deep",
+  "progress-fill", "progress-text",
   "warning", "warning-fill", "warning-surface",
   "danger", "danger-surface", "success",
   "white", "black", "transparent", "current", "inherit",
@@ -638,33 +643,33 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
 
   it("flags a font-size outside the primitive scale", () => {
     const v: Violation[] = [];
-    checkClassString("text-[13px]", PRIMITIVE, v);
+    checkClassString("text-[17px]", PRIMITIVE, v);
     expect(v.map((x) => x.kind)).toEqual(["font-size"]);
   });
 
-  it("flags text-xs (12px) in a primitive", () => {
+  it("flags text-lg (18px) in a primitive — a named size off the scale", () => {
     const v: Violation[] = [];
-    checkClassString("text-xs", PRIMITIVE, v);
+    checkClassString("text-lg", PRIMITIVE, v);
     expect(v).toHaveLength(1);
     expect(v[0].kind).toBe("font-size");
   });
 
-  it("flags font-medium — weight 500 is retired this phase", () => {
+  it("flags font-light — weight 300 is not an active weight", () => {
     const v: Violation[] = [];
-    checkClassString("font-medium", "src/components/primitives/ResourceForm.tsx", v);
+    checkClassString("font-light", "src/components/primitives/ResourceForm.tsx", v);
     expect(v).toHaveLength(1);
     expect(v[0].kind).toBe("font-weight");
   });
 
   it("flags off-grid spacing utilities", () => {
     const v: Violation[] = [];
-    checkClassString("px-2.5 gap-1.5 py-3 p-5 gap-0.5", "src/components/primitives/ConfirmModal.tsx", v);
+    checkClassString("px-2.5 gap-1.5 py-3.5 p-4.5 gap-0.5", "src/components/primitives/ConfirmModal.tsx", v);
     expect(v.filter((x) => x.kind === "spacing").map((x) => x.token).sort()).toEqual([
       "gap-0.5",
       "gap-1.5",
-      "p-5",
+      "p-4.5",
       "px-2.5",
-      "py-3",
+      "py-3.5",
     ]);
   });
 
@@ -674,11 +679,10 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
     expect(v).toEqual([]);
   });
 
-  it("still flags gap-5 outside the locked file — the exception does not leak", () => {
+  it("gap-5 (20px) sits on the redesign grid everywhere, so the D-21 exception is now redundant", () => {
     const v: Violation[] = [];
     checkClassString("gap-5", PRIMITIVE, v);
-    expect(v).toHaveLength(1);
-    expect(v[0].kind).toBe("spacing");
+    expect(v).toEqual([]);
   });
 
   it("passes the D-23 learner-shell header padding exception", () => {
@@ -687,10 +691,10 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
     expect(v).toEqual([]);
   });
 
-  it("does not global-allow px-7 / py-3.5 elsewhere", () => {
+  it("does not global-allow py-3.5 elsewhere (px-7 is 28px and on the redesign grid)", () => {
     const v: Violation[] = [];
     checkClassString("px-7 py-3.5", PRIMITIVE, v);
-    expect(v.map((x) => x.token).sort()).toEqual(["px-7", "py-3.5"]);
+    expect(v.map((x) => x.token).sort()).toEqual(["py-3.5"]);
   });
 
   it("ignores negative nudges, auto, sizing, positioning and sr-only", () => {
@@ -718,7 +722,7 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
   it("accepts the permitted primitive sizes, weights and grid steps", () => {
     const v: Violation[] = [];
     checkClassString(
-      "text-[25px] text-base text-sm text-[11px] font-normal font-semibold gap-1 gap-2 gap-4 gap-6 p-8 p-12",
+      "text-[36px] text-base text-sm text-xs font-normal font-semibold gap-1 gap-2 gap-4 gap-6 p-8 p-12",
       PRIMITIVE,
       v,
     );

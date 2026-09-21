@@ -9,18 +9,24 @@
  * the RSC boundary, the same way `SessionsTab`/`CohortsTable` do — this file
  * never receives a `Date`).
  *
- * The Progress / Assessment / Completion columns render the D-18 named third
+ * The Assessment / Completion columns still render the D-18 named third
  * state — `DeferredColumn` is a `{ kind: "deferred"; phase: 9 | 10 | 11 }`
  * discriminated union with NO numeric member, so there is no cast or
  * numeric fallback (a zero, which would read as "failing") that could
  * produce a fake result here even by accident; the type itself refuses one.
+ *
+ * The Progress column (DD-32, plan 09-13) widened: a pinned cohort now shows
+ * "{completed} of {total}" real counts (`TrackedProgress`); an unpinned
+ * cohort keeps rendering the D-18 deferred gap through `DeferredCell`. The
+ * learner's name links to the new per-learner staff progress page.
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
 import type { AttendanceComponent } from "@/server/services/attendance-component";
-import type { DeferredColumn } from "@/server/services/roster-service";
+import type { DeferredColumn, TrackedProgress } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
 import { formatTimestamp } from "@/lib/format-timestamp";
 
@@ -45,7 +51,7 @@ export type RosterRowView = {
   accessEndsAt: string | null;
   instructors: string[];
   attendance: AttendanceComponent;
-  progress: DeferredColumn;
+  progress: DeferredColumn | TrackedProgress;
   assessment: DeferredColumn;
   completion: DeferredColumn;
 };
@@ -58,6 +64,8 @@ export type RosterTabProps = {
   siblingCohorts?: { id: string; code: string }[];
   /** Learners eligible for a comped/corporate add — best-effort. */
   candidateLearners?: { id: string; name: string; email: string }[];
+  /** Show the enrolment actions (needs enrolments.manage). Default true. */
+  canManage?: boolean;
 };
 
 const STATUS_TONE: Record<string, "success" | "neutral" | "warning" | "danger"> = {
@@ -81,19 +89,40 @@ const STATUS_LABEL: Record<string, string> = {
 /** D-18 — the exact literal labels the grep gate and the component test key
  *  off. Never computed via a template so the strings are physically present
  *  in this file, not merely producible at runtime. */
-const DEFERRED_LABEL: Record<9 | 10 | 11, string> = {
+const DEFERRED_LABEL: Record<9 | 10 | 11 | 12, string> = {
   9: "not tracked yet · Phase 9",
   10: "not tracked yet · Phase 10",
   11: "not tracked yet · Phase 11",
+  12: "not tracked yet · Phase 12",
 };
 
 function DeferredCell({ column }: { column: DeferredColumn }) {
   return (
-    <span className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
+    <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
       <span aria-hidden className="font-mono">
         •
       </span>
       {DEFERRED_LABEL[column.phase]}
+    </span>
+  );
+}
+
+/** DD-32 — the real "{completed} of {total}" figure for a pinned cohort.
+ *  `0 of 0` (no required lessons in the offer) renders exactly like any
+ *  other count, never as the deferred gap — `total: 0` is a legitimate
+ *  tracked value, not a missing one. */
+function TrackedProgressCell({ progress }: { progress: TrackedProgress }) {
+  return (
+    <span className="flex items-center gap-3">
+      <span aria-hidden className="h-1 w-24 overflow-hidden rounded-full bg-accent-wash">
+        <span
+          className="block h-full rounded-full bg-progress-fill"
+          style={{ width: `${Math.min(100, Math.round((progress.completed / Math.max(progress.total, 1)) * 100))}%` }}
+        />
+      </span>
+      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+        {progress.completed} of {progress.total}
+      </span>
     </span>
   );
 }
@@ -104,14 +133,12 @@ function DeferredCell({ column }: { column: DeferredColumn }) {
 function AttendanceCell({ attendance }: { attendance: AttendanceComponent }) {
   if (attendance.kind === "computed") {
     return (
-      <span className="font-mono text-[11px] tabular-nums">
-        {attendance.earnedPct}% / {attendance.requiredPct}%
-      </span>
+      <span className="tabular-nums">{attendance.earnedPct}%</span>
     );
   }
   const label = attendance.kind === "no-rule" ? "No attendance rule" : "No countable sessions yet";
   return (
-    <span className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
+    <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
       <span aria-hidden className="font-mono">
         •
       </span>
@@ -120,12 +147,7 @@ function AttendanceCell({ attendance }: { attendance: AttendanceComponent }) {
   );
 }
 
-function formatAccessWindow(startsAt: string | null, endsAt: string | null): string {
-  const fmt = (iso: string | null) => (iso ? new Date(iso).toISOString().slice(0, 10) : "—");
-  return `${fmt(startsAt)} → ${fmt(endsAt)}`;
-}
-
-const ACTION_BTN = "text-[11px] font-semibold underline underline-offset-2";
+const ACTION_BTN = "text-xs font-semibold underline underline-offset-2";
 
 export function RosterTab({
   cohortId,
@@ -133,6 +155,7 @@ export function RosterTab({
   denied,
   siblingCohorts,
   candidateLearners,
+  canManage = true,
 }: RosterTabProps) {
   const router = useRouter();
   const [target, setTarget] = useState<EnrolmentActionTarget | null>(null);
@@ -145,17 +168,24 @@ export function RosterTab({
     {
       key: "learner",
       header: "Learner",
-      render: (r) => r.learnerName,
+      render: (r) => (
+        <Link
+          href={`/staff/cohorts/${cohortId}/learners/${r.enrolmentId}`}
+          className="font-semibold text-foreground hover:underline"
+        >
+          {r.learnerName}
+        </Link>
+      ),
       subtitle: (r) => r.learnerEmail,
-      width: "18%",
+      width: "28%",
     },
     {
       key: "status",
-      header: "Enrolment status",
+      header: "Enrolment",
       render: (r) => (
         <span className="flex flex-col gap-1">
           <StatusPill label={STATUS_LABEL[r.status] ?? r.status} tone={STATUS_TONE[r.status] ?? "neutral"} />
-          <details className="text-[11px]">
+          <details className="text-xs">
             <summary className="cursor-pointer text-accent underline underline-offset-2 [&::-webkit-details-marker]:hidden">
               history{r.transitionCount > 0 ? ` (${r.transitionCount})` : ""}
             </summary>
@@ -176,43 +206,20 @@ export function RosterTab({
       width: "16%",
     },
     {
-      key: "accessWindow",
-      header: "Access window",
-      render: (r) => formatAccessWindow(r.accessStartsAt, r.accessEndsAt),
-      mono: true,
-      width: "14%",
-    },
-    {
       key: "attendance",
       header: "Attendance",
       render: (r) => <AttendanceCell attendance={r.attendance} />,
       width: "12%",
     },
     {
-      key: "instructor",
-      header: "Instructor",
-      render: (r) => (r.instructors.length > 0 ? r.instructors.join(", ") : "No instructor assigned"),
-      width: "12%",
-      hideOnMobile: true,
-    },
-    {
       key: "progress",
       header: "Progress",
-      render: (r) => <DeferredCell column={r.progress} />,
-      width: "9%",
-      hideOnMobile: true,
-    },
-    {
-      key: "assessment",
-      header: "Assessment",
-      render: (r) => <DeferredCell column={r.assessment} />,
-      width: "9%",
-      hideOnMobile: true,
-    },
-    {
-      key: "completion",
-      header: "Completion",
-      render: (r) => <DeferredCell column={r.completion} />,
+      render: (r) =>
+        r.progress.kind === "tracked" ? (
+          <TrackedProgressCell progress={r.progress} />
+        ) : (
+          <DeferredCell column={r.progress} />
+        ),
       width: "9%",
       hideOnMobile: true,
     },
@@ -220,6 +227,7 @@ export function RosterTab({
       key: "actions",
       header: "Actions",
       render: (r) => {
+        if (!canManage) return "—";
         const open = (t: EnrolmentActionTarget) => setTarget(t);
         if (r.status === "PENDING_PAYMENT") {
           return (
@@ -304,11 +312,11 @@ export function RosterTab({
         emptyHeading="No one is enrolled yet"
         emptyBody="Add an enrolment for a comped or corporate learner, or publish the cohort so learners can register."
         headerActions={
-          !denied && (
+          !denied && canManage && (
             <button
               type="button"
               onClick={() => setTarget({ action: "add", cohortId })}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
             >
               Add enrolment
             </button>

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import {
   loadProgrammeComposition,
@@ -33,18 +34,18 @@ export default async function ProgrammeArrangePage({
   return (
     <UnsavedOrderProvider>
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1">
-          <p className="font-mono text-[11px] text-muted-foreground">{composition.slug}</p>
-          <h1 className="text-lg font-semibold tracking-tight">
-            {composition.title} — courses
-          </h1>
-          <GuardedLink
-            href={`/staff/programmes/${id}`}
-            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-          >
-            Back to programme
-          </GuardedLink>
-        </div>
+        <PageHeader
+          title={`${composition.title} — courses`}
+          identifier={composition.slug}
+          actions={
+            <GuardedLink
+              href={`/staff/programmes/${id}`}
+              className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover"
+            >
+              Back to programme
+            </GuardedLink>
+          }
+        />
 
         <ProgrammeArrangeClient
           key={JSON.stringify(composition.members.map((m) => m.membershipId))}

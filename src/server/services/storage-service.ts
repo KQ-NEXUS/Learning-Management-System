@@ -19,6 +19,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
+import { Upload } from "@aws-sdk/lib-storage";
 import {
   S3Client,
   GetObjectCommand,
@@ -28,7 +30,11 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { downloadTtlFor, UPLOAD_URL_TTL_SECONDS } from "@/lib/upload-limits";
+import {
+  downloadTtlFor,
+  UPLOAD_URL_TTL_SECONDS,
+  validateUpload,
+} from "@/lib/upload-limits";
 
 function makeClient(endpoint: string | undefined): S3Client {
   return new S3Client({
@@ -92,6 +98,56 @@ export function finalStorageKeyFor(stagedKey: string): string {
     throw new Error("A final key can only be derived from a staged lesson upload.");
   }
   return stagedKey.replace(/^lesson-uploads\//, "lessons/");
+}
+
+/**
+ * `submissions/<enrolmentId>/<assessmentId>/<randomUUID()>` — Submission's
+ * final key. Mirrors `buildStorageKey`'s no-predictable-path rationale
+ * (NFR-06) in the Submission domain (ASM-04). Kept as a separate function
+ * from the Lesson builders above (not a shared parameterised helper) so a
+ * Lesson staged key can never be promoted into `submissions/` and vice versa
+ * (T-10-06).
+ */
+export function buildSubmissionStorageKey({
+  enrolmentId,
+  assessmentId,
+}: {
+  enrolmentId: string;
+  assessmentId: string;
+}): string {
+  return `submissions/${enrolmentId}/${assessmentId}/${randomUUID()}`;
+}
+
+/**
+ * `submission-uploads/<enrolmentId>/<assessmentId>/<randomUUID()>` — the key
+ * the browser is allowed to `PUT` to. It is never the final `submissions/`
+ * key, so a leaked upload URL can only overwrite an unpromoted staging
+ * object (T-10-06).
+ */
+export function buildStagedSubmissionStorageKey({
+  enrolmentId,
+  assessmentId,
+}: {
+  enrolmentId: string;
+  assessmentId: string;
+}): string {
+  return `submission-uploads/${enrolmentId}/${assessmentId}/${randomUUID()}`;
+}
+
+/**
+ * The deterministic final key for a staged Submission upload. Only a staged
+ * `submission-uploads/` key can be promoted — passing anything else
+ * (including a Lesson `lesson-uploads/` key) is a programming error and
+ * throws, the same shape `finalStorageKeyFor` uses for Lesson keys. This
+ * function is deliberately NOT a generalisation of `finalStorageKeyFor` — a
+ * Lesson staged key must remain incapable of promoting into `submissions/`
+ * (T-10-06).
+ */
+export function finalSubmissionKeyFor(stagedKey: string): string {
+  if (!stagedKey.startsWith("submission-uploads/")) {
+    throw new Error("A final key can only be derived from a staged submission upload.");
+  }
+  return stagedKey.replace(/^submission-uploads\//, "submissions/");
 }
 
 /**
@@ -189,4 +245,215 @@ export async function presignLessonObjectUrl(
   return getSignedUrl(presignClient, command, {
     expiresIn: downloadTtlFor(input.lessonType),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Certificate PDFs and certificate-template assets
+// ---------------------------------------------------------------------------
+
+/**
+ * The generated PDF key includes fresh randomness even when the certificate
+ * id is known, matching the no-predictable-path rule used by submissions.
+ */
+export function buildCertificateStorageKey({
+  certificateId,
+}: {
+  certificateId: string;
+}): string {
+  return `certificates/${certificateId}/${randomUUID()}`;
+}
+
+/** A final private key for an image used by a certificate template. */
+export function buildTemplateAssetStorageKey({
+  templateId,
+}: {
+  templateId: string;
+}): string {
+  return `certificate-template-assets/${templateId}/${randomUUID()}`;
+}
+
+/** A browser-writable staging key kept separate from final template assets. */
+export function buildStagedTemplateAssetStorageKey({
+  templateId,
+}: {
+  templateId: string;
+}): string {
+  return `certificate-template-asset-uploads/${templateId}/${randomUUID()}`;
+}
+
+/** Derives a retry-safe final template-asset key only from its own staging domain. */
+export function finalTemplateAssetKeyFor(stagedKey: string): string {
+  if (!stagedKey.startsWith("certificate-template-asset-uploads/")) {
+    throw new Error("A final key can only be derived from a staged certificate-template asset upload.");
+  }
+  return stagedKey.replace(
+    /^certificate-template-asset-uploads\//,
+    "certificate-template-assets/",
+  );
+}
+
+/** Writes a server-generated certificate directly to private object storage. */
+export async function putGeneratedCertificateObject(input: {
+  key: string;
+  body: Uint8Array;
+  contentType: string;
+}): Promise<void> {
+  if (input.contentType !== "application/pdf") {
+    throw new Error("Generated certificate objects must use application/pdf.");
+  }
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucketName(),
+      Key: input.key,
+      Body: input.body,
+      ContentType: input.contentType,
+    }),
+  );
+}
+
+/** Creates a short-lived download URL for one generated certificate PDF. */
+export async function presignCertificateObjectUrl(input: {
+  key: string;
+}): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: input.key,
+    ResponseContentDisposition: "attachment",
+    ResponseContentType: "application/pdf",
+  });
+
+  return getSignedUrl(presignClient, command, {
+    expiresIn: downloadTtlFor("FILE"),
+  });
+}
+
+/**
+ * Fetches a private object's full bytes directly, server-side only. Added for
+ * `certificate-issuance-service.ts`'s live `resolveTemplateAsset` binding
+ * (plan 11-07) — the PDF renderer never touches object storage itself
+ * (T-11-14, `certificate-pdf-renderer.ts`'s header); this is the one call
+ * site that resolves a template's image `assetKey` into bytes on its behalf
+ * so a logo/signature/background can be embedded into the rendered PDF. Not
+ * part of any browser-reachable flow — a browser only ever receives a
+ * presigned URL (`presignTemplateAssetUploadUrl`, `presignLessonObjectUrl`).
+ */
+export async function getObjectBytes(key: string): Promise<Uint8Array> {
+  const result = await s3.send(
+    new GetObjectCommand({ Bucket: bucketName(), Key: key }),
+  );
+  if (!result.Body) {
+    throw new Error(`No object body for key ${key}.`);
+  }
+  return result.Body.transformToByteArray();
+}
+
+/** How long a template-image preview link stays valid: long enough to keep an editor open. */
+const TEMPLATE_ASSET_VIEW_TTL_SECONDS = 300;
+
+/**
+ * Creates a short-lived, inline view link for one stored template image, so the template editor
+ * can show a design it has already saved. It signs only keys inside the FINAL template-asset
+ * folder: not staged uploads, generated certificates, submissions or anything else, and not a key
+ * that tries to climb out with `..`. Callers authorize (`certificates.manage`) before asking.
+ */
+export async function presignTemplateAssetViewUrl(input: { key: string }): Promise<string> {
+  const prefix = "certificate-template-assets/";
+  if (
+    !input.key.startsWith(prefix) ||
+    input.key.length === prefix.length ||
+    input.key.split("/").some((part) => part === "..")
+  ) {
+    throw new Error("Only a stored certificate template image can be previewed.");
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: input.key,
+    ResponseContentDisposition: "inline",
+  });
+
+  return getSignedUrl(presignClient, command, { expiresIn: TEMPLATE_ASSET_VIEW_TTL_SECONDS });
+}
+
+/**
+ * Presigns a template image upload after applying the shared IMAGE MIME and
+ * size rules. The asset stays staged until the existing generic inspect and
+ * promote operations verify it.
+ */
+export async function presignTemplateAssetUploadUrl(input: {
+  key: string;
+  contentType: string;
+  contentLength: number;
+}): Promise<string> {
+  const validation = validateUpload({
+    lessonType: "IMAGE",
+    mimeType: input.contentType,
+    sizeBytes: input.contentLength,
+  });
+  if (!validation.ok) throw new Error(validation.message);
+
+  return getSignedUrl(
+    presignClient,
+    new PutObjectCommand({
+      Bucket: bucketName(),
+      Key: input.key,
+      ContentType: input.contentType,
+      ContentLength: input.contentLength,
+    }),
+    { expiresIn: UPLOAD_URL_TTL_SECONDS },
+  );
+}
+
+const EXPORT_KEY_PATTERN = /^exports\/[A-Za-z0-9_-]{8,128}\/[A-Za-z0-9._-]{1,32}\.csv$/;
+
+/** Stable across background retries, with no learner or original filename data. */
+export function buildExportStorageKey(jobId: string, datasetVersion: string): string {
+  const key = `exports/${jobId}/${datasetVersion}.csv`;
+  if (!EXPORT_KEY_PATTERN.test(key)) throw new Error("Invalid export storage identity.");
+  return key;
+}
+
+function assertExportKey(key: string): void {
+  if (!EXPORT_KEY_PATTERN.test(key)) throw new Error("Invalid export storage key.");
+}
+
+export async function uploadExportObject(input: { key: string; body: Readable }): Promise<void> {
+  assertExportKey(input.key);
+  const upload = new Upload({
+    client: s3,
+    params: {
+      Bucket: bucketName(),
+      Key: input.key,
+      Body: input.body,
+      ContentType: "text/csv; charset=utf-8",
+    },
+    queueSize: 2,
+    partSize: 5 * 1024 * 1024,
+    leavePartsOnError: false,
+  });
+  await upload.done();
+}
+
+export async function deleteExportObject(key: string): Promise<void> {
+  assertExportKey(key);
+  await s3.send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));
+}
+
+function exportDownloadTtl(): number {
+  const configured = Number(process.env.EXPORT_DOWNLOAD_TTL_SECONDS ?? 60);
+  return Number.isInteger(configured) ? Math.min(120, Math.max(30, configured)) : 60;
+}
+
+/** Called only after the download service rechecks current grants and expiry. */
+export async function presignExportObjectUrl(input: { key: string; filename: string }): Promise<string> {
+  assertExportKey(input.key);
+  const safeName = input.filename.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 100) || "export.csv";
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: input.key,
+    ResponseContentDisposition: `attachment; filename="${safeName}"`,
+    ResponseContentType: "text/csv; charset=utf-8",
+  });
+  return getSignedUrl(presignClient, command, { expiresIn: exportDownloadTtl() });
 }

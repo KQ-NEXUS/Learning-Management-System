@@ -10,21 +10,22 @@ const rows: CourseRow[] = [
 ];
 
 describe("CoursesTable", () => {
-  it("links to the course create screen while keeping unfinished bulk/export affordances disabled", () => {
+  it("links to the course create screen and offers no unfinished bulk or export controls", () => {
     render(<CoursesTable rows={rows} />);
     const cards = within(screen.getByRole("list"));
-    fireEvent.click(cards.getByRole("checkbox", { name: "Select diagnostics" }));
-    for (const name of ["Publish", "Archive…", "Export CSV"]) {
-      const button = screen.getByRole("button", { name }) as HTMLButtonElement;
-      expect(button.disabled).toBe(true);
-      const description = document.getElementById(button.getAttribute("aria-describedby") ?? "");
-      expect(description?.textContent).toBe("Not available on this screen");
-      expect(description?.closest('[hidden], [aria-hidden="true"], .sr-only')).toBeNull();
-      fireEvent.click(button);
-    }
     expect(screen.getByRole("link", { name: "New course" }).getAttribute("href")).toBe("/staff/courses/new");
     expect(cards.getByRole("link", { name: "Diagnostics" }).getAttribute("href")).toBe("/staff/courses/c1");
-    expect((cards.getByRole("checkbox", { name: "Select diagnostics" }) as HTMLInputElement).checked).toBe(true);
+    // Unfinished affordances are not rendered at all (they used to show as permanently disabled).
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    for (const name of ["Publish", "Archive…", "Export CSV"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
+
+  it("hides the create button for staff who cannot create courses", () => {
+    render(<CoursesTable rows={rows} canCreate={false} />);
+    expect(screen.queryByRole("link", { name: "New course" })).toBeNull();
+    expect(screen.getByRole("table")).toBeTruthy();
   });
 
   it("retains named search, segmented status filtering and sortable rows", () => {

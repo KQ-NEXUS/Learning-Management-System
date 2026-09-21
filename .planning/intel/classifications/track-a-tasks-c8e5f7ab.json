@@ -1,0 +1,13 @@
+{
+  "source_path": "C:/Users/USER/Documents/KQ NEXUS/Learning-Management-System/docs/TRACK-A-TASKS.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Track A — Lead Dev Task List",
+  "summary": "Seven-day task breakdown for lead developer implementing identity, commerce, and core platform features for LMS build.",
+  "scope": ["Next.js", "RBAC", "authentication", "user management", "registration", "payment processing", "Stripe", "Paystack", "order management", "audit logging", "role-based access control", "dashboard", "export", "reconciliation"],
+  "cross_refs": ["PRD Revision 3", "PXR Revision 3"],
+  "locked": false,
+  "precedence": 5,
+  "notes": ""
+}

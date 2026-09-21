@@ -61,13 +61,22 @@ export type ResourceFormProps = {
   onSubmit: (formData: FormData) => void | Promise<void>;
   onCancel?: () => void;
   onRetry?: () => void;
+  /**
+   * A wide, sectioned form: the band already carries the page title, so the form draws no heading of
+   * its own, and its children are `FormSection`s (a 280px title column beside the fields).
+   */
+  sectioned?: boolean;
+  /** Gives the <form> an id so a submit button elsewhere on the page (e.g. in the header band) can target it. */
+  formId?: string;
+  /** Omit the built-in Cancel/Save footer when the page provides its own submit control. */
+  hideFooter?: boolean;
   children: ReactNode;
 };
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-5 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-[46px] items-center rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
 
 export function ResourceForm({
   title,
@@ -80,6 +89,9 @@ export function ResourceForm({
   onSubmit,
   onCancel,
   onRetry,
+  sectioned = false,
+  formId,
+  hideFooter = false,
   children,
 }: ResourceFormProps) {
   const summaryId = useId();
@@ -128,13 +140,13 @@ export function ResourceForm({
 
   if (state.status === "denied") {
     return (
-      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
-        <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 border-t border-foreground py-12">
+        <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
         <p className="text-sm font-semibold text-foreground">Editing needs additional permission</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           Your role does not include{" "}
           {state.permission ? (
-            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-xs">
               {state.permission}
             </code>
           ) : (
@@ -148,7 +160,7 @@ export function ResourceForm({
 
   if (state.status === "error") {
     return (
-      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-card">
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 border-t border-foreground py-12">
         <p className="text-sm font-semibold text-foreground">Could not load this record</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           {state.message ?? "The request failed. Nothing has been changed."}
@@ -166,7 +178,7 @@ export function ResourceForm({
     return (
       <div
         aria-busy
-        className="mx-auto flex w-full max-w-[700px] flex-col gap-4 rounded-xl border border-border bg-surface px-6 py-6 shadow-card"
+        className="mx-auto flex w-full max-w-[700px] flex-col gap-4 border-t border-foreground pt-5"
       >
         <span className="h-4 w-48 animate-pulse rounded-sm bg-surface-2" />
         {Array.from({ length: 5 }, (_, i) => (
@@ -184,18 +196,23 @@ export function ResourceForm({
 
   return (
     <form
+      id={formId}
       ref={formRef}
       action={onSubmit}
       noValidate
-      className="mx-auto flex w-full max-w-[700px] flex-col rounded-xl border border-border bg-surface shadow-card"
+      className={`flex w-full flex-col ${sectioned ? "max-w-[1100px]" : "max-w-[720px]"}`}
     >
-      <div className="flex flex-col gap-4 px-6 py-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
-            {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      <div className="flex flex-col gap-6">
+        {sectioned ? (
+          <h2 className="sr-only">{title}</h2>
+        ) : (
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-[20px] font-semibold tracking-[-0.015em] text-foreground">{title}</h2>
+              {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+            </div>
           </div>
-        </div>
+        )}
 
         {errors.length > 0 && (
           <div
@@ -228,26 +245,54 @@ export function ResourceForm({
           </div>
         )}
 
-        <div className="flex flex-col gap-4">{children}</div>
+        <div className={sectioned ? "flex flex-col" : "flex flex-col gap-4"}>{children}</div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 rounded-b-xl border-t border-border bg-surface-2 px-6 py-4">
+      <div
+        className={`mt-8 flex flex-wrap items-center gap-4 border-t border-foreground pt-6 ${hideFooter ? "hidden" : ""}`}
+      >
         {draftStatus && (
-          <p className="font-mono text-[11px] text-muted-foreground">{draftStatus}</p>
+          <p className="font-mono text-xs text-muted-foreground">{draftStatus}</p>
         )}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button type="submit" disabled={pending} className={BTN_PRIMARY}>
-            {pending ? "Saving…" : submitLabel}
-          </button>
+        <div className="ml-auto flex flex-wrap items-center gap-3">
           {onCancel && (
             <button type="button" onClick={onCancel} className={BTN}>
               Cancel
             </button>
           )}
+          <button type="submit" disabled={pending} className={BTN_PRIMARY}>
+            {pending ? "Saving…" : submitLabel}
+          </button>
         </div>
       </div>
     </form>
   );
+}
+
+/** One row of a sectioned form: title and description on the left, the fields on the right. */
+export function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="grid gap-6 border-t border-border py-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-14">
+      <div className="flex flex-col gap-2">
+        <h3 className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      </div>
+      <div className="flex flex-col gap-5">{children}</div>
+    </section>
+  );
+}
+
+/** Two equal columns for related fields inside a `FormSection`. */
+export function FormGrid({ children }: { children: ReactNode }) {
+  return <div className="grid gap-5 sm:grid-cols-2">{children}</div>;
 }
 
 export type FormFieldProps = {
@@ -290,7 +335,7 @@ export function FormField({
       <label htmlFor={id} className="text-sm font-semibold text-foreground">
         {label}
         {required && (
-          <span className="ml-1 text-[11px] font-normal text-muted-foreground" aria-hidden>
+          <span className="ml-1 text-xs font-normal text-muted-foreground" aria-hidden>
             required
           </span>
         )}
@@ -304,7 +349,7 @@ export function FormField({
       })}
 
       {hint && !error && (
-        <p id={hintId} className="text-[11px] text-muted-foreground">
+        <p id={hintId} className="text-xs text-muted-foreground">
           {hint}
         </p>
       )}
@@ -325,7 +370,7 @@ export function TextInput(
   return (
     <input
       {...rest}
-      className={`h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger ${
+      className={`h-12 rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger ${
         mono ? "font-mono tabular-nums" : ""
       } ${className ?? ""}`}
     />

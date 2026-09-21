@@ -1,5 +1,5 @@
 import { courseService } from "@/server/services/course-service";
-import { AuthorizationError, AuthenticationError } from "@/server/permissions";
+import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { CoursesTable, type CourseRow } from "./CoursesTable";
 
 export const metadata = { title: "Courses" };
@@ -21,5 +21,7 @@ export default async function CoursesPage() {
     throw error;
   }
 
-  return <CoursesTable rows={courses} />;
+  // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
+  const canCreate = await can("courses.create", {});
+  return <CoursesTable rows={courses} canCreate={canCreate} />;
 }

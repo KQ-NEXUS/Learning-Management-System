@@ -61,6 +61,12 @@ import {
   type DomainEventTxClient,
 } from "@/server/services/domain-event-service";
 import { createCohortScopeResolvers } from "@/server/services/cohort-scope";
+import {
+  type CompletionServiceTxClient,
+  type CompletionRecalculationResult,
+} from "@/server/services/completion-service";
+import { recalculateCompletionAndIssue as recalculateCompletion } from "@/server/services/certificate-issuance-service";
+import { runTransactionThenSettleCertificateFiles } from "@/server/services/certificate-file-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 type Audit = (entry: ResourceAuditEntry) => Promise<void>;
@@ -267,6 +273,16 @@ export type AttendanceServiceDeps = {
   sessionScope: (sessionId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   now?: () => Date;
+  /**
+   * D-11 — injected exactly like `writeEvent`/`audit` so the existing unit
+   * tests keep running without a database. Defaults to the live
+   * `completion-service.ts` export where the live singleton is built at the
+   * bottom of this file.
+   */
+  recalculateCompletion: (
+    tx: CompletionServiceTxClient,
+    args: { enrolmentId: string; now: Date; actorId?: string | null },
+  ) => Promise<CompletionRecalculationResult>;
 };
 
 // ---------------------------------------------------------------------------
@@ -404,6 +420,18 @@ export function createAttendanceService(deps: AttendanceServiceDeps) {
         component,
         actorId,
       },
+    });
+
+    // D-11 — recalculate completion reactively, inside the SAME transaction
+    // as the attendance write. This is a direct same-tx call, not an outbox
+    // subscription: the "attendance.changed" event above remains Phase 13's
+    // to drain, and this call never reads it back.
+    await deps.recalculateCompletion(tx as unknown as CompletionServiceTxClient, {
+      enrolmentId,
+      now: now(),
+      // The staff member recording/correcting — so a resulting certificate
+      // review flag is attributed to them, not SYSTEM (plan 11-24, T-11-98).
+      actorId,
     });
 
     return { before, after: state, beforeNote: existing?.note ?? null, afterNote: note };
@@ -724,6 +752,13 @@ export function createPrismaBackedAttendanceService(
   client: AnyPrisma,
   withPermission: WithPermission,
   audit: Audit = liveAudit,
+  // D-03/CRD-06: swapped from the bare completion engine to the certificate-aware
+  // wrapper so an attendance correction issues/re-evaluates a certificate,
+  // without this file knowing certificates exist (plan 11-10).
+  recalculateCompletionDep: AttendanceServiceDeps["recalculateCompletion"] = recalculateCompletion,
+  // CR-01(b), plan 11-31: the post-commit certificate-file step. Omitted in
+  // production (the live settle); tests inject a spy or a rejecting fake.
+  settle?: (tx: object) => Promise<void>,
 ) {
   const scopeResolvers = createCohortScopeResolvers({
     cohort: client.cohort,
@@ -772,9 +807,20 @@ export function createPrismaBackedAttendanceService(
     },
     audit,
     writeEvent: writeDomainEvent,
-    runInTransaction: (fn) => client.$transaction((tx: unknown) => fn(tx as AttendanceTxClient)),
+    // Any certificate issued inside the transaction (via `recalculateCompletion`)
+    // is rendered and stored only AFTER `$transaction` has committed, in a step
+    // that can never fail or roll back the staff member's write (CR-01b). The
+    // SAME tx object must reach issuance and settle: the cast below is
+    // type-only, never a wrapper or proxy.
+    runInTransaction: (fn) =>
+      runTransactionThenSettleCertificateFiles(
+        (body) => client.$transaction((tx: unknown) => body(tx as AttendanceTxClient)),
+        fn,
+        settle,
+      ),
     sessionScope: scopeResolvers.sessionCohortScope,
     withPermission,
+    recalculateCompletion: recalculateCompletionDep,
   });
 }
 

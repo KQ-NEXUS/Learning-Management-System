@@ -215,7 +215,7 @@ function DrawerPanel({
                 <span className="flex flex-col text-sm">
                   <span className="font-semibold text-foreground">{selectedUser.name}</span>
                   {selectedUser.email && (
-                    <span className="text-[11px] text-muted-foreground">{selectedUser.email}</span>
+                    <span className="text-xs text-muted-foreground">{selectedUser.email}</span>
                   )}
                 </span>
                 <button
@@ -274,7 +274,7 @@ function DrawerPanel({
                               <span className="truncate text-sm font-semibold text-foreground">
                                 {row.name}
                               </span>
-                              <span className="truncate text-[11px] text-muted-foreground">{row.email}</span>
+                              <span className="truncate text-xs text-muted-foreground">{row.email}</span>
                             </button>
                           </li>
                         ))}
@@ -343,7 +343,7 @@ function DrawerPanel({
               <input type="text" aria-label="Search scope targets" placeholder="Search…" value={scopeQuery} onChange={event => { setScopeQuery(event.target.value); setScopeId(""); setScopeRetry(value => value + 1); }} className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm" />
               {scopeTargets.length === 0 && !scopeQuery && !scopePending && !scopeError ? (
                 <>
-                  <p className="text-[11px] text-muted-foreground">{EMPTY_STATE_COPY[scopeType]}</p>
+                  <p className="text-xs text-muted-foreground">{EMPTY_STATE_COPY[scopeType]}</p>
                   <select
                     id="drawer-scope-id"
                     name="scopeId"
@@ -384,7 +384,7 @@ function DrawerPanel({
           <div className="flex flex-col gap-1">
             <label htmlFor="drawer-ends-at" className="text-sm font-semibold text-foreground">
               End date
-              <span className="ml-1 text-[11px] font-normal text-muted-foreground">optional</span>
+              <span className="ml-1 text-xs font-normal text-muted-foreground">optional</span>
             </label>
             <input
               id="drawer-ends-at"

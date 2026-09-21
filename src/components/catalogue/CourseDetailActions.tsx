@@ -45,7 +45,7 @@ type Feedback = { tone: "success" | "danger"; text: string } | null;
 const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
 // Accent / danger secondaries — their own strings, not `${BTN} text-accent`, so the
 // colour isn't left to Tailwind source order against BTN's own `text-foreground`
 // / `border-input-border` (which wins, leaving the button ink-coloured).
@@ -283,6 +283,12 @@ export function CourseDetailActions({
           </button>
         )}
 
+        <a
+          href={`/staff/courses/${courseId}/assessments`}
+          className={BTN}
+        >
+          Assessments
+        </a>
         <a
           href={`/staff/courses/${courseId}/arrange`}
           className={BTN}

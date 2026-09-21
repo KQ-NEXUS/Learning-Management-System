@@ -14,10 +14,14 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AuditRow } from "@/server/services/audit-read-service";
 import { AuditTable } from "@/app/staff/audit/AuditTable";
 import { formatTimestamp } from "@/lib/format-timestamp";
+
+const auditExportAction = vi.hoisted(() => vi.fn());
+vi.mock("@/app/staff/audit/actions", () => ({ requestAuditExportAction: auditExportAction }));
+vi.mock("next/link", () => ({ default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => <a href={href} {...props}>{children}</a> }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -59,6 +63,37 @@ function makeRow(overrides: Partial<AuditRow> = {}): AuditRow {
 function mobileList(): HTMLElement {
   return screen.getByRole("list", { name: /audit history/i });
 }
+
+describe("Audit CSV export", () => {
+  const filters = { actorId: "staff-1", action: "course.publish", from: "2026-01-01", to: "2026-01-31" };
+  it("shows no export teaser without both current global grants", () => {
+    render(<AuditTable rows={[]} filters={filters} />);
+    expect(screen.queryByRole("button", { name: "Export audit CSV" })).toBeNull();
+  });
+  it("queues the safe projection with the current filters and links to history", async () => {
+    auditExportAction.mockResolvedValue({ ok: true, jobId: "job-1", status: "QUEUED" });
+    render(<AuditTable rows={[]} filters={filters} canExport />);
+    fireEvent.click(screen.getByRole("button", { name: "Export audit CSV" }));
+    const dialog = screen.getByRole("dialog", { name: "Audit CSV options" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Queue audit export" }));
+    await waitFor(() => expect(auditExportAction).toHaveBeenCalledWith(expect.objectContaining({ filters, columns: expect.arrayContaining(["eventId", "correlationId", "context"]) })));
+    expect(screen.getByRole("link", { name: "View export history" }).getAttribute("href")).toBe("/staff/reports/exports");
+    expect(auditExportAction.mock.calls[0][0].columns).not.toContain("actorEmail");
+  });
+  it("keeps sensitive reason and options after a failed queue attempt", async () => {
+    auditExportAction.mockResolvedValue({ ok: false, message: "Could not queue." });
+    render(<AuditTable rows={[]} filters={filters} canExport canExportSensitive />);
+    fireEvent.click(screen.getByRole("button", { name: "Export audit CSV" }));
+    const dialog = screen.getByRole("dialog", { name: "Audit CSV options" });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Include actor name and email" }));
+    const reason = within(dialog).getByRole("textbox", { name: "Operational reason" });
+    fireEvent.change(reason, { target: { value: "Case investigation" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Queue audit export" }));
+    await waitFor(() => expect(auditExportAction).toHaveBeenCalledWith(expect.objectContaining({ columns: expect.arrayContaining(["actorName", "actorEmail"]), reason: "Case investigation" })));
+    expect(within(dialog).getByRole("alert").textContent).toContain("Could not queue.");
+    expect((reason as HTMLTextAreaElement).value).toBe("Case investigation");
+  });
+});
 
 describe("AuditTable — mobile detail card (task 1)", () => {
   it("renders one semantic card per event with actor, action, target and timestamp", () => {

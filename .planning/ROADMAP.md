@@ -24,12 +24,12 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 3: Public Identity — Registration, Verification & Secure Sessions** *(Track A)* - Visitors register, verify, sign in/out, reset passwords, and manage profiles, resistant to enumeration/brute-force. (completed 2026-09-03)
 - [x] **Phase 4: Catalogue Authoring — Programmes, Courses, Modules & Lessons** *(Track B, parallel-eligible with Phases 2–3)* - Staff author Programmes, Modules, Lessons, and content, versioned and published. (completed 2026-09-03)
 - [x] **Phase 5: Cohorts, Scheduling, Enrolment Operations & Attendance** *(Track B, parallel-eligible with Phases 2–3)* - Staff stand up Cohorts, schedule sessions, manage enrolment lifecycle and capacity, mark and correct attendance. (completed 2026-09-07)
-- [ ] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement.
-- [ ] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
+- [x] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement. (completed 2026-09-12)
+- [x] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
 - [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
-- [ ] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion.
-- [ ] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides.
-- [ ] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly.
+- [x] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion. (completed 2026-09-15)
+- [x] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides. (completed 2026-09-16)
+- [x] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly. (completed 2026-09-19)
 - [ ] **Phase 12: Support Tickets** *(Track B, depends on Phase 2)* - Learners raise tickets; staff (including a non-Administrator Support role) triage, reply, escalate, and report.
 - [ ] **Phase 13: Transactional Communications & Notifications** *(Shared, depends on Phases 3, 5, 6, 7, 10, 11, 12)* - Every lifecycle event across the system sends exactly one deduplicated transactional email; in-product alerts surface important state.
 - [ ] **Phase 14: Software Licence & Deployment Control** *(Track A, depends on Phase 2; contingent — see note below)* - Provider-signed licence verification, status visibility, and expiry-driven read-only enforcement.
@@ -249,40 +249,42 @@ Plans:
 **Requirements**: REG-01, REG-02, REG-03, REG-04, REG-05, PAY-02, PAY-09, PAY-10
 **Success Criteria** (what must be TRUE):
 
-  1. A visitor can select an open Cohort and see current price, dates, mode, availability, prerequisites, and completion expectation before continuing. (REG-01)
-  2. The selected offer survives identity verification/sign-in and returns the learner to their intended order. (REG-02)
-  3. Each checkout attempt creates exactly one traceable, idempotent order; replays cannot create duplicate enrolments. (REG-03)
-  4. Required terms, privacy notice, refund/cancellation policy, and optional marketing consent are captured with versions, separately, at order time. (REG-04)
-  5. A learner can pay via Stripe; only a server-verified result (never a client redirect) marks the order paid and activates enrolment exactly once, through a shared, provider-agnostic payment state machine, and the learner receives a confirmation email and receipt/order record. (PAY-02, PAY-09, PAY-10, REG-05)
+  1. A visitor can select an open Cohort and see current price, dates, mode, availability, prerequisites, and completion expectation before continuing. (REG-01) — `tests/public-catalogue-service.test.ts`, `tests/components/cohort-cards.test.tsx` (10 boundary-state cases) automated; walkthrough step 1 of 06-09's twelve-step journey verified live 2026-09-12 (real Playwright session, screenshot reviewed — see 06-UAT.md).
+  2. The selected offer survives identity verification/sign-in and returns the learner to their intended order. (REG-02) — `tests/landing.test.ts` (20 cases), `tests/checkout-intent.test.ts` (9 cases) automated; `tests/checkout-intent.integration.test.ts` (4 cases) run for real against Testcontainers Postgres 2026-09-12, all passing; full brand-new-account walkthrough (register → verify → sign-in → resume to checkout) completed live, see 06-UAT.md tests 22/45.
+  3. Each checkout attempt creates exactly one traceable, idempotent order; replays cannot create duplicate enrolments. (REG-03) — `tests/checkout-service.test.ts` automated; `tests/checkout-webhook.integration.test.ts`'s redelivery/mismatch cases run for real 2026-09-12 (all passing); forgery/redirect security probes (walkthrough steps 11–12) verified live against a real order — unsigned webhook rejected with 400, direct navigation did not bypass payment.
+  4. Required terms, privacy notice, refund/cancellation policy, and optional marketing consent are captured with versions, separately, at order time. (REG-04) — `tests/checkout-service.test.ts`, `tests/components/checkout-summary.test.tsx` (13 cases) automated; consent-gate UI behavior and the three-row PolicyAcceptance database check both verified live 2026-09-12 with real Playwright automation (screenshots reviewed) — see 06-UAT.md tests 32/34.
+  5. A learner can pay via Stripe; only a server-verified result (never a client redirect) marks the order paid and activates enrolment exactly once, through a shared, provider-agnostic payment state machine, and the learner receives a confirmation email and receipt/order record. (PAY-02, PAY-09, PAY-10, REG-05) — `tests/checkout-phase-invariants.test.ts`, `tests/boundary.test.ts`, `tests/components/order-confirmation.test.tsx` automated; `tests/checkout-webhook.integration.test.ts` run for real 2026-09-12, all passing; full real order→Stripe session→signed-webhook settlement→receipt round trip verified live, including the honest exception-state rendering (real hold-expiry race reproduced, not simulated) — see 06-UAT.md.
 
-**Plans**: 1/9 plans executed across 6 waves (tracer-first: plan 03 proves the full visitor-to-enrolled path end to end — cohort card, order summary, Stripe Checkout, signature-verified webhook, receipt — before any expansion)
+**UAT**: 45/45 checks passed 2026-09-12 (23 auto-verified by the test suite at close-out, 22 verified live in this session — real Postgres, real Stripe test-mode traffic, real Playwright browser automation). See `06-UAT.md` for full detail per item. One non-blocking item flagged for a maintainer's review: a duplicate settlement-webhook delivery (self-inflicted during testing) still resulted in a correct final PAID/ACTIVE state, but logged an `order.exception` audit row alongside `order.paid` — worth confirming whether a second settlement attempt against an already-paid order should be a silent no-op instead.
+
+**Plans**: 9/9 plans executed across 6 waves (tracer-first: plan 03 proves the full visitor-to-enrolled path end to end — cohort card, order summary, Stripe Checkout, signature-verified webhook, receipt — before any expansion)
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Stripe SDK behind its package-legitimacy gate, the single client module, and the NGN currency probe (PAY-09, PAY-10)
+- [x] 06-01-PLAN.md — Stripe SDK behind its package-legitimacy gate, the single client module, and the NGN currency probe (PAY-09, PAY-10)
 - [x] 06-02-PLAN.md — Shared-module extensions: domain-event union, refund/cancellation policy type, `applyEnrolmentActivation` extraction, `PublicCohort` commerce fields (REG-01, REG-04, PAY-02, PAY-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-03-PLAN.md — Tracer: cohort selection through to a webhook-settled, ACTIVE enrolment, end to end (REG-01, REG-03, REG-05, PAY-02, PAY-09, PAY-10)
+- [x] 06-03-PLAN.md — Tracer: cohort selection through to a webhook-settled, ACTIVE enrolment, end to end (REG-01, REG-03, REG-05, PAY-02, PAY-09, PAY-10)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-04-PLAN.md — REG-02: cohort selection survives registration, verification and sign-in via a single-use intent cookie (REG-02)
-- [ ] 06-05-PLAN.md — REG-01 completeness: cohort-card boundary states and Programme offer parity (REG-01)
-- [ ] 06-06-PLAN.md — Webhook hardening: replay safety, amount cross-check, terminal-state guards, the hold-expiry race, and the import-closure gate (REG-03, PAY-02, PAY-09, PAY-10)
+- [x] 06-04-PLAN.md — REG-02: cohort selection survives registration, verification and sign-in via a single-use intent cookie (REG-02)
+- [x] 06-05-PLAN.md — REG-01 completeness: cohort-card boundary states and Programme offer parity (REG-01)
+- [x] 06-06-PLAN.md — Webhook hardening: replay safety, amount cross-check, terminal-state guards, the hold-expiry race, and the import-closure gate (REG-03, PAY-02, PAY-09, PAY-10)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 06-07-PLAN.md — REG-04: three versioned order-bound consents, the server-side pay gate, the hold countdown, and the decline/expired states (REG-04, PAY-02)
+- [x] 06-07-PLAN.md — REG-04: three versioned order-bound consents, the server-side pay gate, the hold countdown, and the decline/expired states (REG-04, PAY-02)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 06-08-PLAN.md — REG-05: confirmation email, the confirming interstitial, and the receipt with its honest exception sub-state (REG-05, PAY-02)
+- [x] 06-08-PLAN.md — REG-05: confirmation email, the confirming interstitial, and the receipt with its honest exception sub-state (REG-05, PAY-02)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 06-09-PLAN.md — Phase close: executable PAY-09/PAY-10 invariants, the full journey walkthrough, and record reconciliation (all eight requirements)
+- [x] 06-09-PLAN.md — Phase close: executable PAY-09/PAY-10 invariants, the full journey walkthrough, and record reconciliation (all eight requirements)
 
 **Cross-cutting constraints:**
 
@@ -290,6 +292,7 @@ Plans:
 - Stripe-specific types and imports stay inside `src/server/payments/providers/stripe/`, enforced by `tests/checkout-phase-invariants.test.ts` (PAY-09).
 - Seat capacity, holds and their expiry are Phase 5's `seat-accounting.ts` primitives called directly, never re-derived (D-09, D-12).
 - The amount charged is always read from the `Cohort` row inside the order-creation transaction, never accepted from a client (D-07).
+- Phase 6 D-07 remains the historical Stripe tracer behavior. Phase 7 supersedes it by migrating from one Cohort price to explicit NGN/USD base prices and from direct amount charging to an immutable fee-and-settlement snapshot.
 
 **UI hint**: yes
 
@@ -297,18 +300,68 @@ Plans:
 
 ### Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds
 
-**Goal**: A learner can pay by any deployment-enabled method, and staff can safely confirm manual payments and process refunds without ever creating a duplicate financial or enrolment effect.
+**Goal**: A learner can pay an administrator-entered NGN price through Paystack or USD price through Stripe, bearing KQ NEXUS's 1.5% platform fee and the configured gateway gross-up, while provider-native split settlement preserves the school's base price; manual confirmation and refunds remain safe, staff-operable, and audited.
 **Depends on**: Phase 6
-**Requirements**: PAY-03, PAY-04, PAY-05, PAY-07, PAY-08, PAY-11, PAY-13, PAY-14
+**Requirements**: COH-02, PAY-03, PAY-04, PAY-05, PAY-07, PAY-08, PAY-11, PAY-13, PAY-14, PAY-15, PAY-16, PAY-17
 **Success Criteria** (what must be TRUE):
 
-  1. A learner can also pay via Paystack or an approved manual channel, chosen only when available for the order, and switching methods never creates a second order or enrolment. (PAY-08, PAY-11)
+  1. An administrator enters independent NGN and USD base prices for a Cohort; no FX conversion occurs; the learner chooses an offered currency before order creation; NGN routes only to Paystack and USD only to Stripe; invalid provider/currency combinations are rejected server-side. (COH-02, PAY-08)
   2. Authorized staff can confirm a manual payment (amount, currency, date, channel, reference, evidence, reason) producing exactly one audit event and one enrolment effect. (PAY-03)
   3. A second success attempt on an already-paid order is rejected or safely reconciled, showing staff the existing transaction and a corrective path — never a silent duplicate. (PAY-04)
   4. Authorized staff can record or initiate a refund capped at eligible paid value, with reason, approver, and audit trail, routed to the original provider where supported. (PAY-05, PAY-13)
   5. Duplicate, delayed, or out-of-order provider notifications become a visible exception rather than a duplicate effect, and gateway credentials/webhook secrets never appear outside deployment-managed secret storage. (PAY-07, PAY-14)
+  6. Every order snapshots base price, 1.5%-of-base KQ NEXUS fee, versioned gateway-fee estimate, learner total, provider/currency, and expected school/KQ settlement in integer minor units; later Cohort or fee-schedule edits do not change the receipt. (PAY-15, PAY-16)
+  7. Paystack sends the school's immutable NGN base price to its subaccount while KQ NEXUS's main account receives the flat platform-plus-gateway allocation and bears the actual processing fee; Stripe transfers the school's immutable USD base price to its connected account while KQ NEXUS bears Stripe's actual fee. (PAY-17)
+  8. Finance evidence distinguishes estimated from actual provider fees and proves learner charge, school settlement, KQ NEXUS gross allocation, actual gateway deduction, and KQ NEXUS net; mismatches become reconciliation exceptions instead of rewriting historical orders. (PAY-07, PAY-17)
 
-**Plans**: TBD
+**Plans**: 12/12 plans executed across 8 waves (tracer-first: plan 04 proves the full NGN path end to end — dual-price read, snapshotted Order, Paystack split initialization, signature-verified webhook, PAID settlement — before any expansion). Decomposed from the approved 9-task design plan `docs/superpowers/plans/2026-09-11-dual-currency-fee-splitting.md`, with `07-RESEARCH.md`'s drift reconciliation applied (Task 7's `worker/` target retargeted to a Netlify Scheduled Function) and a credentials/one-way-decision gate added ahead of the tracer.
+
+Plans:
+**Wave 1**
+
+- [x] 07-01-PLAN.md — Provider settlement credentials, the two one-way policy decisions, and the fail-closed payments config (PAY-13, PAY-14, PAY-17)
+- [x] 07-02-PLAN.md — Additive dual-price, gateway-fee-schedule and snapshot schema, migration and seed (COH-02, PAY-15, PAY-16, PAY-17)
+- [x] 07-03-PLAN.md — Pure integer fee calculator and fixed currency-to-provider routing (PAY-08, PAY-15, PAY-16)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 07-04-PLAN.md — Tracer: an NGN cohort paid through Paystack split settlement to an ACTIVE enrolment, end to end (PAY-07, PAY-08, PAY-11, PAY-16, PAY-17)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 07-05-PLAN.md — Cohort dual-price administration and per-rail publication readiness (COH-02)
+- [x] 07-06-PLAN.md — Stripe USD Connect destination charges and crossed-rail refusal (PAY-08, PAY-17)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 07-07-PLAN.md — Actual-settlement reconciliation on a Netlify Scheduled Function, idempotent, with visible variances (PAY-07, PAY-11, PAY-17)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 07-08-PLAN.md — Manual payment confirmation and component-aware refunds routed to the original provider (PAY-03, PAY-04, PAY-05, PAY-11, PAY-13)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 07-09-PLAN.md — Learner dual-currency CTAs, the four-line breakdown, and the immutable receipt (PAY-08, PAY-15, PAY-16, PAY-17)
+- [x] 07-10-PLAN.md — Finance payments list and detail, expected-versus-actual settlement, and the two staff dialogs (PAY-03, PAY-04, PAY-05, PAY-13, PAY-14)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 07-11-PLAN.md — Legacy Cohort price removal behind an executable invariant, and deployment configuration docs (COH-02, PAY-08, PAY-14, PAY-16)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 07-12-PLAN.md — Phase close: lint/suite/build, the eight-scenario provider test-mode acceptance, and record reconciliation (all twelve requirements)
+
+**Cross-cutting constraints:**
+
+- Executors never run `git commit` — every plan stages with `git add` and reports a suggested message; the repository owner creates each commit explicitly.
+- Only the signature-verified webhook or an authorized manual confirmation may mark an order paid, and `Order.status = "PAID"` is written by exactly one module, enforced by `tests/checkout-phase-invariants.test.ts` (PAY-10).
+- Paystack- and Stripe-specific types stay inside their own `src/server/payments/providers/*` directories, enforced by one generalized AST scan, never two (PAY-09).
+- Provider is always derived server-side from the selected currency; no request field can pair NGN with Stripe or USD with Paystack (D-07, PAY-08).
+- All monetary arithmetic is integer minor units with deterministic rounding; no floating-point money math anywhere in domain or provider code (D-24).
+- An Order's commercial snapshot is immutable — a later Cohort or fee-schedule edit never changes an existing order or receipt (D-13, PAY-16).
+
 **UI hint**: yes
 
 ---
@@ -325,7 +378,41 @@ Plans:
   3. Staff can export CSV datasets with stable columns, applied filters, and generation time; large exports run asynchronously with queued/processing/succeeded/failed/retry states and short-lived authorized download links. (RPT-03, RPT-04)
   4. Authorized reviewers can filter and export an audit view of security and sensitive business actions without exposing secrets. (RPT-05)
 
-**Plans**: TBD
+**Plans**: 12 plans in 6 waves
+
+Plans:
+**Wave 1**
+
+- [x] 08-01-PLAN.md — Reconciliation case-ledger tracer and live schema proof
+- [x] 08-03-PLAN.md — Collection scope, report registry, and Reports hub
+- [x] 08-06-PLAN.md — Managed-upload package legitimacy checkpoint
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 08-02-PLAN.md — Complete exceptions-first reconciliation workflow
+- [x] 08-04-PLAN.md — Ten fixed operational dashboards and drill-down parity
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 08-05-PLAN.md — Immutable export snapshots, stable CSV, and request lifecycle
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 08-07-PLAN.md — Private export storage, background worker, and expiry service
+- [x] 08-12-PLAN.md — Provider-filtered refund reconciliation CSV entry point
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 08-08-PLAN.md — Export History and authorized short-lived downloads
+- [x] 08-09-PLAN.md — Filtered redacted audit export
+- [x] 08-11-PLAN.md — Authenticated scheduled dispatch and Netlify deployment adapters
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 08-10-PLAN.md — Navigation, UI backstops, and phase-wide verification
+
+All 12 Phase 08 plans are implemented. `08-VERIFICATION.md` is `human_needed`; the deployed export lifecycle and visual zoom checks remain in `08-UAT.md` before phase completion.
+
 **UI hint**: yes
 
 ---
@@ -343,7 +430,50 @@ Plans:
   4. Lesson completion is tracked idempotently per content-appropriate rule, and a learner can manually complete a Lesson only where policy allows and only within their own valid access window. (LRN-04, LRN-05)
   5. Eligible learners see session details and meeting links within the configured visibility window, and Course/Programme completion is calculated from versioned rules against current evidence, identifying each satisfied/unmet rule. (LRN-06, LRN-07)
 
-**Plans**: TBD
+**Plans**: 14 plans in 9 waves
+
+Plans:
+**Wave 1**
+
+- [x] 09-01-PLAN.md — Schema (Cohort.accessDurationDays, LessonWatchProgress) + migration + pure access-window evaluator
+- [x] 09-02-PLAN.md — Pure evaluators: lesson sequencing, completionRule v1 parser, completion engine
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 09-03-PLAN.md — learner-access.ts: ownership-scoped enrolment, pinned course structure, server-side lesson gate
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 09-04-PLAN.md — completion-service.ts, three new domain events, attendance-change recalculation trigger
+- [x] 09-05-PLAN.md — Learner download predicate + dual-predicate lesson-resource route
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 09-06-PLAN.md — lesson-progress-service.ts: mark/undo, video watch write + 90% auto-complete, staff override
+- [x] 09-07-PLAN.md — enrolment-dashboard-service.ts: aggregate read, typed named gaps, next-action derivation
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 09-08-PLAN.md — (learner) route group layout + /dashboard page + progress/gap components
+- [x] 09-13-PLAN.md — Staff progress-override screen + roster Progress column widening
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 09-09-PLAN.md — /learn/[enrolmentId] lesson list with lock affordances and the D-07 access gate
+- [x] 09-10-PLAN.md — learner-session-service.ts + /learn/[enrolmentId]/sessions with the meeting-link window
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 09-11-PLAN.md — Lesson reading pane, mark/undo Server Actions, complete-control island
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 09-12-PLAN.md — Video watch tracker island + recordWatchProgress action
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 09-14-PLAN.md — Phase invariants test, real-Postgres learner journey, human walkthrough checkpoint
+
 **UI hint**: yes
 
 ---
@@ -361,7 +491,44 @@ Plans:
   4. Graders see only in-scope submissions, can save draft grades invisibly to learners, and must explicitly release results; overrides require a mandatory reason and are fully audited. (ASM-05, ASM-06)
   5. Learners see only released results, feedback, attempt history, and unmet pass requirements. (ASM-07)
 
-**Plans**: TBD
+**Plans**: 17 plans
+
+Plans:
+**Wave 1**
+
+- [x] 10-01-PLAN.md — Schema migration for attemptGradingMethod, four domain-event types, assessment scope resolver, Submission storage keys
+- [x] 10-02-PLAN.md — Pure quiz-scoring module — per-QuestionType scoring with D-09 partial credit, effective-attempt selection, purity gate
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 10-03-PLAN.md — Assessment draft-validation evaluator and authoring service (CRUD, nested question writes, readiness-gated publish)
+- [x] 10-04-PLAN.md — Attempt service part 1 — start/resume/save with the D-08 frozen question snapshot
+- [x] 10-05-PLAN.md — Submission service — verified two-step upload, durable receipt, lateness flag, resubmission rows
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 10-06-PLAN.md — Attempt service part 2 — submit, server-side scoring, auto-released Grade, lazy expiry, real-Postgres evidence suite
+- [x] 10-07-PLAN.md — Grading service — Cohort-scoped queue, draft save, single release, D-06 batch release in one transaction
+- [x] 10-08-PLAN.md — Staff assessment authoring UI — Course-scoped list, create/edit form, readiness-gated publish
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 10-09-PLAN.md — Grade-override service (D-07 RELEASED-only, reason mandatory) and learner released-only results service
+- [x] 10-10-PLAN.md — Quiz question builder UI — nested question/option authoring with keyboard reorder
+- [x] 10-11-PLAN.md — Learner quiz attempt UI — single-page form, immediate scored result, attempt history
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 10-12-PLAN.md — Staff grading queue UI — Cohort Grading tab, submission queue, first real bulk-select batch release
+- [x] 10-13-PLAN.md — Staff grade-entry UI — draft save, explicit release, RELEASED-only override with mandatory reason
+- [x] 10-14-PLAN.md — Learner assignment submission UI — presigned upload, verified receipt, lateness, cutoff, resubmission history
+- [x] 10-15-PLAN.md — Learner results page and the two Phase 9 dashboard named gaps filled with real data
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 10-16-PLAN.md — Real-Postgres and MinIO integration suites — receipt invariant, Cohort scoping, batch atomicity, released-only read
+- [x] 10-17-PLAN.md — Phase invariants test, validation contract, and the 30-step human walkthrough
+
 **UI hint**: yes
 
 ---
@@ -378,7 +545,97 @@ Plans:
   3. Authorized staff can revoke and reissue a certificate with reason, linking old and new versions while preserving history. (CRD-05)
   4. A later grade, attendance, or completion correction flags affected certificates for review without silently altering or destroying the original record. (CRD-06)
 
-**Plans**: TBD
+**Plans**: 34 plans across 13 waves (16 original plans in waves 1-6, then 8 UAT gap-closure plans 11-17..11-24 in waves 7-8, then 10 code-review/UAT second-pass gap-closure plans 11-25..11-34 in waves 9-13 (11-34 was split out of 11-29 so the font-independent CR-02 fix runs in the first wave of the pass); foundation-first: the schema/migration, the human package + permission gates, and the pure primitives all land in wave 1 so every later plan builds on settled ground; the public verification surface ships in wave 2, before issuance exists, so its disclosure contract is tested in isolation)
+
+Plans:
+**Wave 1**
+
+- [x] 11-01-PLAN.md — Additive schema, migration, the `certificate_one_active_per_enrolment_scope` partial unique index, and the reversible `COMPLETED -> ACTIVE` transition (CRD-01, CRD-02, CRD-05, CRD-06)
+- [x] 11-02-PLAN.md — Blocking human gates: PDF-library legitimacy approval + install + render probe, and the template-authoring permission decision (CRD-03)
+- [x] 11-03-PLAN.md — Pure primitives: versioned layout parser, high-entropy `verificationRef`, and the storage-service certificate/template-asset function group (CRD-03, CRD-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 11-04-PLAN.md — `certificate-pdf-renderer.ts`: the single PDF-construction surface in the repository (CRD-03)
+- [x] 11-05-PLAN.md — `CertificateTemplate` CRUD on the resource factory, layout validation at the write boundary, single-default invariant, seeded default template (CRD-03)
+- [x] 11-06-PLAN.md — Public verification: the closed three-outcome lookup and the standalone `/verify` route group (CRD-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 11-07-PLAN.md — `certificate-issuance-service.ts`: AUTOMATIC issuance, the D-01 Programme-cohort exclusion, D-05 completion, P2002 idempotency, and the superseded review-flag branch (CRD-01, CRD-02, CRD-03, CRD-06)
+- [x] 11-08-PLAN.md — Course/Programme certificate settings: issuance mode and template picker (CRD-01, CRD-02, CRD-03)
+- [x] 11-09-PLAN.md — Template library list and the editor shell: header bar, three-panel frame, click-to-add palette, dirty-state save (CRD-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 11-10-PLAN.md — CRD-06's two hooks: the composition-root dependency swap, the grade-override hook, and the import-closure guard (CRD-01, CRD-02, CRD-06)
+- [x] 11-11-PLAN.md — `certificate-service.ts`: scoped read model, pending-issuance evaluator, manual issue, revoke, reissue (CRD-01, CRD-02, CRD-03, CRD-05, CRD-06)
+- [x] 11-12-PLAN.md — Template editor canvas and property inspector, keyboard-accessible positioning, image-asset upload (CRD-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 11-13-PLAN.md — Download route with denial parity, and the learner dashboard certificate slot closing Phase 9's named gap (CRD-03, CRD-06)
+- [x] 11-14-PLAN.md — Certificates nav entry and the MANUAL-mode pending-issuance queue (CRD-01, CRD-02)
+- [x] 11-15-PLAN.md — Issued list, certificate detail with the flagged/revoked banners and supersede chain, revoke and reissue actions (CRD-03, CRD-05, CRD-06)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 11-16-PLAN.md — Phase close: real-Postgres/MinIO integration suites, seven executable phase invariants, validation reconciliation, and the ten-step browser walkthrough (all six requirements)
+
+**Gap closure — from `11-UAT.md` (7 failed tests + 1 observation)** *(`gap_closure: true`; run with `/gsd:execute-phase 11 --gaps-only`)*
+
+Wave 7 *(independent of each other, no shared files)*
+
+- [x] 11-17-PLAN.md — BLOCKER (UAT 10): COMPLETED enrolments visible-but-not-operable on the learner dashboard; `listOwnDashboardEnrolments`, `includeCompleted`, regression tests using a COMPLETED fixture (CRD-03)
+- [x] 11-19-PLAN.md — MAJOR (UAT 11): PDF renderer converts top-origin layout to pdf-lib space and fits images; position-asserting tests read coordinates back out of the PDF (CRD-03)
+- [x] 11-20-PLAN.md — MAJOR (UAT 6): Course edit page, strict `updateCourseAction`, edit-mode `CourseForm` reusing `CertificateSettingsFields`; Programme edit certificate settings proven by test (CRD-01, CRD-02, CRD-03)
+- [x] 11-21-PLAN.md — MINOR (UAT 4, 13): drag-safe template canvas image; public `/verify-certificate` reference-entry page that does not collide with the IAM-02 `/verify` page (CRD-03, CRD-04)
+- [x] 11-22-PLAN.md — MINOR (UAT 8, data): batched `listCertificateIssuanceSources` and an Issued-by column and filter on All certificates (CRD-01, CRD-02)
+- [x] 11-24-PLAN.md — MINOR (UAT 18 observation): one review-flag audit entry per correction (D-01 guard on the superseded branch) attributed to the correcting staff member (CRD-06)
+
+Wave 8 *(blocked on Wave 7)*
+
+- [x] 11-18-PLAN.md — BLOCKER surface + MINOR (UAT 10, 19): COMPLETED-aware dashboard card without dead links, corrected Next-up copy, real-Postgres issue-then-dashboard regression (CRD-03)
+- [x] 11-23-PLAN.md — MINOR (UAT 8, landing): Recently issued section on the Certificates landing page so automatic issuances are visible (CRD-01, CRD-02)
+
+**Gap closure, second pass — from `11-REVIEW.md` (CR-01..CR-06) and the two open `11-UAT.md` gaps** *(`gap_closure: true`; run with `/gsd:execute-phase 11 --gaps-only`; warnings WR-01..WR-10 and info items stay logged in 11-REVIEW.md, except WR-01 which is fixed as the natural part of CR-01; CR-05 is deferred by user decision and only documented)*
+
+Wave 9 *(independent of each other, no shared files)*
+
+- [x] 11-25-PLAN.md — CR-03 + CR-04: non-ACTIVE/COMPLETED enrolments are not certificate-eligible (typed not-eligible, eligible-only queue); a REVOKED certificate blocks every automatic and queue issuance until staff Reissue, which supersedes every REVOKED row for the enrolment and scope so legacy double-revoked data can still be reissued (CRD-01, CRD-02, CRD-04, CRD-05)
+- [x] 11-26-PLAN.md — CR-01 precondition: BLOCKING human gate to supply, licence-check and hash-pin the bundled Unicode font asset; README records the exact .ttf filename, licence, source and SHA-256 (no executor download) (CRD-03)
+- [x] 11-27-PLAN.md — CR-06: additive migration widening the one-live-enrolment index to ACTIVE + COMPLETED with a violation preflight, proven on real Postgres and never applied to the remote DB by the executor; CR-05 recorded as deliberately deferred (CRD-05, CRD-06)
+- [x] 11-28-PLAN.md — Open UAT gap (test 17): certificate-first `deriveCertificateColumn` so a superseded completion no longer hides a flagged certificate or its download (CRD-03, CRD-06)
+- [x] 11-34-PLAN.md — CR-02 (split out of 11-29, no dependency on the font gate): format-sniffing renderer image guard and template assets restricted to PNG/JPEG at presign, confirm and the inspector picker (CRD-03)
+
+Wave 10 *(blocked on Wave 9; 11-29 also waits on 11-34 because both edit the renderer)*
+
+- [x] 11-29-PLAN.md — CR-01 (renderer): fontkit Unicode font with a never-throw text sanitiser and a font loader whose filename is pinned to the README record (needs the 11-26 font) (CRD-03)
+- [x] 11-30-PLAN.md — CR-01(b): two-phase issuance; the caller's transaction writes rows only, the PDF is rendered and stored after commit by a never-throwing, bounded (6 s default), idempotent file service (also fixes WR-01) (CRD-01, CRD-02, CRD-03)
+
+Wave 11 *(blocked on Wave 10)*
+
+- [x] 11-31-PLAN.md — Wire the post-commit settle into the lesson-progress, attendance and certificate-service roots (an injectable `settle` dep inside `createCertificateService`); the download route produces a missing file on demand behind unchanged denial parity (CRD-01, CRD-03)
+
+Wave 12 *(blocked on Wave 11)*
+
+- [x] 11-32-PLAN.md — Real Postgres + MinIO proof: Unicode names end to end, failure containment, CR-03/CR-04/CR-06 lifecycle guards (CRD-01, CRD-02, CRD-03, CRD-05, CRD-06)
+
+Wave 13 *(blocked on Wave 12; human-only)*
+
+- [x] 11-33-PLAN.md — Human checkpoints: visual check of Yoruba/Polish/CJK certificates, and the human-owned application (or deferral) of the enrolment-index migration on shared databases (CRD-03, CRD-05, CRD-06)
+
+**Cross-cutting constraints:**
+
+- A Programme-cohort enrolment issues exactly one PROGRAMME certificate and never a Course certificate for a member course, even though the completion engine records member-course evidence internally (D-01, enforced by two independent guards in 11-07).
+- `Enrolment.status = "COMPLETED"` is written by exactly one module, `certificate-issuance-service.ts`, and only after a `Certificate` row exists (D-05, invariant 7 in 11-16).
+- A correction flags a certificate for review and reverts the enrolment to ACTIVE; it never alters, revokes or destroys the credential (D-06, CRD-06).
+- The PDF library is imported by exactly one file and no browser-automation package appears in `src/` (D-08, invariants 1-2 in 11-16).
+- `verificationRef` carries at least 128 bits of entropy, diverging from `generateOrderReference()`'s 32-bit convention, because the public verify route is unauthenticated and no rate-limiting infrastructure exists anywhere in this codebase (RESEARCH Pitfall 1/2).
+- The public verification page discloses exactly four fields and its not-found branch shares no DOM structure with a real result (CRD-04, RESEARCH Pitfall 3).
+- No route under `src/app/verify/` or `src/app/api/certificates/` may export `dynamic`, `revalidate` or `fetchCache`, or wrap its lookup in `'use cache'` — Next 16 Cache Components would otherwise freeze a revocation verdict or a presigned URL (RESEARCH Pitfall 6).
+- Certificates are never hard-deleted; revoke flips status and reissue links via `supersedesId` (CAT-08, CRD-05).
+
 **UI hint**: yes
 
 ---
@@ -463,12 +720,12 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 3. Public Identity — Registration, Verification & Secure Sessions | 10/10 | Complete | 2026-09-03 |
 | 4. Catalogue Authoring — Programmes, Courses, Modules & Lessons | 15/15 | Complete | 2026-09-03 |
 | 5. Cohorts, Scheduling, Enrolment Operations & Attendance | 16/16 | Complete | 2026-09-07 |
-| 6. Registration, Checkout & Stripe Payments | 1/9 | In Progress|  |
-| 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 0/TBD | Not started | - |
+| 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
+| 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
 | 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
-| 9. Learning Delivery & Progress Tracking | 0/TBD | Not started | - |
-| 10. Assessment — Quizzes, Assignments & Grading | 0/TBD | Not started | - |
-| 11. Certificates & Completion Lifecycle | 0/TBD | Not started | - |
+| 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
+| 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
+| 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
 | 12. Support Tickets | 0/TBD | Not started | - |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |

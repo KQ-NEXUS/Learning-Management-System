@@ -17,8 +17,9 @@
 import { prisma } from "@/server/db";
 import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
-import type { createWithPermission } from "@/server/permissions/with-permission";
+import type { createWithPermission, Actor } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { hasActiveEnrolmentCoveringCourse } from "@/server/services/learner-access";
 import {
   inspectLessonObject,
   promoteLessonObject,
@@ -107,6 +108,8 @@ export type CreateLessonResourceServiceDeps = {
   withPermission: WithPermissionFn;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
   storage: LessonResourceStorage;
+  /** Injected so the learner predicate is unit-testable without a database (D-07/09-03). */
+  hasActiveEnrolmentCoveringCourse: (userId: string, courseId: string) => Promise<boolean>;
   now?: () => Date;
 };
 
@@ -281,23 +284,63 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     });
   });
 
+  /**
+   * The shared find-filter-sort body behind BOTH `listLessonResources`
+   * (staff, `courses.view`) and `listLessonResourcesForLearner` (DD-26,
+   * ownership) — factored once so the ordering rule cannot drift between
+   * the two entry points, mirroring `shapeDownloadable`'s identical reason
+   * for existing.
+   */
+  async function sortedLessonResources(lessonId: string): Promise<LessonResourceRecord[]> {
+    const rows = await delegate.findMany({ where: { lessonId } });
+    return rows
+      .filter((row) => row.lessonId === lessonId)
+      .sort((left, right) => left.position - right.position);
+  }
+
   const listLessonResources = deps.withPermission<string>(
     "courses.view",
     async (lessonId) => {
       const context = await resolveLessonContext(lessonId);
       return { courseIds: context ? [context.courseId] : [] };
     },
-  )(async (lessonId) => {
-    const rows = await delegate.findMany({ where: { lessonId } });
-    return rows
-      .filter((row) => row.lessonId === lessonId)
-      .sort((left, right) => left.position - right.position);
-  });
+  )((lessonId) => sortedLessonResources(lessonId));
 
-  const getDownloadableResource = deps.withPermission<string>(
-    "courses.view",
-    (id) => lessonResourceScope(id),
-  )(async (id): Promise<DownloadableResource | null> => {
+  /**
+   * DD-26 — the ownership-scoped sibling read `listLessonResources` cannot
+   * serve: `listLessonResources` is `courses.view`-wrapped, and a learner
+   * has no such grant (nor should be given one — a matched grant is not
+   * action-scoped once matched, so widening it would hand a learner every
+   * other course-scoped staff action). Deliberately NOT wrapped in
+   * `withPermission`, same reasoning as `getDownloadableResourceForLearner`
+   * above. Returns `[]` (never throws) for a non-enrolled actor or an
+   * unknown lesson id — both cases indistinguishable to the caller by
+   * design — and otherwise the SAME ordered rows the staff path returns via
+   * the shared `sortedLessonResources` helper.
+   */
+  async function listLessonResourcesForLearner(
+    actor: Actor,
+    lessonId: string,
+  ): Promise<LessonResourceRecord[]> {
+    const context = await resolveLessonContext(lessonId);
+    if (!context) return [];
+
+    const authorized = await deps.hasActiveEnrolmentCoveringCourse(actor.userId, context.courseId);
+    if (!authorized) return [];
+
+    return sortedLessonResources(lessonId);
+  }
+
+  /**
+   * The shared shaping step behind BOTH `getDownloadableResource` (staff,
+   * `courses.view`) and `getDownloadableResourceForLearner` (ownership,
+   * ACTIVE enrolment) — written once so the `UPLOADING` / non-`READY`
+   * refusal cannot be bypassed by entering through whichever predicate was
+   * NOT updated (RESEARCH Pitfall 1). Returns `null` for an unknown id;
+   * throws `ResourceUploadPendingError` / `ResourceUploadUnavailableError`
+   * for a row whose upload has not finished or failed.
+   */
+  async function shapeDownloadable(id: string): Promise<DownloadableResource | null> {
     const row = await delegate.findUnique({ where: { id } });
     if (!row) return null;
     if (row.uploadStatus === "UPLOADING") throw new ResourceUploadPendingError();
@@ -305,7 +348,44 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
 
     const context = await resolveLessonContext(row.lessonId);
     return { ...row, lesson: { type: context?.type ?? "FILE" } };
-  });
+  }
+
+  const getDownloadableResource = deps.withPermission<string>(
+    "courses.view",
+    (id) => lessonResourceScope(id),
+  )((id) => shapeDownloadable(id));
+
+  /**
+   * DD-14 / RESEARCH Pitfall 1: the second, ownership-based predicate for
+   * LRN-03. Deliberately NOT wrapped in `withPermission` and never consults
+   * a grant — granting a learner `courses.view` instead would hand them
+   * every other course-scoped staff action, because a matched grant is not
+   * action-scoped once matched. The predicate here differs from the staff
+   * path (ACTIVE enrolment covering the lesson's course, not a permission
+   * grant) but everything after the predicate — the upload-status checks,
+   * the row shape, the `null` for "not found" — is deliberately shared via
+   * `shapeDownloadable` so the two paths can never drift apart.
+   *
+   * Returns `null` (never throws an authorization error) for both an
+   * unknown resource id and a signed-in caller with no ACTIVE enrolment
+   * covering the lesson's course — the two cases are indistinguishable to
+   * the caller by design.
+   */
+  async function getDownloadableResourceForLearner(
+    actor: Actor,
+    id: string,
+  ): Promise<DownloadableResource | null> {
+    const row = await delegate.findUnique({ where: { id } });
+    if (!row) return null;
+
+    const context = await resolveLessonContext(row.lessonId);
+    if (!context) return null;
+
+    const authorized = await deps.hasActiveEnrolmentCoveringCourse(actor.userId, context.courseId);
+    if (!authorized) return null;
+
+    return shapeDownloadable(id);
+  }
 
   return {
     lessonResourceScope,
@@ -314,7 +394,9 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     completeLessonResourceUpload,
     removeLessonResource,
     listLessonResources,
+    listLessonResourcesForLearner,
     getDownloadableResource,
+    getDownloadableResourceForLearner,
   };
 }
 
@@ -335,6 +417,7 @@ const built = createLessonResourceService({
     delete: deleteLessonObject,
     finalKey: finalStorageKeyFor,
   },
+  hasActiveEnrolmentCoveringCourse,
   audit: (entry) =>
     recordAudit({
       actorId: entry.actorId,
@@ -354,4 +437,6 @@ export const beginLessonResourceUpload = built.beginLessonResourceUpload;
 export const completeLessonResourceUpload = built.completeLessonResourceUpload;
 export const removeLessonResource = built.removeLessonResource;
 export const listLessonResources = built.listLessonResources;
+export const listLessonResourcesForLearner = built.listLessonResourcesForLearner;
 export const getDownloadableResource = built.getDownloadableResource;
+export const getDownloadableResourceForLearner = built.getDownloadableResourceForLearner;

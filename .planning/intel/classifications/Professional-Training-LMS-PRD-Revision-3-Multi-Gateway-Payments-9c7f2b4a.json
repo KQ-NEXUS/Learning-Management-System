@@ -1,0 +1,23 @@
+{
+  "source_path": "C:/Users/USER/Documents/KQ NEXUS/Learning-Management-System/docs/reference/Professional-Training-LMS-PRD-Revision-3-Multi-Gateway-Payments.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Professional Training Learning Management System",
+  "summary": "Standalone LMS enabling one professional training provider to publish, sell, deliver, assess, and certify learning with auditable operations.",
+  "scope": [
+    "Learning Management System",
+    "Professional training",
+    "Course and Programme management",
+    "Learner enrollment",
+    "Payment processing",
+    "Assessment and grading",
+    "Certificate issuance",
+    "Support tickets",
+    "Role-based access control",
+    "Dashboards and reporting"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 0
+}

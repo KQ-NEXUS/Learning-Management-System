@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { PasswordInput } from "@/components/primitives/PasswordInput";
 import { AuthFooterLine } from "../AuthPanel";
 import { signInAction, type SignInState } from "./actions";
 
@@ -11,7 +12,7 @@ export function SignInForm() {
   const [state, action, pending] = useActionState(signInAction, INITIAL);
 
   return (
-    <form action={action} className="flex w-full max-w-sm flex-col gap-4">
+    <form action={action} className="flex w-full flex-col gap-5">
       {state.error && (
         <p
           role="alert"
@@ -21,37 +22,36 @@ export function SignInForm() {
         </p>
       )}
 
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex flex-col gap-2 text-sm">
         <span className="font-semibold text-foreground">Email address</span>
         <input
           name="email"
           type="email"
           autoComplete="username"
           required
-          className="h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
+          className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex flex-col gap-2 text-sm">
         <span className="flex items-baseline justify-between">
           <span className="font-semibold text-foreground">Password</span>
-          <Link href="/forgot-password" className="text-[11px] text-accent">
-            Forgot?
+          <Link href="/forgot-password" className="text-sm font-medium text-accent hover:underline">
+            Forgot password?
           </Link>
         </span>
-        <input
+        <PasswordInput
           name="password"
-          type="password"
           autoComplete="current-password"
           required
-          className="h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
+          className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
         />
       </label>
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:opacity-50"
+        className="h-12 w-full rounded-md bg-accent px-4 text-base font-semibold text-accent-contrast hover:bg-accent-deep disabled:opacity-50"
       >
         {pending ? "Signing in…" : "Sign in"}
       </button>

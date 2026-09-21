@@ -118,6 +118,14 @@ enum GradeStatus {
   RELEASED
 }
 
+// D-02 — which Attempt's score is the learner-visible, pass/fail-deciding
+// one when an Assessment's maxAttempts > 1.
+enum AttemptGradingMethod {
+  HIGHEST
+  LATEST
+  AVERAGE
+}
+
 enum CompletionScope {
   COURSE
   PROGRAMME
@@ -127,6 +135,13 @@ enum CertificateStatus {
   ACTIVE
   REVOKED
   SUPERSEDED
+}
+
+// D-02 / CRD-01 — certificate enablement and issuance timing are separate
+// staff choices. MANUAL is the fail-closed default for existing providers.
+enum CertificateIssuanceMode {
+  AUTOMATIC
+  MANUAL
 }
 
 // PRD §19 — Paystack and Stripe are providers within one deployment, not
@@ -163,6 +178,39 @@ enum RefundStatus {
   COMPLETED
   FAILED
   RECORDED_MANUALLY
+}
+
+enum ReconciliationSubject {
+  PAYMENT
+  REFUND
+}
+
+enum ReconciliationRisk {
+  CAPTURED_MONEY
+  SETTLEMENT_VARIANCE
+  MISSING_PROVIDER_DATA
+}
+
+enum ReconciliationCaseStatus {
+  OPEN
+  RESOLVED
+  REOPENED
+}
+
+enum ReconciliationCaseEventType {
+  OPENED
+  EVIDENCE_CHANGED
+  ASSIGNED
+  RESOLVED
+  REOPENED
+}
+
+enum ReconciliationResolutionReason {
+  MATCHED_PROVIDER_EVIDENCE
+  CORRECTED_UPSTREAM
+  DUPLICATE_RECORD
+  ACCEPTED_VARIANCE
+  OTHER
 }
 
 enum WebhookStatus {
@@ -249,6 +297,9 @@ model User {
   facilitatorOf      ScheduledSession[]
   gradesGiven        Grade[]            @relation("Grader")
   exportJobs         ExportJob[]
+  reconciliationCasesAssigned ReconciliationCase[]      @relation("ReconciliationCaseAssignee")
+  reconciliationCasesResolved ReconciliationCase[]      @relation("ReconciliationCaseResolver")
+  reconciliationCaseEvents    ReconciliationCaseEvent[] @relation("ReconciliationCaseEventActor")
 
   // CAT-06 — publish attribution. Named relations disambiguate the two
   // publication models that both point at User.
@@ -463,7 +514,10 @@ model Programme {
   completionRule        Json?
   completionRuleVersion Int   @default(1)
 
-  certificateEnabled Boolean @default(true)
+  certificateEnabled      Boolean                 @default(true)
+  certificateIssuanceMode CertificateIssuanceMode @default(MANUAL)
+  certificateTemplateId   String?
+  certificateTemplate     CertificateTemplate?    @relation(fields: [certificateTemplateId], references: [id])
 
   // CAT-05 — incremented on publish, mirroring Course.contentVersion so the
   // shared publish operation (plan 04-08) behaves identically for both.
@@ -550,7 +604,10 @@ model Course {
   contentVersion Int @default(1)
 
   // CRD-01 — Course certificates issue only where the provider enables them.
-  certificateEnabled Boolean @default(false)
+  certificateEnabled      Boolean                 @default(false)
+  certificateIssuanceMode CertificateIssuanceMode @default(MANUAL)
+  certificateTemplateId   String?
+  certificateTemplate     CertificateTemplate?    @relation(fields: [certificateTemplateId], references: [id])
 
   completionRule        Json?
   completionRuleVersion Int   @default(1)
@@ -674,10 +731,11 @@ model Lesson {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  module     Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  assessment Assessment?      @relation(fields: [assessmentId], references: [id])
-  resources  LessonResource[]
-  progress   LessonProgress[]
+  module        Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  assessment    Assessment?           @relation(fields: [assessmentId], references: [id])
+  resources     LessonResource[]
+  progress      LessonProgress[]
+  watchProgress LessonWatchProgress[]
 
   @@unique([moduleId, position])
   @@index([moduleId])
@@ -756,8 +814,24 @@ model Cohort {
   // CHECK lives in prisma/sql/003_cohort_operations.sql.
   holdMinutes Int? @default(30)
 
+  // D-01/D-02 — self-paced access-duration window, read ONLY when
+  // deliveryMode = SELF_PACED (INSTRUCTOR_LED and BLENDED keep using the
+  // Cohort-wide startsAt/endsAt above). `null` means unlimited access,
+  // mirroring the holdMinutes nullable-duration convention. A set value is a
+  // day count measured from the learner's own Enrolment.activatedAt, not
+  // from this Cohort's startsAt.
+  accessDurationDays Int?
+
   priceMinor Int
   currency   String @default("NGN")
+
+  // D-06/D-08 — two independent, nullable, administrator-entered base
+  // prices. NULL means "this rail is not offered", never "free". No
+  // exchange rate is stored anywhere in the schema; setting one rail never
+  // changes the other. The non-negative CHECK lives in
+  // prisma/sql/004_payment_split_integrity.sql.
+  priceNgnMinor Int?
+  priceUsdMinor Int?
 
   status      CohortStatus @default(DRAFT)
   publishedAt DateTime?
@@ -937,6 +1011,7 @@ model Enrolment {
   transferredTo   Enrolment[] @relation("EnrolmentTransfer")
 
   lessonProgress LessonProgress[]
+  watchProgress  LessonWatchProgress[]
   attendance     AttendanceRecord[]
   attempts       Attempt[]
   submissions    Submission[]
@@ -985,6 +1060,26 @@ model LessonProgress {
   @@unique([enrolmentId, lessonId])
 }
 
+// LRN-04/D-08/D-09 — the running video watch position, written periodically
+// as a learner plays a VIDEO lesson. A row here is NOT a completion — that
+// remains exactly LessonProgress's meaning. This table only carries the
+// in-progress position so a learner resuming a video does not restart the
+// 90% auto-complete threshold from zero.
+model LessonWatchProgress {
+  id              String   @id @default(cuid())
+  enrolmentId     String
+  lessonId        String
+  secondsWatched  Int      @default(0)
+  durationSeconds Int?
+  percentWatched  Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  lesson    Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([enrolmentId, lessonId])
+}
+
 // LRN-07 — records which rule version was satisfied and what evidence
 // satisfied it, so a later correction can be reasoned about.
 model CompletionRecord {
@@ -1022,9 +1117,12 @@ model Assessment {
   dueAt          DateTime?
 
   // Quiz settings
-  maxAttempts Int?
-  passMark    Int?
-  totalMarks  Int?
+  maxAttempts          Int?
+  passMark             Int?
+  totalMarks           Int?
+  // D-02 — selects which Attempt's score is the learner-visible,
+  // pass/fail-deciding one when maxAttempts > 1.
+  attemptGradingMethod AttemptGradingMethod @default(HIGHEST)
 
   // Assignment settings — ASM-03
   allowedFileTypes  String[]
@@ -1111,10 +1209,10 @@ model Submission {
   submittedAt DateTime @default(now())
   isLate      Boolean  @default(false)
 
-  storageKey String
-  filename   String
-  mimeType   String
-  sizeBytes  Int
+  storageKey   String
+  filename     String
+  mimeType     String
+  sizeBytes    Int
   // Shared private-file lifecycle with LessonResource and TicketAttachment.
   uploadStatus UploadStatus @default(UPLOADING)
 
@@ -1177,6 +1275,24 @@ model GradeOverride {
 // Certificates — CRD-01 to CRD-06
 // ---------------------------------------------------------------------------
 
+// D-10 / CRD-01 — reusable, versioned certificate layouts. Archived
+// templates remain referencable by Course and Programme configuration.
+model CertificateTemplate {
+  id                  String    @id @default(cuid())
+  name                String
+  layout              Json
+  layoutSchemaVersion Int       @default(1)
+  isDefault           Boolean   @default(false)
+  archivedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  courses    Course[]
+  programmes Programme[]
+
+  @@index([archivedAt])
+}
+
 model Certificate {
   id String @id @default(cuid())
 
@@ -1222,6 +1338,35 @@ model Certificate {
 // Commerce — REG-03, PAY-01 to PAY-14, PRD §19
 // ---------------------------------------------------------------------------
 
+// D-11, PAY-16 — provider fee rules as immutable, effective-dated records.
+// A rate change is a new version row, never an in-place edit — that
+// immutability is what makes an Order's snapshotted gatewayFeeScheduleId/
+// Version resolve to the exact rule it was priced under for the life of the
+// receipt. Seed rows are configurable examples of a provider's published
+// schedule, not hard-coded permanent truth (D-11).
+model GatewayFeeSchedule {
+  id       String          @id @default(cuid())
+  provider PaymentProvider
+  currency String
+
+  version Int
+
+  percentageBps        Int
+  fixedMinor           Int
+  waiverThresholdMinor Int?
+  capMinor             Int?
+  taxBps               Int    @default(0)
+  roundingRule         String
+
+  effectiveFrom DateTime
+  active        Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([provider, currency, version])
+  @@index([provider, currency, active, effectiveFrom])
+}
+
 // REG-03 — one traceable order per checkout attempt. idempotencyKey makes
 // replay produce at most one paid effect and one active enrolment.
 model Order {
@@ -1237,6 +1382,16 @@ model Order {
 
   // §19.1 — the provider chosen at checkout. Changing method keeps one order.
   selectedProvider PaymentProvider?
+
+  // D-13 — snapshotted at order creation so a later Cohort or fee-schedule
+  // edit never changes an existing Order or receipt. amountMinor above keeps
+  // its existing meaning (the learner total) and is not redefined here.
+  baseAmountMinor               Int?
+  platformFeeMinor              Int?
+  gatewayFeeEstimateMinor       Int?
+  gatewayFeeScheduleId          String?
+  gatewayFeeScheduleVersion     Int?
+  schoolSettlementExpectedMinor Int?
 
   idempotencyKey String  @unique
   correlationId  String?
@@ -1296,8 +1451,19 @@ model PaymentAttempt {
   // recorded state. Becomes a visible exception, not a duplicate effect.
   exceptionNote String?
 
+  // D-14 — actual settlement, populated only once verified provider evidence
+  // arrives. NULL means "no verified provider evidence yet" and is never
+  // equivalent to 0. reconciledAt lets the 07-07 scheduled sweep select
+  // un-enriched rows without inferring intent from a NULL fee.
+  gatewayFeeActualMinor       Int?
+  schoolSettlementActualMinor Int?
+  platformGrossActualMinor    Int?
+  platformNetActualMinor      Int?
+  reconciledAt                DateTime?
+
   order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   refunds Refund[]
+  reconciliationCases ReconciliationCase[]
 
   @@index([orderId, status])
   @@index([provider, status])
@@ -1325,11 +1491,81 @@ model Refund {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
 
+  // D-22 — component allocation across base/platform/gateway so Finance can
+  // reconcile a reversal against the order's own snapshot.
+  baseComponentMinor     Int?
+  platformComponentMinor Int?
+  gatewayComponentMinor  Int?
+  providerOutcome        String?
+
   order          Order          @relation(fields: [orderId], references: [id])
   paymentAttempt PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
+  reconciliationCases ReconciliationCase[]
 
   @@index([orderId])
   @@index([status])
+}
+
+// Phase 8 investigation ledger. This observes payment/refund facts; it never
+// replaces or mutates either domain state machine. PostgreSQL partial unique
+// indexes in the named migration enforce one durable case per subject row.
+model ReconciliationCase {
+  id      String                @id @default(cuid())
+  subject ReconciliationSubject
+  risk    ReconciliationRisk
+  status  ReconciliationCaseStatus @default(OPEN)
+
+  paymentAttemptId String?
+  refundId         String?
+
+  evidence            Json
+  evidenceFingerprint String
+  lastEvidenceAt      DateTime
+
+  assignedToId String?
+  assignedAt   DateTime?
+
+  resolutionReason ReconciliationResolutionReason?
+  resolutionNote   String?
+  resolvedAt       DateTime?
+  resolvedById     String?
+
+  openedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  paymentAttempt PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  refund         Refund?         @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  assignedTo     User?           @relation("ReconciliationCaseAssignee", fields: [assignedToId], references: [id])
+  resolvedBy     User?           @relation("ReconciliationCaseResolver", fields: [resolvedById], references: [id])
+  events         ReconciliationCaseEvent[]
+
+  @@index([status, risk, openedAt])
+  @@index([paymentAttemptId])
+  @@index([refundId])
+  @@index([assignedToId])
+}
+
+// Append-only application history for a reconciliation investigation.
+model ReconciliationCaseEvent {
+  id       String                      @id @default(cuid())
+  caseId   String
+  type     ReconciliationCaseEventType
+  actorId  String?
+  actorType String                     @default("SYSTEM")
+
+  evidence         Json?
+  fingerprint      String?
+  resolutionReason ReconciliationResolutionReason?
+  note             String?
+  correlationId    String?
+  createdAt        DateTime @default(now())
+
+  case  ReconciliationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actor User?              @relation("ReconciliationCaseEventActor", fields: [actorId], references: [id])
+
+  @@index([caseId, createdAt])
+  @@index([correlationId])
+  @@index([actorId, createdAt])
 }
 
 // PAY-07 — the replay guard. providerEventId is unique, so a duplicate or
@@ -1417,13 +1653,13 @@ model TicketAttachment {
   ticketId  String
   messageId String?
 
-  storageKey String
-  filename   String
-  mimeType   String
-  sizeBytes  Int
+  storageKey   String
+  filename     String
+  mimeType     String
+  sizeBytes    Int
   // Shared private-file lifecycle with LessonResource and Submission.
   uploadStatus UploadStatus @default(UPLOADING)
-  createdAt  DateTime   @default(now())
+  createdAt    DateTime     @default(now())
 
   ticket  Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   message TicketMessage? @relation(fields: [messageId], references: [id])
@@ -1441,19 +1677,48 @@ model ExportJob {
   id            String    @id @default(cuid())
   requestedById String
   dataset       String
+  datasetVersion String   @default("1.0")
   filters       Json?
+  asOf          DateTime  @default(now())
+  timezone      String    @default("Africa/Lagos")
+  scopeSnapshot Json?
+  columnSnapshot Json?
+  sensitiveReason String?
+  idempotencyKey String?  @unique
+  retryOfId     String?
   status        JobStatus @default(QUEUED)
-  rowCount      Int?
+  rowCount      Int?      @default(0)
   storageKey    String?
   expiresAt     DateTime?
   error         String?
+  errorCode     String?
+  errorMessage  String?
   createdAt     DateTime  @default(now())
+  startedAt     DateTime?
   completedAt   DateTime?
   downloadedAt  DateTime?
+  updatedAt     DateTime  @updatedAt
 
   requestedBy User @relation(fields: [requestedById], references: [id])
+  retryOf     ExportJob? @relation("ExportRetry", fields: [retryOfId], references: [id])
+  retries     ExportJob[] @relation("ExportRetry")
+  snapshotRows ExportSnapshotRow[]
 
   @@index([requestedById, status])
+  @@index([status, createdAt])
+  @@index([retryOfId])
+}
+
+model ExportSnapshotRow {
+  id        String   @id @default(cuid())
+  jobId     String
+  ordinal   Int
+  data      Json
+  createdAt DateTime @default(now())
+
+  job ExportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, ordinal])
 }
 
 // COM-02 — repeated events within one correlation produce at most one

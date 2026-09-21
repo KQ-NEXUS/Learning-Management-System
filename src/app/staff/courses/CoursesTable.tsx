@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ResourceTable,
@@ -65,23 +65,19 @@ const columns: Column<CourseRow>[] = [
   },
 ];
 
-const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60";
-
-const UNAVAILABLE = "Not available on this screen";
-
 export function CoursesTable({
+  canCreate = true,
   rows,
   denied,
 }: {
   rows?: CourseRow[];
+  /** Hide the create button for staff who cannot create. Default true. */
+  canCreate?: boolean;
   denied?: { permission: string };
 }) {
-  const unavailableId = useId();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState<SortState>({ key: "title", direction: "asc" });
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const visible = useMemo(() => {
     if (!rows) return [];
@@ -129,6 +125,7 @@ export function CoursesTable({
 
   return (
     <ResourceTable<CourseRow>
+      asPage
       noun="courses"
       title="Courses"
       columns={columns}
@@ -173,31 +170,15 @@ export function CoursesTable({
             : { key, direction: "asc" },
         )
       }
-      selection={{
-        selectedIds,
-        onChange: setSelectedIds,
-        // Archive replaces delete throughout — there is no delete affordance
-        // in any state (PRD CAT-08).
-        actions: [
-          { label: "Publish", onClick: () => {}, disabled: true, description: UNAVAILABLE },
-          { label: "Archive…", onClick: () => {}, disabled: true, description: UNAVAILABLE },
-        ],
-      }}
       headerActions={
-        <>
-          <button type="button" disabled aria-describedby={unavailableId} className={BTN}>
-            Export CSV
-          </button>
+        canCreate ? (
           <Link
             href="/staff/courses/new"
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
           >
             New course
           </Link>
-          <p id={unavailableId} className="basis-full text-sm text-muted-foreground">
-            {UNAVAILABLE}
-          </p>
-        </>
+        ) : undefined
       }
     />
   );

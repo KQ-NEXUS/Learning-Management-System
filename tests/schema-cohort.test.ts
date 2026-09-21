@@ -107,6 +107,25 @@ describe("Phase-5 schema delta is declared in prisma/schema.prisma", () => {
   });
 });
 
+describe("Phase-7 dual price columns are declared and legacy prices are backfilled (D-06/D-08)", () => {
+  it("Cohort.priceNgnMinor and priceUsdMinor are nullable Int", () => {
+    const model = sliceModel("Cohort");
+    expect(model).toMatch(/priceNgnMinor\s+Int\?/);
+    expect(model).toMatch(/priceUsdMinor\s+Int\?/);
+  });
+
+  it("the migration backfills both currency rails from the legacy priceMinor column, leaving the other rail NULL", () => {
+    expect(allMigrationSql).toMatch(
+      /UPDATE\s+"Cohort"\s+SET\s+"priceNgnMinor"\s*=\s*"priceMinor"\s+WHERE\s+upper\("currency"\)\s*=\s*'NGN'\s+AND\s+"priceNgnMinor"\s+IS\s+NULL/i,
+    );
+    expect(allMigrationSql).toMatch(
+      /UPDATE\s+"Cohort"\s+SET\s+"priceUsdMinor"\s*=\s*"priceMinor"\s+WHERE\s+upper\("currency"\)\s*=\s*'USD'\s+AND\s+"priceUsdMinor"\s+IS\s+NULL/i,
+    );
+    expect(allMigrationSql).not.toMatch(/"priceNgnMinor"\s*=\s*0\b/);
+    expect(allMigrationSql).not.toMatch(/"priceUsdMinor"\s*=\s*0\b/);
+  });
+});
+
 describe("The manual paste-in from 003_cohort_operations.sql was actually applied", () => {
   for (const name of NEW_CONSTRAINTS) {
     it(`${name} appears in an applied migration file`, () => {
@@ -131,6 +150,23 @@ describe("The manual paste-in from 003_cohort_operations.sql was actually applie
     ]) {
       expect(body).not.toContain(preExisting);
     }
+  });
+
+  it("guard: the one-live-enrolment index covers ACTIVE and COMPLETED and is created before the old one is dropped (CR-06)", () => {
+    const dir = "20260919120000_enrolment_one_live_per_learner_cohort";
+    const sql = readFileSync(path.join(migrationsDir, dir, "migration.sql"), "utf8")
+      .split(/\r?\n/)
+      .filter((line) => !line.trimStart().startsWith("--"))
+      .join("\n");
+
+    expect(allMigrationSql).toContain("enrolment_one_live_per_learner_cohort");
+    expect(sql).toMatch(/WHERE\s+status\s+IN\s*\(\s*'ACTIVE'\s*,\s*'COMPLETED'\s*\)/);
+
+    const create = sql.search(/CREATE\s+UNIQUE\s+INDEX\s+enrolment_one_live_per_learner_cohort/);
+    const drop = sql.search(/DROP\s+INDEX\s+enrolment_one_active_per_learner_cohort/);
+    expect(create).toBeGreaterThan(-1);
+    expect(drop).toBeGreaterThan(-1);
+    expect(create).toBeLessThan(drop);
   });
 
   it("never introduces a DEFERRABLE clause (init-migration regression guard)", () => {

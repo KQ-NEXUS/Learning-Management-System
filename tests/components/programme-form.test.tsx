@@ -176,3 +176,75 @@ describe("ProgrammeForm — outcomes persistence through edits and failed saves"
     expect(lastFormData(updateAction).get("outcomes")).toBe("Updated outcome.");
   });
 });
+
+describe("ProgrammeForm — edit mode certificate settings", () => {
+  const templates = [
+    { id: "tpl-1", name: "Classic", isDefault: true },
+    { id: "tpl-2", name: "Modern", isDefault: false },
+  ];
+  const certValues = {
+    title: "Ops",
+    slug: "ops",
+    certificateEnabled: true,
+    certificateIssuanceMode: "AUTOMATIC" as const,
+    certificateTemplateId: "tpl-2",
+  };
+
+  it("prefills the stored issuance mode and template", () => {
+    render(
+      <ProgrammeForm
+        mode="edit"
+        programmeId="prog-1"
+        values={certValues}
+        templates={templates}
+      />,
+    );
+    expect((screen.getByRole("radio", { name: /Automatic/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Certificate template") as HTMLSelectElement).value).toBe("tpl-2");
+  });
+
+  it("submits programmeId with the changed mode and template", async () => {
+    updateAction.mockResolvedValue({ ok: true, id: "prog-1" });
+    const { container } = render(
+      <ProgrammeForm
+        mode="edit"
+        programmeId="prog-1"
+        values={certValues}
+        templates={templates}
+      />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.change(screen.getByLabelText("Certificate template"), {
+      target: { value: "tpl-1" },
+    });
+    submit(container);
+
+    await waitFor(() => expect(updateAction).toHaveBeenCalledTimes(1));
+    const fd = lastFormData(updateAction);
+    expect(fd.get("programmeId")).toBe("prog-1");
+    expect(fd.get("certificateIssuanceMode")).toBe("MANUAL");
+    expect(fd.get("certificateTemplateId")).toBe("tpl-1");
+    expect(createAction).not.toHaveBeenCalled();
+  });
+
+  it("disables both controls and omits their keys when certificates are off", async () => {
+    updateAction.mockResolvedValue({ ok: true, id: "prog-1" });
+    const { container } = render(
+      <ProgrammeForm
+        mode="edit"
+        programmeId="prog-1"
+        values={{ ...certValues, certificateEnabled: false }}
+        templates={templates}
+      />,
+    );
+    expect((screen.getByRole("radio", { name: /Automatic/ }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("radio", { name: /Manual/ }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Certificate template") as HTMLSelectElement).disabled).toBe(true);
+    submit(container);
+
+    await waitFor(() => expect(updateAction).toHaveBeenCalledTimes(1));
+    const fd = lastFormData(updateAction);
+    expect(fd.has("certificateIssuanceMode")).toBe(false);
+    expect(fd.has("certificateTemplateId")).toBe(false);
+  });
+});

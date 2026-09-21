@@ -72,6 +72,8 @@ export type ArrangeBoardProps = {
   renderItemAction?: (item: ArrangeItem, containerId: string) => ReactNode;
   /** Shown when a container has no items. Defaults to the lesson-board copy. */
   emptyContainerLabel?: string;
+  /** Show each item's "module.lesson" number ("2.3") in mono before its title. */
+  numbered?: boolean;
 };
 
 type Loc = { droppableId: string; index: number };
@@ -123,9 +125,9 @@ export function arrangementFromDragResult(
 }
 
 const ROW =
-  "flex flex-wrap items-center gap-2 border-t border-border bg-surface px-4 py-2 text-sm first:border-t-0";
+  "flex flex-wrap items-center gap-3 border-b border-border bg-surface py-3 text-sm";
 const BTN =
-  "rounded-md border border-input-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40";
+  "rounded-md px-2 py-1 text-xs font-semibold text-accent hover:bg-accent-wash disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-50 disabled:hover:bg-transparent";
 
 export function ArrangeBoard({
   containers,
@@ -141,6 +143,7 @@ export function ArrangeBoard({
   renderContainerAction,
   renderItemAction,
   emptyContainerLabel = "No lessons in this module yet.",
+  numbered = false,
 }: ArrangeBoardProps) {
   const { setDirty } = useUnsavedOrder();
   const boardKey = useId();
@@ -190,7 +193,7 @@ export function ArrangeBoard({
   return (
     <div className="flex flex-col gap-4">
       {title && (
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       )}
 
       {error && (
@@ -209,12 +212,15 @@ export function ArrangeBoard({
 
       <DragDropContext onDragEnd={handleDragEnd}>
         {containers.map((container, ci) => (
-          <section
-            key={container.id}
-            className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-2 px-4 py-2">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <section key={container.id} className="flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground pb-2">
+              <h3
+                className={
+                  containers.length === 1 && container.label === title
+                    ? "sr-only"
+                    : "text-base font-semibold text-foreground"
+                }
+              >
                 {container.label}
               </h3>
               {renderContainerAction?.(container.id)}
@@ -232,7 +238,7 @@ export function ArrangeBoard({
                   }`}
                 >
                   {container.items.length === 0 && (
-                    <li className="border-t border-dashed border-border px-4 py-2 text-sm text-muted-foreground">
+                    <li className="border-b border-dashed border-border py-3 text-sm text-muted-foreground">
                       {emptyContainerLabel}
                     </li>
                   )}
@@ -251,18 +257,25 @@ export function ArrangeBoard({
                           >
                             <GripVertical aria-hidden className="size-4" />
                           </span>
-                          <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate font-semibold text-foreground">
-                              {item.label}
+                          {numbered && (
+                            <span className="w-8 shrink-0 font-mono text-[13px] text-muted-foreground">
+                              {ci + 1}.{index + 1}
                             </span>
-                            {item.sublabel && (
-                              <span className="truncate text-[11px] text-muted-foreground">
-                                {item.sublabel}
-                              </span>
-                            )}
+                          )}
+                          <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                            {item.label}
                           </span>
+                          {item.sublabel && (
+                            <span className="hidden w-20 shrink-0 truncate text-[13px] text-muted-foreground capitalize sm:block">
+                              {item.sublabel.toLowerCase()}
+                            </span>
+                          )}
                           {item.badge && (
-                            <span className="rounded-full bg-pill-grey-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-pill-grey-ink">
+                            <span
+                              className={`hidden w-20 shrink-0 text-[13px] sm:block ${
+                                item.badge === "Optional" ? "text-muted-foreground" : "text-foreground"
+                              }`}
+                            >
                               {item.badge}
                             </span>
                           )}
@@ -344,12 +357,12 @@ export function ArrangeBoard({
           type="button"
           onClick={() => onSave()}
           disabled={!dirty || saving}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save order"}
         </button>
         {dirty && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-pill-amber-bg px-2 py-1 text-[11px] font-semibold text-pill-amber-ink">
+          <span className="inline-flex items-center gap-1 rounded-full bg-pill-amber-bg px-2 py-1 text-xs font-semibold text-pill-amber-ink">
             <span aria-hidden className="size-1.5 rounded-full bg-pill-amber-dot" />
             Unsaved changes
           </span>
@@ -358,7 +371,7 @@ export function ArrangeBoard({
 
       {withdrawn.length > 0 && (
         <details className="rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
-          <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Withdrawn ({withdrawn.length})
           </summary>
           <ul className="mt-2 flex flex-col gap-1">
@@ -369,7 +382,7 @@ export function ArrangeBoard({
               >
                 <span className="flex-1 truncate">{entry.label}</span>
                 {entry.kind && (
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {entry.kind}
                   </span>
                 )}

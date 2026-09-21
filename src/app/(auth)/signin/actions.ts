@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/server/services/auth-service";
 import { SESSION_COOKIE, SESSION_TTL_DAYS } from "@/server/auth/lockout";
-import { landingPathFor } from "@/server/auth/landing";
+import { checkoutReturnPathFor, CHECKOUT_INTENT_COOKIE } from "@/server/auth/landing";
 
 export type SignInState = { error: string | null };
 
@@ -39,7 +39,14 @@ export async function signInAction(
     maxAge: SESSION_TTL_DAYS * 86_400,
   });
 
-  redirect(landingPathFor(result));
+  // D-14: consume the checkout-intent cookie, if any, on THIS response — the
+  // delete happens unconditionally and before the redirect so the intent is
+  // single-use. An abandoned checkout must not silently resurrect itself on
+  // an unrelated sign-in days later (T-06-21).
+  const intent = jar.get(CHECKOUT_INTENT_COOKIE)?.value;
+  jar.delete(CHECKOUT_INTENT_COOKIE);
+
+  redirect(checkoutReturnPathFor(result, intent));
 }
 
 export async function signOutAction(): Promise<void> {

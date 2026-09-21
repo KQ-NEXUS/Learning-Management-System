@@ -48,7 +48,58 @@ export type DomainEventType =
   // exercised enrolments.manage; activated means a verified Stripe payment
   // did it with no actor. Phase 8's reconciliation views and Phase 13's
   // email drain need to tell those apart from the outbox alone.
-  | "enrolment.activated";
+  | "enrolment.activated"
+  // 07-07 — the idempotent actual-settlement sweep (payment-reconciliation-
+  // service.ts). "reconciled" is the ordinary case (actual figures recorded,
+  // no variance); "reconciliation_exception" is the same write PLUS a
+  // variance beyond the schedule's rounding tolerance (D-14/D-18) — never a
+  // second Order.status change, never an Enrolment write.
+  | "payment.reconciled"
+  | "payment.reconciliation_exception"
+  // Phase 9 (LRN-07, DD-13) — emitted by completion-service.ts purely as
+  // Phase 13 drain input. No Phase 9 code path reads any of these three
+  // back as a trigger — DD-13 forbids a Phase-9 consumer of its own output,
+  // which is exactly the duplicate/circular write RESEARCH Pitfall 4
+  // describes. "lesson.completed" fires when a `LessonProgress` row is
+  // CREATED (not on every completion recalculation); "course.completed"
+  // and "programme.completed" fire only when a scope's verdict transitions
+  // from unsatisfied to satisfied — never on a supersede, and never a
+  // second time while the same CompletionRecord stays open.
+  | "lesson.completed"
+  | "course.completed"
+  | "programme.completed"
+  // Phase 10 (ASM-01..07) — Assessment/Attempt/Submission/Grade lifecycle.
+  // "grade.released" covers BOTH D-01's automatic quiz release AND staff
+  // single/batch release — one type, distinguished by payload, so Phase
+  // 13's drain needs exactly one handler for both origins.
+  // "grade.overridden" is ASM-06/D-07's audited correction of an
+  // already-RELEASED grade.
+  // "submission.created" fires only after the object store has confirmed
+  // the upload (ASM-04) — never optimistically, before the bytes exist.
+  // "attempt.submitted" fires when an Attempt transitions to SUBMITTED or
+  // EXPIRED.
+  | "attempt.submitted"
+  | "submission.created"
+  | "grade.released"
+  | "grade.overridden"
+  // Phase 11 (CRD-01, CRD-02, CRD-06) — certificate-issuance-service.ts.
+  // "certificate.issued" fires once, inside the same transaction as the
+  // Certificate row create, carrying only ids/scope/verificationRef — never
+  // PDF bytes (T-11-32). "certificate.review_flagged" fires when a
+  // previously-issued certificate is flagged for review, either by a
+  // completion supersede (attendance/lesson correction) or a grade
+  // correction (plan 11-10) — never on revoke/reissue, which are their own
+  // distinct acts.
+  | "certificate.issued"
+  | "certificate.review_flagged"
+  // Plan 11-11 — the staff-triggered revoke/reissue mutations
+  // (certificate-service.ts). "certificate.revoked" carries ids and the
+  // verificationRef only, never revocationReason (T-11-50 — staff-internal
+  // text must not reach Phase 13's email templates or the public verify
+  // page). "certificate.reissued" carries both the old and new certificate
+  // ids/references, also never the reason text.
+  | "certificate.revoked"
+  | "certificate.reissued";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction

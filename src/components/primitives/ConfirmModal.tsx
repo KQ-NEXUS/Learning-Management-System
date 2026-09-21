@@ -137,7 +137,7 @@ function ConfirmDialog({
         className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-6 shadow-card"
       >
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="font-mono text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {eyebrow}
           </span>
           <h2 id={titleId} className="text-base font-semibold tracking-tight text-foreground">
@@ -151,7 +151,7 @@ function ConfirmDialog({
             role="alert"
             className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
+            <p className="text-xs font-semibold uppercase tracking-wide text-danger">
               Action not applied
             </p>
             <p className="mt-1 text-sm text-danger">{error}</p>
@@ -162,7 +162,7 @@ function ConfirmDialog({
           <div className="flex flex-col gap-1">
             <label
               htmlFor={reasonId}
-              className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
             >
               {reasonLabel}
               <span className="ml-1 font-normal text-muted-foreground" aria-hidden>
@@ -184,7 +184,7 @@ function ConfirmDialog({
             <p
               id={counterId}
               aria-live="polite"
-              className={`font-mono text-[11px] ${
+              className={`font-mono text-xs ${
                 touched && !reasonValid ? "text-danger" : "text-muted-foreground"
               }`}
             >
@@ -213,7 +213,7 @@ function ConfirmDialog({
           >
             Cancel
           </button>
-          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+          <span className="ml-auto font-mono text-xs text-muted-foreground">
             {pending ? "ESC suppressed" : "ESC cancels"}
           </span>
         </div>

@@ -27,7 +27,12 @@ import {
  * successful save so a second save needs no reload.
  */
 
-type LessonLite = { id: string; title: string; type: string; required: boolean };
+type LessonLite = {
+  id: string;
+  title: string;
+  type: string;
+  required: boolean;
+};
 type ModuleLite = { id: string; title: string; lessons: LessonLite[] };
 
 export type ArrangeClientProps = {
@@ -203,67 +208,125 @@ export function ArrangeClient({
     if (res.ok) router.refresh();
   }
 
+  const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);
+  const requiredCount = modules.reduce(
+    (sum, m) => sum + m.lessons.filter((l) => l.required).length,
+    0,
+  );
+  const unsaved = moduleDirty || lessonDirty;
+
   return (
-    <div className="flex flex-col gap-6">
-      <ModuleComposer
-        modules={modules.map((m) => ({ id: m.id, title: m.title }))}
-        onAddModule={handleAddModule}
-        onRenameModule={handleRenameModule}
-      />
+    <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <div className="flex min-w-0 flex-col gap-10 lg:pr-14">
+        <ModuleComposer
+          modules={modules.map((m) => ({ id: m.id, title: m.title }))}
+          onAddModule={handleAddModule}
+          onRenameModule={handleRenameModule}
+        />
 
-      {modules.length > 0 && (
-        <>
-          <ArrangeBoard
-            title="Module order"
-            containers={moduleContainers}
-            withdrawn={withdrawnModules.map((m) => ({
-              id: m.id,
-              label: m.title,
-              kind: "Module",
-            }))}
-            dirty={moduleDirty}
-            saving={savingModules}
-            error={moduleError}
-            onArrangementChange={setModuleContainers}
-            onSave={handleSaveModuleOrder}
-            onRestore={(id) => handleRestore("module", id)}
-          />
-          {moduleStale && <ReloadRow onReload={() => router.refresh()} />}
+        {modules.length > 0 && (
+          <>
+            <ArrangeBoard
+              title="Module order"
+              containers={moduleContainers}
+              withdrawn={withdrawnModules.map((m) => ({
+                id: m.id,
+                label: m.title,
+                kind: "Module",
+              }))}
+              dirty={moduleDirty}
+              saving={savingModules}
+              error={moduleError}
+              onArrangementChange={setModuleContainers}
+              onSave={handleSaveModuleOrder}
+              onRestore={(id) => handleRestore("module", id)}
+            />
+            {moduleStale && <ReloadRow onReload={() => router.refresh()} />}
 
-          <ArrangeBoard
-            title="Lessons by module"
-            containers={lessonContainers}
-            withdrawn={withdrawnLessons.map((l) => ({
-              id: l.id,
-              label: l.title,
-              kind: l.moduleTitle,
-            }))}
-            dirty={lessonDirty}
-            saving={savingLessons}
-            error={lessonError}
-            allowCrossContainer
-            onArrangementChange={setLessonContainers}
-            onSave={handleSaveLessonArrangement}
-            onRestore={(id) => handleRestore("lesson", id)}
-            renderContainerAction={(containerId) => (
-              <GuardedLink
-                href={`/staff/courses/${courseId}/lessons/new?moduleId=${containerId}`}
-                className="rounded-md border border-input-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-2"
+            <ArrangeBoard
+              title="Lessons by module"
+              containers={lessonContainers}
+              withdrawn={withdrawnLessons.map((l) => ({
+                id: l.id,
+                label: l.title,
+                kind: l.moduleTitle,
+              }))}
+              dirty={lessonDirty}
+              saving={savingLessons}
+              error={lessonError}
+              allowCrossContainer
+              numbered
+              onArrangementChange={setLessonContainers}
+              onSave={handleSaveLessonArrangement}
+              onRestore={(id) => handleRestore("lesson", id)}
+              renderContainerAction={(containerId) => (
+                <GuardedLink
+                  href={`/staff/courses/${courseId}/lessons/new?moduleId=${containerId}`}
+                  className="rounded-md px-2 py-1 text-xs font-semibold text-accent hover:bg-accent-wash"
+                >
+                  Add lesson
+                </GuardedLink>
+              )}
+            />
+            {lessonStale && <ReloadRow onReload={() => router.refresh()} />}
+          </>
+        )}
+      </div>
+
+      <aside
+        aria-label="Outline"
+        className="flex flex-col gap-8 lg:border-l lg:border-border lg:pl-10"
+      >
+        <section>
+          <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+            Outline
+          </h2>
+          <dl className="border-t border-foreground">
+            {(
+              [
+                ["Modules", modules.length],
+                ["Lessons", lessonCount],
+                ["Required", requiredCount],
+              ] as const
+            ).map(([label, value]) => (
+              <div
+                key={label}
+                className="flex justify-between border-b border-border py-3"
               >
-                Add lesson
-              </GuardedLink>
-            )}
-          />
-          {lessonStale && <ReloadRow onReload={() => router.refresh()} />}
-        </>
-      )}
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="font-mono tabular-nums">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+        <section>
+          <p className="font-semibold text-foreground">Moving things</p>
+          <p className="text-muted-foreground">
+            Drag by the handle. Or focus a handle, press space to lift, use the
+            arrow keys to move, and press space again to drop.
+          </p>
+        </section>
+        {unsaved && (
+          <p
+            role="status"
+            data-tone="warning"
+            className="font-medium text-warning"
+          >
+            <span
+              aria-hidden
+              className="mr-2 inline-block size-[7px] rounded-full bg-current"
+            />
+            The new order is not saved yet. Leaving this page discards it.
+          </p>
+        )}
+      </aside>
     </div>
   );
 }
 
 function ReloadRow({ onReload }: { onReload: () => void }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground shadow-xs">
+    <div className="flex items-center gap-2 text-sm text-foreground border-b border-border py-3">
       <span>Someone else changed this order while you were working.</span>
       <button
         type="button"

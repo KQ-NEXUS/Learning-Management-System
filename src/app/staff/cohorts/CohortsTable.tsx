@@ -30,6 +30,9 @@ export type CohortRow = {
   timezone: string;
   enrolmentOpensAt: string;
   enrolmentClosesAt: string;
+  startsAt: string;
+  /** Names of the cohort's assigned instructors (empty when none, or when the viewer cannot read them). */
+  instructors: string[];
   capacity: number;
   seatsTaken: number;
   status: string;
@@ -57,63 +60,62 @@ const DELIVERY_LABEL: Record<string, string> = {
   BLENDED: "Blended",
 };
 
-/** Formats a UTC ISO instant as the date shown in the cohort's own timezone. */
+/** "12 Oct 2026", in the cohort's own timezone. */
 function formatInZone(iso: string, timezone: string): string {
+  const opts = { day: "numeric", month: "short", year: "numeric" } as const;
   try {
-    const dtf = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    return dtf.format(new Date(iso));
+    return new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: timezone }).format(new Date(iso));
   } catch {
-    return iso.slice(0, 10);
+    return new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: "UTC" }).format(new Date(iso));
   }
 }
 
 const columns: Column<CohortRow>[] = [
   {
     key: "code",
-    header: "Code",
-    render: (c) => c.code,
-    mono: true,
-    width: "12%",
+    header: "Cohort",
+    render: (c) => <span className="font-semibold">{c.offerTitle === "—" ? c.title : c.title}</span>,
+    subtitle: (c) => <span className="font-mono text-xs">{c.code}</span>,
+    width: "28%",
     sortable: true,
   },
   {
-    key: "offer",
-    header: "Offer",
-    render: (c) => c.offerTitle,
-    subtitle: (c) => c.offerKind,
-    width: "28%",
+    key: "starts",
+    header: "Starts",
+    render: (c) => formatInZone(c.startsAt, c.timezone),
+    subtitle: (c) => c.timezone,
+    width: "12%",
   },
   {
     key: "deliveryMode",
-    header: "Delivery mode",
-    render: (c) => <StatusPill label={DELIVERY_LABEL[c.deliveryMode] ?? c.deliveryMode} />,
-    width: "16%",
+    header: "Format",
+    render: (c) => DELIVERY_LABEL[c.deliveryMode] ?? c.deliveryMode,
+    width: "14%",
   },
   {
-    key: "window",
-    header: "Window",
-    render: (c) =>
-      `${formatInZone(c.enrolmentOpensAt, c.timezone)} → ${formatInZone(
-        c.enrolmentClosesAt,
-        c.timezone,
-      )}`,
-    subtitle: (c) => c.timezone,
-    mono: true,
-    width: "22%",
+    key: "instructor",
+    header: "Instructor",
+    render: (c) => (c.instructors.length > 0 ? c.instructors.join(", ") : "—"),
+    width: "16%",
+    hideOnMobile: true,
   },
   {
     key: "seats",
     header: "Seats",
-    // `seatsTaken` renders as "{seatsTaken}/{capacity}" — mono, right-aligned.
-    render: (c) => `${c.seatsTaken}/${c.capacity}`,
-    align: "right",
-    mono: true,
-    width: "10%",
+    render: (c) => (
+      <span className="flex items-center gap-3">
+        <span aria-hidden className="h-1 w-20 overflow-hidden rounded-full bg-accent-wash">
+          <span
+            className="block h-full rounded-full bg-progress-fill"
+            style={{ width: `${Math.min(100, Math.round((c.seatsTaken / Math.max(c.capacity, 1)) * 100))}%` }}
+          />
+        </span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {c.seatsTaken}/{c.capacity}
+        </span>
+      </span>
+    ),
+    width: "14%",
     sortable: true,
   },
   {
@@ -122,31 +124,35 @@ const columns: Column<CohortRow>[] = [
     render: (c) => (
       <StatusPill label={STATUS_LABEL[c.status] ?? c.status} tone={STATUS_TONE[c.status] ?? "neutral"} />
     ),
-    width: "12%",
+    width: "14%",
   },
 ];
 
 const DELIVERY_OPTIONS = [
-  { value: "", label: "Any" },
+  { value: "", label: "All formats" },
   { value: "SELF_PACED", label: "Self-paced" },
   { value: "INSTRUCTOR_LED", label: "Instructor-led" },
   { value: "BLENDED", label: "Blended" },
 ];
 
-const STATUS_OPTIONS = [
-  { value: "", label: "Any" },
-  { value: "DRAFT", label: "Draft" },
-  { value: "PUBLISHED", label: "Published" },
-  { value: "IN_PROGRESS", label: "In progress" },
+// Tab order and wording: the mockup's "Open / In delivery / Completed", plus the two states it
+// does not draw. A tab is only shown once at least one cohort is in that status.
+const STATUS_TABS = [
+  { value: "PUBLISHED", label: "Open" },
+  { value: "IN_PROGRESS", label: "In delivery" },
   { value: "COMPLETED", label: "Completed" },
+  { value: "DRAFT", label: "Draft" },
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
 export function CohortsTable({
+  canCreate = true,
   rows,
   denied,
 }: {
   rows?: CohortRow[];
+  /** Hide the create button for staff who cannot create. Default true. */
+  canCreate?: boolean;
   denied?: { permission: string };
 }) {
   const [search, setSearch] = useState("");
@@ -174,6 +180,13 @@ export function CohortsTable({
       return a.code.localeCompare(b.code) * dir;
     });
   }, [rows, search, status, deliveryMode, sort]);
+
+  const statusTabs = [
+    { value: "", label: "All", count: rows?.length ?? 0 },
+    ...STATUS_TABS.map((tab) => ({ ...tab, count: rows?.filter((r) => r.status === tab.value).length ?? 0 })).filter(
+      (tab) => tab.count > 0,
+    ),
+  ];
 
   const activeFilterCount = (search ? 1 : 0) + (status ? 1 : 0) + (deliveryMode ? 1 : 0);
   const query = [
@@ -208,6 +221,7 @@ export function CohortsTable({
 
   return (
     <ResourceTable<CohortRow>
+      asPage
       noun="cohorts"
       title="Cohorts"
       columns={columns}
@@ -221,25 +235,26 @@ export function CohortsTable({
       emptyBody="Create a cohort to schedule sessions and open enrolment."
       filters={[
         {
+          kind: "tabs",
+          name: "status",
+          label: "Status",
+          value: status,
+          options: statusTabs,
+        },
+        {
           kind: "search",
           name: "search",
           label: "Search",
           value: search,
-          placeholder: "Code or title",
-        },
-        {
-          kind: "select",
-          name: "status",
-          label: "Status",
-          value: status,
-          options: STATUS_OPTIONS,
+          placeholder: "Search by code or title",
         },
         {
           kind: "select",
           name: "deliveryMode",
-          label: "Delivery mode",
+          label: "Format",
           value: deliveryMode,
           options: DELIVERY_OPTIONS,
+          variant: "select",
         },
       ]}
       onFilterChange={(name, value) => {
@@ -258,15 +273,17 @@ export function CohortsTable({
         )
       }
       headerActions={
-        // The one accent primary button on this screen (UI-SPEC accent
-        // reserved list #1) — always visible, never duplicated in the empty
-        // state, so there is exactly one "Create cohort" affordance at a time.
-        <Link
-          href="/staff/cohorts/new"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
-        >
-          Create cohort
-        </Link>
+        canCreate ? (
+          // The one accent primary button on this screen (UI-SPEC accent
+          // reserved list #1) — always visible, never duplicated in the empty
+          // state, so there is exactly one "Create cohort" affordance at a time.
+          <Link
+            href="/staff/cohorts/new"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
+          >
+            New cohort
+          </Link>
+        ) : undefined
       }
     />
   );

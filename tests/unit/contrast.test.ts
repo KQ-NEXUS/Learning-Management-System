@@ -31,7 +31,7 @@ function contrastRatio(hexA: string, hexB: string): number {
 /** Parses every `--primitive-*` / `--pill-*` hex declaration out of globals.css's `:root` block. */
 function parseTokens(css: string): Map<string, string> {
   const map = new Map<string, string>();
-  const pattern = /--((?:primitive|pill)-[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;/g;
+  const pattern = /--((?:primitive|pill|sidebar|on-navy)-[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;/g;
   for (const match of css.matchAll(pattern)) {
     map.set(match[1], match[2]);
   }
@@ -50,8 +50,17 @@ const REQUIRED_TOKENS = [
   "primitive-line",
   "primitive-paper",
   "primitive-brand",
-  "primitive-teal-700",
-  "primitive-teal-500",
+  "primitive-field",
+  "primitive-navy",
+  "primitive-brand-light",
+  "sidebar-fg",
+  "sidebar-muted",
+  "sidebar-soft",
+  "on-navy-green",
+  "on-navy-amber",
+  "on-navy-red",
+  "on-navy-blue",
+  "on-navy-grey",
   "primitive-amber-700",
   "primitive-amber-500",
   "primitive-red-700",
@@ -96,7 +105,11 @@ describe("body text contrast — UI-SPEC 5.4 PASS rows, >= 4.5:1", () => {
     ["muted-foreground on paper", () => hex("primitive-muted"), paper],
     ["accent (brand) on white", () => hex("primitive-brand"), white],
     ["accent-contrast (white) on accent", white, () => hex("primitive-brand")],
-    ["teal-text on white", () => hex("primitive-teal-700"), white],
+    ["status green ink on white", () => hex("pill-green-ink"), white],
+    ["status blue ink on white", () => hex("pill-blue-ink"), white],
+    ["status amber ink on white", () => hex("pill-amber-ink"), white],
+    ["status grey ink on white", () => hex("pill-grey-ink"), white],
+    ["status red ink on white", () => hex("pill-red-ink"), white],
     ["warning (text-safe amber) on white", () => hex("primitive-amber-700"), white],
     ["success (green) on white", () => hex("primitive-green-700"), white],
     ["danger on white", () => hex("primitive-red-700"), white],
@@ -109,10 +122,37 @@ describe("body text contrast — UI-SPEC 5.4 PASS rows, >= 4.5:1", () => {
   });
 });
 
-describe("UI edge contrast — input-border (muted), >= 3:1 against white and parsed paper", () => {
+describe("navy frame text contrast — rail, header band and auth panel, >= 4.5:1", () => {
+  const navy = () => hex("primitive-navy");
+  const pairs: [string, () => string][] = [
+    ["white on navy", () => hex("primitive-white")],
+    ["sidebar-fg on navy", () => hex("sidebar-fg")],
+    ["sidebar-muted on navy", () => hex("sidebar-muted")],
+    ["sidebar-soft on navy", () => hex("sidebar-soft")],
+    ["on-navy green status on navy", () => hex("on-navy-green")],
+    ["on-navy amber status on navy", () => hex("on-navy-amber")],
+    ["on-navy red status on navy", () => hex("on-navy-red")],
+    ["on-navy blue status on navy", () => hex("on-navy-blue")],
+    ["on-navy grey status on navy", () => hex("on-navy-grey")],
+  ];
+  it.each(pairs)("%s meets 4.5:1", (_label, fg) => {
+    expect(contrastRatio(fg(), navy())).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // The active-nav underline on navy is a non-text indicator: 3:1 (WCAG 1.4.11).
+  it("accent-light (active nav underline) on navy meets 3:1", () => {
+    expect(contrastRatio(hex("primitive-brand-light"), navy())).toBeGreaterThanOrEqual(3);
+  });
+  // The primary button is the brand blue sitting on navy in the header band: 3:1 for the edge.
+  it("brand blue button on navy meets 3:1", () => {
+    expect(contrastRatio(hex("primitive-brand"), navy())).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("UI edge contrast — input-border (field), >= 3:1 against white and parsed paper", () => {
   const uiEdgePairs: [string, () => string, () => string][] = [
-    ["input-border (muted) on white", () => hex("primitive-muted"), () => hex("primitive-white")],
-    ["input-border (muted) on paper", () => hex("primitive-muted"), () => hex("primitive-paper")],
+    ["input-border (field) on white", () => hex("primitive-field"), () => hex("primitive-white")],
+    ["input-border (field) on paper", () => hex("primitive-field"), () => hex("primitive-paper")],
   ];
 
   it.each(uiEdgePairs)("%s meets 3:1", (_label, fg, bg) => {
@@ -139,8 +179,8 @@ describe("StatusPill tone ink-on-tint — UI-SPEC 5.6, >= 4.5:1", () => {
 describe("deliberately sub-threshold values — pinned by exact hex, not asserted as passing", () => {
   // WCAG 1.4.11 (D-15): --primitive-line is a decorative/structural border, exempt because
   // these elements are identified by content/layout, not solely their edge.
-  it("--primitive-line stays #dfe5ee", () => {
-    expect(hex("primitive-line")).toBe("#dfe5ee");
+  it("--primitive-line stays #e3e7f1", () => {
+    expect(hex("primitive-line")).toBe("#e3e7f1");
   });
 
   // WCAG 1.4.11 (D-12/D-15 mitigation, UI-SPEC 5.5): --primitive-amber-500 is the fill token,

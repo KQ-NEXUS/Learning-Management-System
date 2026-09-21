@@ -14,6 +14,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { isPaystackRailEnabled, isStripeRailEnabled } from "@/server/payments/settlement-config";
 
 /**
  * A record is public iff it is `publiclyListed` AND not `ARCHIVED`.
@@ -56,12 +57,25 @@ export type PublicCohort = {
   enrolmentOpensAt: Date;
   enrolmentClosesAt: Date;
   deliveryMode: "SELF_PACED" | "INSTRUCTOR_LED" | "BLENDED";
-  priceMinor: number;
-  currency: string;
+  // D-06/D-08 — the two independent, nullable dual-currency rails this phase
+  // adds. `null` means "this rail is not offered OR this deployment's
+  // required school settlement account is absent for it (D-05, D-19)" —
+  // the anonymous card never learns which. The legacy `priceMinor`/
+  // `currency` pair is gone (07-11).
+  priceNgnMinor: number | null;
+  priceUsdMinor: number | null;
   // Derived (capacity - seatsTaken, floored at 0) — the raw seatsTaken/capacity
   // counters are internal operational data and are never present on this
   // anonymous payload (REG-01, 06-RESEARCH.md Pitfall 6).
   seatsAvailable: number;
+};
+
+/** A live module of a public course, by title only, with how many live lessons it holds. */
+export type PublicCourseModule = { title: string; lessonCount: number };
+
+/** What the catalogue list shows per course: the course plus its soonest bookable cohort. */
+export type PublicCourseListing = Omit<PublicCourse, "upcomingCohorts" | "modules"> & {
+  nextCohort: PublicCohort | null;
 };
 
 export type PublicCourse = {
@@ -73,7 +87,13 @@ export type PublicCourse = {
   prerequisites: string | null;
   durationHours: number | null;
   certificateEnabled: boolean;
+  modules: PublicCourseModule[];
   upcomingCohorts: PublicCohort[];
+};
+
+/** What the catalogue list shows per programme: the programme plus its soonest bookable cohort. */
+export type PublicProgrammeListing = Omit<PublicProgramme, "upcomingCohorts" | "memberCourseTitles"> & {
+  nextCohort: PublicCohort | null;
 };
 
 export type PublicProgramme = {
@@ -98,13 +118,26 @@ export type PublicCatalogueDeps = {
   programmeDelegate: Finder;
   cohortDelegate: CohortFinder;
   now?: () => Date;
+  /**
+   * Whether this deployment's required school settlement account is present
+   * for each rail (D-02/D-05) — the same presence check `cohort-service.ts`
+   * injects into `evaluateCohortReadiness` (07-05), reused here so a rail
+   * that is priced but has no usable settlement account is never offered to
+   * an anonymous visitor as a selectable payment option (D-19). Defaults to
+   * both rails enabled so every existing test/caller that omits this keeps
+   * its current behaviour; the real binding at the bottom of this file wires
+   * it to `settlement-config.ts`'s own presence checks.
+   */
+  enabledRails?: () => { ngn: boolean; usd: boolean };
 };
 
 export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
   const now = deps.now ?? (() => new Date());
+  const enabledRails = deps.enabledRails ?? (() => ({ ngn: true, usd: true }));
 
   async function upcomingCohorts(link: { courseId: string } | { programmeId: string }): Promise<PublicCohort[]> {
     const at = now();
+    const rails = enabledRails();
     const rows = (await deps.cohortDelegate.findMany({
       where: { ...link, status: "PUBLISHED", startsAt: { gt: at } },
       select: {
@@ -114,8 +147,8 @@ export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
         enrolmentOpensAt: true,
         enrolmentClosesAt: true,
         deliveryMode: true,
-        priceMinor: true,
-        currency: true,
+        priceNgnMinor: true,
+        priceUsdMinor: true,
         capacity: true,
         seatsTaken: true,
       },
@@ -142,38 +175,71 @@ export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
         enrolmentOpensAt: new Date(row.enrolmentOpensAt),
         enrolmentClosesAt: new Date(row.enrolmentClosesAt),
         deliveryMode: row.deliveryMode,
-        priceMinor: row.priceMinor,
-        currency: row.currency,
+        // D-05/D-19 — a priced rail this deployment has not enabled (no
+        // settlement account configured) is nulled out here, at the source,
+        // exactly like an unpriced rail. The card downstream (CohortCards)
+        // never learns WHY a rail is absent — only that it is, which is the
+        // "boolean-shaped fact, never a reason string" this phase requires.
+        priceNgnMinor: rails.ngn ? row.priceNgnMinor : null,
+        priceUsdMinor: rails.usd ? row.priceUsdMinor : null,
         seatsAvailable: Math.max(0, row.capacity - row.seatsTaken),
       }));
   }
 
-  async function listPublicCourses(): Promise<Array<Omit<PublicCourse, "upcomingCohorts">>> {
+  async function listPublicCourses(): Promise<PublicCourseListing[]> {
     const rows = (await deps.courseDelegate.findMany({
       where: PUBLIC_VISIBILITY_WHERE,
-      select: COURSE_PUBLIC_SELECT,
+      select: { ...COURSE_PUBLIC_SELECT, id: true },
       orderBy: { title: "asc" },
-    })) as Array<Omit<PublicCourse, "upcomingCohorts">>;
-    return rows;
+    })) as Array<Omit<PublicCourseListing, "nextCohort"> & { id: string }>;
+    return Promise.all(
+      rows.map(async ({ id, ...rest }) => ({
+        ...rest,
+        nextCohort: (await upcomingCohorts({ courseId: id }))[0] ?? null,
+      })),
+    );
   }
 
-  async function listPublicProgrammes(): Promise<Array<Omit<PublicProgramme, "upcomingCohorts" | "memberCourseTitles">>> {
+  async function listPublicProgrammes(): Promise<PublicProgrammeListing[]> {
     const rows = (await deps.programmeDelegate.findMany({
       where: PUBLIC_VISIBILITY_WHERE,
-      select: PROGRAMME_PUBLIC_SELECT,
+      select: { ...PROGRAMME_PUBLIC_SELECT, id: true },
       orderBy: { title: "asc" },
-    })) as Array<Omit<PublicProgramme, "upcomingCohorts" | "memberCourseTitles">>;
-    return rows;
+    })) as Array<Omit<PublicProgrammeListing, "nextCohort"> & { id: string }>;
+    return Promise.all(
+      rows.map(async ({ id, ...rest }) => ({
+        ...rest,
+        nextCohort: (await upcomingCohorts({ programmeId: id }))[0] ?? null,
+      })),
+    );
   }
 
   async function getPublicCourseBySlug(slug: string): Promise<PublicCourse | null> {
     const row = (await deps.courseDelegate.findFirst({
       where: { slug, ...PUBLIC_VISIBILITY_WHERE },
-      select: { ...COURSE_PUBLIC_SELECT, id: true },
-    })) as (Omit<PublicCourse, "upcomingCohorts"> & { id: string }) | null;
+      select: {
+        ...COURSE_PUBLIC_SELECT,
+        id: true,
+        // Titles and lesson counts of LIVE modules only: withdrawn ones are soft-deleted.
+        modules: {
+          where: { withdrawnAt: null },
+          orderBy: { position: "asc" },
+          select: { title: true, lessons: { where: { withdrawnAt: null }, select: { id: true } } },
+        },
+      },
+    })) as
+      | (Omit<PublicCourse, "upcomingCohorts" | "modules"> & {
+          id: string;
+          modules?: Array<{ title: string; lessons: unknown[] }>;
+        })
+      | null;
     if (!row) return null;
-    const { id, ...rest } = row;
-    return { ...rest, upcomingCohorts: await upcomingCohorts({ courseId: id }) };
+    const { id, modules, ...rest } = row;
+    return {
+      ...rest,
+      modules: (modules ?? []).map((m) => ({ title: m.title, lessonCount: m.lessons.length })),
+      upcomingCohorts: await upcomingCohorts({ courseId: id }),
+    };
   }
 
   async function getPublicProgrammeBySlug(slug: string): Promise<PublicProgramme | null> {
@@ -211,6 +277,7 @@ const built = createPublicCatalogueService({
   courseDelegate: prisma.course as unknown as Finder,
   programmeDelegate: prisma.programme as unknown as Finder,
   cohortDelegate: prisma.cohort as unknown as CohortFinder,
+  enabledRails: () => ({ ngn: isPaystackRailEnabled(), usd: isStripeRailEnabled() }),
 });
 
 export const listPublicCourses = built.listPublicCourses;

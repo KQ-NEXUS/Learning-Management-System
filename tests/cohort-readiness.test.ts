@@ -10,8 +10,11 @@ import {
  *
  * Six categories: Catalogue, Schedule, Price, Capacity, Instructors, Completion.
  * Catalogue / Schedule / Capacity / Instructors are `blocking: true` and
- * FAIL-capable; Price is `blocking: true` but effectively always PASS;
- * Completion (and the two WARN sub-items) are `blocking: false`.
+ * FAIL-capable; Completion (and the two WARN sub-items) are `blocking: false`.
+ *
+ * Price (D-06/D-08, 07-05) is TWO items, `price-ngn` and `price-usd` — one
+ * per online rail — each `blocking` only when `enabledRails` says this
+ * deployment has turned that rail on.
  */
 
 function makeCohort(overrides: Partial<ReadinessCohortInput> = {}): ReadinessCohortInput {
@@ -21,8 +24,9 @@ function makeCohort(overrides: Partial<ReadinessCohortInput> = {}): ReadinessCoh
     endsAt: "2026-12-01T00:00:00.000Z",
     capacity: 20,
     seatsTaken: 5,
-    priceMinor: 50000,
-    currency: "GBP",
+    priceNgnMinor: 45000000,
+    priceUsdMinor: 50000,
+    enabledRails: { ngn: true, usd: true },
     attendanceThresholdPct: 80,
     instructorCount: 2,
     nonCancelledSessionCount: 8,
@@ -48,18 +52,20 @@ function find(items: ReturnType<typeof evaluateCohortReadiness>, id: string) {
 }
 
 describe("evaluateCohortReadiness — item shape", () => {
-  it("emits exactly the eight documented ids in order", () => {
+  it("emits exactly the nine documented ids in order, with no item id price remaining", () => {
     const items = evaluateCohortReadiness(makeCohort());
     expect(items.map((item) => item.id)).toEqual([
       "catalogue",
       "schedule",
       "schedule-dates",
-      "price",
+      "price-ngn",
+      "price-usd",
       "capacity",
       "instructors",
       "completion",
       "attendance-threshold-self-paced",
     ]);
+    expect(items.some((item) => item.id === "price")).toBe(false);
   });
 
   it("never uses NOT_YET_CHECKED and never carries deferredTo — D-28 makes them real checks", () => {
@@ -78,11 +84,12 @@ describe("evaluateCohortReadiness — item shape", () => {
     }
   });
 
-  it("Catalogue / Schedule / Capacity / Instructors are blocking; Price is blocking; Completion items are not", () => {
+  it("Catalogue / Schedule / Capacity / Instructors are blocking; price-ngn/price-usd are blocking when their rail is enabled; Completion items are not", () => {
     const items = evaluateCohortReadiness(makeCohort());
     expect(find(items, "catalogue")?.blocking).toBe(true);
     expect(find(items, "schedule")?.blocking).toBe(true);
-    expect(find(items, "price")?.blocking).toBe(true);
+    expect(find(items, "price-ngn")?.blocking).toBe(true);
+    expect(find(items, "price-usd")?.blocking).toBe(true);
     expect(find(items, "capacity")?.blocking).toBe(true);
     expect(find(items, "instructors")?.blocking).toBe(true);
     expect(find(items, "schedule-dates")?.blocking).toBe(false);
@@ -95,7 +102,8 @@ describe("evaluateCohortReadiness — item shape", () => {
     expect(find(items, "catalogue")?.category).toBe("Catalogue");
     expect(find(items, "schedule")?.category).toBe("Schedule");
     expect(find(items, "schedule-dates")?.category).toBe("Schedule");
-    expect(find(items, "price")?.category).toBe("Price");
+    expect(find(items, "price-ngn")?.category).toBe("Price");
+    expect(find(items, "price-usd")?.category).toBe("Price");
     expect(find(items, "capacity")?.category).toBe("Capacity");
     expect(find(items, "instructors")?.category).toBe("Instructors");
     expect(find(items, "completion")?.category).toBe("Completion");
@@ -211,25 +219,76 @@ describe("evaluateCohortReadiness — Schedule (D-28)", () => {
   });
 });
 
-describe("evaluateCohortReadiness — Price (D-28)", () => {
-  it("PASS for a paid cohort with a currency", () => {
+describe("evaluateCohortReadiness — Price (D-06/D-08, 07-05)", () => {
+  it("price-ngn PASSes with a positive NGN price and reads exactly the Paystack label", () => {
     const items = evaluateCohortReadiness(makeCohort());
-    expect(find(items, "price")?.state).toBe("PASS");
+    const priceNgn = find(items, "price-ngn");
+    expect(priceNgn?.state).toBe("PASS");
+    expect(priceNgn?.label).toBe("NGN price set (Paystack)");
+    expect(priceNgn?.detail).toContain("Paystack");
   });
 
-  it("PASS for a free cohort — priceMinor 0 is legal", () => {
-    const items = evaluateCohortReadiness(makeCohort({ priceMinor: 0 }));
-    expect(find(items, "price")?.state).toBe("PASS");
+  it("price-usd PASSes with a positive USD price and reads exactly the Stripe label", () => {
+    const items = evaluateCohortReadiness(makeCohort());
+    const priceUsd = find(items, "price-usd");
+    expect(priceUsd?.state).toBe("PASS");
+    expect(priceUsd?.label).toBe("USD price set (Stripe)");
+    expect(priceUsd?.detail).toContain("Stripe");
   });
 
-  it("FAIL when currency is missing", () => {
-    const items = evaluateCohortReadiness(makeCohort({ currency: null }));
-    expect(find(items, "price")?.state).toBe("FAIL");
+  it("price-ngn FAILs when priceNgnMinor is null, with the exact UI-SPEC copy naming the rail", () => {
+    const items = evaluateCohortReadiness(makeCohort({ priceNgnMinor: null }));
+    const priceNgn = find(items, "price-ngn");
+    expect(priceNgn?.state).toBe("FAIL");
+    expect(priceNgn?.detail).toBe(
+      "No NGN price set — this rail is unavailable to learners until an administrator adds one.",
+    );
   });
 
-  it("FAIL when priceMinor is negative", () => {
-    const items = evaluateCohortReadiness(makeCohort({ priceMinor: -1 }));
-    expect(find(items, "price")?.state).toBe("FAIL");
+  it("price-usd FAILs when priceUsdMinor is null, with the exact UI-SPEC copy naming the rail", () => {
+    const items = evaluateCohortReadiness(makeCohort({ priceUsdMinor: null }));
+    const priceUsd = find(items, "price-usd");
+    expect(priceUsd?.state).toBe("FAIL");
+    expect(priceUsd?.detail).toBe(
+      "No USD price set — this rail is unavailable to learners until an administrator adds one.",
+    );
+  });
+
+  it("price-ngn FAILs when priceNgnMinor is 0 — a free online rail is not a legal published state", () => {
+    const items = evaluateCohortReadiness(makeCohort({ priceNgnMinor: 0 }));
+    expect(find(items, "price-ngn")?.state).toBe("FAIL");
+  });
+
+  it("price-ngn FAILs when priceNgnMinor is negative", () => {
+    const items = evaluateCohortReadiness(makeCohort({ priceNgnMinor: -1 }));
+    expect(find(items, "price-ngn")?.state).toBe("FAIL");
+  });
+
+  it("with NGN priced and USD unpriced on a deployment where both rails are enabled, price-ngn PASSes and price-usd FAILs, and blockingFailures includes exactly the USD item", () => {
+    const items = evaluateCohortReadiness(
+      makeCohort({ priceNgnMinor: 45000000, priceUsdMinor: null, enabledRails: { ngn: true, usd: true } }),
+    );
+    expect(find(items, "price-ngn")?.state).toBe("PASS");
+    expect(find(items, "price-usd")?.state).toBe("FAIL");
+    const failures = blockingFailures(items);
+    expect(failures.map((item) => item.id)).toContain("price-usd");
+    expect(failures.map((item) => item.id)).not.toContain("price-ngn");
+  });
+
+  it("with NGN priced and only the NGN rail enabled, price-usd is present but non-blocking, so publication is not blocked on price", () => {
+    const items = evaluateCohortReadiness(
+      makeCohort({ priceNgnMinor: 45000000, priceUsdMinor: null, enabledRails: { ngn: true, usd: false } }),
+    );
+    const priceUsd = find(items, "price-usd");
+    expect(priceUsd?.state).toBe("FAIL");
+    expect(priceUsd?.blocking).toBe(false);
+    expect(blockingFailures(items).map((item) => item.id)).not.toContain("price-usd");
+  });
+
+  it("updating one price never changes the other — no conversion exists anywhere in this evaluator", () => {
+    const before = evaluateCohortReadiness(makeCohort({ priceNgnMinor: 45000000, priceUsdMinor: 50000 }));
+    const after = evaluateCohortReadiness(makeCohort({ priceNgnMinor: 90000000, priceUsdMinor: 50000 }));
+    expect(find(after, "price-usd")).toEqual(find(before, "price-usd"));
   });
 });
 

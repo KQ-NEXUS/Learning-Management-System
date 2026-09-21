@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import { programmeService } from "@/server/services/programme-service";
@@ -36,10 +37,7 @@ export default async function NewCohortPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="font-mono text-[11px] text-muted-foreground">Staff · Cohorts</p>
-        <h1 className="text-[25px] leading-[1.2] font-semibold tracking-tight">New cohort</h1>
-      </div>
+      <PageHeader title="New cohort" breadcrumbs={[{ label: "Cohorts", href: "/staff/cohorts" }, { label: "New" }]} />
       <CohortForm mode="create" courses={courses} programmes={programmes} />
     </div>
   );

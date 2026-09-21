@@ -1,0 +1,36 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+const m = vi.hoisted(() => ({ actor: vi.fn(), load: vi.fn(), get: vi.fn(), start: vi.fn(), save: vi.fn(), submit: vi.fn(), revalidate: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: m.revalidate }));
+vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: m.actor }));
+vi.mock("@/server/services/learner-quiz-service", () => ({ loadLearnerQuiz: m.load, toSafeQuizAttempt: () => ({ id: "a", questions: [], responses: [] }), quizResultForLearner: (result: unknown) => result }));
+vi.mock("@/server/services/attempt-service", async importOriginal => ({ ...await importOriginal<object>(), startAttempt: m.start, getOwnAttempt: m.get, saveAttemptAnswers: m.save, submitAttempt: m.submit }));
+import { startAttemptAction, saveAttemptAnswersAction, submitAttemptAction } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions";
+import { AttemptNotStartableError } from "@/server/services/attempt-service";
+const input = { enrolmentId: "e", lessonId: "l", attemptId: "a", responses: [{ questionId: "q", selectedOptionIds: ["o"] }] };
+beforeEach(() => { vi.clearAllMocks(); m.actor.mockResolvedValue({ userId: "u" }); m.load.mockResolvedValue({ assessmentId: "quiz", feedbackBehaviour: "IMMEDIATE", history: [] }); m.get.mockResolvedValue({ id: "a", enrolmentId: "e", assessmentId: "quiz", status: "IN_PROGRESS" }); m.start.mockResolvedValue({}); m.save.mockResolvedValue({}); m.submit.mockResolvedValue({ score: 1 }); });
+describe("quiz action boundary", () => {
+  it("reports the authored attempt limit on a refused start", async () => {
+    m.start.mockRejectedValue(new AttemptNotStartableError("quiz", "attempt-limit-reached", 2));
+    expect(await startAttemptAction({ enrolmentId: "e", lessonId: "l", assessmentId: "quiz" })).toMatchObject({ ok: false, message: "You've used all 2 of your attempts for this quiz." });
+  });
+  it.each(["score", "maxScore", "passed"])("rejects client verdict %s", async key => { expect((await submitAttemptAction({ ...input, [key]: 100 })).ok).toBe(false); expect(m.submit).not.toHaveBeenCalled(); });
+  it("rejects nested verdicts on save", async () => { expect((await saveAttemptAnswersAction({ ...input, responses: [{ ...input.responses[0], score: 1 }] })).ok).toBe(false); expect(m.save).not.toHaveBeenCalled(); });
+  it("checks the lesson's actual assessment before starting", async () => { expect((await startAttemptAction({ enrolmentId: "e", lessonId: "l", assessmentId: "foreign" })).ok).toBe(false); expect(m.start).not.toHaveBeenCalled(); });
+  it("returns refreshed history and remaining attempts after abandoning an unfinished attempt", async () => {
+    const abandoned = { attemptId: "old", attemptNumber: 1, status: "ABANDONED" };
+    m.load
+      .mockResolvedValueOnce({ assessmentId: "quiz", feedbackBehaviour: "IMMEDIATE", history: [], attemptsRemaining: 2 })
+      .mockResolvedValueOnce({ assessmentId: "quiz", feedbackBehaviour: "IMMEDIATE", history: [abandoned], attemptsRemaining: 2 });
+
+    const result = await startAttemptAction({ enrolmentId: "e", lessonId: "l", assessmentId: "quiz", startNew: true });
+
+    expect(result).toMatchObject({ ok: true, history: [abandoned], attemptsRemaining: 2 });
+    expect(m.load).toHaveBeenCalledTimes(2);
+    expect(m.revalidate).toHaveBeenCalledExactlyOnceWith("/learn/e/lessons/l");
+  });
+  it("rejects another enrolment before saving or scoring", async () => { m.get.mockResolvedValue({ enrolmentId: "foreign", assessmentId: "quiz" }); expect((await submitAttemptAction(input)).ok).toBe(false); expect(m.save).not.toHaveBeenCalled(); expect(m.submit).not.toHaveBeenCalled(); });
+  it("saves the selections before scoring and revalidates in the same response", async () => { expect((await submitAttemptAction(input)).ok).toBe(true); expect(m.save).toHaveBeenCalledExactlyOnceWith({ userId: "u" }, input); expect(m.submit).toHaveBeenCalledExactlyOnceWith({ userId: "u" }, input); expect(m.save.mock.invocationCallOrder[0]).toBeLessThan(m.submit.mock.invocationCallOrder[0]); expect(m.revalidate).toHaveBeenCalledExactlyOnceWith("/learn/e/lessons/l"); });
+  it("can honestly report saved answers after scoring fails", async () => { m.submit.mockRejectedValue(new Error("db")); expect(await submitAttemptAction(input)).toMatchObject({ ok: false, body: "Something went wrong scoring your attempt. Your answers are saved — try submitting again." }); });
+  it("does not claim saved answers when saving fails", async () => { m.save.mockRejectedValue(new Error("db")); const result = await submitAttemptAction(input); expect(result).toMatchObject({ ok: false, body: "Your answers could not be saved. Keep this page open and try submitting again." }); expect(m.submit).not.toHaveBeenCalled(); });
+  it("returns an expired score without modifying the frozen attempt", async () => { m.get.mockResolvedValue({ id: "a", enrolmentId: "e", assessmentId: "quiz", status: "EXPIRED" }); m.load.mockResolvedValue({ assessmentId: "quiz", history: [{ attemptId: "a", expired: true }] }); expect(await submitAttemptAction(input)).toMatchObject({ ok: true, result: { expired: true } }); expect(m.save).not.toHaveBeenCalled(); });
+});

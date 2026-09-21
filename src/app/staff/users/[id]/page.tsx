@@ -1,8 +1,9 @@
+import { formatDateShort } from "@/lib/format-timestamp";
 import { notFound } from "next/navigation";
 import { staffAccountService, type StaffUserRow } from "@/server/services/staff-account-service";
 import { assignmentService, type AssignmentWithRole } from "@/server/services/assignment-service";
 import { roleService, MIN_REASON_LENGTH } from "@/server/services/role-service";
-import { AuthorizationError } from "@/server/permissions";
+import { AuthorizationError, can } from "@/server/permissions";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { AssignmentsPanel, AccountStatusControl, type AssignmentRow } from "../AssignmentsPanel";
 
@@ -12,9 +13,15 @@ const TONE: Record<string, "success" | "warning" | "neutral"> = {
   PENDING_VERIFICATION: "neutral",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "Active",
+  DEACTIVATED: "Deactivated",
+  PENDING_VERIFICATION: "Pending verification",
+};
+
 function fmtDate(value: Date | string | null): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString();
+  return formatDateShort(new Date(value));
 }
 
 export default async function StaffUserDetailPage({
@@ -55,6 +62,9 @@ export default async function StaffUserDetailPage({
     reason: a.reason,
   }));
 
+  // Mutation controls only for staff who can actually use them (the server actions re-check).
+  const [canManageUsers, canManageRoles] = await Promise.all([can("users.manage", {}), can("roles.manage", {})]);
+
   return (
     <DetailLayout
       breadcrumbs={[
@@ -64,14 +74,16 @@ export default async function StaffUserDetailPage({
       ]}
       title={user.name}
       identifier={user.email}
-      badges={<StatusPill label={user.status} tone={TONE[user.status] ?? "neutral"} />}
+      badges={<StatusPill label={STATUS_LABEL[user.status] ?? user.status} tone={TONE[user.status] ?? "neutral"} />}
       actions={
-        <AccountStatusControl
-          userId={user.id}
-          userName={user.name}
-          status={user.status}
-          minReasonLength={MIN_REASON_LENGTH}
-        />
+        canManageUsers ? (
+          <AccountStatusControl
+            userId={user.id}
+            userName={user.name}
+            status={user.status}
+            minReasonLength={MIN_REASON_LENGTH}
+          />
+        ) : undefined
       }
       sections={[
         {
@@ -82,10 +94,10 @@ export default async function StaffUserDetailPage({
               facts={[
                 { label: "Name", value: user.name },
                 { label: "Email", value: user.email, mono: true },
-                { label: "Status", value: user.status },
-                { label: "Created", value: fmtDate(user.createdAt), mono: true },
+                { label: "Status", value: <StatusPill label={STATUS_LABEL[user.status] ?? user.status} tone={TONE[user.status] ?? "neutral"} /> },
+                { label: "Created", value: fmtDate(user.createdAt) },
                 ...(user.deactivatedAt
-                  ? [{ label: "Deactivated", value: fmtDate(user.deactivatedAt), mono: true }]
+                  ? [{ label: "Deactivated", value: fmtDate(user.deactivatedAt) }]
                   : []),
               ]}
             />
@@ -105,6 +117,7 @@ export default async function StaffUserDetailPage({
               assignments={assignmentRows}
               roles={roles}
               minReasonLength={MIN_REASON_LENGTH}
+              canManage={canManageRoles}
             />
           ),
         },

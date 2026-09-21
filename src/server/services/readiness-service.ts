@@ -26,7 +26,13 @@ export type ReadinessCategory =
   | "Price"
   | "Capacity"
   | "Instructors"
-  | "Completion";
+  | "Completion"
+  // Added by 10-03 for `evaluateAssessmentReadiness` (assessment-readiness.ts)
+  // — pass mark, attempt limit, attempt-grading method and feedback-behaviour
+  // items. None of the existing seven slots fit a per-Assessment grading
+  // setting, so this extends the union rather than forcing those items into
+  // "Content" (which is reserved for questions/instructions/file settings).
+  | "Grading";
 
 export type ReadinessItem = {
   /** Stable identifier. The panel keys on it — never derive it from `label`. */
@@ -265,8 +271,15 @@ export type ReadinessCohortInput = {
   endsAt: Date | string;
   capacity: number;
   seatsTaken: number;
-  priceMinor: number;
-  currency: string | null;
+  // D-06/D-08 — the two independent, nullable dual-currency base prices
+  // (07-05). `null` means "this rail is not offered," never "free."
+  priceNgnMinor: number | null;
+  priceUsdMinor: number | null;
+  // Which online rails THIS DEPLOYMENT has turned on (D-02/D-05 — the
+  // school's settlement account identifier is configured for that
+  // provider). Derived by the caller from deployment configuration; this
+  // function stays pure and data-access-free.
+  enabledRails: { ngn: boolean; usd: boolean };
   attendanceThresholdPct: number | null;
   instructorCount: number;
   nonCancelledSessionCount: number;
@@ -279,6 +292,17 @@ export type ReadinessCohortInput = {
   } | null;
 };
 
+/** Same `Intl.NumberFormat` convention the Cohort detail page's own
+ *  `formatPrice` helper uses — falls back to a plain minor-units string if
+ *  the currency code is somehow not renderable. */
+function formatRailAmount(minorUnits: number, currency: "NGN" | "USD"): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(minorUnits / 100);
+  } catch {
+    return `${minorUnits} minor units ${currency}`;
+  }
+}
+
 function toEpoch(value: Date | string): number {
   return value instanceof Date ? value.getTime() : new Date(value).getTime();
 }
@@ -286,10 +310,17 @@ function toEpoch(value: Date | string): number {
 /**
  * Evaluates a Cohort's publication readiness across the six D-28/D-29
  * categories. Catalogue, Schedule, Capacity and Instructors are
- * `blocking: true` and FAIL-capable; Price is `blocking: true` but is
- * effectively always PASS (0 is a legal free cohort); Completion and the two
- * WARN sub-items are advisory. No item is ever `NOT_YET_CHECKED` — D-28 turns
- * every reserved slot into a real check.
+ * `blocking: true` and FAIL-capable; Completion and the two WARN sub-items
+ * are advisory. No item is ever `NOT_YET_CHECKED` — D-28 turns every
+ * reserved slot into a real check.
+ *
+ * Price (D-06/D-08, 07-05) is now TWO items, `price-ngn` and `price-usd` —
+ * one per online rail — replacing the single item this comment used to
+ * describe as "effectively always PASS." That is no longer true: each item
+ * is `blocking` only when `enabledRails` says this deployment has turned
+ * that rail on, and FAILs when the matching price is null or non-positive.
+ * A rail this deployment has not enabled is never blocking, however it is
+ * priced — D-08 only requires a price for every ENABLED rail.
  */
 export function evaluateCohortReadiness(cohort: ReadinessCohortInput): ReadinessItem[] {
   const selfPaced = cohort.deliveryMode === "SELF_PACED";
@@ -346,22 +377,29 @@ export function evaluateCohortReadiness(cohort: ReadinessCohortInput): Readiness
         : "Every non-cancelled session falls within the cohort start and end dates",
   };
 
-  // --- Price (D-28) — blocking but effectively always PASS ---------------
-  const currencySet = cohort.currency != null && cohort.currency.trim().length > 0;
-  const pricePass = currencySet && cohort.priceMinor >= 0;
-  const price: ReadinessItem = {
-    id: "price",
+  // --- Price (D-06/D-08) — per-rail, blocking only for an enabled rail ---
+  const ngnPricePass = cohort.priceNgnMinor != null && cohort.priceNgnMinor > 0;
+  const priceNgn: ReadinessItem = {
+    id: "price-ngn",
     category: "Price",
-    label: "Price set",
-    blocking: true,
-    state: pricePass ? "PASS" : "FAIL",
-    detail: !currencySet
-      ? "No currency set on the cohort"
-      : cohort.priceMinor < 0
-        ? `Price is negative (${cohort.priceMinor} minor units)`
-        : cohort.priceMinor === 0
-          ? `Free cohort — 0 ${cohort.currency}`
-          : `${cohort.priceMinor} minor units ${cohort.currency}`,
+    label: "NGN price set (Paystack)",
+    blocking: cohort.enabledRails.ngn,
+    state: ngnPricePass ? "PASS" : "FAIL",
+    detail: ngnPricePass
+      ? `${formatRailAmount(cohort.priceNgnMinor as number, "NGN")} (Paystack)`
+      : "No NGN price set — this rail is unavailable to learners until an administrator adds one.",
+  };
+
+  const usdPricePass = cohort.priceUsdMinor != null && cohort.priceUsdMinor > 0;
+  const priceUsd: ReadinessItem = {
+    id: "price-usd",
+    category: "Price",
+    label: "USD price set (Stripe)",
+    blocking: cohort.enabledRails.usd,
+    state: usdPricePass ? "PASS" : "FAIL",
+    detail: usdPricePass
+      ? `${formatRailAmount(cohort.priceUsdMinor as number, "USD")} (Stripe)`
+      : "No USD price set — this rail is unavailable to learners until an administrator adds one.",
   };
 
   // --- Capacity (D-28) --------------------------------------------------
@@ -427,7 +465,8 @@ export function evaluateCohortReadiness(cohort: ReadinessCohortInput): Readiness
     catalogue,
     schedule,
     scheduleDates,
-    price,
+    priceNgn,
+    priceUsd,
     capacity,
     instructors,
     completion,

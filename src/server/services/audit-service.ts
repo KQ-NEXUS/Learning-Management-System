@@ -14,6 +14,7 @@
  */
 
 import { prisma } from "@/server/db";
+import type { Prisma } from "@prisma/client";
 import type { AuditEntry } from "@/server/permissions/with-permission";
 import type { ScopeType } from "@/server/permissions/scope";
 
@@ -99,6 +100,14 @@ export function buildAuditRow(event: BusinessAuditEvent) {
 
 export async function recordAudit(event: BusinessAuditEvent): Promise<void> {
   await prisma.auditEvent.create({ data: buildAuditRow(event) });
+}
+
+/** Keeps transaction-bound audit writes on the same redacting, append-only sink. */
+export async function recordAuditInTransaction(
+  tx: Pick<Prisma.TransactionClient, "auditEvent">,
+  event: BusinessAuditEvent,
+): Promise<void> {
+  await tx.auditEvent.create({ data: buildAuditRow(event) });
 }
 
 /** Adapts an authorization denial to the audit table. */

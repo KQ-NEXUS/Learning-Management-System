@@ -42,14 +42,14 @@ export function ForgotPasswordForm() {
             type="email"
             autoComplete="email"
             required
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
+            className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
           />
         </label>
 
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast shadow-[0_6px_18px_var(--accent-glow)] hover:opacity-90 disabled:opacity-50"
+          className="h-12 w-full rounded-md bg-accent px-4 text-base font-semibold text-accent-contrast hover:bg-accent-deep disabled:opacity-50"
         >
           {pending ? "Sending…" : "Send reset link"}
         </button>

@@ -72,10 +72,13 @@ const columns: Column<ProgrammeIndexRow>[] = [
 ];
 
 export function ProgrammesTable({
+  canCreate = true,
   rows,
   denied,
 }: {
   rows?: ProgrammeIndexRow[];
+  /** Hide the create button for staff who cannot create. Default true. */
+  canCreate?: boolean;
   denied?: { permission: string };
 }) {
   const [search, setSearch] = useState("");
@@ -113,6 +116,7 @@ export function ProgrammesTable({
 
   return (
     <ResourceTable<ProgrammeIndexRow>
+      asPage
       noun="programmes"
       title="Programmes"
       columns={columns}
@@ -164,12 +168,14 @@ export function ProgrammesTable({
         )
       }
       headerActions={
-        <Link
-          href="/staff/programmes/new"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
-        >
-          New programme
-        </Link>
+        canCreate ? (
+          <Link
+            href="/staff/programmes/new"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90"
+          >
+            New programme
+          </Link>
+        ) : undefined
       }
     />
   );

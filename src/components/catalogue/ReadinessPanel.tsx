@@ -1,4 +1,3 @@
-import { useId } from "react";
 import type {
   ReadinessCategory,
   ReadinessItem,
@@ -23,6 +22,14 @@ import type {
 const CATEGORY_ORDER: readonly ReadinessCategory[] = [
   "Catalogue",
   "Content",
+  // "Grading" (plan 10-08) sits beside "Content" — `evaluateAssessmentReadiness`
+  // (assessment-readiness.ts) is this category's only producer today, covering
+  // pass mark / attempt limit / attempt-grading method / feedback behaviour.
+  // Omitting it here would silently drop those items from every render of this
+  // panel (T-10-14 requires the panel to render the SAME evaluator output the
+  // server-side publish refusal checks against — a missing category is a
+  // correctness bug, not a cosmetic gap).
+  "Grading",
   "Schedule",
   "Price",
   "Capacity",
@@ -85,22 +92,22 @@ function ReadinessRow({ item }: { item: ReadinessItem }) {
           {presentation.label}
         </span>
       </div>
-      {item.detail && <p className="break-words pl-6 text-[11px] text-muted-foreground">{item.detail}</p>}
+      {item.detail && <p className="break-words pl-6 text-xs text-muted-foreground">{item.detail}</p>}
     </li>
   );
 }
 
 export function ReadinessPanel({ items }: { items: ReadinessItem[] }) {
-  const headingId = useId();
-
   return (
     <section
-      aria-labelledby={headingId}
-      className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-card"
+      aria-label="Publication readiness"
+      className="flex flex-col gap-4"
     >
       <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-sm font-semibold tracking-tight">
-          Publication readiness
+        <h2
+          className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground"
+        >
+          Publishing
         </h2>
         <ReadinessSummary items={items} />
       </div>
@@ -114,9 +121,9 @@ export function ReadinessPanel({ items }: { items: ReadinessItem[] }) {
                 {category}
               </h3>
               {categoryItems.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">Not yet checked — a later phase.</p>
+                <p className="text-xs text-muted-foreground">Not yet checked — a later phase.</p>
               ) : (
-                <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface px-4 shadow-xs">
+                <ul className="flex flex-col divide-y divide-border border-b border-border py-3">
                   {categoryItems.map((item) => (
                     <ReadinessRow key={item.id} item={item} />
                   ))}
@@ -136,7 +143,7 @@ export function ReadinessSummary({ items }: { items: ReadinessItem[] }) {
   const notYetChecked = items.filter((item) => item.state === "NOT_YET_CHECKED").length;
 
   return (
-    <p className="text-[11px] text-muted-foreground">
+    <p className="text-xs text-muted-foreground">
       {blocking} blocking, {warnings} {warnings === 1 ? "warning" : "warnings"}, {notYetChecked} not yet
       checked
     </p>

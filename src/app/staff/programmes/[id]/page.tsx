@@ -8,6 +8,7 @@ import {
 } from "@/server/services/publish-service";
 import { evaluateProgrammeReadiness } from "@/server/services/readiness-service";
 import { blockingCohorts } from "@/server/services/catalogue-guards";
+import { listSelectableTemplates } from "@/server/services/certificate-template-service";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { ReadinessPanel } from "@/components/catalogue/ReadinessPanel";
 import { ProgrammeDetailClient } from "./ProgrammeDetailClient";
@@ -25,6 +26,8 @@ type Programme = {
   contentVersion: number;
   publiclyListed: boolean;
   certificateEnabled: boolean;
+  certificateIssuanceMode: "AUTOMATIC" | "MANUAL";
+  certificateTemplateId: string | null;
 };
 
 const TONE: Record<string, "success" | "neutral" | "warning"> = {
@@ -66,6 +69,16 @@ export default async function ProgrammeDetailPage({
     blockingCohorts({ programmeId: id }),
   ]);
 
+  // A role that can manage this Programme but lacks certificates.view still
+  // gets the settings tab — just with an empty picker, falling back to "Use
+  // the default template" rather than a hard denial of the whole page.
+  let templates: { id: string; name: string; isDefault: boolean }[] = [];
+  try {
+    templates = await listSelectableTemplates();
+  } catch (error) {
+    if (!(error instanceof AuthorizationError || error instanceof AuthenticationError)) throw error;
+  }
+
   const courseList =
     composition.members.length === 0 ? (
       <p className="text-sm text-foreground">
@@ -85,7 +98,7 @@ export default async function ProgrammeDetailPage({
         <ol className="flex flex-col gap-1">
           {composition.members.map((member) => (
             <li key={member.membershipId} className="flex items-baseline gap-2 text-sm">
-              <span className="font-mono text-[11px] text-muted-foreground">{member.position + 1}</span>
+              <span className="font-mono text-xs text-muted-foreground">{member.position + 1}</span>
               <Link
                 href={`/staff/courses/${member.courseId}`}
                 className="text-accent underline underline-offset-2"
@@ -93,7 +106,7 @@ export default async function ProgrammeDetailPage({
                 {member.title}
               </Link>
               {member.status !== "PUBLISHED" && (
-                <span className="text-[11px] uppercase tracking-wide text-warning">{member.status}</span>
+                <span className="text-xs uppercase tracking-wide text-warning">{member.status}</span>
               )}
             </li>
           ))}
@@ -183,6 +196,7 @@ export default async function ProgrammeDetailPage({
             <ProgrammeForm
               mode="edit"
               programmeId={id}
+              templates={templates}
               values={{
                 title: programme.title,
                 slug: programme.slug,
@@ -190,6 +204,9 @@ export default async function ProgrammeDetailPage({
                 outcomes: programme.outcomes,
                 audience: programme.audience,
                 sequential: programme.sequential,
+                certificateEnabled: programme.certificateEnabled,
+                certificateIssuanceMode: programme.certificateIssuanceMode,
+                certificateTemplateId: programme.certificateTemplateId,
               }}
             />
           ),

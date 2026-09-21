@@ -1,9 +1,23 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  BTN as DIALOG_BTN,
+  BTN_ON_NAVY,
+  BTN_PRIMARY as DIALOG_BTN_PRIMARY,
+  DIALOG_PANEL,
+  DIALOG_SCRIM,
+  FIELD,
+  NOTE_SUCCESS,
+  TEXTAREA,
+} from "@/components/primitives/controls";
 import type { AuditRow, AuditFilterOptions } from "@/server/services/audit-read-service";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { formatDateTimeShort, formatTimestamp } from "@/lib/format-timestamp";
+import { getExportDatasetDefinition } from "@/server/services/report-registry";
+import { requestAuditExportAction } from "./actions";
 
 /**
  * A sibling of ResourceTable, not a consumer of it — expand-in-place is the
@@ -12,15 +26,22 @@ import { formatTimestamp } from "@/lib/format-timestamp";
  * matches exactly.
  */
 
-const HEAD =
-  "px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+const HEAD = "px-4 py-3 text-left text-[13px] font-medium text-muted-foreground";
+
+/** "cohort.instructor_assigned" reads as "Cohort instructor assigned" in the desktop table. */
+function humanizeAction(action: string): string {
+  const words = action.replace(/[._]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+const DESKTOP_COLS = "grid w-full grid-cols-[190px_190px_230px_minmax(0,1fr)] gap-4 px-4 py-4 text-left";
 const CELL = "px-4 py-2 align-middle";
 const BTN =
   "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface px-6 py-12 shadow-xs">
+    <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
       {children}
     </div>
   );
@@ -85,7 +106,7 @@ function EventDetail({ row }: { row: AuditRow }) {
       </div>
 
       <p className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
-        <span className="font-semibold uppercase tracking-wide text-[11px] text-muted-foreground">
+        <span className="font-semibold uppercase tracking-wide text-xs text-muted-foreground">
           Reason:
         </span>{" "}
         {row.reason ?? "—"}
@@ -121,6 +142,8 @@ export function AuditTable({
   filterOptions,
   filters,
   validationError,
+  canExport = false,
+  canExportSensitive = false,
 }: {
   rows?: AuditRow[];
   denied?: { permission: string };
@@ -128,12 +151,57 @@ export function AuditTable({
   filterOptions?: AuditFilterOptions;
   filters?: AuditTableFilters;
   validationError?: { message: string } | null;
+  canExport?: boolean;
+  canExportSensitive?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [includeIdentity, setIncludeIdentity] = useState(false);
+  const [exportReason, setExportReason] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
+  const [exportJobId, setExportJobId] = useState("");
+  const [exportPending, startExport] = useTransition();
+  const exportButton = useRef<HTMLButtonElement>(null);
+  const exportDialog = useRef<HTMLDivElement>(null);
+  const auditColumns = getExportDatasetDefinition("audit");
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const dialog = exportDialog.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled])') ?? []);
+    focusable()[0]?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); setExportOpen(false); queueMicrotask(() => exportButton.current?.focus()); }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0]; const last = items.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [exportOpen]);
+
+  function queueAuditExport() {
+    if (!filters) return;
+    setExportMessage(""); setExportJobId("");
+    startExport(async () => {
+      const result = await requestAuditExportAction({
+        filters: Object.fromEntries(Object.entries(filters).filter(([, value]) => value)),
+        columns: [...auditColumns.safeColumns.map((column) => column.key), ...(includeIdentity ? auditColumns.sensitiveColumns.map((column) => column.key) : [])],
+        ...(includeIdentity ? { reason: exportReason } : {}),
+      });
+      if (!result.ok) { setExportMessage(result.message); return; }
+      setExportOpen(false); setExportJobId(result.jobId);
+      setExportMessage("Export queued. You can leave this page and follow its progress in Export History.");
+      queueMicrotask(() => exportButton.current?.focus());
+    });
+  }
 
   function setParam(name: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -157,12 +225,22 @@ export function AuditTable({
 
   const header = (
     <div className="flex flex-col gap-4">
-      <h2 className="text-base font-semibold tracking-tight text-foreground">Audit</h2>
+      <PageHeader
+        title="Audit"
+        subtitle="Who did what, and when."
+        actions={
+          canExport ? (
+            <button ref={exportButton} type="button" className={BTN_ON_NAVY} onClick={() => { setExportMessage(""); setExportOpen(true); }}>
+              Export audit CSV
+            </button>
+          ) : undefined
+        }
+      />
 
       {filterOptions && filters && (
-        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
+        <div className="flex flex-wrap items-center gap-4 border-b border-border py-3">
           <label className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Actor
             </span>
             <select
@@ -180,7 +258,7 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Action
             </span>
             <select
@@ -198,7 +276,7 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               From
             </span>
             <input
@@ -210,7 +288,7 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               To
             </span>
             <input
@@ -240,11 +318,11 @@ export function AuditTable({
       <div className="flex flex-col gap-4">
         {header}
         <Panel>
-          <span className="font-mono text-[11px] tracking-wide text-muted-foreground">403</span>
+          <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
           <p className="text-sm font-semibold text-foreground">You do not have access to audit events</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             Your role does not include{" "}
-            <code className="rounded-sm bg-surface-2 px-1 font-mono text-[11px]">{denied.permission}</code> at this
+            <code className="rounded-sm bg-surface-2 px-1 font-mono text-xs">{denied.permission}</code> at this
             scope. Ask a workspace administrator to grant it.
           </p>
         </Panel>
@@ -270,6 +348,29 @@ export function AuditTable({
     <div className="flex flex-col gap-4">
       {header}
 
+      {canExport && !exportOpen && exportMessage && (
+        <p role="status" className={NOTE_SUCCESS}>{exportMessage} {exportJobId && <Link href="/staff/reports/exports" className="font-semibold text-accent hover:underline">View export history</Link>}</p>
+      )}
+
+      {canExport && exportOpen && (
+        <div className={DIALOG_SCRIM}>
+          <div ref={exportDialog} role="dialog" aria-modal="true" aria-label="Audit CSV options" className={DIALOG_PANEL}>
+            <div>
+              <h3 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em]">Audit CSV options</h3>
+              <p className="mt-2 text-sm text-muted-foreground">The current actor, action and date filters will be frozen with this request. Values in investigative context are withheld; safe field names and correlation references remain.</p>
+            </div>
+            <p className="text-sm">Safe columns: {auditColumns.safeColumns.map((column) => column.label).join(", ")}</p>
+            {canExportSensitive && <label className="flex items-center gap-3 text-sm"><input type="checkbox" className="size-4 accent-accent" checked={includeIdentity} onChange={(event) => setIncludeIdentity(event.target.checked)} /> Include actor name and email</label>}
+            {canExportSensitive && includeIdentity && <label className={FIELD}>Operational reason<textarea value={exportReason} onChange={(event) => setExportReason(event.target.value)} maxLength={2000} className={TEXTAREA} /></label>}
+            {exportMessage && <p role="alert" className="border-l-2 border-danger py-1 pl-4 text-sm text-danger">{exportMessage}</p>}
+            <div className="flex flex-wrap justify-end gap-3">
+              <button type="button" className={DIALOG_BTN} onClick={() => { setExportOpen(false); queueMicrotask(() => exportButton.current?.focus()); }}>Cancel</button>
+              <button type="button" className={DIALOG_BTN_PRIMARY} disabled={exportPending || (includeIdentity && !exportReason.trim())} onClick={queueAuditExport}>{exportPending ? "Queuing audit export…" : "Queue audit export"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {validationError && (
         <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
           {validationError.message}
@@ -291,14 +392,14 @@ export function AuditTable({
         <>
           {/* Desktop — hidden below sm, where the card list takes over so
               nothing scrolls sideways (D-04). */}
-          <div className="hidden overflow-hidden rounded-xl border border-border bg-surface shadow-xs sm:block">
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full border-collapse text-sm">
-              <thead className="bg-surface-2">
+              <thead className="border-b border-foreground">
                 <tr>
-                  <th scope="col" className={HEAD}>Actor</th>
+                  <th scope="col" className={HEAD}>When</th>
+                  <th scope="col" className={HEAD}>Who</th>
                   <th scope="col" className={HEAD}>Action</th>
                   <th scope="col" className={HEAD}>Target</th>
-                  <th scope="col" className={`${HEAD} text-right`}>Time</th>
                 </tr>
               </thead>
               <tbody aria-busy={isPending || undefined}>
@@ -322,24 +423,24 @@ export function AuditTable({
                                 aria-expanded={expanded}
                                 aria-controls={detailId}
                                 onClick={() => setExpandedId(expanded ? null : row.id)}
-                                className="grid w-full grid-cols-4 gap-2 px-4 py-2 text-left"
+                                className={DESKTOP_COLS}
                               >
+                                <span className="self-center font-mono text-[13px] tabular-nums text-foreground">
+                                  {formatDateTimeShort(new Date(row.createdAt))}
+                                </span>
                                 <span className="flex min-w-0 flex-col gap-1">
                                   <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
                                     {row.actorName ?? "System"}
                                   </span>
-                                  <span className="min-w-0 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                                  <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                                     {row.actorEmail ?? "—"}
                                   </span>
                                 </span>
-                                <span className="min-w-0 self-center font-mono text-sm text-foreground [overflow-wrap:anywhere]">
-                                  {row.action}
+                                <span className="min-w-0 self-center text-sm text-foreground [overflow-wrap:anywhere]">
+                                  {humanizeAction(row.action)}
                                 </span>
                                 <span className="min-w-0 self-center text-sm text-foreground [overflow-wrap:anywhere]">
-                                  {row.targetType} <span className="font-mono">{shortenId(row.targetId)}</span>
-                                </span>
-                                <span className="self-center text-right font-mono text-sm tabular-nums text-muted-foreground">
-                                  {formatTimestamp(row.createdAt)}
+                                  {row.targetType} <span className="font-mono text-[13px]">{shortenId(row.targetId)}</span>
                                 </span>
                               </button>
                             </td>
@@ -364,13 +465,13 @@ export function AuditTable({
           <ul
             aria-label="Audit history"
             aria-busy={isPending || undefined}
-            className="flex flex-col gap-2 sm:hidden"
+            className="flex flex-col sm:hidden"
           >
             {isPending
               ? Array.from({ length: 5 }, (_, i) => (
                   <li
                     key={i}
-                    className="rounded-xl border border-border bg-surface px-4 py-4 shadow-xs"
+                    className="border-t border-foreground pt-5"
                   >
                     <span className="block h-3 w-full max-w-[16rem] animate-pulse rounded-sm bg-surface-2" />
                   </li>
@@ -381,20 +482,20 @@ export function AuditTable({
                   return (
                     <li
                       key={row.id}
-                      className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs"
+                      className="overflow-hidden border-b border-border"
                     >
                       <button
                         type="button"
                         aria-expanded={expanded}
                         aria-controls={detailId}
                         onClick={() => setExpandedId(expanded ? null : row.id)}
-                        className="flex w-full min-w-0 flex-col gap-1 px-4 py-4 text-left"
+                        className="flex w-full min-w-0 flex-col gap-1 py-4 text-left"
                       >
                         <span className="flex min-w-0 flex-col gap-1">
                           <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
                             {row.actorName ?? "System"}
                           </span>
-                          <span className="min-w-0 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                          <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                             {row.actorEmail ?? "—"}
                           </span>
                         </span>

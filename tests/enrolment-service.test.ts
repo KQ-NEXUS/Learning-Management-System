@@ -304,8 +304,8 @@ describe("assertTransition — the explicit table (D-16)", () => {
     expect(() => assertTransition("PENDING_PAYMENT", "ACTIVE")).not.toThrow();
   });
 
-  it("every terminal status has an empty allow-list", () => {
-    for (const terminal of ["WITHDRAWN", "TRANSFERRED", "CANCELLED", "COMPLETED"] as const) {
+  it("keeps non-completion terminal statuses closed", () => {
+    for (const terminal of ["WITHDRAWN", "TRANSFERRED", "CANCELLED"] as const) {
       expect(VALID_TRANSITIONS[terminal]).toEqual([]);
     }
   });
