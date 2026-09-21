@@ -151,4 +151,59 @@ describe("ticket service", () => {
     expect(serializedEvents).not.toContain("Private diagnosis");
     expect(serializedEvents).not.toContain("Fixed");
   });
+
+  it("keeps firstRespondedAt from the first public reply and requires an urgent priority reason", async () => {
+    const harness = makeTicketHarness({ actorId: "staff-1" });
+    const { withPermission } = createTestWithPermission([grant("tickets.manage")], { userId: "staff-1" });
+    const service = createTicketService({ ...harness.deps, withPermission });
+    const created = await service.createOwnTicket({ category: "OTHER", subject: "Priority", body: "Initial" });
+
+    await expect(
+      service.changePriority({ reference: created.reference, expectedVersion: 1, priority: "URGENT" }),
+    ).rejects.toThrow("reason is required");
+    await service.addPublicReply({ reference: created.reference, expectedVersion: 1, body: "First reply" });
+    const firstResponse = harness.tickets[0].firstRespondedAt;
+    harness.now = new Date("2026-09-21T13:00:00.000Z");
+    await service.addPublicReply({ reference: created.reference, expectedVersion: 2, body: "Second reply" });
+
+    expect(harness.tickets[0].firstRespondedAt).toBe(firstResponse);
+  });
+
+  it("supports escalation, accept escalation, learner reopen and learner close as versioned attributed commands", async () => {
+    const harness = makeTicketHarness({ actorId: "learner-1" });
+    const { withPermission } = createTestWithPermission([grant("tickets.manage")], { userId: "staff-1" });
+    const service = createTicketService({ ...harness.deps, withPermission });
+    const created = await service.createOwnTicket({ category: "OTHER", subject: "Lifecycle", body: "Initial" });
+
+    harness.actorId = "staff-1";
+    await expect(service.escalateTicket({ reference: created.reference, expectedVersion: 1 })).rejects.toThrow(
+      "reason is required",
+    );
+    await service.escalateTicket({ reference: created.reference, expectedVersion: 1, queue: "TECHNICAL", reason: "Needs specialist" });
+    await service.acceptEscalation({ reference: created.reference, expectedVersion: 2 });
+    await service.resolveTicket({ reference: created.reference, expectedVersion: 3, reason: "Answered" });
+    harness.actorId = "learner-1";
+    await service.reopenOwnTicket({ reference: created.reference, expectedVersion: 4, reason: "Still broken" });
+    await service.resolveTicket({ reference: created.reference, expectedVersion: 5, reason: "Fixed again" });
+    await service.closeOwnTicket({ reference: created.reference, expectedVersion: 6 });
+
+    expect(harness.tickets[0]).toMatchObject({ status: "CLOSED", version: 7, queue: "TECHNICAL" });
+    expect(harness.events.map((event) => event.type)).toEqual([
+      "CREATED",
+      "ESCALATED",
+      "ESCALATION_ACCEPTED",
+      "RESOLVED",
+      "REOPENED",
+      "RESOLVED",
+      "LEARNER_CLOSED",
+    ]);
+    expect(harness.domainEvents.map((event) => event.type)).toEqual([
+      "ticket.created",
+      "ticket.escalated",
+      "ticket.resolved",
+      "ticket.reopened",
+      "ticket.resolved",
+      "ticket.closed",
+    ]);
+  });
 });

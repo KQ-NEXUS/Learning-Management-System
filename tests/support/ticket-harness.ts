@@ -10,7 +10,7 @@ import type {
 } from "@/server/services/ticket-service";
 
 export function makeTicketHarness(opts: { actorId: string }) {
-  const now = new Date("2026-09-21T12:00:00.000Z");
+  let now = new Date("2026-09-21T12:00:00.000Z");
   let ticketSeq = 0;
   let messageSeq = 0;
   let eventSeq = 0;
@@ -27,7 +27,12 @@ export function makeTicketHarness(opts: { actorId: string }) {
     set actorId(value: string) {
       opts.actorId = value;
     },
-    now,
+    get now() {
+      return now;
+    },
+    set now(value: Date) {
+      now = value;
+    },
     tickets,
     messages,
     events,
@@ -115,7 +120,7 @@ export function makeTicketHarness(opts: { actorId: string }) {
     updateVersioned: async (reference, expectedVersion, mutate) => {
       const ticket = tickets.find((candidate) => candidate.reference === reference);
       if (!ticket || ticket.version !== expectedVersion) return null;
-      mutate(ticket);
+      await mutate(ticket);
       ticket.version += 1;
       ticket.updatedAt = now;
       return ticket;

@@ -9,8 +9,12 @@ import {
 } from "@/server/services/domain-event-service";
 import {
   assertAssignmentReason,
+  assertEscalationReason,
   assertPriorityReason,
+  assertReopenReason,
   assertTicketTransition,
+  canLearnerClose,
+  canLearnerReopen,
   statusAfterPublicReply,
   type TicketPriorityValue,
   type TicketStatusValue,
@@ -157,7 +161,7 @@ export type TicketRepository = {
   updateVersioned(
     reference: string,
     expectedVersion: number,
-    mutate: (ticket: TicketRecord) => void,
+    mutate: (ticket: TicketRecord) => void | Promise<void>,
   ): Promise<TicketRecord | null>;
   runInTransaction<R>(fn: (tx: TicketRepository) => Promise<R>): Promise<R>;
 };
@@ -365,13 +369,29 @@ export function createTicketService(deps: TicketServiceDeps) {
   ) {
     return deps.withPermission<typeof input>("tickets.manage", () => ({}))(async (authorizedInput, ctx) =>
       deps.repository.runInTransaction(async (tx) => {
-        const updated = await tx.updateVersioned(authorizedInput.reference, authorizedInput.expectedVersion, (ticket) => {
-          void operation(ticket, tx, ctx.actor);
-        });
+        const updated = await tx.updateVersioned(authorizedInput.reference, authorizedInput.expectedVersion, (ticket) =>
+          operation(ticket, tx, ctx.actor),
+        );
         if (!updated) throw new StaleTicketVersionError();
         return ticketSummaryDto(updated);
       }),
     )(input);
+  }
+
+  async function mutateOwnTicket(
+    input: { reference: string; expectedVersion: number },
+    operation: (ticket: TicketRecord, tx: TicketRepository, actor: Actor) => Promise<void> | void,
+  ) {
+    const actor = requireActor(await deps.getActor());
+    const existing = await deps.repository.findOwnByReference(actor.userId, input.reference);
+    if (!existing) throw new TicketNotFoundError();
+    return deps.repository.runInTransaction(async (tx) => {
+      const updated = await tx.updateVersioned(input.reference, input.expectedVersion, (ticket) =>
+        operation(ticket, tx, actor),
+      );
+      if (!updated) throw new StaleTicketVersionError();
+      return ticketSummaryDto(updated);
+    });
   }
 
   async function claimTicket(input: { reference: string; expectedVersion: number }) {
@@ -468,6 +488,55 @@ export function createTicketService(deps: TicketServiceDeps) {
     });
   }
 
+  async function escalateTicket(input: {
+    reference: string;
+    expectedVersion: number;
+    queue?: TicketQueueValue;
+    reason?: string | null;
+  }) {
+    return mutateStaffTicket(input, async (ticket, tx, actor) => {
+      assertEscalationReason(input.reason);
+      const before = { status: ticket.status, queue: ticket.queue };
+      assertTicketTransition(ticket.status, "ESCALATED");
+      ticket.status = "ESCALATED";
+      ticket.queue = input.queue ?? ticket.queue;
+      ticket.escalatedAt = now();
+      await tx.createEvent({
+        ticketId: ticket.id,
+        actorId: actor.userId,
+        type: "ESCALATED",
+        reason: input.reason ?? null,
+        statusBefore: before.status,
+        statusAfter: "ESCALATED",
+        queueBefore: before.queue,
+        queueAfter: ticket.queue,
+      });
+      await deps.writeEvent(tx, {
+        type: "ticket.escalated",
+        payload: { ticketId: ticket.id, reference: ticket.reference, queue: ticket.queue },
+        occurredAt: now(),
+      });
+    });
+  }
+
+  async function acceptEscalation(input: { reference: string; expectedVersion: number }) {
+    return mutateStaffTicket(input, async (ticket, tx, actor) => {
+      const before = { status: ticket.status, assigneeId: ticket.assigneeId };
+      assertTicketTransition(ticket.status, "ASSIGNED");
+      ticket.status = "ASSIGNED";
+      ticket.assigneeId = actor.userId;
+      await tx.createEvent({
+        ticketId: ticket.id,
+        actorId: actor.userId,
+        type: "ESCALATION_ACCEPTED",
+        statusBefore: before.status,
+        statusAfter: "ASSIGNED",
+        assigneeBeforeId: before.assigneeId,
+        assigneeAfterId: actor.userId,
+      });
+    });
+  }
+
   async function resolveTicket(input: { reference: string; expectedVersion: number; reason?: string | null }) {
     return mutateStaffTicket(input, async (ticket, tx, actor) => {
       const before = ticket.status;
@@ -490,6 +559,55 @@ export function createTicketService(deps: TicketServiceDeps) {
     });
   }
 
+  async function reopenOwnTicket(input: { reference: string; expectedVersion: number; reason?: string | null }) {
+    return mutateOwnTicket(input, async (ticket, tx, actor) => {
+      assertReopenReason(input.reason);
+      if (!canLearnerReopen(ticket.status, ticket.resolvedAt, now())) {
+        throw new Error("This ticket can no longer be reopened.");
+      }
+      const before = ticket.status;
+      const after: TicketStatusValue = ticket.assigneeId ? "ASSIGNED" : "OPEN";
+      ticket.status = after;
+      ticket.reopenedAt = now();
+      await tx.createEvent({
+        ticketId: ticket.id,
+        actorId: actor.userId,
+        type: "REOPENED",
+        reason: input.reason ?? null,
+        statusBefore: before,
+        statusAfter: after,
+      });
+      await deps.writeEvent(tx, {
+        type: "ticket.reopened",
+        payload: { ticketId: ticket.id, reference: ticket.reference, ownerId: ticket.assigneeId },
+        occurredAt: now(),
+      });
+    });
+  }
+
+  async function closeOwnTicket(input: { reference: string; expectedVersion: number }) {
+    return mutateOwnTicket(input, async (ticket, tx, actor) => {
+      if (!canLearnerClose(ticket.status)) {
+        throw new Error("Only a resolved ticket can be closed.");
+      }
+      const before = ticket.status;
+      ticket.status = "CLOSED";
+      ticket.closedAt = now();
+      await tx.createEvent({
+        ticketId: ticket.id,
+        actorId: actor.userId,
+        type: "LEARNER_CLOSED",
+        statusBefore: before,
+        statusAfter: "CLOSED",
+      });
+      await deps.writeEvent(tx, {
+        type: "ticket.closed",
+        payload: { ticketId: ticket.id, reference: ticket.reference, requesterId: ticket.userId },
+        occurredAt: now(),
+      });
+    });
+  }
+
   return {
     createOwnTicket,
     listOwnTickets,
@@ -501,7 +619,11 @@ export function createTicketService(deps: TicketServiceDeps) {
     addPublicReply,
     addInternalNote,
     changePriority,
+    escalateTicket,
+    acceptEscalation,
     resolveTicket,
+    reopenOwnTicket,
+    closeOwnTicket,
   };
 }
 
@@ -563,7 +685,7 @@ function createPrismaTicketRepository(client: AnyPrisma): TicketRepository {
       const current = await client.ticket.findUnique({ where: { reference } });
       if (!current || current.version !== expectedVersion) return null;
       const copy = mapTicket({ ...current });
-      mutate(copy);
+      await mutate(copy);
       const result = await client.ticket.updateMany({
         where: { id: copy.id, version: expectedVersion },
         data: {
@@ -607,4 +729,8 @@ export const assignTicket = liveService.assignTicket;
 export const addPublicTicketReply = liveService.addPublicReply;
 export const addInternalTicketNote = liveService.addInternalNote;
 export const changeTicketPriority = liveService.changePriority;
+export const escalateTicket = liveService.escalateTicket;
+export const acceptTicketEscalation = liveService.acceptEscalation;
 export const resolveTicket = liveService.resolveTicket;
+export const reopenOwnTicket = liveService.reopenOwnTicket;
+export const closeOwnTicket = liveService.closeOwnTicket;
