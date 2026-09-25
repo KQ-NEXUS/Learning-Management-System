@@ -53,6 +53,7 @@ export type TicketEventTypeValue =
   | "ASSIGNED"
   | "REASSIGNED"
   | "PRIORITY_CHANGED"
+  | "QUEUE_CHANGED"
   | "ESCALATED"
   | "ESCALATION_ACCEPTED"
   | "RESOLVED"
@@ -549,13 +550,15 @@ export function createTicketService(deps: TicketServiceDeps) {
   }
 
   async function addPublicReply(input: { reference: string; expectedVersion: number; body: string }) {
-    return mutateStaffTicket(input, async (ticket, tx, actor) => {
+    let messageId = "";
+    const summary = await mutateStaffTicket(input, async (ticket, tx, actor) => {
       const body = trimBounded(input.body, "Reply", 1, 5_000);
       const before = ticket.status;
       const after = statusAfterPublicReply(ticket.status);
       if (before !== after) ticket.status = after;
       if (!ticket.firstRespondedAt) ticket.firstRespondedAt = now();
-      await tx.createMessage({ ticketId: ticket.id, authorId: actor.userId, kind: "REPLY", visibility: "PUBLIC", body });
+      const message = await tx.createMessage({ ticketId: ticket.id, authorId: actor.userId, kind: "REPLY", visibility: "PUBLIC", body });
+      messageId = message.id;
       await tx.writeDomainEvent({
         type: "ticket.public_reply_added",
         payload: { ticketId: ticket.id, reference: ticket.reference, recipientId: ticket.userId },
@@ -563,13 +566,42 @@ export function createTicketService(deps: TicketServiceDeps) {
       });
       await tx.audit(ticketAudit(ticket, "ticket.public_reply_added", actor.userId));
     });
+    return { ...summary, messageId };
   }
 
   async function addInternalNote(input: { reference: string; expectedVersion: number; body: string }) {
-    return mutateStaffTicket(input, async (ticket, tx, actor) => {
+    let messageId = "";
+    const summary = await mutateStaffTicket(input, async (ticket, tx, actor) => {
       const body = trimBounded(input.body, "Internal note", 1, 5_000);
-      await tx.createMessage({ ticketId: ticket.id, authorId: actor.userId, kind: "INTERNAL_NOTE", visibility: "INTERNAL", body });
+      const message = await tx.createMessage({ ticketId: ticket.id, authorId: actor.userId, kind: "INTERNAL_NOTE", visibility: "INTERNAL", body });
+      messageId = message.id;
       await tx.audit(ticketAudit(ticket, "ticket.internal_note_added", actor.userId));
+    });
+    return { ...summary, messageId };
+  }
+
+  async function moveQueue(input: {
+    reference: string;
+    expectedVersion: number;
+    queue: TicketQueueValue;
+    reason: string;
+  }) {
+    return mutateStaffTicket(input, async (ticket, tx, actor) => {
+      const reason = trimBounded(input.reason ?? "", "Queue reason", 1, 1_000);
+      if (ticket.status === "RESOLVED" || ticket.status === "CLOSED") {
+        throw new Error("A resolved or closed ticket cannot be moved.");
+      }
+      const before = ticket.queue;
+      ticket.queue = input.queue;
+      await tx.createEvent({
+        ticketId: ticket.id,
+        actorId: actor.userId,
+        type: "QUEUE_CHANGED",
+        reason,
+        queueBefore: before,
+        queueAfter: input.queue,
+      });
+      await tx.audit(ticketAudit(ticket, "ticket.queue_moved", actor.userId, { queue: input.queue }));
     });
   }
 
@@ -599,14 +631,17 @@ export function createTicketService(deps: TicketServiceDeps) {
     reference: string;
     expectedVersion: number;
     queue?: TicketQueueValue;
+    /** Optional eligible owner; the ticket stays ESCALATED until they accept or claim it. */
+    assigneeId?: string | null;
     reason?: string | null;
   }) {
     return mutateStaffTicket(input, async (ticket, tx, actor) => {
       assertEscalationReason(input.reason);
-      const before = { status: ticket.status, queue: ticket.queue };
+      const before = { status: ticket.status, queue: ticket.queue, assigneeId: ticket.assigneeId };
       assertTicketTransition(ticket.status, "ESCALATED");
       ticket.status = "ESCALATED";
       ticket.queue = input.queue ?? ticket.queue;
+      if (input.assigneeId) ticket.assigneeId = input.assigneeId;
       ticket.escalatedAt = now();
       await tx.createEvent({
         ticketId: ticket.id,
@@ -617,6 +652,8 @@ export function createTicketService(deps: TicketServiceDeps) {
         statusAfter: "ESCALATED",
         queueBefore: before.queue,
         queueAfter: ticket.queue,
+        assigneeBeforeId: before.assigneeId,
+        assigneeAfterId: ticket.assigneeId,
       });
       await tx.writeDomainEvent({
         type: "ticket.escalated",
@@ -731,6 +768,7 @@ export function createTicketService(deps: TicketServiceDeps) {
     addPublicReply,
     addInternalNote,
     changePriority,
+    moveQueue,
     escalateTicket,
     acceptEscalation,
     resolveTicket,
@@ -887,6 +925,7 @@ export const assignTicket = liveService.assignTicket;
 export const addPublicTicketReply = liveService.addPublicReply;
 export const addInternalTicketNote = liveService.addInternalNote;
 export const changeTicketPriority = liveService.changePriority;
+export const moveTicketQueue = liveService.moveQueue;
 export const escalateTicket = liveService.escalateTicket;
 export const acceptTicketEscalation = liveService.acceptEscalation;
 export const resolveTicket = liveService.resolveTicket;
