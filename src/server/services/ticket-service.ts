@@ -16,6 +16,7 @@ import {
   canLearnerClose,
   canLearnerReopen,
   statusAfterPublicReply,
+  ticketReopenDeadline,
   type TicketPriorityValue,
   type TicketStatusValue,
 } from "@/server/services/ticket-lifecycle";
@@ -45,7 +46,7 @@ export type TicketQueueValue =
 
 export type TicketMessageKindValue = "INITIAL" | "REPLY" | "INTERNAL_NOTE";
 export type MessageVisibilityValue = "PUBLIC" | "INTERNAL";
-export type UploadStatusValue = "UPLOADING" | "READY" | "QUARANTINED" | "REJECTED";
+export type UploadStatusValue = "UPLOADING" | "READY" | "ERROR";
 export type TicketEventTypeValue =
   | "CREATED"
   | "CLAIMED"
@@ -274,12 +275,20 @@ function ticketSummaryDto(ticket: TicketRecord) {
   return staffSummaryDto(ticket);
 }
 
-function learnerDetailDto(ticket: TicketRecord, messages: TicketMessageRecord[]) {
+function learnerDetailDto(ticket: TicketRecord, messages: TicketMessageRecord[], now: Date) {
+  const isResolved = ticket.status === "RESOLVED" && ticket.resolvedAt !== null;
+  const autoCloseAt = isResolved ? ticketReopenDeadline(ticket.resolvedAt as Date) : null;
   return {
     ...learnerSummaryDto(ticket),
+    /** Server-calculated lifecycle affordances (D-04); the client never derives the grace window. */
+    canReply: ticket.status !== "RESOLVED" && ticket.status !== "CLOSED",
+    canClose: canLearnerClose(ticket.status),
+    canReopen: canLearnerReopen(ticket.status, ticket.resolvedAt, now),
+    autoCloseAt,
     messages: messages.map((message) => ({
       id: message.id,
       kind: message.kind,
+      authorRole: message.authorId === ticket.userId ? ("LEARNER" as const) : ("SUPPORT" as const),
       body: message.body,
       createdAt: message.createdAt,
       attachments: message.attachments.map(attachmentDto),
@@ -376,7 +385,7 @@ export function createTicketService(deps: TicketServiceDeps) {
       }
       if (!ticket) throw new Error("Could not allocate a support ticket reference.");
 
-      await tx.createMessage({
+      const initial = await tx.createMessage({
         ticketId: ticket.id,
         authorId: actor.userId,
         kind: "INITIAL",
@@ -397,7 +406,7 @@ export function createTicketService(deps: TicketServiceDeps) {
         payload: { ticketId: ticket.id, reference: ticket.reference, requesterId: actor.userId },
         occurredAt: now(),
       });
-      return learnerSummaryDto(ticket);
+      return { ...learnerSummaryDto(ticket), initialMessageId: initial.id };
     });
   }
 
@@ -411,7 +420,7 @@ export function createTicketService(deps: TicketServiceDeps) {
     const ticket = await deps.repository.findOwnByReference(actor.userId, reference);
     if (!ticket) throw new TicketNotFoundError();
     const messages = await deps.repository.listPublicMessages(ticket.id);
-    return learnerDetailDto(ticket, messages);
+    return learnerDetailDto(ticket, messages, now());
   }
 
   const listStaffTickets = deps.withPermission("tickets.view", () => ({}))(async () =>
@@ -457,6 +466,34 @@ export function createTicketService(deps: TicketServiceDeps) {
       if (!updated) throw new StaleTicketVersionError();
       return learnerSummaryDto(updated);
     });
+  }
+
+  async function addOwnReply(input: { reference: string; expectedVersion: number; body: string }) {
+    const actor = requireActor(await deps.getActor());
+    const body = trimBounded(input.body, "Reply", 1, 5_000);
+    const existing = await deps.repository.findOwnByReference(actor.userId, input.reference);
+    if (!existing) throw new TicketNotFoundError();
+    let messageId = "";
+    const summary = await deps.repository.runInTransaction(async (tx) => {
+      const updated = await tx.updateVersioned(input.reference, input.expectedVersion, async (ticket) => {
+        if (ticket.userId !== actor.userId) throw new TicketNotFoundError();
+        if (ticket.status === "RESOLVED" || ticket.status === "CLOSED") {
+          throw new Error("This ticket is not open for replies.");
+        }
+        const message = await tx.createMessage({
+          ticketId: ticket.id,
+          authorId: actor.userId,
+          kind: "REPLY",
+          visibility: "PUBLIC",
+          body,
+        });
+        messageId = message.id;
+        await tx.audit(ticketAudit(ticket, "ticket.learner_reply_added", actor.userId));
+      });
+      if (!updated) throw new StaleTicketVersionError();
+      return learnerSummaryDto(updated);
+    });
+    return { ticket: summary, messageId };
   }
 
   async function claimTicket(input: { reference: string; expectedVersion: number }) {
@@ -699,6 +736,7 @@ export function createTicketService(deps: TicketServiceDeps) {
     resolveTicket,
     reopenOwnTicket,
     closeOwnTicket,
+    addOwnReply,
   };
 }
 
@@ -854,3 +892,4 @@ export const acceptTicketEscalation = liveService.acceptEscalation;
 export const resolveTicket = liveService.resolveTicket;
 export const reopenOwnTicket = liveService.reopenOwnTicket;
 export const closeOwnTicket = liveService.closeOwnTicket;
+export const addOwnTicketReply = liveService.addOwnReply;
