@@ -1,4 +1,5 @@
 import { AlertTriangle, Download } from "lucide-react";
+import { GetSupportLink } from "@/components/support/GetSupportLink";
 import type { CertificateColumn } from "@/server/services/enrolment-dashboard-service";
 
 /**
@@ -101,6 +102,7 @@ export function CertificateSlot({ certificate }: CertificateSlotProps) {
       )}
       <DownloadLink certificateId={certificate.certificateId} />
       <CertificateReference verificationRef={certificate.verificationRef} />
+      <GetSupportLink kind="CERTIFICATE" id={certificate.certificateId} />
     </div>
   );
 }

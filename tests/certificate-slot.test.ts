@@ -273,18 +273,13 @@ function makeService(opts: {
     store,
     learnerAccess: makeLearnerAccess(opts),
     learnerResults: makeLearnerResults(),
+    tickets: { listCurrentOwn: async () => [] },
     now: () => NOW,
   });
   return { svc, calls };
 }
 
 describe("createEnrolmentDashboardService — certificate column wiring", () => {
-  it("keeps tickets deferred at phase 12, untouched by this plan", async () => {
-    const { svc } = makeService({ enrolmentsByActor: { "user-a": [snapshot()] } });
-    const [card] = (await svc.loadLearnerDashboard({ userId: "user-a" } as Actor)).cards;
-    expect(card.tickets).toEqual({ kind: "deferred", phase: 12 });
-  });
-
   it("never surfaces another learner's certificate on this learner's card (T-11-61)", async () => {
     const { svc } = makeService({
       enrolmentsByActor: {

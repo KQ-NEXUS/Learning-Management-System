@@ -1,4 +1,5 @@
 import { ListChecks, ClipboardList } from "lucide-react";
+import { GetSupportLink } from "@/components/support/GetSupportLink";
 import { StatusPill } from "@/components/primitives/ResourceTable";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { LearnerResultCard } from "@/server/services/learner-results-service";
@@ -52,6 +53,7 @@ function HistoryStatus({
 
 function ResultCard({ result }: { result: LearnerResultCard }) {
   const line = scoreLine(result);
+  const latestSubmission = result.history.find((h) => h.kind === "submission" && h.submissionId);
   const historyLabel = result.type === "QUIZ" ? "Attempt history" : "Submission history";
 
   return (
@@ -147,6 +149,11 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+      {latestSubmission && (
+        <div className="mt-4">
+          <GetSupportLink kind="SUBMISSION" id={latestSubmission.submissionId} />
         </div>
       )}
     </article>
