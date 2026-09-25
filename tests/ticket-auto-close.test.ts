@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- loosely typed test fakes */
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/db", () => ({ prisma: { ticket: {}, $transaction: vi.fn() } }));
