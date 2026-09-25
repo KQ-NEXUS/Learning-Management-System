@@ -667,7 +667,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
 
 - [x] 12-03-PLAN.md — deliver private ticket attachment upload, completion, download, and stale-upload cleanup.
 - [x] 12-04-PLAN.md — implement bounded automatic closure and prove scheduled/interactive concurrency safety.
-- [ ] 12-08-PLAN.md — activate reconciled support reporting and privacy-safe CSV export.
+- [x] 12-08-PLAN.md — activate reconciled support reporting and privacy-safe CSV export.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -760,7 +760,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
-| 12. Support Tickets | 4/9 | In Progress|  |
+| 12. Support Tickets | 5/9 | In Progress|  |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |

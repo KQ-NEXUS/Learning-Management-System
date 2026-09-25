@@ -131,7 +131,7 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 - [ ] **SUP-03**: Ticket access is granted through `tickets.view`/`tickets.manage` without requiring Administrator status; a custom Support Agent role can triage/resolve while denied unrelated permissions.
 - [ ] **SUP-04**: Escalation to another staff owner/queue with reason is supported; escalation preserves history, notifies the next owner per policy, and stays visible in operational reporting.
 - [ ] **SUP-05**: Permitted contextual links to learner, Cohort, Course, order, submission, or certificate records are allowed; opening context performs a fresh permission/scope check.
-- [ ] **SUP-06**: Ticket volume, age, priority, status, ownership, response, resolution, and escalation are reportable; dashboard and CSV values reconcile for the same filters and exclude private note content.
+- [x] **SUP-06**: Ticket volume, age, priority, status, ownership, response, resolution, and escalation are reportable; dashboard and CSV values reconcile for the same filters and exclude private note content.
 
 ### Dashboards, Reports, Exports, and Audit (RPT)
 
@@ -277,7 +277,7 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | SUP-03 | Phase 12 | Pending |
 | SUP-04 | Phase 12 | Pending |
 | SUP-05 | Phase 12 | Pending |
-| SUP-06 | Phase 12 | Pending |
+| SUP-06 | Phase 12 | Complete |
 | COM-01 | Phase 13 | Pending |
 | COM-02 | Phase 13 | Pending |
 | COM-03 | Phase 13 | Pending |
