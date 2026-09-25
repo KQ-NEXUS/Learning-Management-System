@@ -448,3 +448,20 @@ describe("private content never reaches learner output", () => {
     expect(screen.getByRole("alert").textContent).toBe("We couldn’t load this ticket. Try again.");
   });
 });
+
+describe("axe accessibility (jsdom)", () => {
+  it("learner list, new ticket form and ticket detail have no axe violations", async () => {
+    const { axeViolations } = await import("../support/axe");
+    listOwnTickets.mockResolvedValue([]);
+    const list = render(await SupportIndexPage({ searchParams: Promise.resolve({}) }));
+    expect(await axeViolations(list.container)).toEqual([]);
+    list.unmount();
+
+    const form = render(<NewTicketForm createTicket={vi.fn()} />);
+    expect(await axeViolations(form.container)).toEqual([]);
+    form.unmount();
+
+    const detail = render(<LearnerTicketDetail ticket={baseView} banner={null} actions={actionsStub()} />);
+    expect(await axeViolations(detail.container)).toEqual([]);
+  });
+});

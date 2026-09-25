@@ -424,3 +424,21 @@ describe("long content, narrow viewport and focus contracts (12-09)", () => {
     await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
   });
 });
+
+describe("axe accessibility (jsdom)", () => {
+  it("staff queue, empty and denied states have no axe violations", async () => {
+    const { axeViolations } = await import("../support/axe");
+    const { container, rerender } = render(<SupportWorkspace view={makeView()} />);
+    expect(await axeViolations(container)).toEqual([]);
+    rerender(<SupportWorkspace view={makeView({ rows: [], total: 0 })} />);
+    expect(await axeViolations(container)).toEqual([]);
+    rerender(<SupportWorkspace denied />);
+    expect(await axeViolations(container)).toEqual([]);
+  });
+
+  it("staff ticket workspace has no axe violations", async () => {
+    const { axeViolations } = await import("../support/axe");
+    const { container } = render(<StaffTicketDetail workspace={makeWorkspace()} canManage />);
+    expect(await axeViolations(container)).toEqual([]);
+  });
+});
