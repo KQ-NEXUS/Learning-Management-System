@@ -780,6 +780,8 @@ export function createTicketService(deps: TicketServiceDeps) {
   };
 }
 
+// The Prisma client is passed structurally so tests can supply a real or in-memory client.
+/* eslint-disable @typescript-eslint/no-explicit-any */
 type AnyPrisma = {
   ticket: any;
   ticketMessage: any;
@@ -890,6 +892,7 @@ function createPrismaTicketRepository(client: AnyPrisma): TicketRepository {
     writeDomainEvent: (event) => writeDomainEvent(client as never, event),
   };
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export function createPrismaBackedTicketService(
   client: AnyPrisma,

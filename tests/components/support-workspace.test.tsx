@@ -374,3 +374,53 @@ describe("StaffTicketDetail operational actions", () => {
     }
   });
 });
+
+describe("long content, narrow viewport and focus contracts (12-09)", () => {
+  it("wraps a very long unbroken message and attachment name instead of overflowing", () => {
+    const long = "x".repeat(400);
+    const ws = makeWorkspace();
+    (ws.timeline[0] as unknown as { message: { body: string } }).message.body = long;
+    render(<StaffTicketDetail workspace={ws} canManage />);
+    const list = screen.getByRole("list", { name: "Ticket chronology" });
+    const bodyEl = within(list).getByText(long);
+    expect(bodyEl.className).toMatch(/break-words|overflow-wrap:anywhere/);
+    expect(bodyEl.closest(".min-w-0")).not.toBeNull();
+    expect(within(list).getByRole("link", { name: /very-long-filename/ }).innerHTML).toContain("overflow-wrap:anywhere");
+    // No fixed viewport-width classes that would force horizontal scroll.
+    expect(list.innerHTML).not.toMatch(/\bw-screen\b|\bmin-w-\[\d{3,}px\]|\bw-\[\d{3,}px\]/);
+  });
+
+  it("queue tabs scroll horizontally on their own strip and never widen the page", () => {
+    render(<SupportWorkspace view={makeView()} />);
+    const tablist = screen.getByRole("tablist");
+    expect(tablist.className).toContain("overflow-x-auto");
+    expect(screen.getAllByRole("tab").every((t) => t.className.includes("shrink-0"))).toBe(true);
+  });
+
+  it("returns focus to the opener and keeps the typed draft when the review dialog closes", async () => {
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage />);
+    fireEvent.click(screen.getByRole("button", { name: "Reply to learner" }));
+    fireEvent.change(screen.getByLabelText("Message to learner"), { target: { value: "Draft" } });
+    const opener = screen.getByRole("button", { name: "Review reply" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Review reply" });
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+    expect((screen.getByLabelText("Message to learner") as HTMLTextAreaElement).value).toBe("Draft");
+  });
+
+  it("announces action failures through an alert region", async () => {
+    resolveAction.mockResolvedValue({ ok: false, error: "Could not resolve." });
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage />);
+    fireEvent.click(screen.getByRole("button", { name: /Resolve/ }));
+    const dialog = screen.getByRole("dialog");
+    const field = within(dialog).getAllByRole("textbox")[0];
+    fireEvent.change(field, { target: { value: "Fixed for learner" } });
+    fireEvent.submit(dialog.querySelector("form")!);
+    await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
+  });
+});

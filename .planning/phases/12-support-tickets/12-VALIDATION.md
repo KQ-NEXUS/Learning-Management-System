@@ -1,9 +1,9 @@
 ---
 phase: 12
 slug: support-tickets
-status: planned
+status: reconciled
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-09-21
 ---
 
@@ -32,28 +32,28 @@ created: 2026-09-21
 
 | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| SUP-01 | T-12-01, T-12-05 | Only the owner creates/views a ticket; categories and attachments use closed allow-lists | unit + integration | `npx vitest run tests/ticket-service.test.ts tests/ticket-access.integration.test.ts` | ❌ W0 | ⬜ pending |
-| SUP-01 | T-12-05, T-12-06 | Attachment intent/complete/download is owner/staff authorized, metadata-verified, READY-only, private/no-store | unit + route | `npx vitest run tests/ticket-attachment-service.test.ts tests/ticket-attachment-download-route.test.ts` | ❌ W0 | ⬜ pending |
-| SUP-02 | T-12-01, T-12-04 | State transitions are valid, version-protected, attributed, immutable, and reason-gated | unit + integration | `npx vitest run tests/ticket-lifecycle.test.ts tests/ticket-concurrency.integration.test.ts` | ❌ W0 | ⬜ pending |
-| SUP-02 | T-12-01 | Learner projections and downloads reveal no internal-note body, metadata, count, filename, or existence signal | negative security | `npx vitest run tests/ticket-privacy.test.ts` | ❌ W0 | ⬜ pending |
-| SUP-03 | T-12-02 | A ticket-only Support Agent manages tickets but remains denied users, roles, payments, and grades | integration | `npx vitest run tests/ticket-rbac.integration.test.ts` | ❌ W0 | ⬜ pending |
-| SUP-04 | T-12-07 | Escalation requires a reason, preserves history, stays Escalated until accepted, emits no private content | unit | `npx vitest run tests/ticket-service.test.ts -t escalation` | ❌ W0 | ⬜ pending |
-| SUP-05 | T-12-03 | Ticket access never grants target-record access; locked references disclose safe identifiers only | unit + route | `npx vitest run tests/ticket-context.test.ts` | ❌ W0 | ⬜ pending |
-| SUP-06 | T-12-01, T-12-09 | Dashboard and CSV reconcile for identical filters; export has no message/attachment data and gates identity | unit + integration | `npx vitest run tests/support-report.test.ts tests/support-report.integration.test.ts` | ❌ W0 | ⬜ pending |
-| D-04 | T-12-08 | Reopen/close obey seven-day boundary; auto-close cannot overwrite a concurrent learner action | unit + integration | `npx vitest run tests/ticket-auto-close.test.ts tests/ticket-concurrency.integration.test.ts` | ❌ W0 | ⬜ pending |
-| D-11–D-15 | T-12-01, T-12-07 | Separate composers, amber Staff only treatment, public review, immutable timeline | component | `npx vitest run tests/components/support-workspace.test.tsx` | ❌ W0 | ⬜ pending |
+| SUP-01 | T-12-01, T-12-05 | Only the owner creates/views a ticket; categories and attachments use closed allow-lists | unit + integration | `npx vitest run tests/ticket-service.test.ts tests/ticket-access.integration.test.ts` | ✅ | ✅ green (12-09) |
+| SUP-01 | T-12-05, T-12-06 | Attachment intent/complete/download is owner/staff authorized, metadata-verified, READY-only, private/no-store | unit + route | `npx vitest run tests/ticket-attachment-service.test.ts tests/ticket-attachment-download-route.test.ts` | ✅ | ✅ green (12-09) |
+| SUP-02 | T-12-01, T-12-04 | State transitions are valid, version-protected, attributed, immutable, and reason-gated | unit + integration | `npx vitest run tests/ticket-lifecycle.test.ts tests/ticket-concurrency.integration.test.ts` | ✅ | ✅ green (12-09) |
+| SUP-02 | T-12-01 | Learner projections and downloads reveal no internal-note body, metadata, count, filename, or existence signal | negative security | `npx vitest run tests/ticket-privacy.test.ts` | ✅ | ✅ green (12-09) |
+| SUP-03 | T-12-02 | A ticket-only Support Agent manages tickets but remains denied users, roles, payments, and grades | integration | `npx vitest run tests/ticket-rbac.integration.test.ts` | ✅ | ✅ green (12-09) |
+| SUP-04 | T-12-07 | Escalation requires a reason, preserves history, stays Escalated until accepted, emits no private content | unit | `npx vitest run tests/ticket-service.test.ts -t escalation` | ✅ | ✅ green (12-09) |
+| SUP-05 | T-12-03 | Ticket access never grants target-record access; locked references disclose safe identifiers only | unit + route | `npx vitest run tests/ticket-context.test.ts` | ✅ | ✅ green (12-09) |
+| SUP-06 | T-12-01, T-12-09 | Dashboard and CSV reconcile for identical filters; export has no message/attachment data and gates identity | unit + integration | `npx vitest run tests/support-report.test.ts tests/support-report.integration.test.ts` | ✅ | ✅ green (12-09) |
+| D-04 | T-12-08 | Reopen/close obey seven-day boundary; auto-close cannot overwrite a concurrent learner action | unit + integration | `npx vitest run tests/ticket-auto-close.test.ts tests/ticket-concurrency.integration.test.ts` | ✅ | ✅ green (12-09) |
+| D-11–D-15 | T-12-01, T-12-07 | Separate composers, amber Staff only treatment, public review, immutable timeline | component | `npx vitest run tests/components/support-workspace.test.tsx` | ✅ | ✅ green (12-09) |
 
 ## Wave 0 Requirements
 
-- [ ] `tests/ticket-lifecycle.test.ts` — pure transition table and seven-day boundary.
-- [ ] `tests/ticket-service.test.ts` — aggregate commands, reasons, timestamps, event/audit/outbox behavior.
-- [ ] `tests/ticket-privacy.test.ts` — internal-note non-disclosure across learner projections.
-- [ ] `tests/ticket-attachment-service.test.ts` and `tests/ticket-attachment-download-route.test.ts` — direct private-file lifecycle.
-- [ ] `tests/ticket-access.integration.test.ts`, `tests/ticket-rbac.integration.test.ts`, and `tests/ticket-concurrency.integration.test.ts` — real PostgreSQL ownership/RBAC/race proof.
-- [ ] `tests/ticket-context.test.ts` — permission-rechecked target links and locked safe references.
-- [ ] `tests/support-report.test.ts` and `tests/support-report.integration.test.ts` — metrics/export reconciliation and private-content exclusion.
-- [ ] `tests/ticket-auto-close.test.ts` — bounded scheduled close service.
-- [ ] `tests/components/support-workspace.test.tsx` and `tests/components/learner-support.test.tsx` — UI interaction and disclosure states.
+- [x] `tests/ticket-lifecycle.test.ts` — pure transition table and seven-day boundary.
+- [x] `tests/ticket-service.test.ts` — aggregate commands, reasons, timestamps, event/audit/outbox behavior.
+- [x] `tests/ticket-privacy.test.ts` — internal-note non-disclosure across learner projections.
+- [x] `tests/ticket-attachment-service.test.ts` and `tests/ticket-attachment-download-route.test.ts` — direct private-file lifecycle.
+- [x] `tests/ticket-access.integration.test.ts`, `tests/ticket-rbac.integration.test.ts`, and `tests/ticket-concurrency.integration.test.ts` — real PostgreSQL ownership/RBAC/race proof.
+- [x] `tests/ticket-context.test.ts` — permission-rechecked target links and locked safe references.
+- [x] `tests/support-report.test.ts` and `tests/support-report.integration.test.ts` — metrics/export reconciliation and private-content exclusion.
+- [x] `tests/ticket-auto-close.test.ts` — bounded scheduled close service.
+- [x] `tests/components/support-workspace.test.tsx` and `tests/components/learner-support.test.tsx` — UI interaction and disclosure states.
 - [ ] Framework install: none; existing Vitest/jsdom/Testcontainers infrastructure is sufficient.
 
 ## Plan Verification Map
@@ -87,4 +87,29 @@ created: 2026-09-21
 - [x] Ordinary unit/component task commands are scoped to the 30-second target; explicitly serial Docker/full-suite gates are final-wave exceptions.
 - [x] `nyquist_compliant: true` is set after mapping every validation row to plans 12-01 through 12-09.
 
-**Approval:** structurally complete for execution; `wave_0_complete` remains false until the planned files exist and execute. Plan 12-09 reconciles this document from actual evidence.
+**Approval:** automated evidence reconciled by plan 12-09 (see Reconciliation Evidence). The three Manual-Only rows remain OPEN until the blocking deployed walkthrough (12-09 Task 3) is signed off; they are not converted to automated passes.
+
+## Reconciliation Evidence (plan 12-09, 2026-09-25)
+
+| Gate | Result |
+|------|--------|
+| `npx prisma validate` | exit 0 (schema valid) |
+| `npx prisma migrate status` | Against the configured remote (Neon) dev DB: migration `20260925120000_ticket_queue_changed_event` is NOT yet applied. Not applied by the executor (shared remote DB). Real-Postgres suites apply all 18 migrations to a testcontainers DB and pass. Must be applied via `prisma migrate deploy` before the deployed walkthrough. |
+| `npx prisma generate` | exit 0 |
+| `npx tsc --noEmit` | exit 0 |
+| Focused Phase 12 suites (18 files, 135 tests, Docker/testcontainers) | all pass |
+| Task 1 matrix (7 files, 40 tests incl. new `ticket-access.integration.test.ts` and `ticket-phase-invariants.test.ts`) | all pass, real PostgreSQL |
+| `tests/components/support-workspace.test.tsx` | 32 pass (4 added: long-content wrap, tab strip overflow, focus restoration, alert region) |
+| `npm test` (full, `--no-file-parallelism`) | 274 files, 3710 passed, 1 skipped (`tests/components/audit-table.test.tsx`, pre-existing, unrelated) |
+| `npm run build` | succeeds; `/support`, `/support/new`, `/support/[reference]`, `/staff/support`, `/staff/support/[reference]` and the ticket-attachment routes present |
+| `npm run lint` | 3 errors + 20 warnings remain, all in files outside Phase 12 (`tests/certificate-pdf-unicode.test.ts` no-explicit-any x3; warnings in unrelated tests). The 15 `no-explicit-any` errors in `ticket-service.ts` were fixed. Logged as a deferred item, not fixed. |
+| `git diff --check` | clean |
+
+### Known automated gaps (recorded, not hidden)
+
+- No axe/browser accessibility run; keyboard/focus/aria are asserted in jsdom only. Real mobile reflow is human-verified only.
+- No `loading.tsx` skeleton for support routes (pages are server-rendered); UI-SPEC 8.1 skeleton requirement is not implemented.
+- Staff queue filtering runs in memory (12-07); acceptable at current scale, not load-tested.
+- Attachment storage (R2 inspect/promote/presign) is exercised with an in-memory store; real R2 behavior is Manual-Only.
+- Sweep of stale UPLOADING ticket attachments has no real-DB test.
+- Manual-Only rows (responsive journeys, Netlify scheduled function, R2 privacy/disposition): PENDING human sign-off.
