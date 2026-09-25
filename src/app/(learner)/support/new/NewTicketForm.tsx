@@ -36,6 +36,7 @@ export function NewTicketForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [locked, setLocked] = useState(false);
   // Stored before any upload so a retry never calls create again.
   const created = useRef<Created | null>(null);
   const submitting = useRef(false);
@@ -67,6 +68,7 @@ export function NewTicketForm({
           return;
         }
         created.current = { reference: outcome.reference, initialMessageId: outcome.initialMessageId };
+        setLocked(true);
       }
 
       const { reference, initialMessageId } = created.current;
@@ -114,7 +116,6 @@ export function NewTicketForm({
   }
 
   const busy = pending || files.some((f) => f.status === "uploading");
-  const locked = created.current !== null;
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex max-w-[640px] flex-col gap-4">
