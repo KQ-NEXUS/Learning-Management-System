@@ -8,7 +8,7 @@ export const metadata = { title: "Report dashboard" };
 
 function filterParams(params: Record<string, string | string[] | undefined>) {
   const filters: Record<string, string> = {};
-  for (const key of ["from", "to", "programmeId", "cohortId", "provider", "currency", "status", "page", "pageSize"]) {
+  for (const key of ["from", "to", "programmeId", "cohortId", "provider", "currency", "status", "category", "priority", "queue", "owner", "page", "pageSize"]) {
     const value = params[key];
     if (typeof value === "string" && value) filters[key] = value;
   }

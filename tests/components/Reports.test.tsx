@@ -96,8 +96,8 @@ describe("ReportsHub", () => {
 
   it("shows mixed availability explicitly and never gives unavailable reports a zero", () => {
     render(<ReportsHub state="ready" overview={overview} scopeLabel="Limited scope" />);
-    expect(screen.getAllByText("Available")).toHaveLength(4);
-    expect(screen.getAllByText("Not available yet")).toHaveLength(6);
+    expect(screen.getAllByText("Available")).toHaveLength(5);
+    expect(screen.getAllByText("Not available yet")).toHaveLength(5);
     const progress = screen
       .getAllByTestId("report-card")
       .find((card) => card.getAttribute("data-dataset") === "progress")!;
@@ -253,5 +253,58 @@ describe("ReportDashboard", () => {
     expect(screen.getAllByText("REG-A")).toHaveLength(2);
     expect(screen.getAllByRole("time")).toHaveLength(2);
     expect(screen.queryByRole("link", { name: /Total registrations/ })).toBeNull();
+  });
+});
+
+function supportDashboard(): AvailableDatasetReport {
+  const base = { ...dashboardRequest, dataset: "support" as const, filters: { category: "OTHER", owner: "UNASSIGNED" } };
+  const asOf = new Date("2026-09-15T12:34:56.000Z");
+  const metric = (id: string, label: string, value: number | null, section: "health" | "performance", format: "COUNT" | "MINUTES" | "PERCENT" = "COUNT") =>
+    ({ id, label, value, format, section, helper: `${label} definition`, href: `/staff/reports/support?status=OPEN_BACKLOG&from=2000-01-01#rows` });
+  return {
+    available: true,
+    definition: getReportDefinition("support"),
+    request: { ...base, asOf },
+    lastRefreshed: asOf,
+    metrics: [
+      metric("open", "Open", 7, "health"), metric("unassigned", "Unassigned", 2, "health"), metric("urgent", "Urgent", 1, "health"), metric("escalated", "Escalated", 3, "health"),
+      metric("created", "Created", 12, "performance"), metric("first-response", "Median first response", 90, "performance", "MINUTES"), metric("reopen-rate", "Reopen rate", null, "performance", "PERCENT"),
+    ],
+    breakdown: [{ id: "age-lt-1d", group: "Backlog age", label: "Under 24 hours", value: 4, href: "/staff/reports/support#rows" }],
+    rows: [{ kind: "support", id: "t1", reference: "TKT-1", businessDate: new Date("2026-09-14T10:00:00.000Z"), resolvedAt: null, closedAt: null, category: "OTHER", priority: "NORMAL", status: "OPEN", queue: "GENERAL_SUPPORT", ownerId: null, ownerName: null, ageMinutes: 90, firstResponseMinutes: null, resolutionMinutes: null, escalationCount: 0, contextType: null, contextReference: null }],
+    totalRows: 1, page: 1, pageSize: 25,
+    options: { programmes: [], cohorts: [], owners: [{ id: "u1", label: "Staff One" }] },
+  };
+}
+
+describe("ReportDashboard support", () => {
+  it("renders health, performance, age bands, support filters and as-of text in the shared shell", () => {
+    render(<ReportDashboard report={supportDashboard()} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Support" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current backlog health" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Performance" })).toBeTruthy();
+    for (const name of ["Open", "Unassigned", "Urgent", "Escalated"]) expect(screen.getByRole("link", { name: new RegExp(`^${name}: `) })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Median first response: 1\.5 h/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Reopen rate: No data/ })).toBeTruthy();
+    expect(screen.getByText("Backlog age")).toBeTruthy();
+    expect(screen.getByText("Under 24 hours")).toBeTruthy();
+    expect(screen.getByText("Open definition")).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Category" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Owner" })).toBeTruthy();
+    expect(screen.getByText(/all priorities; all queues; unassigned/)).toBeTruthy();
+    expect(screen.getAllByRole("time")).toHaveLength(2);
+    expect(screen.queryByRole("combobox", { name: "Programme" })).toBeNull();
+  });
+
+  it("queues a metadata-only export and offers identity only through the permitted-columns hint", async () => {
+    exportActions.request.mockResolvedValueOnce({ ok: true, jobId: "j", status: "QUEUED" });
+    render(<ReportDashboard report={supportDashboard()} />);
+    expect(screen.queryByRole("button", { name: "Export options" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    await waitFor(() => expect(exportActions.request).toHaveBeenCalled());
+    const call = exportActions.request.mock.lastCall?.[0];
+    expect(call).toMatchObject({ dataset: "support", filters: { category: "OTHER", owner: "UNASSIGNED" } });
+    expect(call.columns).not.toContain("learnerName");
+    expect(call.columns.join(",")).not.toMatch(/body|note|filename|attachment|message/);
   });
 });

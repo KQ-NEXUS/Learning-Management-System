@@ -104,21 +104,27 @@ async function assertScopeStillCovered(tx: Tx, original: CollectionScopeSnapshot
 }
 
 function projectedValue(row: ReportRow | ReconciliationRefundRow, key: string): SnapshotCell {
-  if (key === "registeredAt" || key === "confirmedAt" || key === "activatedAt" || key === "sessionDate" || key === "occurredAt") return row.businessDate.toISOString();
+  if (key === "registeredAt" || key === "confirmedAt" || key === "activatedAt" || key === "sessionDate" || key === "occurredAt" || key === "createdAt") return row.businessDate.toISOString();
   if (key === "amountMinor" && "learnerTotalMinor" in row) return row.learnerTotalMinor;
   if (key === "reference" && "orderReference" in row) return row.orderReference;
   if (key === "sessionId") return row.id;
   if (key === "state" && "stateCounts" in row) return Object.entries(row.stateCounts).map(([state, count]) => `${state}: ${count}`).join("; ") || (row.expected ? "Missing register" : "Not applicable");
   const value = (row as unknown as Record<string, unknown>)[key];
+  if (value instanceof Date) return value.toISOString();
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : null;
 }
+
+const GLOBAL_SCOPE: CollectionScopeSnapshot = { kind: "GLOBAL", programmeIds: [], courseIds: [], cohortIds: [] };
 
 function reportProducer(): TrustedExportProducer {
   return async ({ datasetId, normalizedFilters, authorizedScope, selectedColumns, asOf, tx }) => {
     const permission = datasetId === "reconciliation-refunds" ? "payments.view" : "reports.view";
     const service = createReportQueryService({
       store: tx as unknown as ReportQueryStore,
-      authorizeCollection: async () => ({ actor: { userId: "trusted-export" }, permission, scope: authorizedScope, cohortWhere: cohortWhereForCollection(authorizedScope) }),
+      // Ticket access was already proven GLOBAL by authorize(); tickets are not cohort-owned.
+      authorizeCollection: async (requested) => requested === "tickets.view"
+        ? { actor: { userId: "trusted-export" }, permission: requested, scope: GLOBAL_SCOPE, cohortWhere: {} }
+        : { actor: { userId: "trusted-export" }, permission, scope: authorizedScope, cohortWhere: cohortWhereForCollection(authorizedScope) },
       now: () => asOf,
     });
     const rows = datasetId === "reconciliation-refunds"
@@ -126,7 +132,10 @@ function reportProducer(): TrustedExportProducer {
       : await service.getExportDatasetRows(datasetId as ReportDataset, normalizedFilters);
     const needsIdentity = selectedColumns.some((column) => column.permission === "users.view");
     const identities = new Map<string, { name: string; email: string }>();
-    if (needsIdentity && datasetId === "enrolments") {
+    if (needsIdentity && datasetId === "support") {
+      const records = await tx.ticket.findMany({ where: { id: { in: rows.map((row) => row.id) } }, select: { id: true, user: { select: { name: true, email: true } } } });
+      for (const record of records) identities.set(record.id, record.user);
+    } else if (needsIdentity && datasetId === "enrolments") {
       const records = await tx.enrolment.findMany({ where: { id: { in: rows.map((row) => row.id) } }, select: { id: true, user: { select: { name: true, email: true } } } });
       for (const record of records) identities.set(record.id, record.user);
     } else if (needsIdentity) {
@@ -163,9 +172,15 @@ async function authorize(tx: Tx, userId: string, dataset: ExportDataset, sensiti
       if (uncovered > 0) throw new AuthorizationError(required[1]);
     }
   }
+  if (dataset === "support") {
+    // Tickets are not cohort-owned: viewing them requires a GLOBAL ticket grant.
+    const tickets = collectionScopeFromGrants(active, "tickets.view", asOf);
+    if (!tickets || tickets.kind !== "GLOBAL") throw new AuthorizationError("tickets.view");
+  }
   if (sensitive) {
     const identity = collectionScopeFromGrants(active, "users.view", asOf);
     if (!identity) throw new AuthorizationError("users.view");
+    if (dataset === "support" && identity.kind !== "GLOBAL") throw new AuthorizationError("users.view");
     if (definition.scopePolicy === "GLOBAL" && identity.kind !== "GLOBAL") throw new AuthorizationError("users.view");
     if (scope.kind === "GLOBAL" && identity.kind !== "GLOBAL") throw new AuthorizationError("users.view");
     if (scope.kind === "LIMITED" && identity.kind === "LIMITED") {

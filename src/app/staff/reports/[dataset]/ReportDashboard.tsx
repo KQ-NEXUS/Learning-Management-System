@@ -29,6 +29,7 @@ import type {
 import type {
   ReportRow,
 } from "@/server/services/report-query-service";
+import { SUPPORT_CATEGORIES, SUPPORT_PRIORITIES, SUPPORT_QUEUES, SUPPORT_STATUSES } from "@/lib/support-report-vocabulary";
 
 function count(value: number) {
   return new Intl.NumberFormat("en-NG").format(value);
@@ -56,13 +57,23 @@ function scopeLabel(report: ClientDatasetReport) {
 
 function pageHref(report: ClientAvailableDatasetReport, page: number) {
   const params = new URLSearchParams();
-  for (const key of ["from", "to", "programmeId", "cohortId", "provider", "currency", "status"] as const) {
+  for (const key of ["from", "to", "programmeId", "cohortId", "provider", "currency", "status", "category", "priority", "queue", "owner"] as const) {
     const value = report.request.filters[key];
     if (value) params.set(key, value);
   }
   params.set("page", String(page));
   params.set("pageSize", String(report.pageSize));
   return `${report.definition.drillDownPath}?${params.toString()}#rows`;
+}
+
+function label(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function duration(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 2880) return `${Math.round((minutes / 60) * 10) / 10} h`;
+  return `${Math.round((minutes / 1440) * 10) / 10} d`;
 }
 
 function rowFields(row: ReportRow): Array<[string, string]> {
@@ -91,6 +102,15 @@ function rowFields(row: ReportRow): Array<[string, string]> {
       ["Enrolment", row.id], ["Learner", row.learnerName], ["Cohort", row.cohortTitle],
       ["State", row.status.replaceAll("_", " ")], ["Transition date", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
     ];
+    case "support": return [
+      ["Reference", row.reference], ["Created", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
+      ["Category", label(row.category)], ["Priority", label(row.priority)], ["Status", label(row.status)], ["Queue", label(row.queue)],
+      ["Owner", row.ownerName ?? "Unassigned"], ["Age", duration(row.ageMinutes)],
+      ["First response", row.firstResponseMinutes === null ? "Not yet" : duration(row.firstResponseMinutes)],
+      ["Resolution", row.resolutionMinutes === null ? "Not resolved" : duration(row.resolutionMinutes)],
+      ["Escalations", count(row.escalationCount)],
+      ["Context", row.contextType ? `${label(row.contextType)} ${row.contextReference}` : "None"],
+    ];
     case "attendance": return [
       ["Session", row.sessionTitle], ["Cohort", row.cohortTitle],
       ["Session date", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
@@ -107,6 +127,26 @@ function amountState(value: number | null, row: Extract<ReportRow, { kind: "paym
 
 function Filters({ report }: { report: ClientAvailableDatasetReport }) {
   const { filters } = report.request;
+  if (report.definition.id === "support") {
+    const select = (name: string, labelText: string, all: string, values: readonly (readonly [string, string])[]) => (
+      <label className={FIELD}>{labelText}<select className={CONTROL} name={name} defaultValue={(filters as Record<string, string | undefined>)[name] ?? ""}><option value="">{all}</option>{values.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
+    );
+    return (
+      <form method="get" aria-label="Report filters" className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-2 xl:grid-cols-4">
+        <label className={FIELD}>Date from<input className={CONTROL} type="date" name="from" defaultValue={filters.from ?? ""} /></label>
+        <label className={FIELD}>Date to<input className={CONTROL} type="date" name="to" defaultValue={filters.to ?? ""} /></label>
+        {select("category", "Category", "All categories", SUPPORT_CATEGORIES.map((value) => [value, label(value)] as const))}
+        {select("priority", "Priority", "All priorities", SUPPORT_PRIORITIES.map((value) => [value, label(value)] as const))}
+        {select("queue", "Queue", "All queues", SUPPORT_QUEUES.map((value) => [value, label(value)] as const))}
+        {select("owner", "Owner", "All owners", [["UNASSIGNED", "Unassigned"], ...(report.options.owners ?? []).map((owner) => [owner.id, owner.label] as const)])}
+        {select("status", "Status", "All statuses", [["OPEN_BACKLOG", "Open backlog"], ...SUPPORT_STATUSES.map((value) => [value, label(value)] as const)])}
+        <div className="flex items-end gap-3">
+          <button type="submit" className={BTN}>Apply filters</button>
+          <Link href={report.definition.drillDownPath} className={`${BTN} no-underline`}>Clear</Link>
+        </div>
+      </form>
+    );
+  }
   return (
     <form
       method="get"
@@ -144,6 +184,8 @@ function BandFact({ label, children, first }: { label: string; children: React.R
 
 function metricValue(metric: ClientAvailableDatasetReport["metrics"][number]): string {
   if (metric.format === "MONEY" && metric.currency) return money(metric.value, metric.currency);
+  if (metric.format === "MINUTES") return metric.value === null ? "No data" : duration(metric.value);
+  if (metric.format === "PERCENT") return metric.value === null ? "No data" : `${metric.value}%`;
   return metric.value === null ? "Pending" : count(metric.value);
 }
 
@@ -186,7 +228,9 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
         <BandFact label="Last refreshed">{dateTime(report.lastRefreshed)}</BandFact>
         <BandFact label="Data as of">{dateTime(request.asOf)}</BandFact>
       </dl>
-      <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ?? "All dates"} to {request.filters.to ?? "data as of"}; {request.filters.programmeId ? "selected programme" : "all authorised programmes"}; {request.filters.cohortId ? "selected cohort" : "all authorised cohorts"}{request.filters.provider ? `; ${request.filters.provider}` : ""}{request.filters.currency ? `; ${request.filters.currency}` : ""}{request.filters.status ? `; ${request.filters.status.replaceAll("_", " ")}` : ""}</p>
+      {definition.id === "support" ? (
+        <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ?? "30 days before data time"} to {request.filters.to ?? "data as of"}; {request.filters.category ? label(request.filters.category) : "all categories"}; {request.filters.priority ? label(request.filters.priority) : "all priorities"}; {request.filters.queue ? label(request.filters.queue) : "all queues"}; {request.filters.owner ? (request.filters.owner === "UNASSIGNED" ? "unassigned" : "selected owner") : "all owners"}{request.filters.status ? `; ${label(request.filters.status)}` : ""}. Current health counts every open ticket now; performance uses the range shown.</p>
+      ) : <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ?? "All dates"} to {request.filters.to ?? "data as of"}; {request.filters.programmeId ? "selected programme" : "all authorised programmes"}; {request.filters.cohortId ? "selected cohort" : "all authorised cohorts"}{request.filters.provider ? `; ${request.filters.provider}` : ""}{request.filters.currency ? `; ${request.filters.currency}` : ""}{request.filters.status ? `; ${request.filters.status.replaceAll("_", " ")}` : ""}</p>}
     </div>
   );
 
@@ -235,6 +279,7 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
           )}
           {failedSections.includes("filters") ? <SectionError section="filters" onRetry={retry} /> : <Filters report={report} />}
           {failedSections.includes("metrics") ? <SectionError section="metrics" onRetry={retry} /> : (
+            definition.id === "support" ? <SupportMetrics report={report} /> :
             <section aria-label="Report metrics" className="grid grid-cols-2 gap-x-6 gap-y-8 border-t border-foreground pt-5 lg:grid-cols-5">
               {report.metrics.map((metric, index) => (
                 <Link
@@ -250,7 +295,8 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
               ))}
             </section>
           )}
-          {report.breakdown.length > 0 && (failedSections.includes("breakdown") ? <SectionError section="breakdown" onRetry={retry} /> : (
+          {report.breakdown.length > 0 && definition.id === "support" && <SupportBreakdown report={report} />}
+          {report.breakdown.length > 0 && definition.id !== "support" && (failedSections.includes("breakdown") ? <SectionError section="breakdown" onRetry={retry} /> : (
             <section aria-labelledby="breakdown-heading">
               <h2 id="breakdown-heading" className={`${SECTION_TITLE} pb-4`}>Breakdown</h2>
               <ul className="flex flex-wrap gap-x-8 gap-y-3 border-t border-foreground pt-4">
@@ -279,6 +325,59 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
         </>
       )}
     </div>
+  );
+}
+
+function SupportMetrics({ report }: { report: ClientAvailableDatasetReport }) {
+  const groups: Array<[string, "health" | "performance", string]> = [
+    ["Current backlog health", "health", "Open tickets as of the data time. Not limited by the date range."],
+    ["Performance", "performance", "Tickets and events inside the selected range (default: the 30 days before the data time)."],
+  ];
+  return (
+    <>
+      {groups.map(([title, section, note]) => (
+        <section key={section} aria-label={title} className="flex flex-col gap-4 border-t border-foreground pt-5">
+          <div>
+            <h2 className={SECTION_TITLE}>{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{note}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-8 lg:grid-cols-4">
+            {report.metrics.filter((metric) => metric.section === section).map((metric) => (
+              <Link key={metric.id} href={metric.href} aria-label={`${metric.label}: ${metricValue(metric)}. View matching rows`} className="group flex min-w-0 flex-col gap-1 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">
+                <span className="text-sm text-muted-foreground">{metric.label}</span>
+                <span className="font-mono text-[28px] leading-[1.15] font-medium tracking-[-0.03em] break-words text-foreground tabular-nums">{metricValue(metric)}</span>
+                {metric.helper && <span className="text-[13px] text-muted-foreground">{metric.helper}</span>}
+                <span className="text-sm text-accent group-hover:underline">View matching rows</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
+    </>
+  );
+}
+
+function SupportBreakdown({ report }: { report: ClientAvailableDatasetReport }) {
+  const groups = [...new Set(report.breakdown.map((item) => item.group ?? "Breakdown"))];
+  return (
+    <section aria-labelledby="breakdown-heading" className="flex flex-col gap-5">
+      <h2 id="breakdown-heading" className={`${SECTION_TITLE} pb-1`}>Breakdowns</h2>
+      {groups.map((group) => (
+        <div key={group} className="border-t border-foreground pt-4">
+          <h3 className="text-sm font-semibold text-foreground">{group}</h3>
+          <ul className="mt-2 flex flex-wrap gap-x-8 gap-y-3">
+            {report.breakdown.filter((item) => (item.group ?? "Breakdown") === group).map((item) => (
+              <li key={item.id}>
+                <Link href={item.href} className="inline-flex min-h-10 items-center gap-2 text-sm text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                  <span>{item.label}</span>
+                  <span className="font-mono text-foreground tabular-nums">{count(item.value)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }
 
