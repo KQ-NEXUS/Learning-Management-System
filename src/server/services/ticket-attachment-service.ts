@@ -112,7 +112,6 @@ export class TicketAttachmentConflictError extends Error {
 /** Display-only filename: no separators, quotes or control characters. */
 export function sanitizeTicketFilename(name: string): string {
   const cleaned = name
-    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f"\\/<>:|?*]/g, "_")
     .trim()
     .slice(0, 200);

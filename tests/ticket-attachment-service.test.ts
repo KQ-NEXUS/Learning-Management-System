@@ -34,7 +34,7 @@ function harness(options?: {
     buildStagedKey: (ticketId: string) => buildStagedTicketAttachmentKey({ ticketId }),
     finalKey: finalTicketAttachmentKeyFor,
     presignPut: vi.fn(async () => "https://storage.example/put"),
-    inspect: vi.fn(async () => options?.stored ?? { sizeBytes: 1000n, contentType: "image/png" }),
+    inspect: vi.fn(async () => options?.stored ?? { sizeBytes: BigInt(1000), contentType: "image/png" }),
     promote: vi.fn(async () => undefined),
     delete: vi.fn(async () => undefined),
   };
@@ -176,7 +176,7 @@ describe("ticket attachment completion", () => {
 
   it("never yields READY on a size mismatch", async () => {
     const { service, rows, storage } = harness({
-      stored: { sizeBytes: 999n, contentType: "image/png" },
+      stored: { sizeBytes: BigInt(999), contentType: "image/png" },
     });
     const { attachment } = await service.createUploadIntent(png);
     await expect(service.completeUpload(attachment.id)).rejects.toBeInstanceOf(
@@ -189,7 +189,7 @@ describe("ticket attachment completion", () => {
 
   it("never yields READY on a content type mismatch", async () => {
     const { service, rows } = harness({
-      stored: { sizeBytes: 1000n, contentType: "text/html" },
+      stored: { sizeBytes: BigInt(1000), contentType: "text/html" },
     });
     const { attachment } = await service.createUploadIntent(png);
     await expect(service.completeUpload(attachment.id)).rejects.toBeInstanceOf(
