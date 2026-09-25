@@ -813,8 +813,25 @@ function createPrismaTicketRepository(client: AnyPrisma): TicketRepository {
   };
 }
 
-const liveService = createTicketService({
-  repository: createPrismaTicketRepository(prisma as AnyPrisma),
+export function createPrismaBackedTicketService(
+  client: AnyPrisma,
+  options: {
+    getActor: () => Promise<Actor | null>;
+    withPermission: WithPermission;
+    generateReference?: () => string;
+    now?: () => Date;
+  },
+) {
+  return createTicketService({
+    repository: createPrismaTicketRepository(client),
+    getActor: options.getActor,
+    withPermission: options.withPermission,
+    generateReference: options.generateReference,
+    now: options.now,
+  });
+}
+
+const liveService = createPrismaBackedTicketService(prisma as AnyPrisma, {
   getActor: async () => {
     const { getCurrentActor } = await import("@/server/auth/current-actor");
     return getCurrentActor();
