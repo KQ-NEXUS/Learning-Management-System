@@ -87,7 +87,7 @@ created: 2026-09-21
 - [x] Ordinary unit/component task commands are scoped to the 30-second target; explicitly serial Docker/full-suite gates are final-wave exceptions.
 - [x] `nyquist_compliant: true` is set after mapping every validation row to plans 12-01 through 12-09.
 
-**Approval:** automated evidence reconciled by plan 12-09 (see Reconciliation Evidence). The three Manual-Only rows remain OPEN until the blocking deployed walkthrough (12-09 Task 3) is signed off; they are not converted to automated passes.
+**Approval:** automated evidence reconciled by plan 12-09 (see Reconciliation Evidence). The three Manual-Only rows were signed off by the user via the deployed walkthrough on 2026-09-25 (all eight steps reported passing; overall approval, no per-step detail supplied). They are human-verified, not automated passes.
 
 ## Reconciliation Evidence (plan 12-09, 2026-09-25)
 
@@ -108,8 +108,7 @@ created: 2026-09-21
 ### Known automated gaps (recorded, not hidden)
 
 - No axe/browser accessibility run; keyboard/focus/aria are asserted in jsdom only. Real mobile reflow is human-verified only.
-- No `loading.tsx` skeleton for support routes (pages are server-rendered); UI-SPEC 8.1 skeleton requirement is not implemented.
 - Staff queue filtering runs in memory (12-07); acceptable at current scale, not load-tested.
 - Attachment storage (R2 inspect/promote/presign) is exercised with an in-memory store; real R2 behavior is Manual-Only.
-- Sweep of stale UPLOADING ticket attachments has no real-DB test.
-- Manual-Only rows (responsive journeys, Netlify scheduled function, R2 privacy/disposition): PENDING human sign-off.
+- Manual-Only rows (responsive journeys, Netlify scheduled function, R2 privacy/disposition): SIGNED OFF by user 2026-09-25.
+- Resolved after reconciliation: migration applied to Neon; lint clean (0 errors); support loading skeletons added; stale-UPLOADING sweep has a real-DB test; jsdom axe checks added.
