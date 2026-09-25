@@ -237,4 +237,56 @@ describe("ticket service", () => {
       "ticket.closed",
     ]);
   });
+
+  describe("learner own reply and detail lifecycle flags (12-05)", () => {
+    it("adds a public learner reply guarded by version and returns the message id", async () => {
+      const harness = makeTicketHarness({ actorId: "learner-1" });
+      const service = createTicketService(harness.deps);
+      const created = await service.createOwnTicket({ category: "OTHER", subject: "Mine", body: "Body" });
+      expect(created.initialMessageId).toBe("msg-1");
+
+      const sent = await service.addOwnReply({ reference: created.reference, expectedVersion: 1, body: "  More detail  " });
+      expect(sent.messageId).toBe("msg-2");
+      expect(harness.messages[1]).toMatchObject({ kind: "REPLY", visibility: "PUBLIC", authorId: "learner-1", body: "More detail" });
+      await expect(
+        service.addOwnReply({ reference: created.reference, expectedVersion: 1, body: "stale" }),
+      ).rejects.toBeInstanceOf(StaleTicketVersionError);
+    });
+
+    it("rejects replies on another learner's ticket and on resolved or closed tickets", async () => {
+      const harness = makeTicketHarness({ actorId: "learner-1" });
+      const service = createTicketService(harness.deps);
+      const created = await service.createOwnTicket({ category: "OTHER", subject: "Mine", body: "Body" });
+      harness.tickets[0].status = "RESOLVED";
+      harness.tickets[0].resolvedAt = harness.now;
+      await expect(
+        service.addOwnReply({ reference: created.reference, expectedVersion: 1, body: "hi" }),
+      ).rejects.toThrow("not open for replies");
+      harness.actorId = "learner-2";
+      await expect(
+        service.addOwnReply({ reference: created.reference, expectedVersion: 1, body: "hi" }),
+      ).rejects.toBeInstanceOf(TicketNotFoundError);
+    });
+
+    it("computes canReply/canClose/canReopen and the auto-close date on the server, inclusive at the exact boundary", async () => {
+      const harness = makeTicketHarness({ actorId: "learner-1" });
+      const service = createTicketService(harness.deps);
+      const created = await service.createOwnTicket({ category: "OTHER", subject: "Mine", body: "Body" });
+      const open = await service.getOwnTicketByReference(created.reference);
+      expect(open).toMatchObject({ canReply: true, canClose: false, canReopen: false, autoCloseAt: null });
+      expect(open.messages[0]).toMatchObject({ authorRole: "LEARNER" });
+
+      const resolvedAt = new Date("2026-09-21T12:00:00.000Z");
+      harness.tickets[0].status = "RESOLVED";
+      harness.tickets[0].resolvedAt = resolvedAt;
+      harness.now = new Date(resolvedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const atBoundary = await service.getOwnTicketByReference(created.reference);
+      expect(atBoundary).toMatchObject({ canReply: false, canClose: true, canReopen: true });
+      expect(atBoundary.autoCloseAt?.toISOString()).toBe("2026-09-28T12:00:00.000Z");
+
+      harness.now = new Date(resolvedAt.getTime() + 7 * 24 * 60 * 60 * 1000 + 1);
+      const after = await service.getOwnTicketByReference(created.reference);
+      expect(after).toMatchObject({ canReopen: false, canClose: true });
+    });
+  });
 });

@@ -20,9 +20,14 @@ vi.mock("@/components/support/upload-ticket-attachment", () => ({
 }));
 
 const listOwnTickets = vi.fn();
+const getOwnTicketByReference = vi.fn();
+const { NotFound } = vi.hoisted(() => ({
+  NotFound: class TicketNotFoundError extends Error {},
+}));
 vi.mock("@/server/services/ticket-service", () => ({
   listOwnTickets: () => listOwnTickets(),
-  getOwnTicketByReference: vi.fn(),
+  getOwnTicketByReference: (ref: string) => getOwnTicketByReference(ref),
+  TicketNotFoundError: NotFound,
 }));
 vi.mock("@/server/auth/current-actor", () => ({
   getCurrentActor: async () => ({ userId: "learner-1" }),
@@ -36,12 +41,18 @@ import SupportIndexPage from "@/app/(learner)/support/page";
 import { NewTicketForm } from "@/app/(learner)/support/new/NewTicketForm";
 import { TICKET_CATEGORY_OPTIONS } from "@/components/support/ticket-labels";
 import { validatePickedFiles } from "@/components/support/TicketAttachmentPicker";
+import LearnerTicketPage from "@/app/(learner)/support/[reference]/page";
+import {
+  LearnerTicketDetail,
+  type LearnerTicketView,
+} from "@/app/(learner)/support/[reference]/LearnerTicketDetail";
 
 beforeEach(() => {
   push.mockReset();
   refresh.mockReset();
   uploadTicketAttachment.mockReset();
   listOwnTickets.mockReset();
+  getOwnTicketByReference.mockReset();
 });
 afterEach(() => cleanup());
 
@@ -201,5 +212,239 @@ describe("partial upload recovery", () => {
       screen.getByText("Ticket KQT-9 was created, but 1 attachment(s) could not be uploaded. Try again from the ticket."),
     ).toBeTruthy();
     expect(screen.getByText("Upload failed")).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 - detail, reply, resolved / reopen / closed, private-content safety
+// ---------------------------------------------------------------------------
+
+const baseView: LearnerTicketView = {
+  reference: "KQT-77",
+  subject: "Cannot open certificate",
+  category: "CERTIFICATE",
+  status: "OPEN",
+  version: 3,
+  createdAt: new Date("2026-09-20T10:00:00Z"),
+  updatedAt: new Date("2026-09-21T10:00:00Z"),
+  context: null,
+  canReply: true,
+  canClose: false,
+  canReopen: false,
+  autoCloseAt: null,
+  messages: [
+    {
+      id: "m1",
+      authorRole: "LEARNER",
+      body: "Line one\nLine two with averyveryverylongunbrokenwordaverylongunbrokenwordaverylongunbrokenword",
+      createdAt: new Date("2026-09-20T10:00:00Z"),
+      attachments: [{ id: "a1", filename: "screenshot.png", mimeType: "image/png", sizeBytes: 2048 }],
+    },
+    {
+      id: "m2",
+      authorRole: "SUPPORT",
+      body: "We are looking into it.",
+      createdAt: new Date("2026-09-21T09:00:00Z"),
+      attachments: [],
+    },
+  ],
+};
+
+function actionsStub(overrides: Partial<Record<"reply" | "reopen" | "close", ReturnType<typeof vi.fn>>> = {}) {
+  return {
+    reply: vi.fn().mockResolvedValue({ ok: true, messageId: "m3" }),
+    reopen: vi.fn().mockResolvedValue({ ok: true }),
+    close: vi.fn().mockResolvedValue({ ok: true }),
+    ...overrides,
+  } as never;
+}
+
+describe("learner detail timeline", () => {
+  it("renders an ordered list with absolute times, roles and authorized download links", () => {
+    const { container } = render(<LearnerTicketDetail ticket={baseView} banner={null} actions={actionsStub()} />);
+    const items = container.querySelectorAll("ol > li");
+    expect(items).toHaveLength(2);
+    expect(container.querySelectorAll("time[datetime]").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("You")).toBeTruthy();
+    expect(screen.getByText("Support")).toBeTruthy();
+    const link = screen.getByRole("link", { name: /screenshot.png/ });
+    expect(link.getAttribute("href")).toBe("/api/ticket-attachments/a1/download");
+    const body = container.querySelector("ol li p") as HTMLElement;
+    expect(body.className).toContain("whitespace-pre-wrap");
+    expect(body.className).toContain("break-words");
+  });
+
+  it("keeps unsent reply text and file metadata when the reply fails", async () => {
+    const reply = vi.fn().mockResolvedValue({ ok: false, kind: "error", message: "x" });
+    render(<LearnerTicketDetail ticket={baseView} banner={null} actions={actionsStub({ reply })} />);
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "More info" } });
+    addFiles([file("proof.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: "Send reply" }));
+    await screen.findByText("Your message wasn’t sent. Your text and selected files are still here.");
+    expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe("More info");
+    expect(screen.getByText("proof.pdf")).toBeTruthy();
+  });
+
+  it("shows the conflict copy, refreshes and preserves the unsent message", async () => {
+    const reply = vi.fn().mockResolvedValue({ ok: false, kind: "conflict", message: "stale" });
+    render(<LearnerTicketDetail ticket={baseView} banner={null} actions={actionsStub({ reply })} />);
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Keep me" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send reply" }));
+    await screen.findByText(
+      "This ticket changed while you were working. We loaded the latest activity—review it and try again.",
+    );
+    expect(refresh).toHaveBeenCalled();
+    expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe("Keep me");
+  });
+
+  it("sends a reply with expected version then uploads files against the new message", async () => {
+    const reply = vi.fn().mockResolvedValue({ ok: true, messageId: "m3" });
+    uploadTicketAttachment.mockResolvedValue({ ok: true });
+    render(<LearnerTicketDetail ticket={baseView} banner={null} actions={actionsStub({ reply })} />);
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Here you go" } });
+    addFiles([file("proof.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: "Send reply" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(reply).toHaveBeenCalledWith({ reference: "KQT-77", expectedVersion: 3, body: "Here you go" });
+    expect(uploadTicketAttachment).toHaveBeenCalledWith("m3", expect.any(File));
+  });
+});
+
+describe("resolved, reopen and closed", () => {
+  const resolved: LearnerTicketView = {
+    ...baseView,
+    status: "RESOLVED",
+    canReply: false,
+    canClose: true,
+    canReopen: true,
+    autoCloseAt: new Date("2026-09-28T12:00:00Z"),
+  };
+
+  it("shows the prompt, exact auto-close date and no composer", () => {
+    render(<LearnerTicketDetail ticket={resolved} banner={null} actions={actionsStub()} />);
+    expect(screen.getByText("Did this solve the issue?")).toBeTruthy();
+    expect(
+      screen.getByText("This ticket will close automatically on 28 September 2026 unless you reopen it."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close ticket" })).toBeTruthy();
+    expect(screen.queryByLabelText("Message")).toBeNull();
+  });
+
+  it("requires a reason to reopen and keeps input when the server rejects", async () => {
+    const reopen = vi.fn().mockResolvedValue({ ok: false, kind: "error", message: "This ticket can no longer be reopened." });
+    render(<LearnerTicketDetail ticket={resolved} banner={null} actions={actionsStub({ reopen })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Reopen ticket" }));
+    const dialog = screen.getByRole("dialog");
+    const confirm = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Reopen ticket")!;
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect(reopen).not.toHaveBeenCalled();
+    const reasonBox = dialog.querySelector("textarea") as HTMLTextAreaElement;
+    fireEvent.change(reasonBox, { target: { value: "Still broken" } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(reopen).toHaveBeenCalledWith({ reference: "KQT-77", expectedVersion: 3, reason: "Still broken" }));
+    await screen.findByText(/can no longer be reopened/);
+    expect((screen.getByRole("dialog").querySelector("textarea") as HTMLTextAreaElement).value).toBe("Still broken");
+  });
+
+  it("closes a resolved ticket with the expected version", async () => {
+    const close = vi.fn().mockResolvedValue({ ok: true });
+    render(<LearnerTicketDetail ticket={resolved} banner={null} actions={actionsStub({ close })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Close ticket" }));
+    await waitFor(() => expect(close).toHaveBeenCalledWith({ reference: "KQT-77", expectedVersion: 3 }));
+  });
+
+  it("hides reopen once the server says the grace window has passed", () => {
+    render(
+      <LearnerTicketDetail
+        ticket={{ ...resolved, canReopen: false, canClose: false }}
+        banner={null}
+        actions={actionsStub()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Reopen ticket" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Create a new ticket" }).getAttribute("href")).toBe("/support/new");
+  });
+
+  it("closed tickets are read-only with a link to a new ticket", () => {
+    render(
+      <LearnerTicketDetail
+        ticket={{ ...baseView, status: "CLOSED", canReply: false }}
+        banner={null}
+        actions={actionsStub()}
+      />,
+    );
+    expect(screen.queryByLabelText("Message")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByText("This ticket is closed. Create a new ticket if you need more help.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Create a new ticket" }).getAttribute("href")).toBe("/support/new");
+  });
+
+  it("renders the created and partial-upload banners", () => {
+    const { rerender } = render(
+      <LearnerTicketDetail ticket={baseView} banner={{ kind: "created", failed: 0 }} actions={actionsStub()} />,
+    );
+    expect(screen.getByText("Ticket KQT-77 was created.")).toBeTruthy();
+    rerender(<LearnerTicketDetail ticket={baseView} banner={{ kind: "partial", failed: 2 }} actions={actionsStub()} />);
+    expect(
+      screen.getByText("Ticket KQT-77 was created, but 2 attachment(s) could not be uploaded. Try again from the ticket."),
+    ).toBeTruthy();
+  });
+});
+
+describe("private content never reaches learner output", () => {
+  it("drops staff-shaped fields and hidden sentinels; no hidden count or placeholder", async () => {
+    getOwnTicketByReference.mockResolvedValue({
+      ...baseView,
+      // Staff-shaped or private data that a faulty service could leak:
+      priority: "URGENT",
+      queue: "FINANCE",
+      assigneeId: "STAFF-SENTINEL-ID",
+      internalNote: "INTERNAL-SENTINEL-TEXT",
+      hiddenCount: 4,
+      context: null,
+      messages: baseView.messages.map((m) => ({ ...m, visibility: "PUBLIC", authorId: "AUTHOR-SENTINEL" })),
+    });
+    const { container } = render(
+      await LearnerTicketPage({
+        params: Promise.resolve({ reference: "KQT-77" }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+    const html = container.innerHTML;
+    for (const leak of [
+      "INTERNAL-SENTINEL-TEXT",
+      "STAFF-SENTINEL-ID",
+      "AUTHOR-SENTINEL",
+      "URGENT",
+      "FINANCE",
+      "Staff only",
+    ]) {
+      expect(html).not.toContain(leak);
+    }
+    expect(container.textContent ?? "").not.toMatch(/hidden|internal|private/i);
+    expect(container.querySelectorAll("ol > li")).toHaveLength(2);
+  });
+
+  it("renders the access-denied copy for a foreign or unknown reference", async () => {
+    getOwnTicketByReference.mockRejectedValue(new NotFound());
+    render(
+      await LearnerTicketPage({
+        params: Promise.resolve({ reference: "OTHER" }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+    expect(screen.getByRole("alert").textContent).toBe("You don’t have access to this ticket.");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  it("renders the generic load error for unexpected failures", async () => {
+    getOwnTicketByReference.mockRejectedValue(new Error("db down"));
+    render(
+      await LearnerTicketPage({
+        params: Promise.resolve({ reference: "KQT-77" }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+    expect(screen.getByRole("alert").textContent).toBe("We couldn’t load this ticket. Try again.");
   });
 });
