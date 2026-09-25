@@ -499,6 +499,8 @@ export function createTicketService(deps: TicketServiceDeps) {
 
   async function claimTicket(input: { reference: string; expectedVersion: number }) {
     return mutateStaffTicket(input, async (ticket, tx, actor) => {
+      // Taking a ticket from another owner is a replacement and needs the reassignment path (D-07).
+      assertAssignmentReason(ticket.assigneeId, actor.userId, null);
       const before = { status: ticket.status, assigneeId: ticket.assigneeId };
       const nextStatus: TicketStatusValue = "ASSIGNED";
       assertTicketTransition(ticket.status, nextStatus);

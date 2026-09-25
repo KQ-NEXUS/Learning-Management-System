@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { DetailLayout } from "@/components/primitives";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { TicketNotFoundError } from "@/server/services/ticket-service";
-import { getStaffTicketWorkspace } from "@/server/services/ticket-staff-queue-service";
+import { getStaffTicketWorkspace, listTicketAssignees } from "@/server/services/ticket-staff-queue-service";
 import { StaffTicketDetail } from "./StaffTicketDetail";
 
 export const metadata = { title: "Support ticket" };
@@ -24,5 +24,6 @@ export default async function StaffTicketPage({ params }: { params: Promise<{ re
     return <DetailLayout title="Support ticket" sections={[]} state={{ status: "error", message: "We couldn’t load this ticket. Try again." }} />;
   }
   const canManage = await can("tickets.manage", {});
-  return <StaffTicketDetail workspace={workspace} canManage={canManage} />;
+  const assignees = canManage ? await listTicketAssignees().catch(() => []) : [];
+  return <StaffTicketDetail workspace={workspace} canManage={canManage} assignees={assignees} />;
 }

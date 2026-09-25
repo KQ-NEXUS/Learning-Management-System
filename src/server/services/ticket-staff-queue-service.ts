@@ -1,6 +1,7 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { withPermission } from "@/server/permissions";
+import type { createWithPermission } from "@/server/permissions/with-permission";
 import {
   getStaffTicketByReference,
   type TicketCategoryValue,
@@ -158,88 +159,111 @@ export function buildQueueView(rows: readonly QueueRow[], params: QueueParams, a
   };
 }
 
-const viewTickets = withPermission<void>("tickets.view", () => ({}));
-
-export const getStaffQueue = withPermission<QueueParams>("tickets.view", () => ({}))(async (params, ctx) => {
-  const records = await prisma.ticket.findMany({
-    select: {
-      id: true,
-      reference: true,
-      subject: true,
-      category: true,
-      priority: true,
-      status: true,
-      queue: true,
-      assigneeId: true,
-      updatedAt: true,
-      resolvedAt: true,
-      user: { select: { name: true, email: true } },
-      assignee: { select: { name: true } },
-    },
-  });
-  const rows: QueueRow[] = records.map((record) => ({
-    id: record.id,
-    reference: record.reference,
-    subject: record.subject,
-    learnerName: record.user.name,
-    learnerEmail: record.user.email,
-    category: record.category as TicketCategoryValue,
-    priority: record.priority as TicketPriorityValue,
-    status: record.status as TicketStatusValue,
-    queue: record.queue as TicketQueueValue,
-    assigneeId: record.assigneeId,
-    assigneeName: record.assignee?.name ?? null,
-    updatedAt: record.updatedAt,
-    resolvedAt: record.resolvedAt,
-  }));
-  return buildQueueView(rows, params, ctx.actor.userId, new Date());
-});
-
 export type TicketAssigneeOption = { id: string; name: string };
 
-/** Active staff whose role currently grants tickets.manage globally. */
-export const listTicketAssignees = viewTickets(async (): Promise<TicketAssigneeOption[]> => {
-  const now = new Date();
-  return prisma.$queryRaw<TicketAssigneeOption[]>(Prisma.sql`
-    SELECT DISTINCT u.id, u.name
-    FROM "User" u
-    JOIN "Assignment" a ON a."userId" = u.id
-    JOIN "Role" r ON r.id = a."roleId"
-    WHERE u."isStaff" = TRUE
-      AND u.status = 'ACTIVE'
-      AND a.active = TRUE AND a."revokedAt" IS NULL
-      AND (a."startsAt" IS NULL OR a."startsAt" <= ${now})
-      AND (a."endsAt" IS NULL OR a."endsAt" > ${now})
-      AND a."scopeType" = 'GLOBAL'
-      AND r.active = TRUE
-      AND 'tickets.manage' = ANY(r.permissions)
-    ORDER BY u.name, u.id
-  `);
+type WithPermission = ReturnType<typeof createWithPermission>;
+
+export type TicketStaffQueueDeps = {
+  client: PrismaClient;
+  withPermission: WithPermission;
+  getStaffTicketByReference: (reference: string) => Promise<StaffTicketDetail>;
+  now?: () => Date;
+};
+
+export function createTicketStaffQueueService(deps: TicketStaffQueueDeps) {
+  const { client } = deps;
+  const now = deps.now ?? (() => new Date());
+  const viewTickets = deps.withPermission<void>("tickets.view", () => ({}));
+
+  const getStaffQueue = deps.withPermission<QueueParams>("tickets.view", () => ({}))(async (params, ctx) => {
+    const records = await client.ticket.findMany({
+      select: {
+        id: true,
+        reference: true,
+        subject: true,
+        category: true,
+        priority: true,
+        status: true,
+        queue: true,
+        assigneeId: true,
+        updatedAt: true,
+        resolvedAt: true,
+        user: { select: { name: true, email: true } },
+        assignee: { select: { name: true } },
+      },
+    });
+    const rows: QueueRow[] = records.map((record) => ({
+      id: record.id,
+      reference: record.reference,
+      subject: record.subject,
+      learnerName: record.user.name,
+      learnerEmail: record.user.email,
+      category: record.category as TicketCategoryValue,
+      priority: record.priority as TicketPriorityValue,
+      status: record.status as TicketStatusValue,
+      queue: record.queue as TicketQueueValue,
+      assigneeId: record.assigneeId,
+      assigneeName: record.assignee?.name ?? null,
+      updatedAt: record.updatedAt,
+      resolvedAt: record.resolvedAt,
+    }));
+    return buildQueueView(rows, params, ctx.actor.userId, now());
+  });
+
+  /** Active staff whose role currently grants tickets.manage globally. */
+  const listTicketAssignees = viewTickets(async (): Promise<TicketAssigneeOption[]> => {
+    const at = now();
+    return client.$queryRaw<TicketAssigneeOption[]>(Prisma.sql`
+      SELECT DISTINCT u.id, u.name
+      FROM "User" u
+      JOIN "Assignment" a ON a."userId" = u.id
+      JOIN "Role" r ON r.id = a."roleId"
+      WHERE u."isStaff" = TRUE
+        AND u.status = 'ACTIVE'
+        AND a.active = TRUE AND a."revokedAt" IS NULL
+        AND (a."startsAt" IS NULL OR a."startsAt" <= ${at})
+        AND (a."endsAt" IS NULL OR a."endsAt" > ${at})
+        AND a."scopeType" = 'GLOBAL'
+        AND r.active = TRUE
+        AND 'tickets.manage' = ANY(r.permissions)
+      ORDER BY u.name, u.id
+    `);
+  });
+
+  /** Staff detail: full chronology plus resolved display names for every actor. */
+  const getStaffTicketWorkspace = deps.withPermission<string>("tickets.view", () => ({}))(async (reference) => {
+    const detail = await deps.getStaffTicketByReference(reference);
+    const ids = new Set<string>();
+    const learner = await client.ticket.findUnique({
+      where: { reference },
+      select: { user: { select: { id: true, name: true, email: true } } },
+    });
+    if (detail.assigneeId) ids.add(detail.assigneeId);
+    for (const entry of detail.timeline) {
+      if (entry.kind === "MESSAGE") ids.add(entry.message.authorId);
+      else {
+        if (entry.event.actorId) ids.add(entry.event.actorId);
+        if (entry.event.assigneeAfterId) ids.add(entry.event.assigneeAfterId);
+        if (entry.event.assigneeBeforeId) ids.add(entry.event.assigneeBeforeId);
+      }
+    }
+    const users = await client.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true } });
+    const names: Record<string, string> = Object.fromEntries(users.map((user) => [user.id, user.name]));
+    return { ...detail, learner: learner?.user ?? null, names };
+  });
+
+  return { getStaffQueue, listTicketAssignees, getStaffTicketWorkspace };
+}
+
+type StaffTicketDetail = Awaited<ReturnType<typeof getStaffTicketByReference>>;
+
+const live = createTicketStaffQueueService({
+  client: prisma,
+  withPermission,
+  getStaffTicketByReference,
 });
 
-/** Staff detail: full chronology plus resolved display names for every actor. */
-export const getStaffTicketWorkspace = withPermission<string>("tickets.view", () => ({}))(async (reference) => {
-  const detail = await getStaffTicketByReference(reference);
-  const ids = new Set<string>();
-  const learner = await prisma.ticket.findUnique({
-    where: { reference },
-    select: { user: { select: { id: true, name: true, email: true } } },
-  });
-  if (detail.assigneeId) ids.add(detail.assigneeId);
-  for (const entry of detail.timeline) {
-    if (entry.kind === "MESSAGE") ids.add(entry.message.authorId);
-    else {
-      if (entry.event.actorId) ids.add(entry.event.actorId);
-      if (entry.event.assigneeAfterId) ids.add(entry.event.assigneeAfterId);
-      if (entry.event.assigneeBeforeId) ids.add(entry.event.assigneeBeforeId);
-    }
-  }
-  const users = await prisma.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true } });
-  const names: Record<string, string> = Object.fromEntries(users.map((user) => [user.id, user.name]));
-  return {
-    ...detail,
-    learner: learner?.user ?? null,
-    names,
-  };
-});
+export const getStaffQueue = live.getStaffQueue;
+export const listTicketAssignees = live.listTicketAssignees;
+export const getStaffTicketWorkspace = live.getStaffTicketWorkspace;
 export type StaffTicketWorkspace = Awaited<ReturnType<typeof getStaffTicketWorkspace>>;

@@ -13,9 +13,23 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/staff/support", useSear
 vi.mock("@/server/services/ticket-staff-queue-service", () => ({}));
 const replyAction = vi.fn();
 const noteAction = vi.fn();
+const claimAction = vi.fn();
+const acceptAction = vi.fn();
+const assignAction = vi.fn();
+const queueAction = vi.fn();
+const priorityAction = vi.fn();
+const escalateAction = vi.fn();
+const resolveAction = vi.fn();
 vi.mock("@/app/staff/support/[reference]/actions", () => ({
   sendPublicReplyAction: (...args: unknown[]) => replyAction(...args),
   addInternalNoteAction: (...args: unknown[]) => noteAction(...args),
+  claimTicketAction: (...args: unknown[]) => claimAction(...args),
+  acceptEscalationAction: (...args: unknown[]) => acceptAction(...args),
+  assignTicketAction: (...args: unknown[]) => assignAction(...args),
+  moveQueueAction: (...args: unknown[]) => queueAction(...args),
+  changePriorityAction: (...args: unknown[]) => priorityAction(...args),
+  escalateTicketAction: (...args: unknown[]) => escalateAction(...args),
+  resolveTicketAction: (...args: unknown[]) => resolveAction(...args),
 }));
 vi.mock("@/components/support/upload-ticket-attachment", () => ({ uploadTicketAttachment: vi.fn().mockResolvedValue({ ok: true }) }));
 
@@ -229,5 +243,134 @@ describe("TicketComposer via StaffTicketDetail", () => {
     expect(screen.queryByRole("button", { name: "Reply to learner" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add internal note" })).toBeNull();
     expect(screen.getByText(/can read this ticket but cannot/)).toBeTruthy();
+  });
+});
+
+const ASSIGNEES = [{ id: "s1", name: "Sam Agent" }, { id: "s2", name: "Kim Agent" }];
+const CONFLICT = "This ticket changed while you were working. We loaded the latest activity—review it and try again.";
+
+describe("StaffTicketDetail operational actions", () => {
+  it("assign to me claims with the expected version and never alters the ticket optimistically", async () => {
+    claimAction.mockResolvedValue({ ok: true });
+    render(<StaffTicketDetail workspace={makeWorkspace({ assigneeId: null, status: "OPEN" })} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign to me" }));
+    await waitFor(() => expect(claimAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4 }));
+    expect(refresh).toHaveBeenCalled();
+    expect(screen.getAllByText("Unassigned").length).toBeGreaterThan(0);
+    expect((await screen.findByRole("status")).textContent).toContain("Ticket assigned to you.");
+  });
+
+  it("assigns an unowned ticket to a chosen eligible owner", async () => {
+    assignAction.mockResolvedValue({ ok: true });
+    render(<StaffTicketDetail workspace={makeWorkspace({ assigneeId: null, status: "OPEN" })} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    const dialog = screen.getByRole("dialog", { name: "Assign ticket" });
+    fireEvent.change(within(dialog).getByLabelText(/Assignee/), { target: { value: "s2" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Assign ticket" }));
+    await waitFor(() => expect(assignAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4, assigneeId: "s2", reason: undefined }));
+  });
+
+  it("requires a Reassignment reason before replacing an existing owner", async () => {
+    assignAction.mockResolvedValue({ ok: true });
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Reassign" }));
+    const dialog = screen.getByRole("dialog", { name: "Reassign ticket" });
+    fireEvent.change(within(dialog).getByLabelText(/New owner/), { target: { value: "s2" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reassign ticket" }));
+    expect(within(dialog).getByText("Reassignment reason is required.")).toBeTruthy();
+    expect(assignAction).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText(/Reassignment reason/), { target: { value: "Shift change" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reassign ticket" }));
+    await waitFor(() => expect(assignAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4, assigneeId: "s2", reason: "Shift change" }));
+  });
+
+  it("requires a Priority reason only for Urgent", async () => {
+    priorityAction.mockResolvedValue({ ok: true });
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Change priority" }));
+    const dialog = screen.getByRole("dialog", { name: "Change priority" });
+    fireEvent.change(within(dialog).getByLabelText(/^Priority \(/), { target: { value: "URGENT" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change priority" }));
+    expect(within(dialog).getByText("Priority reason is required.")).toBeTruthy();
+    expect(priorityAction).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText(/Priority reason/), { target: { value: "Exam tomorrow" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change priority" }));
+    await waitFor(() => expect(priorityAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4, priority: "URGENT", reason: "Exam tomorrow" }));
+  });
+
+  it("escalation needs a reason, offers exactly the five queues and an optional owner", async () => {
+    escalateAction.mockResolvedValue({ ok: true });
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Escalate" }));
+    const dialog = screen.getByRole("dialog", { name: "Escalate ticket" });
+    const queues = within(within(dialog).getByLabelText(/Target queue/)).getAllByRole("option").map((o) => o.textContent);
+    expect(queues).toEqual(["General Support", "Accounts", "Finance", "Learning & Assessment", "Technical"]);
+    fireEvent.change(within(dialog).getByLabelText(/Target queue/), { target: { value: "FINANCE" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Escalate ticket" }));
+    expect(within(dialog).getByText("Escalation reason is required.")).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText(/Escalate to owner/), { target: { value: "s2" } });
+    fireEvent.change(within(dialog).getByLabelText(/Escalation reason/), { target: { value: "Refund dispute" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Escalate ticket" }));
+    await waitFor(() => expect(escalateAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4, queue: "FINANCE", assigneeId: "s2", reason: "Refund dispute" }));
+  });
+
+  it("moves queue and resolves with a required note and expected version", async () => {
+    queueAction.mockResolvedValue({ ok: true });
+    resolveAction.mockResolvedValue({ ok: true });
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Move queue" }));
+    let dialog = screen.getByRole("dialog", { name: "Move to queue" });
+    fireEvent.change(within(dialog).getByLabelText(/^Queue \(/), { target: { value: "TECHNICAL" } });
+    fireEvent.change(within(dialog).getByLabelText(/Queue reason/), { target: { value: "Needs engineering" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Move ticket" }));
+    await waitFor(() => expect(queueAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4, queue: "TECHNICAL", reason: "Needs engineering" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "Resolve ticket" }));
+    dialog = screen.getByRole("dialog", { name: "Resolve ticket" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Resolve ticket" }));
+    expect(within(dialog).getByText("Resolution note is required.")).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText(/Resolution note/), { target: { value: "Fixed access" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Resolve ticket" }));
+    await waitFor(() => expect(resolveAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4, reason: "Fixed access" }));
+  });
+
+  it("accepts an escalation directly", async () => {
+    acceptAction.mockResolvedValue({ ok: true });
+    render(<StaffTicketDetail workspace={makeWorkspace({ status: "ESCALATED" })} canManage assignees={ASSIGNEES} />);
+    expect(screen.queryByRole("button", { name: "Escalate" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Accept escalation" }));
+    await waitFor(() => expect(acceptAction).toHaveBeenCalledWith({ reference: "TKT-ABC123", expectedVersion: 4 }));
+  });
+
+  it("on a stale conflict reloads latest, shows the banner, keeps input and does not retry silently", async () => {
+    resolveAction.mockResolvedValue({ ok: false, kind: "conflict", message: CONFLICT });
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Resolve ticket" }));
+    const dialog = screen.getByRole("dialog", { name: "Resolve ticket" });
+    fireEvent.change(within(dialog).getByLabelText(/Resolution note/), { target: { value: "Fixed access" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Resolve ticket" }));
+    expect(await within(dialog).findByText(CONFLICT)).toBeTruthy();
+    expect(refresh).toHaveBeenCalled();
+    expect(resolveAction).toHaveBeenCalledTimes(1);
+    expect((within(dialog).getByLabelText(/Resolution note/) as HTMLTextAreaElement).value).toBe("Fixed access");
+  });
+
+  it("keeps dialog input and shows the failure when a command fails", async () => {
+    priorityAction.mockResolvedValue({ ok: false, kind: "error", message: "The action did not complete. Nothing was changed." });
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage assignees={ASSIGNEES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Change priority" }));
+    const dialog = screen.getByRole("dialog", { name: "Change priority" });
+    fireEvent.change(within(dialog).getByLabelText(/^Priority \(/), { target: { value: "HIGH" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change priority" }));
+    expect(await within(dialog).findByText("The action did not complete. Nothing was changed.")).toBeTruthy();
+    expect((within(dialog).getByLabelText(/^Priority \(/) as HTMLSelectElement).value).toBe("HIGH");
+  });
+
+  it("gives tickets.view-only staff no mutation controls", () => {
+    render(<StaffTicketDetail workspace={makeWorkspace()} canManage={false} assignees={ASSIGNEES} />);
+    for (const name of ["Assign to me", "Assign", "Reassign", "Move queue", "Change priority", "Escalate", "Resolve ticket", "Accept escalation"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
   });
 });
