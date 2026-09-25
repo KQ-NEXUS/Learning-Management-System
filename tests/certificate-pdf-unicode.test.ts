@@ -269,6 +269,7 @@ describe("every drawn glyph has an outline in the embedded font program (visual 
       expect(fontBytes, "an embedded TrueType font program must be present").not.toBeNull();
       expect(drawnGlyphIds.length).toBeGreaterThan(10);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const font = (fontkit as unknown as { create(b: Buffer): any }).create(fontBytes as Buffer);
       const spaceGlyphId = font.glyphForCodePoint(0x20).id;
       const withoutOutline: number[] = [];
@@ -289,9 +290,11 @@ describe("every drawn glyph has an outline in the embedded font program (visual 
   it("embeds the complete font program, not a truncated subset", async () => {
     const bytes = await renderLearnerName("Amara Okafor");
     const { fontBytes } = await readEmbeddedFontAndDrawnGlyphs(bytes);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const source = (fontkit as unknown as { create(b: Buffer): any }).create(
       Buffer.from(await loadCertificateFontBytes()),
     );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const embedded = (fontkit as unknown as { create(b: Buffer): any }).create(fontBytes as Buffer);
     expect(embedded.numGlyphs).toBe(source.numGlyphs);
   });
