@@ -126,8 +126,8 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Support Tickets (SUP)
 
-- [ ] **SUP-01**: Learners can create and view their own support tickets with category, subject, description, and permitted attachments; a ticket receives a reference and status; unsafe files are rejected.
-- [ ] **SUP-02**: Priority, status, assignment, public reply, private internal note, and closure/reopen behavior are supported; public/private content stay distinctly labeled and permission-protected; transitions are timestamped/attributed.
+- [x] **SUP-01**: Learners can create and view their own support tickets with category, subject, description, and permitted attachments; a ticket receives a reference and status; unsafe files are rejected.
+- [x] **SUP-02**: Priority, status, assignment, public reply, private internal note, and closure/reopen behavior are supported; public/private content stay distinctly labeled and permission-protected; transitions are timestamped/attributed.
 - [ ] **SUP-03**: Ticket access is granted through `tickets.view`/`tickets.manage` without requiring Administrator status; a custom Support Agent role can triage/resolve while denied unrelated permissions.
 - [ ] **SUP-04**: Escalation to another staff owner/queue with reason is supported; escalation preserves history, notifies the next owner per policy, and stays visible in operational reporting.
 - [ ] **SUP-05**: Permitted contextual links to learner, Cohort, Course, order, submission, or certificate records are allowed; opening context performs a fresh permission/scope check.
@@ -272,8 +272,8 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | CRD-04 | Phase 11 | Complete |
 | CRD-05 | Phase 11 | Complete |
 | CRD-06 | Phase 11 | Complete |
-| SUP-01 | Phase 12 | Pending |
-| SUP-02 | Phase 12 | Pending |
+| SUP-01 | Phase 12 | Complete |
+| SUP-02 | Phase 12 | Complete |
 | SUP-03 | Phase 12 | Pending |
 | SUP-04 | Phase 12 | Pending |
 | SUP-05 | Phase 12 | Pending |

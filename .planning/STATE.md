@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 12 UI-SPEC approved
-last_updated: "2026-09-21T16:25:22.699Z"
-last_activity: 2026-09-21 -- Phase 12 Plan 02 service core completed
+last_updated: "2026-09-25T11:58:14.953Z"
+last_activity: 2026-09-25
 progress:
   total_phases: 16
   completed_phases: 11
   total_plans: 191
-  completed_plans: 182
+  completed_plans: 185
   percent: 69
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 12 (Support Tickets) — EXECUTING
-Plan: 2 of 9
-Status: Executing Phase 12
-Last activity: 2026-09-21 -- Phase 12 Plan 02 service core completed
+Plan: 3 of 9
+Status: Ready to execute
+Last activity: 2026-09-25
 
-Progress: [██████████] 99%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -97,6 +97,7 @@ Progress: [██████████] 99%
 | Phase 11 P22 | 20min | 2 tasks | 6 files |
 | Phase 12 P01 | 27min | 3 tasks | 7 files |
 | Phase 12 P02 | 1h 20min | 3 tasks | 9 files |
+| Phase 12 P03 | 25min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11-28]: deriveCertificateColumn now lets an existing certificate decide the dashboard slot before the completion record (revoked, flagged, issued); no-certificate fallbacks unchanged. A superseded completion no longer hides a flagged certificate or its download (D-06/CRD-06, UAT test 17). WR-06 stays out of scope.
 - [Phase 11-34]: CR-02: the certificate renderer decides image format from leading bytes (PNG signature, JPEG SOI) and skips anything else or corrupt (permanent, retry cannot help); a resolver fetch failure still rejects (retryable). Template assets are restricted to PNG/JPEG at presign, confirm (server-observed type) and the inspector picker via validateTemplateAssetUpload; UPLOAD_LIMITS.IMAGE unchanged for lessons. Plan 11-29 must keep the image guard and its tests when swapping the font.
 - [Phase 11-30]: CR-01b/WR-01: two-phase issuance. issueCertificateForEnrolment is database-only (row with storageKey null, COMPLETED, audit, event) and registers the certificate id against the tx object; certificate-file-service.ts renders from the row snapshot and stores after commit (compare-and-set on storageKey null and status ACTIVE), never throws, settle bounded at 6 s, ensureCertificateFile produces the file on demand. Layout parsing moved to the post-commit step; IssueCertificateDeps is now {generateRef, audit, writeEvent}. Until plan 11-31 wires runTransactionThenSettleCertificateFiles at the lesson-progress/attendance roots and the download route, new certificates have no file (degraded but consistent). The roots must pass the SAME tx object to issuance (registry keys on identity).
+- [Phase 12]: 12-03: attachment auth via service (owner+PUBLIC or staff perms), single NotFound for all denials; cleanup bounded per kind
 
 ### Pending Todos
 
@@ -253,6 +255,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-21T15:49:52.274Z
+Last session: 2026-09-25T11:58:04.600Z
 Stopped at: Phase 12 UI-SPEC approved
-Resume file: .planning/phases/12-support-tickets/12-UI-SPEC.md
+Resume file: None

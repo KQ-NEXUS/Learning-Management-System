@@ -657,15 +657,15 @@ Wave 13 *(blocked on Wave 12; human-only)*
 
 **Wave 1**
 
-- [ ] 12-01-PLAN.md — establish ticket persistence, schema synchronization, and pure lifecycle/reference/upload contracts.
+- [x] 12-01-PLAN.md — establish ticket persistence, schema synchronization, and pure lifecycle/reference/upload contracts.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 12-02-PLAN.md — implement the authorized ticket aggregate, privacy-shaped projections, commands, context links, and durable events.
+- [x] 12-02-PLAN.md — implement the authorized ticket aggregate, privacy-shaped projections, commands, context links, and durable events.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 12-03-PLAN.md — deliver private ticket attachment upload, completion, download, and stale-upload cleanup.
+- [x] 12-03-PLAN.md — deliver private ticket attachment upload, completion, download, and stale-upload cleanup.
 - [ ] 12-04-PLAN.md — implement bounded automatic closure and prove scheduled/interactive concurrency safety.
 - [ ] 12-08-PLAN.md — activate reconciled support reporting and privacy-safe CSV export.
 
@@ -760,7 +760,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
-| 12. Support Tickets | 0/9 | Planned | - |
+| 12. Support Tickets | 3/9 | In Progress|  |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |
