@@ -7,8 +7,12 @@ import {
 } from "@/server/permissions/collection-scope";
 import {
   getReportDefinition,
+  SUPPORT_BACKLOG_STATUS,
+  SUPPORT_STATUSES,
+  SUPPORT_UNASSIGNED_OWNER,
   type ReportDataset,
 } from "@/server/services/report-registry";
+import { AuthorizationError } from "@/server/permissions/with-permission";
 import type { Permission } from "@/server/permissions/catalogue";
 
 export type ReportFilters = Readonly<{
@@ -19,6 +23,10 @@ export type ReportFilters = Readonly<{
   provider?: "PAYSTACK" | "STRIPE" | "MANUAL";
   currency?: "NGN" | "USD";
   status?: string;
+  category?: string;
+  priority?: string;
+  queue?: string;
+  owner?: string;
   page?: number;
   pageSize?: number;
 }>;
@@ -49,9 +57,13 @@ export type ReportMetric = Readonly<{
   id: string;
   label: string;
   value: number | null;
-  format: "COUNT" | "MONEY";
+  format: "COUNT" | "MONEY" | "MINUTES" | "PERCENT";
   currency?: "NGN" | "USD";
   href: string;
+  /** Support only: which part of the report the metric belongs to. */
+  section?: "health" | "performance";
+  /** Definition and denominator shown beside the value. */
+  helper?: string;
 }>;
 
 export type ReportBreakdownItem = Readonly<{
@@ -59,6 +71,8 @@ export type ReportBreakdownItem = Readonly<{
   label: string;
   value: number;
   href: string;
+  /** Support only: headed group for the breakdown item. */
+  group?: string;
 }>;
 
 export type RegistrationReportRow = Readonly<{
@@ -116,7 +130,30 @@ export type AttendanceReportRow = Readonly<{
   stateCounts: Readonly<Record<string, number>>;
 }>;
 
+/** Operational metadata only. Deliberately has no body, note, filename, storage key, attachment or message property (D-19). */
+export type SupportReportRow = Readonly<{
+  kind: "support";
+  id: string;
+  reference: string;
+  businessDate: Date;
+  resolvedAt: Date | null;
+  closedAt: Date | null;
+  category: string;
+  priority: string;
+  status: string;
+  queue: string;
+  ownerId: string | null;
+  ownerName: string | null;
+  ageMinutes: number;
+  firstResponseMinutes: number | null;
+  resolutionMinutes: number | null;
+  escalationCount: number;
+  contextType: string | null;
+  contextReference: string | null;
+}>;
+
 export type ReportRow =
+  | SupportReportRow
   | RegistrationReportRow
   | PaymentReportRow
   | EnrolmentReportRow
@@ -133,7 +170,7 @@ export type AvailableDatasetReport = Readonly<{
   totalRows: number;
   page: number;
   pageSize: number;
-  options: ReturnType<typeof stableOptions>;
+  options: ReportOptions;
   sectionErrors?: readonly string[];
 }>;
 
@@ -214,7 +251,36 @@ export type ReconciliationRefundRow = Readonly<{
   exceptionContext: string | null;
 }>;
 
+export type ReportOptions = ReturnType<typeof stableOptions> & {
+  owners?: ReadonlyArray<{ id: string; label: string }>;
+};
+
+/** Structural store for the support projection. No message or attachment delegate or select exists here. */
+export type SupportTicketRecord = {
+  id: string;
+  reference: string;
+  category: string;
+  priority: string;
+  status: string;
+  queue: string;
+  assigneeId: string | null;
+  cohortId: string | null;
+  courseId: string | null;
+  orderId: string | null;
+  submissionId: string | null;
+  certificateId: string | null;
+  createdAt: Date;
+  firstRespondedAt: Date | null;
+  resolvedAt: Date | null;
+  closedAt: Date | null;
+  assignee: { id: string; name: string } | null;
+  events: Array<{ type: string; createdAt: Date }>;
+};
+
 export type ReportQueryStore = {
+  ticket?: {
+    findMany(args: Record<string, unknown>): Promise<SupportTicketRecord[]>;
+  };
   order: CountDelegate & {
     groupBy(args: Record<string, unknown>): Promise<Array<{
       currency: string;
@@ -262,17 +328,27 @@ export type ReportQueryServiceDeps = {
   now?: () => Date;
 };
 
-function normalizeFilters(input: unknown): ReportFilters {
-  const definition = getReportDefinition("registrations");
+const SUPPORT_FILTER_KEYS = ["from", "to", "category", "priority", "queue", "owner", "status", "page", "pageSize"];
+
+function normalizeFilters(input: unknown, dataset: ReportDataset = "registrations"): ReportFilters {
+  const isSupport = dataset === "support";
+  const definition = getReportDefinition(isSupport ? "support" : "registrations");
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("Report filters are invalid.");
   }
   const filterCandidate = input as Record<string, unknown>;
-  const allowed = new Set(["from", "to", "programmeId", "cohortId", "provider", "currency", "status", "page", "pageSize"]);
+  const allowed = new Set(isSupport ? SUPPORT_FILTER_KEYS : ["from", "to", "programmeId", "cohortId", "provider", "currency", "status", "page", "pageSize"]);
   if (Object.keys(filterCandidate).some((key) => !allowed.has(key))) {
     throw new Error("Report filters are invalid.");
   }
-  const parsed = definition.filterSchema.safeParse({
+  const parsed = definition.filterSchema.safeParse(isSupport ? {
+    from: filterCandidate.from,
+    to: filterCandidate.to,
+    category: filterCandidate.category,
+    priority: filterCandidate.priority,
+    queue: filterCandidate.queue,
+    owner: filterCandidate.owner,
+  } : {
     from: filterCandidate.from,
     to: filterCandidate.to,
     programmeId: filterCandidate.programmeId,
@@ -318,7 +394,7 @@ const MAX_REPORT_ROWS = 25_000;
 
 function reportQuery(filters: ReportFilters, extra: Record<string, string> = {}): string {
   const params = new URLSearchParams();
-  for (const key of ["from", "to", "programmeId", "cohortId", "provider", "currency"] as const) {
+  for (const key of ["from", "to", "programmeId", "cohortId", "provider", "currency", "category", "priority", "queue", "owner"] as const) {
     const value = filters[key];
     if (value) params.set(key, String(value));
   }
@@ -331,6 +407,25 @@ function reportQuery(filters: ReportFilters, extra: Record<string, string> = {})
 
 function drillDownHref(dataset: ReportDataset, filters: ReportFilters, extra: Record<string, string> = {}) {
   return `/staff/reports/${dataset}${reportQuery(filters, extra)}#rows`;
+}
+
+const SUPPORT_OPEN_STATUSES = ["NEW", "OPEN", "ASSIGNED", "ESCALATED"] as const;
+/** Drill-down start date that spans the whole backlog instead of the default 30-day window. */
+const SUPPORT_BACKLOG_FROM = "2000-01-01";
+const THIRTY_DAYS_MS = 30 * 86_400_000;
+
+function supportRange(filters: ReportFilters, asOf: Date): { start: Date; end: Date } {
+  const start = filters.from ? new Date(`${filters.from}T00:00:00.000+01:00`) : new Date(asOf.getTime() - THIRTY_DAYS_MS);
+  const requestedEnd = filters.to ? new Date(`${filters.to}T23:59:59.999+01:00`) : asOf;
+  return { start, end: requestedEnd < asOf ? requestedEnd : asOf };
+}
+
+/** Median of a list; empty is null (never a false zero) and even counts average the two middle values. */
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
 function stableBusinessRows<T extends { id: string; businessDate: Date }>(rows: readonly T[]): T[] {
@@ -391,8 +486,14 @@ export function createReportQueryService(deps: ReportQueryServiceDeps) {
     rawFilters: unknown,
   ): Promise<NormalizedReportRequest> {
     const definition = getReportDefinition(dataset);
-    const filters = normalizeFilters(rawFilters);
+    const filters = normalizeFilters(rawFilters, dataset);
     const authorization = await deps.authorizeCollection("reports.view");
+    if (dataset === "support") {
+      // Tickets are not cohort-owned: both the report grant and a GLOBAL
+      // ticket-view grant are required, and neither is inferred from the other.
+      const tickets = await deps.authorizeCollection("tickets.view");
+      if (tickets.scope.kind !== "GLOBAL") throw new AuthorizationError("tickets.view");
+    }
     const asOf = now();
     return Object.freeze({
       dataset,
@@ -668,6 +769,126 @@ export function createReportQueryService(deps: ReportQueryServiceDeps) {
     return Object.freeze({ available: true, definition: getReportDefinition("attendance"), request, lastRefreshed: request.asOf, metrics: Object.freeze(metrics), breakdown: Object.freeze(breakdown), rows: Object.freeze(paginateRows(complete, request.filters)), totalRows: complete.length, page: request.filters.page ?? 1, pageSize: request.filters.pageSize ?? 25, options, sectionErrors });
   }
 
+  async function supportReport(request: NormalizedReportRequest): Promise<AvailableDatasetReport> {
+    if (!deps.store.ticket) throw new Error("Support report store is unavailable.");
+    const { filters, asOf } = request;
+    if (filters.status && filters.status !== SUPPORT_BACKLOG_STATUS && !(SUPPORT_STATUSES as readonly string[]).includes(filters.status)) {
+      throw new Error("Report filters are invalid.");
+    }
+    const range = supportRange(filters, asOf);
+    const inRange = (date: Date | null) => date !== null && date >= range.start && date <= range.end;
+    const base: Record<string, unknown> = {
+      ...(filters.category ? { category: filters.category } : {}),
+      ...(filters.priority ? { priority: filters.priority } : {}),
+      ...(filters.queue ? { queue: filters.queue } : {}),
+      ...(filters.owner ? { assigneeId: filters.owner === SUPPORT_UNASSIGNED_OWNER ? null : filters.owner } : {}),
+      ...(filters.status ? { status: filters.status === SUPPORT_BACKLOG_STATUS ? { in: [...SUPPORT_OPEN_STATUSES] } : filters.status } : {}),
+    };
+    const window = { gte: range.start, lte: range.end };
+    // Private conversation relations are intentionally absent from this select.
+    const records = await deps.store.ticket.findMany({
+      where: { AND: [base, { OR: [{ createdAt: window }, { resolvedAt: window }, { status: { in: [...SUPPORT_OPEN_STATUSES] } }] }, { createdAt: { lte: asOf } }] },
+      select: {
+        id: true, reference: true, category: true, priority: true, status: true, queue: true, assigneeId: true,
+        cohortId: true, courseId: true, orderId: true, submissionId: true, certificateId: true,
+        createdAt: true, firstRespondedAt: true, resolvedAt: true, closedAt: true,
+        assignee: { select: { id: true, name: true } },
+        events: { where: { type: { in: ["ESCALATED", "ESCALATION_ACCEPTED", "REOPENED"] } }, select: { type: true, createdAt: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: MAX_REPORT_ROWS + 1,
+    });
+    assertBounded(records);
+    const minutes = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 60_000));
+    const toRow = (record: SupportTicketRecord): SupportReportRow => {
+      const context = record.cohortId ? ["COHORT", record.cohortId] : record.courseId ? ["COURSE", record.courseId] : record.orderId ? ["ORDER", record.orderId] : record.submissionId ? ["SUBMISSION", record.submissionId] : record.certificateId ? ["CERTIFICATE", record.certificateId] : [null, null];
+      const finished = record.closedAt ?? record.resolvedAt;
+      return Object.freeze({
+        kind: "support", id: record.id, reference: record.reference, businessDate: record.createdAt,
+        resolvedAt: record.resolvedAt, closedAt: record.closedAt,
+        category: record.category, priority: record.priority, status: record.status, queue: record.queue,
+        ownerId: record.assigneeId, ownerName: record.assignee?.name ?? null,
+        ageMinutes: minutes(record.createdAt, finished && finished < asOf ? finished : asOf),
+        firstResponseMinutes: record.firstRespondedAt ? minutes(record.createdAt, record.firstRespondedAt) : null,
+        resolutionMinutes: record.resolvedAt ? minutes(record.createdAt, record.resolvedAt) : null,
+        escalationCount: record.events.filter((event) => event.type === "ESCALATED").length,
+        contextType: context[0], contextReference: context[1],
+      });
+    };
+    const complete = stableBusinessRows(records.filter((record) => inRange(record.createdAt)).map(toRow));
+
+    // Current health: every currently-open ticket matching the non-date filters, as of one frozen instant.
+    const open = records.filter((record) => (SUPPORT_OPEN_STATUSES as readonly string[]).includes(record.status));
+    const bands = [
+      { id: "lt-1d", label: "Under 24 hours", value: 0 },
+      { id: "1-3d", label: "1-3 days", value: 0 },
+      { id: "4-7d", label: "4-7 days", value: 0 },
+      { id: "gt-7d", label: "Over 7 days", value: 0 },
+    ];
+    for (const record of open) {
+      const days = Math.floor((asOf.getTime() - record.createdAt.getTime()) / 86_400_000);
+      bands[days < 1 ? 0 : days <= 3 ? 1 : days <= 7 ? 2 : 3].value += 1;
+    }
+    const healthFilters = { ...filters, from: SUPPORT_BACKLOG_FROM, to: undefined, status: undefined };
+    const backlogHref = (extra: Record<string, string> = {}) => drillDownHref("support", healthFilters, { status: SUPPORT_BACKLOG_STATUS, ...extra });
+    const performanceHref = (extra: Record<string, string> = {}) => drillDownHref("support", filters, extra);
+    const resolved = records.filter((record) => inRange(record.resolvedAt));
+    const reopened = records.filter((record) => record.events.some((event) => event.type === "REOPENED" && inRange(event.createdAt)));
+    const firstResponses = complete.flatMap((row) => (row.firstResponseMinutes === null ? [] : [row.firstResponseMinutes]));
+    const resolutions = resolved.map((record) => minutes(record.createdAt, record.resolvedAt as Date));
+    const acceptance: number[] = [];
+    for (const record of records) {
+      let pending: Date | null = null;
+      for (const event of record.events) {
+        if (event.type === "ESCALATED") pending = event.createdAt;
+        else if (event.type === "ESCALATION_ACCEPTED" && pending) {
+          acceptance.push(minutes(pending, event.createdAt));
+          pending = null;
+        }
+      }
+    }
+    const escalationEvents = records.reduce((sum, record) => sum + record.events.filter((event) => event.type === "ESCALATED" && inRange(event.createdAt)).length, 0);
+    const metrics: ReportMetric[] = [
+      { id: "open", label: "Open", value: open.length, format: "COUNT", section: "health", helper: "Tickets not yet resolved or closed as of the data time.", href: backlogHref() },
+      { id: "unassigned", label: "Unassigned", value: open.filter((r) => r.assigneeId === null).length, format: "COUNT", section: "health", helper: "Open tickets with no owner.", href: backlogHref({ owner: SUPPORT_UNASSIGNED_OWNER }) },
+      { id: "urgent", label: "Urgent", value: open.filter((r) => r.priority === "URGENT").length, format: "COUNT", section: "health", helper: "Open tickets at Urgent priority.", href: backlogHref({ priority: "URGENT" }) },
+      { id: "escalated", label: "Escalated", value: open.filter((r) => r.status === "ESCALATED").length, format: "COUNT", section: "health", helper: "Open tickets currently in Escalated status.", href: backlogHref({ status: "ESCALATED" }) },
+      { id: "created", label: "Created", value: complete.length, format: "COUNT", section: "performance", helper: "Tickets created in the selected range.", href: performanceHref() },
+      { id: "resolved", label: "Resolved", value: resolved.length, format: "COUNT", section: "performance", helper: "Tickets resolved in the selected range.", href: performanceHref({ status: "RESOLVED" }) },
+      { id: "first-response", label: "Median first response", value: median(firstResponses), format: "MINUTES", section: "performance", helper: `Median of ${firstResponses.length} tickets created in range that have a first response. Even counts average the two middle values; no data shows a dash.`, href: performanceHref() },
+      { id: "resolution", label: "Median resolution", value: median(resolutions), format: "MINUTES", section: "performance", helper: `Median creation-to-resolution time of ${resolutions.length} tickets resolved in range.`, href: performanceHref({ status: "RESOLVED" }) },
+      { id: "reopen-rate", label: "Reopen rate", value: resolved.length === 0 ? null : Math.round((reopened.length / resolved.length) * 1000) / 10, format: "PERCENT", section: "performance", helper: `${reopened.length} tickets reopened in range divided by ${resolved.length} tickets resolved in range.`, href: performanceHref() },
+      { id: "escalations", label: "Escalations", value: escalationEvents, format: "COUNT", section: "performance", helper: "Escalation events recorded in range.", href: performanceHref({ status: "ESCALATED" }) },
+      { id: "escalation-acceptance", label: "Median escalation acceptance", value: median(acceptance), format: "MINUTES", section: "performance", helper: `Median time from escalation to acceptance across ${acceptance.length} accepted escalations.`, href: performanceHref({ status: "ESCALATED" }) },
+    ];
+
+    const ownerLabel = new Map(records.filter((r) => r.assignee).map((r) => [r.assignee!.id, r.assignee!.name]));
+    const pretty = (value: string) => value.replaceAll("_", " ");
+    const ownerText = (id: string) => (id === SUPPORT_UNASSIGNED_OWNER ? "Unassigned" : ownerLabel.get(id) ?? "Owner");
+    type Keyed = { assigneeId?: string | null; ownerId?: string | null; queue: string; category?: string; status?: string; priority?: string };
+    const ownerOf = (item: Keyed) => item.assigneeId ?? item.ownerId ?? SUPPORT_UNASSIGNED_OWNER;
+    const tally = (source: readonly Keyed[], group: string, key: (item: Keyed) => string, label: (k: string) => string, param: string, link: (extra: Record<string, string>) => string) =>
+      [...countBy(source, key)].sort(([a], [b]) => a.localeCompare(b)).map(([id, value]): ReportBreakdownItem => ({ id: `${group}-${id}`, group, label: label(id), value, href: link({ [param]: id }) }));
+    const breakdown: ReportBreakdownItem[] = [
+      ...bands.map((band) => ({ ...band, id: `age-${band.id}`, group: "Backlog age", href: backlogHref() })),
+      ...tally(open, "Backlog by queue", (r) => r.queue, pretty, "queue", backlogHref),
+      ...tally(open, "Backlog by owner", ownerOf, ownerText, "owner", backlogHref),
+      ...tally(complete, "Created by category", (r) => r.category ?? "", pretty, "category", performanceHref),
+      ...tally(complete, "Created by status", (r) => r.status ?? "", pretty, "status", performanceHref),
+      ...tally(complete, "Created by priority", (r) => r.priority ?? "", pretty, "priority", performanceHref),
+      ...tally(complete, "Created by queue", (r) => r.queue, pretty, "queue", performanceHref),
+      ...tally(complete, "Created by owner", ownerOf, ownerText, "owner", performanceHref),
+    ];
+    const owners = [...ownerLabel].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
+    return Object.freeze({
+      available: true, definition: getReportDefinition("support"), request, lastRefreshed: asOf,
+      metrics: Object.freeze(metrics), breakdown: Object.freeze(breakdown),
+      rows: Object.freeze(paginateRows(complete, filters)), totalRows: complete.length,
+      page: filters.page ?? 1, pageSize: filters.pageSize ?? 25,
+      options: { programmes: [], cohorts: [], owners }, sectionErrors: [],
+    });
+  }
+
   async function getDatasetReport(dataset: ReportDataset, rawFilters: unknown = {}): Promise<DatasetReport> {
     const request = await normalizeRequest(dataset, rawFilters);
     return projectDatasetReport(dataset, request);
@@ -683,6 +904,7 @@ export function createReportQueryService(deps: ReportQueryServiceDeps) {
       case "payments": return paymentsReport(request);
       case "enrolments": return enrolmentsReport(request);
       case "attendance": return attendanceReport(request);
+      case "support": return supportReport(request);
       default: return Object.freeze({ available: false, definition, request, lastRefreshed: request.asOf });
     }
   }
