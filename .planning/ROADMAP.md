@@ -676,7 +676,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 12-06-PLAN.md — connect support to the learner dashboard and authorized contextual “Get help” entry points.
+- [x] 12-06-PLAN.md — connect support to the learner dashboard and authorized contextual “Get help” entry points.
 
 **Wave 6** *(blocked on Waves 3–5 completion)*
 
@@ -760,7 +760,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
-| 12. Support Tickets | 7/9 | In Progress|  |
+| 12. Support Tickets | 8/9 | In Progress|  |
 | 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |
