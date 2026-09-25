@@ -43,6 +43,20 @@ export class TicketReasonRequiredError extends Error {
   }
 }
 
+export class TicketAlreadyAssignedError extends Error {
+  readonly ownedByActor: boolean;
+
+  constructor(ownedByActor: boolean) {
+    super(
+      ownedByActor
+        ? "You already own this ticket."
+        : "This ticket is already assigned to another agent. Ask a manager to reassign it.",
+    );
+    this.name = "TicketAlreadyAssignedError";
+    this.ownedByActor = ownedByActor;
+  }
+}
+
 export function assertTicketTransition(
   from: TicketStatusValue,
   to: TicketStatusValue,

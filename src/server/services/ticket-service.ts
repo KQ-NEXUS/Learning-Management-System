@@ -13,6 +13,7 @@ import {
   assertPriorityReason,
   assertReopenReason,
   assertTicketTransition,
+  TicketAlreadyAssignedError,
   canLearnerClose,
   canLearnerReopen,
   statusAfterPublicReply,
@@ -499,8 +500,8 @@ export function createTicketService(deps: TicketServiceDeps) {
 
   async function claimTicket(input: { reference: string; expectedVersion: number }) {
     return mutateStaffTicket(input, async (ticket, tx, actor) => {
-      // Taking a ticket from another owner is a replacement and needs the reassignment path (D-07).
-      assertAssignmentReason(ticket.assigneeId, actor.userId, null);
+      // D-07: claim is only for unassigned tickets. Changing an owner goes through assignTicket with a reason.
+      if (ticket.assigneeId !== null) throw new TicketAlreadyAssignedError(ticket.assigneeId === actor.userId);
       const before = { status: ticket.status, assigneeId: ticket.assigneeId };
       const nextStatus: TicketStatusValue = "ASSIGNED";
       assertTicketTransition(ticket.status, nextStatus);
@@ -509,7 +510,7 @@ export function createTicketService(deps: TicketServiceDeps) {
       await tx.createEvent({
         ticketId: ticket.id,
         actorId: actor.userId,
-        type: before.assigneeId ? "REASSIGNED" : "CLAIMED",
+        type: "CLAIMED",
         statusBefore: before.status,
         statusAfter: nextStatus,
         assigneeBeforeId: before.assigneeId,

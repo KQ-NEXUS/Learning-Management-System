@@ -100,6 +100,14 @@ describe("staff support server actions", () => {
     expect(result).toMatchObject({ ok: false, kind: "denied" });
   });
 
+  it("maps an already-assigned claim to a validation result with the reassignment guidance", async () => {
+    const { TicketAlreadyAssignedError } = await import("@/server/services/ticket-lifecycle");
+    h.svc.claimTicket.mockRejectedValue(new TicketAlreadyAssignedError(false));
+    const result = await claimTicketAction(base);
+    expect(result).toMatchObject({ ok: false, kind: "validation" });
+    expect((result as { message: string }).message).toContain("Ask a manager to reassign it");
+  });
+
   it("does not assign to a user outside the eligible support owners", async () => {
     const result = await assignTicketAction({ ...base, assigneeId: "someone-else", reason: "x" });
     expect(result).toMatchObject({ ok: false, kind: "validation" });

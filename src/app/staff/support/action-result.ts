@@ -1,6 +1,6 @@
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { StaleTicketVersionError } from "@/server/services/ticket-service";
-import { IllegalTicketTransitionError, TicketReasonRequiredError } from "@/server/services/ticket-lifecycle";
+import { IllegalTicketTransitionError, TicketAlreadyAssignedError, TicketReasonRequiredError } from "@/server/services/ticket-lifecycle";
 
 /** Typed result every staff ticket action returns; success is never assumed client-side. */
 export type StaffTicketActionResult =
@@ -22,6 +22,7 @@ export function mapStaffTicketFailure(error: unknown): StaffTicketActionResult {
   }
   if (
     error instanceof TicketReasonRequiredError ||
+    error instanceof TicketAlreadyAssignedError ||
     error instanceof IllegalTicketTransitionError ||
     error instanceof TypeError
   ) {

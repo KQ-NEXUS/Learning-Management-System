@@ -40,11 +40,23 @@ describe("staff ticket commands added in 12-07", () => {
     expect(harness.tickets[0]).toMatchObject({ status: "ASSIGNED", assigneeId: "staff-1" });
   });
 
-  it("requires the reassignment path to take a ticket owned by someone else", async () => {
+  it("refuses to claim a ticket owned by someone else and points to reassignment", async () => {
     const { harness, service, reference } = await setup();
     await service.assignTicket({ reference, expectedVersion: 1, assigneeId: "staff-2" });
-    await expect(service.claimTicket({ reference, expectedVersion: 2 })).rejects.toThrow("reason is required");
+    const eventCount = harness.events.length;
+    await expect(service.claimTicket({ reference, expectedVersion: 2 })).rejects.toThrow("Ask a manager to reassign it");
     expect(harness.tickets[0].assigneeId).toBe("staff-2");
+    expect(harness.events).toHaveLength(eventCount);
+  });
+
+  it("refuses to re-claim an own ticket without writing a misleading REASSIGNED event", async () => {
+    const { harness, service, reference } = await setup();
+    await service.claimTicket({ reference, expectedVersion: 1 });
+    const eventCount = harness.events.length;
+    await expect(service.claimTicket({ reference, expectedVersion: 2 })).rejects.toThrow("You already own this ticket");
+    expect(harness.events).toHaveLength(eventCount);
+    expect(harness.events.some((e) => (e as { type: string }).type === "REASSIGNED")).toBe(false);
+    expect(harness.events.at(-1)).toMatchObject({ type: "CLAIMED", actorId: "staff-1" });
   });
 
   it("returns the created message id from public replies and internal notes", async () => {
