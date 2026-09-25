@@ -7,6 +7,7 @@ import { getCurrentActor } from "@/server/auth/current-actor";
 import { profileService } from "@/server/services/profile-service";
 import { loadLearnerDashboard } from "@/server/services/enrolment-dashboard-service";
 import type {
+  DashboardTicketSummary,
   LearnerDashboardCard,
   UpcomingSessionCard,
 } from "@/server/services/enrolment-dashboard-service";
@@ -15,6 +16,7 @@ import { ProgressMeter } from "@/components/learner/ProgressMeter";
 import { DeferredSlot } from "@/components/learner/DeferredSlot";
 import { CertificateSlot } from "@/components/learner/CertificateSlot";
 import { utcToWallParts } from "@/lib/timezone";
+import { TicketStatusPill, TicketTime } from "@/components/support/ticket-labels";
 
 /**
  * `/dashboard` (LRN-01, 09-08 Task 3) — the entry point every other learner
@@ -390,12 +392,58 @@ function UpcomingSessionsSection({ card }: { card: LearnerDashboardCard }) {
   );
 }
 
+/** Plan 12-06 (UI-SPEC 7.4) - owner-only, learner-safe fields; no priority/owner/queue. */
+function SupportTicketsSection({ tickets }: { tickets: DashboardTicketSummary[] }) {
+  return (
+    <Section
+      title="Support tickets"
+      aside={
+        tickets.length > 0 ? (
+          <Link href="/support" className="text-sm font-semibold text-accent hover:underline">
+            View all support tickets
+          </Link>
+        ) : undefined
+      }
+    >
+      {tickets.length === 0 ? (
+        <div className="flex flex-col items-start gap-2 pt-4">
+          <p className="text-sm text-muted-foreground">No open support tickets</p>
+          <Link href="/support/new" className="text-sm font-semibold text-accent hover:underline">
+            Get help
+          </Link>
+        </div>
+      ) : (
+        <ul>
+          {tickets.map((ticket) => (
+            <li key={ticket.id} className="flex flex-col gap-1 border-b border-border py-4">
+              <Link
+                href={`/support/${encodeURIComponent(ticket.reference)}`}
+                className="font-semibold text-foreground hover:underline"
+              >
+                {ticket.subject}
+              </Link>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                <span className="font-mono">{ticket.reference}</span>
+                <TicketStatusPill status={ticket.status} />
+                <span>
+                  Updated <TicketTime value={ticket.updatedAt} />
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
 export default async function DashboardPage() {
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
   const dashboard = await loadLearnerDashboard(actor);
   const cards = dashboard.cards;
+  const supportTickets = dashboard.supportTickets ?? [];
 
   if (cards.length === 0) {
     return (
@@ -414,6 +462,7 @@ export default async function DashboardPage() {
             Browse the catalogue
           </Link>
         </div>
+        <SupportTicketsSection tickets={supportTickets} />
       </div>
     );
   }
@@ -459,6 +508,7 @@ export default async function DashboardPage() {
 
         <div className="flex min-w-0 flex-col gap-12 lg:border-l lg:border-border lg:pl-10">
           {primaryActive && <UpcomingSessionsSection card={primary} />}
+          <SupportTicketsSection tickets={supportTickets} />
           {certificateCards.length > 0 && (
             <Section title="Certificates">
               {certificateCards.map((card) => (

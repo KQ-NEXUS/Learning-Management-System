@@ -18,6 +18,7 @@ import {
   collectRequiredLessonEvidence,
   deriveNextAction,
   type EnrolmentDashboardStore,
+  type EnrolmentDashboardTickets,
   type DashboardSessionStoreRow,
   type DashboardAttendanceRecordStoreRow,
   type DashboardCompletionRecordStoreRow,
@@ -318,6 +319,7 @@ function makeService(opts: {
   now?: () => Date;
   /** Plan 11-17 - spy hooks: swap in wrapped fakes to count calls. */
   learnerResults?: EnrolmentDashboardLearnerResults;
+  tickets?: EnrolmentDashboardTickets;
   wrapDashboardStore?: (store: EnrolmentDashboardStore) => EnrolmentDashboardStore;
 }) {
   const learnerAccessStore = makeLearnerAccessStore(opts);
@@ -329,6 +331,7 @@ function makeService(opts: {
     store: dashboardStore,
     learnerAccess,
     learnerResults,
+    tickets: opts.tickets ?? { listCurrentOwn: async () => [] },
     now: opts.now ?? (() => NOW),
   });
 }
@@ -395,18 +398,55 @@ describe("loadLearnerDashboard", () => {
     expect(dashboard.cards.map((c) => c.enrolmentId)).toEqual(["enrolment-new", "enrolment-old"]);
   });
 
-  it("keeps tickets deferred — Phase 12's own named gap, untouched by plan 11-13", async () => {
-    const svc = makeService({
+  describe("plan 12-06 support ticket summary", () => {
+    const T = (id: string, status: string, day: number) => ({
+      id,
+      reference: `TKT-${id}`,
+      subject: `Subject ${id}`,
+      status,
+      updatedAt: new Date(`2026-06-${String(day).padStart(2, "0")}T00:00:00.000Z`),
+    });
+    const base = {
       enrolments: [enrolment()],
       cohorts: [cohort()],
       courses: [course()],
       coursePublications: { "pub-1": { payload: coursePayload() } },
       modules: [moduleRow()],
       lessons: [lessonRow()],
+    };
+
+    it("returns [] with no tickets and no per-card tickets column", async () => {
+      const dash = await makeService(base).loadLearnerDashboard(actorA);
+      expect(dash.supportTickets).toEqual([]);
+      expect(dash.cards[0]).not.toHaveProperty("tickets");
     });
 
-    const [card] = (await svc.loadLearnerDashboard(actorA)).cards;
-    expect(card.tickets).toEqual({ kind: "deferred", phase: 12 });
+    it("bounds to three, most recently updated first, excluding closed", async () => {
+      const rows = [T("1", "OPEN", 1), T("2", "OPEN", 5), T("3", "CLOSED", 9), T("4", "RESOLVED", 3), T("5", "OPEN", 4)];
+      const dash = await makeService({ ...base, tickets: { listCurrentOwn: async () => rows } }).loadLearnerDashboard(actorA);
+      expect(dash.supportTickets.map((t) => t.id)).toEqual(["2", "5", "4"]);
+    });
+
+    it("carries only id/reference/subject/status/updatedAt even if the source row has more", async () => {
+      const rows = [{ ...T("1", "OPEN", 1), priority: "URGENT", queue: "SECRET", assigneeId: "staff-1" }];
+      const dash = await makeService({ ...base, tickets: { listCurrentOwn: async () => rows } }).loadLearnerDashboard(actorA);
+      expect(Object.keys(dash.supportTickets[0]).sort()).toEqual(["id", "reference", "status", "subject", "updatedAt"]);
+    });
+
+    it("scopes the read to the actor and performs one query regardless of card count", async () => {
+      const calls: string[] = [];
+      const dash = await makeService({
+        ...base,
+        enrolments: [
+          enrolment({ id: "enrolment-1" }),
+          enrolment({ id: "enrolment-2", activatedAt: new Date("2026-02-01T00:00:00.000Z") }),
+          enrolment({ id: "enrolment-3", activatedAt: new Date("2026-03-01T00:00:00.000Z") }),
+        ],
+        tickets: { listCurrentOwn: async (userId) => (calls.push(userId), []) },
+      }).loadLearnerDashboard(actorA);
+      expect(dash.cards).toHaveLength(3);
+      expect(calls).toEqual(["user-a"]);
+    });
   });
 
   it("plan 11-13 — certificate is not-complete with no unsuperseded completion record, never a deferred placeholder", async () => {
