@@ -31,7 +31,7 @@ import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 import { assertRoleManagementContinuity, lockRoleManagementContinuity, type ContinuityLockTx } from "@/server/services/continuity-service";
 import { MIN_REASON_LENGTH } from "@/server/services/role-service";
-import { assignmentTargetScope } from "@/server/services/assignment-service";
+import { assertWithinGrantCeiling, assignmentTargetScope } from "@/server/services/assignment-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 
@@ -204,6 +204,10 @@ export function createStaffAccountService(deps: {
     for (const permission of role.permissions) {
       assertScopeAllowed(permission as Permission, input.scopeType);
     }
+
+    // F-07 — and to the same grant ceiling as any other assignment. (A new
+    // account can never be the actor, so the self-assignment rule cannot apply.)
+    assertWithinGrantCeiling(ctx.grants, role.permissions, assignmentTargetScope(input.scopeType, input.scopeId));
 
     const email = input.email.toLowerCase().trim();
     const temporaryPassword = input.temporaryPassword ?? generateTemporaryPassword();
