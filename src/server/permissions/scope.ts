@@ -52,6 +52,19 @@ export type GrantWindow = {
 };
 
 /**
+ * F-05 — narrows a cohort's scope to ONE of its courses, for resources that
+ * belong to a single course (an assessment, its submissions and grades). A
+ * programme cohort's scope lists every member course, so without this a
+ * COURSE grant for one member course would reach all of them. PROGRAMME and
+ * COHORT grants are unaffected (their keys are kept); a course the cohort
+ * does not deliver leaves no course to match, so a COURSE grant is denied.
+ */
+export function narrowScopeToCourse(scope: ResourceScope, courseId: string): ResourceScope {
+  const { courseIds, ...rest } = scope;
+  return { ...rest, courseIds: courseIds?.includes(courseId) ? [courseId] : [] };
+}
+
+/**
  * Whether a single grant reaches a resource.
  *
  * A GLOBAL grant reaches everything. A narrower grant must name an id the

@@ -637,3 +637,65 @@ describe("grade release re-evaluates completion (v2 assessment rule)", () => {
     expect(calls).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// F-05 — a COURSE grant reaches only its own course's assessments, even
+// inside a programme cohort that also delivers other courses.
+// ---------------------------------------------------------------------------
+
+describe("F-05 — course-scoped graders stay inside their course", () => {
+  const progCohort = cohort({ id: "coh-p", programmeId: "prog-1" });
+  const cohortCourses: CohortCourseRow[] = [
+    { cohortId: "coh-p", courseId: "course-a" },
+    { cohortId: "coh-p", courseId: "course-b" },
+  ] as CohortCourseRow[];
+  const learner = enr({ id: "enr-p", cohortId: "coh-p" });
+  const asgA = assessment({ id: "asg-a", courseId: "course-a" });
+  const asgB = assessment({ id: "asg-b", courseId: "course-b" });
+  const subB = submission({ id: "sub-b", assessmentId: "asg-b", enrolmentId: "enr-p" });
+  const gradeB = gradeRow({ id: "grade-b", assessmentId: "asg-b", enrolmentId: "enr-p", submissionId: "sub-b" });
+
+  const build = (grants: ReturnType<typeof grant>[]) =>
+    harness({
+      grants,
+      cohorts: [progCohort],
+      cohortCourses,
+      enrolments: [learner],
+      users: [user({ id: "user-enr-p" })],
+      assessments: [asgA, asgB],
+      submissions: [subB],
+      grades: [gradeB],
+    });
+
+  it("a course-A grader cannot open, grade or release course-B work in the same programme cohort", async () => {
+    const h = build([grant("submissions.view", "COURSE", "course-a"), grant("grades.manage", "COURSE", "course-a")]);
+    await expect(h.service.getGradingDetail({ submissionId: "sub-b" })).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(h.service.saveDraftGrade({ submissionId: "sub-b", score: 90, feedback: null })).rejects.toBeInstanceOf(
+      AuthorizationError,
+    );
+    await expect(h.service.releaseGrade({ gradeId: "grade-b" })).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(h.service.releaseGradesBatch({ gradeIds: ["grade-b"] })).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(
+      h.service.listGradingQueue({ cohortId: "coh-p", assessmentId: "asg-b" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("a course-B grader can", async () => {
+    const h = build([grant("submissions.view", "COURSE", "course-b"), grant("grades.manage", "COURSE", "course-b")]);
+    await expect(h.service.getGradingDetail({ submissionId: "sub-b" })).resolves.toBeTruthy();
+    await expect(h.service.releaseGrade({ gradeId: "grade-b" })).resolves.toMatchObject({ status: "RELEASED" });
+  });
+
+  it("programme- and cohort-scoped graders still reach every course in the cohort", async () => {
+    for (const scoped of [grant("submissions.view", "PROGRAMME", "prog-1"), grant("submissions.view", "COHORT", "coh-p")]) {
+      const h = build([scoped]);
+      await expect(h.service.getGradingDetail({ submissionId: "sub-b" })).resolves.toBeTruthy();
+    }
+  });
+
+  it("the cohort grading summary lists only the assessments the grader's course grant covers", async () => {
+    const h = build([grant("submissions.view", "COURSE", "course-a")]);
+    const rows = await h.service.listCohortGradingSummary({ cohortId: "coh-p" });
+    expect(rows.map((r) => r.assessmentId)).toEqual(["asg-a"]);
+  });
+});

@@ -5,7 +5,7 @@
 import { prisma } from "@/server/db";
 import { withPermission } from "@/server/permissions";
 import type { createWithPermission } from "@/server/permissions/with-permission";
-import type { ResourceScope } from "@/server/permissions/scope";
+import { narrowScopeToCourse, type ResourceScope } from "@/server/permissions/scope";
 import { enrolmentCohortScope } from "./cohort-scope";
 import { recordAudit } from "./audit-service";
 import type { ResourceAuditEntry } from "./resource-service";
@@ -45,6 +45,8 @@ export type GradeOverrideTx = DomainEventTxClient & {
 export type GradeOverrideDeps = {
   grade: GradeOverrideTx["grade"] extends { findUnique: infer F } ? { findUnique: F } : never;
   enrolmentScope(enrolmentId: string): Promise<ResourceScope> | ResourceScope;
+  /** F-05 — the grade's assessment's course, so a COURSE grant only reaches its own course. */
+  assessmentCourseId?(assessmentId: string): Promise<string | null>;
   withPermission: ReturnType<typeof createWithPermission>;
   runInTransaction<R>(fn: (tx: GradeOverrideTx) => Promise<R>): Promise<R>;
   writeEvent: typeof writeDomainEvent;
@@ -66,7 +68,11 @@ export type GradeOverrideDeps = {
 export function createGradeOverrideService(deps: GradeOverrideDeps) {
   const overrideGrade = deps.withPermission<Input>("grades.manage", async ({ gradeId }) => {
     const grade = await deps.grade.findUnique({ where: { id: gradeId } });
-    return grade ? deps.enrolmentScope(grade.enrolmentId) : {};
+    if (!grade) return {};
+    const scope = await deps.enrolmentScope(grade.enrolmentId);
+    if (!deps.assessmentCourseId) return scope;
+    const courseId = await deps.assessmentCourseId(grade.assessmentId);
+    return courseId ? narrowScopeToCourse(scope, courseId) : {};
   })(async (input, ctx): Promise<GradeOverrideResult> => {
     const reason = input.reason.trim();
     if (reason.length < 10) throw new OverrideReasonRequiredError();
@@ -98,6 +104,8 @@ export function createGradeOverrideService(deps: GradeOverrideDeps) {
 const built = createGradeOverrideService({
   grade: prisma.grade,
   enrolmentScope: enrolmentCohortScope,
+  assessmentCourseId: async (id) =>
+    (await prisma.assessment.findUnique({ where: { id }, select: { courseId: true } }))?.courseId ?? null,
   withPermission,
   runInTransaction: (fn) => prisma.$transaction((tx) => fn(tx as unknown as GradeOverrideTx)),
   writeEvent: writeDomainEvent,

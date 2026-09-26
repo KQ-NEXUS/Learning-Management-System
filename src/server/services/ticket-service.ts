@@ -946,9 +946,21 @@ const liveService = createPrismaBackedTicketService(prisma as AnyPrisma, {
       findSubmission: async (id) => {
         const row = await prisma.submission.findUnique({
           where: { id },
-          select: { assessmentId: true, enrolmentId: true, enrolment: { select: { cohortId: true } } },
+          select: {
+            assessmentId: true,
+            enrolmentId: true,
+            enrolment: { select: { cohortId: true } },
+            assessment: { select: { courseId: true } },
+          },
         });
-        return row ? { assessmentId: row.assessmentId, enrolmentId: row.enrolmentId, cohortId: row.enrolment.cohortId } : null;
+        return row
+          ? {
+              assessmentId: row.assessmentId,
+              enrolmentId: row.enrolmentId,
+              cohortId: row.enrolment.cohortId,
+              courseId: row.assessment.courseId,
+            }
+          : null;
       },
       findCertificateEnrolment: async (id) => {
         const row = await prisma.certificate.findUnique({ where: { id }, select: { enrolmentId: true } });
