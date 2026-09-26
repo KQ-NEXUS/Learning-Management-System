@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requiresPassingAssessments } from "../../course-schema";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
@@ -22,6 +23,8 @@ type CourseRow = {
   certificateEnabled: boolean;
   certificateIssuanceMode: "AUTOMATIC" | "MANUAL";
   certificateTemplateId: string | null;
+  completionRule: unknown;
+  completionRuleVersion: number;
 };
 
 export default async function EditCoursePage({
@@ -89,6 +92,7 @@ export default async function EditCoursePage({
           prerequisites: course.prerequisites,
           durationHours: course.durationHours,
           certificateEnabled: course.certificateEnabled,
+          requirePassingAssessments: requiresPassingAssessments(course.completionRule, course.completionRuleVersion),
           certificateIssuanceMode: course.certificateIssuanceMode,
           certificateTemplateId: course.certificateTemplateId,
           certificateTemplateName,

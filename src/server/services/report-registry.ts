@@ -1,5 +1,13 @@
 import { z, type ZodType } from "zod";
 import type { Permission } from "@/server/permissions/catalogue";
+import {
+  SUPPORT_BACKLOG_STATUS,
+  SUPPORT_CATEGORIES,
+  SUPPORT_PRIORITIES,
+  SUPPORT_QUEUES,
+  SUPPORT_STATUSES,
+  SUPPORT_UNASSIGNED_OWNER,
+} from "@/lib/support-report-vocabulary";
 
 export const REPORT_DATASETS = Object.freeze([
   "registrations",
@@ -65,6 +73,17 @@ const reportFilters = z
     currency: z.enum(["NGN", "USD"]).optional(),
   })
   .strict();
+export { SUPPORT_BACKLOG_STATUS, SUPPORT_CATEGORIES, SUPPORT_PRIORITIES, SUPPORT_QUEUES, SUPPORT_STATUSES, SUPPORT_UNASSIGNED_OWNER };
+const supportFilters = z
+  .object({
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional(),
+    category: z.enum(SUPPORT_CATEGORIES).optional(),
+    priority: z.enum(SUPPORT_PRIORITIES).optional(),
+    queue: z.enum(SUPPORT_QUEUES).optional(),
+    owner: optionalId,
+  })
+  .strict();
 const auditFilters = z
   .object({
     from: z.iso.date().optional(),
@@ -84,14 +103,14 @@ function safe(...columns: Array<[string, string, ReportColumn["valueType"]]>): r
 }
 
 function report(
-  definition: Omit<ReportDefinition, "version" | "scopePolicy" | "drillDownPath" | "filterSchema">,
+  definition: Omit<ReportDefinition, "version" | "scopePolicy" | "drillDownPath" | "filterSchema"> & { filterSchema?: ZodType },
 ): ReportDefinition {
   return Object.freeze({
     ...definition,
     version: "1.0",
     scopePolicy: "COLLECTION",
     drillDownPath: `/staff/reports/${definition.id}`,
-    filterSchema: reportFilters,
+    filterSchema: definition.filterSchema ?? reportFilters,
   });
 }
 
@@ -204,12 +223,30 @@ export const REPORT_REGISTRY: readonly ReportDefinition[] = Object.freeze([
     id: "support",
     label: "Support",
     group: "OUTCOMES_SUPPORT",
-    availability: "NOT_AVAILABLE_YET",
+    availability: "AVAILABLE",
     permission: "reports.view",
-    definition: "Support tickets opened during the selected range.",
+    definition: "Current support backlog health plus trailing-30-day ticket performance. Rows are tickets created in the selected range (default: the 30 days before the as-of time).",
     businessDateLabel: "Ticket creation date",
-    unavailableReason: "support operations start collecting authoritative tickets",
-    safeColumns: safe(["ticketId", "Ticket", "TEXT"], ["createdAt", "Created", "DATE"], ["status", "Status", "TEXT"]),
+    filterSchema: supportFilters,
+    // Operational metadata only. No message body, internal note or attachment
+    // property exists in this column contract (D-19).
+    safeColumns: safe(
+      ["reference", "Reference", "TEXT"],
+      ["createdAt", "Created", "DATE"],
+      ["resolvedAt", "Resolved", "DATE"],
+      ["closedAt", "Closed", "DATE"],
+      ["category", "Category", "TEXT"],
+      ["priority", "Priority", "TEXT"],
+      ["status", "Status", "TEXT"],
+      ["queue", "Queue", "TEXT"],
+      ["ownerId", "Owner", "TEXT"],
+      ["ageMinutes", "Age (minutes)", "INTEGER"],
+      ["firstResponseMinutes", "First response (minutes)", "INTEGER"],
+      ["resolutionMinutes", "Resolution (minutes)", "INTEGER"],
+      ["escalationCount", "Escalations", "INTEGER"],
+      ["contextType", "Context type", "TEXT"],
+      ["contextReference", "Context reference", "TEXT"],
+    ),
     sensitiveColumns: identityColumns,
   }),
 ]);

@@ -13,8 +13,10 @@ import { writeDomainEvent, type DomainEventTxClient } from "./domain-event-servi
 import {
   flagCertificatesForGradeCorrection,
   liveIssuanceDeps,
+  recalculateCompletionAndIssue,
   type CertificateIssuanceTxClient,
 } from "./certificate-issuance-service";
+import type { CompletionServiceTxClient } from "./completion-service";
 
 export class GradeNotReleasedError extends Error {
   constructor() { super("Only a released grade can be corrected. Edit a draft grade directly."); this.name = "GradeNotReleasedError"; }
@@ -104,13 +106,21 @@ const built = createGradeOverrideService({
   // through `unknown` — the same idiom the certificate-issuance module's own
   // completion-and-issue wrapper and `enrolment-transitions.ts`'s
   // `applyEnrolmentActivation` use for their own tx-client narrowing (plan
-  // 11-10). This path never re-derives a completion verdict — grades carry
-  // no key the v1 completion rule recognises, so it only flags.
-  reactToGradeOverride: (tx, args) =>
-    flagCertificatesForGradeCorrection(
+  // 11-10). It also re-evaluates completion: a v2 rule that requires passing
+  // assessments can gain or lose its verdict when an override crosses the
+  // pass mark (a v1 rule reads no grades, so this is a no-op there).
+  reactToGradeOverride: async (tx, args) => {
+    const now = new Date();
+    await flagCertificatesForGradeCorrection(
       tx as unknown as CertificateIssuanceTxClient,
-      { ...args, now: new Date() },
+      { ...args, now },
       liveIssuanceDeps,
-    ),
+    );
+    await recalculateCompletionAndIssue(tx as unknown as CompletionServiceTxClient, {
+      enrolmentId: args.enrolmentId,
+      now,
+      actorId: args.actorId,
+    });
+  },
 });
 export const overrideGrade = built.overrideGrade;

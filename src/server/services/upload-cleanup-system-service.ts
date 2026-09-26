@@ -6,7 +6,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * A hourly Netlify Scheduled Function invokes this to clear lesson resources
- * left `UPLOADING` for more than 24 hours — an intent whose browser never
+ * and support-ticket attachments left `UPLOADING` for more than 24 hours — an intent whose browser never
  * completed the direct upload. It runs with no request and no session, so it
  * cannot pass through the request-scoped permission choke point
  * (`src/server/permissions/*`); wrapping it there would make it throw on the
@@ -51,6 +51,8 @@ type LessonResourceCleanupDelegate = {
 
 export type CreateUploadCleanupSystemServiceDeps = {
   lessonResource: LessonResourceCleanupDelegate;
+  /** Support-ticket attachments; swept with the same predicate and bound. */
+  ticketAttachment?: LessonResourceCleanupDelegate;
   deleteObject: (key: string) => Promise<void>;
   audit: (event: {
     actorId: string | null;
@@ -72,11 +74,13 @@ export type CreateUploadCleanupSystemServiceDeps = {
  * failure is caught, logged and counted — one poison row cannot stall the rest.
  */
 export function createUploadCleanupSystemService(deps: CreateUploadCleanupSystemServiceDeps) {
-  return async function cleanupStaleLessonUploads(
+  async function sweep(
+    delegate: LessonResourceCleanupDelegate,
+    kind: { targetType: string; action: string },
     olderThan: Date,
     batchLimit: number,
   ): Promise<{ removed: number; failed: number }> {
-    const candidates = await deps.lessonResource.findMany({
+    const candidates = await delegate.findMany({
       where: { uploadStatus: "UPLOADING", createdAt: { lt: olderThan } },
       orderBy: { createdAt: "asc" },
       take: batchLimit,
@@ -95,12 +99,12 @@ export function createUploadCleanupSystemService(deps: CreateUploadCleanupSystem
     for (const row of work) {
       try {
         await deps.deleteObject(row.storageKey);
-        await deps.lessonResource.delete({ where: { id: row.id } });
+        await delegate.delete({ where: { id: row.id } });
         await deps.audit({
           actorId: null,
           actorType: SYSTEM_ACTOR_TYPE,
-          action: "lessonresource.upload_abandoned",
-          targetType: "LessonResource",
+          action: kind.action,
+          targetType: kind.targetType,
           targetId: row.id,
           outcome: "SUCCESS",
           reason: "upload incomplete after 24 hours",
@@ -115,11 +119,39 @@ export function createUploadCleanupSystemService(deps: CreateUploadCleanupSystem
     }
 
     return { removed, failed };
+  }
+
+  /**
+   * Each kind is bounded by `batchLimit`, so one invocation touches at most
+   * 2 x batchLimit rows. The name is kept for the existing scheduled wrapper.
+   */
+  return async function cleanupStaleLessonUploads(
+    olderThan: Date,
+    batchLimit: number,
+  ): Promise<{ removed: number; failed: number }> {
+    const lessons = await sweep(
+      deps.lessonResource,
+      { targetType: "LessonResource", action: "lessonresource.upload_abandoned" },
+      olderThan,
+      batchLimit,
+    );
+    if (!deps.ticketAttachment) return lessons;
+    const tickets = await sweep(
+      deps.ticketAttachment,
+      { targetType: "TicketAttachment", action: "ticketattachment.upload_abandoned" },
+      olderThan,
+      batchLimit,
+    );
+    return {
+      removed: lessons.removed + tickets.removed,
+      failed: lessons.failed + tickets.failed,
+    };
   };
 }
 
 const built = createUploadCleanupSystemService({
   lessonResource: prisma.lessonResource as unknown as LessonResourceCleanupDelegate,
+  ticketAttachment: prisma.ticketAttachment as unknown as LessonResourceCleanupDelegate,
   deleteObject: deleteLessonObject,
   audit: (event) => recordAudit(event),
 });

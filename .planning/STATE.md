@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Phase 11 complete (34/34) — ready to discuss Phase 12
-last_updated: 2026-09-19T20:05:09.684Z
-last_activity: 2026-09-19
+stopped_at: Phase 12 complete (9/9) — ready to discuss Phase 13
+last_updated: 2026-09-25T19:28:27.710Z
+last_activity: 2026-09-25
 progress:
   total_phases: 16
-  completed_phases: 9
-  total_plans: 160
-  completed_plans: 170
-  percent: 56
+  completed_phases: 11
+  total_plans: 191
+  completed_plans: 191
+  percent: 69
 ---
 
 # Project State
@@ -21,21 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 12 — support tickets
+**Current focus:** Phase 13 — transactional communications & notifications
 
 ## Current Position
 
-Phase: 12
+Phase: 13
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-09-19
+Last activity: 2026-09-25
 
 Progress: [██████████] 99%
 
 ## Performance Metrics
 
 **Velocity:**
-
 
 **By Phase:**
 
@@ -96,6 +95,10 @@ Progress: [██████████] 99%
 | Phase 11 P20 | 35min | 3 tasks | 9 files |
 | Phase 11 P21 | 25min | 2 tasks | 7 files |
 | Phase 11 P22 | 20min | 2 tasks | 6 files |
+| Phase 12 P01 | 27min | 3 tasks | 7 files |
+| Phase 12 P02 | 1h 20min | 3 tasks | 9 files |
+| Phase 12 P03 | 25min | 3 tasks | 9 files |
+| Phase 12 P07 | 2h | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -199,6 +202,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11-28]: deriveCertificateColumn now lets an existing certificate decide the dashboard slot before the completion record (revoked, flagged, issued); no-certificate fallbacks unchanged. A superseded completion no longer hides a flagged certificate or its download (D-06/CRD-06, UAT test 17). WR-06 stays out of scope.
 - [Phase 11-34]: CR-02: the certificate renderer decides image format from leading bytes (PNG signature, JPEG SOI) and skips anything else or corrupt (permanent, retry cannot help); a resolver fetch failure still rejects (retryable). Template assets are restricted to PNG/JPEG at presign, confirm (server-observed type) and the inspector picker via validateTemplateAssetUpload; UPLOAD_LIMITS.IMAGE unchanged for lessons. Plan 11-29 must keep the image guard and its tests when swapping the font.
 - [Phase 11-30]: CR-01b/WR-01: two-phase issuance. issueCertificateForEnrolment is database-only (row with storageKey null, COMPLETED, audit, event) and registers the certificate id against the tx object; certificate-file-service.ts renders from the row snapshot and stores after commit (compare-and-set on storageKey null and status ACTIVE), never throws, settle bounded at 6 s, ensureCertificateFile produces the file on demand. Layout parsing moved to the post-commit step; IssueCertificateDeps is now {generateRef, audit, writeEvent}. Until plan 11-31 wires runTransactionThenSettleCertificateFiles at the lesson-progress/attendance roots and the download route, new certificates have no file (degraded but consistent). The roots must pass the SAME tx object to issuance (registry keys on identity).
+- [Phase 12]: 12-03: attachment auth via service (owner+PUBLIC or staff perms), single NotFound for all denials; cleanup bounded per kind
+- [Phase 12]: 12-07: QUEUE_CHANGED event added so queue moves are attributed chronology; claimTicket requires reassignment reason when taking another owner's ticket; eligible owners are active staff with a GLOBAL tickets.manage role
 
 ### Pending Todos
 
@@ -252,6 +257,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T18:58:00.000Z
-Stopped at: Completed 11-32-PLAN.md (second gap pass: real Postgres + MinIO proof of CR-01/CR-03/CR-04/CR-06) - only 11-33 (human checkpoints) remains
+Last session: 2026-09-25T13:04:05.705Z
+Stopped at: Phase 12 UI-SPEC approved
 Resume file: None

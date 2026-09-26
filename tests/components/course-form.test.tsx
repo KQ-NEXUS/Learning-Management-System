@@ -175,3 +175,30 @@ describe("CourseForm — edit mode", () => {
     expect(screen.getByRole("button", { name: "Create course" })).toBeTruthy();
   });
 });
+
+describe("CourseForm — require passing assessments", () => {
+  const base = {
+    title: "Workplace Safety",
+    slug: "workplace-safety",
+    summary: null,
+    outcomes: null,
+    audience: null,
+    prerequisites: null,
+    durationHours: null,
+    certificateEnabled: false,
+    certificateIssuanceMode: "MANUAL" as const,
+    certificateTemplateId: null,
+  };
+
+  it("reflects the stored setting and submits it by name", () => {
+    render(<CourseForm mode="edit" courseId="course-9" values={{ ...base, requirePassingAssessments: true }} templates={[]} />);
+    const box = screen.getByLabelText("Learners must pass required assessments") as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(box.name).toBe("requirePassingAssessments");
+  });
+
+  it("is unchecked by default", () => {
+    render(<CourseForm mode="create" templates={[]} />);
+    expect((screen.getByLabelText("Learners must pass required assessments") as HTMLInputElement).checked).toBe(false);
+  });
+});

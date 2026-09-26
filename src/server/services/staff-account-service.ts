@@ -76,6 +76,27 @@ export type StaffUserRow = {
 
 export type StaffSearchRow = { id: string; name: string; email: string; status: string };
 
+/** What list/get hand to pages. The list reaches a client component, so no credential or lockout field may appear here. */
+export type StaffAccountSummary = {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  createdAt: Date;
+  deactivatedAt: Date | null;
+};
+
+function toSummary(row: StaffUserRow): StaffAccountSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    status: row.status,
+    createdAt: row.createdAt,
+    deactivatedAt: row.deactivatedAt,
+  };
+}
+
 export type CreateStaffAccountInput = {
   name: string;
   email: string;
@@ -149,15 +170,19 @@ export function createStaffAccountService(deps: {
   const listInternal = authorize<Record<string, never>>(
     "users.view",
     () => userScope(),
-  )(async () =>
-    store.user.findMany({
+  )(async () => {
+    const rows = await store.user.findMany({
       where: { isStaff: true },
       orderBy: { name: "asc" },
-    }),
-  );
+    });
+    return rows.map(toSummary);
+  });
 
   const getInternal = authorize<string>("users.view", () => userScope())(
-    async (id) => store.user.findUnique({ where: { id } }),
+    async (id) => {
+      const row = await store.user.findUnique({ where: { id } });
+      return row ? toSummary(row) : null;
+    },
   );
 
   const createInternal = authorize<CreateStaffAccountInput>(

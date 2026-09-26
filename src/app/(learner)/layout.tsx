@@ -27,6 +27,7 @@ import { deriveAvatarDisplay } from "@/lib/avatar-display";
 const NAV: LearnerNavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "My learning", href: "/learn" },
+  { label: "Support", href: "/support" },
   { label: "Catalogue", href: "/courses" },
   { label: "Account", href: "/account" },
 ];

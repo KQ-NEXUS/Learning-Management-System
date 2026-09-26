@@ -10,6 +10,7 @@ import {
 } from "@/server/services/learner-access";
 import { collectRequiredLessonEvidence } from "@/server/services/enrolment-dashboard-service";
 import { ProgressMeter } from "@/components/learner/ProgressMeter";
+import { GetSupportLink } from "@/components/support/GetSupportLink";
 import { LessonRow } from "@/components/learner/LessonRow";
 import { AccessDeniedPanel } from "@/components/learner/AccessDeniedPanel";
 
@@ -193,6 +194,8 @@ export default async function LessonListPage({
               </Link>
             </div>
           </section>
+
+          <GetSupportLink kind="COHORT" id={path.enrolment.cohort.id} />
         </aside>
       </div>
     </div>

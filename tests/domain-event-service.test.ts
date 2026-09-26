@@ -120,6 +120,29 @@ describe("buildDomainEventRow", () => {
       expect(payload.token).toBe("[redacted]");
     },
   );
+
+  it.each([
+    "ticket.created",
+    "ticket.public_reply_added",
+    "ticket.assigned",
+    "ticket.escalated",
+    "ticket.resolved",
+    "ticket.reopened",
+    "ticket.closed",
+  ] satisfies DomainEventType[])(
+    "type-checks support ticket event %s and stores no private content keys",
+    (type) => {
+      const row = buildDomainEventRow({
+        type,
+        payload: {
+          ticketId: "ticket-1",
+          reference: "KQT-20260921-ABCDEF12",
+        },
+      });
+      expect(row.type).toBe(type);
+      expect(JSON.stringify(row.payload)).not.toMatch(/body|reason|filename|storageKey|attachments/);
+    },
+  );
 });
 
 describe("writeDomainEvent", () => {

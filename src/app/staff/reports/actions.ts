@@ -64,6 +64,10 @@ export async function permittedSensitiveColumnsAction(dataset: string): Promise<
     const definition = getExportDatasetDefinition(dataset);
     const [domain, exporting, identity] = await Promise.all([authorizeCollection(definition.permission), authorizeCollection(dataset === "audit" ? "audit.export" : "reports.export"), authorizeCollection("users.view")]);
     if (domain.actor.userId !== identity.actor.userId || domain.actor.userId !== exporting.actor.userId) return [];
+    if (dataset === "support") {
+      const tickets = await authorizeCollection("tickets.view");
+      if (tickets.scope.kind !== "GLOBAL" || identity.scope.kind !== "GLOBAL") return [];
+    }
     if (domain.scope.kind === "GLOBAL" && identity.scope.kind !== "GLOBAL") return [];
     if (domain.scope.kind === "GLOBAL" && exporting.scope.kind !== "GLOBAL") return [];
     if (domain.scope.kind === "LIMITED" && identity.scope.kind === "LIMITED") {

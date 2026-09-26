@@ -126,12 +126,12 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Support Tickets (SUP)
 
-- [ ] **SUP-01**: Learners can create and view their own support tickets with category, subject, description, and permitted attachments; a ticket receives a reference and status; unsafe files are rejected.
-- [ ] **SUP-02**: Priority, status, assignment, public reply, private internal note, and closure/reopen behavior are supported; public/private content stay distinctly labeled and permission-protected; transitions are timestamped/attributed.
-- [ ] **SUP-03**: Ticket access is granted through `tickets.view`/`tickets.manage` without requiring Administrator status; a custom Support Agent role can triage/resolve while denied unrelated permissions.
-- [ ] **SUP-04**: Escalation to another staff owner/queue with reason is supported; escalation preserves history, notifies the next owner per policy, and stays visible in operational reporting.
-- [ ] **SUP-05**: Permitted contextual links to learner, Cohort, Course, order, submission, or certificate records are allowed; opening context performs a fresh permission/scope check.
-- [ ] **SUP-06**: Ticket volume, age, priority, status, ownership, response, resolution, and escalation are reportable; dashboard and CSV values reconcile for the same filters and exclude private note content.
+- [x] **SUP-01**: Learners can create and view their own support tickets with category, subject, description, and permitted attachments; a ticket receives a reference and status; unsafe files are rejected.
+- [x] **SUP-02**: Priority, status, assignment, public reply, private internal note, and closure/reopen behavior are supported; public/private content stay distinctly labeled and permission-protected; transitions are timestamped/attributed.
+- [x] **SUP-03**: Ticket access is granted through `tickets.view`/`tickets.manage` without requiring Administrator status; a custom Support Agent role can triage/resolve while denied unrelated permissions.
+- [x] **SUP-04**: Escalation to another staff owner/queue with reason is supported; escalation preserves history, notifies the next owner per policy, and stays visible in operational reporting.
+- [x] **SUP-05**: Permitted contextual links to learner, Cohort, Course, order, submission, or certificate records are allowed; opening context performs a fresh permission/scope check.
+- [x] **SUP-06**: Ticket volume, age, priority, status, ownership, response, resolution, and escalation are reportable; dashboard and CSV values reconcile for the same filters and exclude private note content.
 
 ### Dashboards, Reports, Exports, and Audit (RPT)
 
@@ -272,12 +272,12 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | CRD-04 | Phase 11 | Complete |
 | CRD-05 | Phase 11 | Complete |
 | CRD-06 | Phase 11 | Complete |
-| SUP-01 | Phase 12 | Pending |
-| SUP-02 | Phase 12 | Pending |
-| SUP-03 | Phase 12 | Pending |
-| SUP-04 | Phase 12 | Pending |
-| SUP-05 | Phase 12 | Pending |
-| SUP-06 | Phase 12 | Pending |
+| SUP-01 | Phase 12 | Complete |
+| SUP-02 | Phase 12 | Complete |
+| SUP-03 | Phase 12 | Complete |
+| SUP-04 | Phase 12 | Complete |
+| SUP-05 | Phase 12 | Complete |
+| SUP-06 | Phase 12 | Complete |
 | COM-01 | Phase 13 | Pending |
 | COM-02 | Phase 13 | Pending |
 | COM-03 | Phase 13 | Pending |

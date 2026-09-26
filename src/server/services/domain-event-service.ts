@@ -99,7 +99,17 @@ export type DomainEventType =
   // page). "certificate.reissued" carries both the old and new certificate
   // ids/references, also never the reason text.
   | "certificate.revoked"
-  | "certificate.reissued";
+  | "certificate.reissued"
+  // Phase 12 (SUP-01..05) - support ticket lifecycle notifications.
+  // Payloads carry ids/references/recipients/owners only: never message
+  // bodies, staff reasons, filenames, storage keys, or attachments.
+  | "ticket.created"
+  | "ticket.public_reply_added"
+  | "ticket.assigned"
+  | "ticket.escalated"
+  | "ticket.resolved"
+  | "ticket.reopened"
+  | "ticket.closed";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction

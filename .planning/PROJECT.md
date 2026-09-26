@@ -37,6 +37,7 @@ Cross-cutting foundation *also* already in place, underpinning multiple future r
 
 - ✓ **ASM-01 through ASM-07**: Full assessment loop — versioned Quiz/Assignment authoring with draft-validation, automatic reproducible Quiz scoring with full attempt evidence, verified two-step Assignment submission with durable receipts, Cohort-scoped grading with invisible drafts and explicit release, mandatory-reason audited overrides, and learner-visible released-only results — Phase 10. Verified by goal-backward verification (`.planning/phases/10-assessment-quizzes-assignments-grading/10-VERIFICATION.md`, 7/7 must-haves) and a delegated 30-step Chrome walkthrough (7 defects found and fixed). See `10-VALIDATION.md`.
 - ✓ **CRD-01 through CRD-06**: Certificates and completion lifecycle — Course certificates issue once when completion rules pass and issuance is enabled, Programme certificates only after every required Course and the Programme rule pass (D-01); AUTOMATIC or MANUAL issuance per Course/Programme with a reusable template library and a keyboard-accessible layout editor; per-learner PDF (bundled Noto Sans, Latin-extended/Yoruba names render, other scripts print `?`), unique 128-bit public verification reference, owner/scoped-staff download with identical-404 denial parity, public verification page disclosing only status, name, award and issue date; staff revoke and reissue with mandatory reasons and a preserved supersede chain; grade, attendance and completion corrections flag certificates for review and never delete them — Phase 11. Verified by goal-backward verification (4/4 success criteria), a 20/20 UAT (browser-driven, isolated database), a 200/200 threat-register security audit (`11-SECURITY.md`), and a human visual check of the generated PDFs. Known accepted limitations: a false-alarm review flag cannot be cleared (CR-05), audit rows are not on the caller transaction (WR-02), about 316 KB per PDF.
+- ✓ **SUP-01 through SUP-06**: Support tickets — learner ticket creation with contextual links and private attachments, ownership-safe public chronology with staff-only internal notes, staff queue and workspace with claim/assign/priority/escalate/resolve/reopen/close, safe automatic closure of resolved tickets, and a Support report with metadata-only CSV — Validated in Phase 12: Support Tickets.
 
 ### Active
 
@@ -49,7 +50,6 @@ Cross-cutting foundation *also* already in place, underpinning multiple future r
 - [ ] **Payments, Refunds & Reconciliation** — PAY-02 through PAY-14 (PAY-01 superseded by PAY-08 within the PRD itself — see REQUIREMENTS.md)
 - [ ] **Learning Delivery & Progress** — LRN-01 through LRN-07
 - [ ] **Communications** — COM-01 through COM-04
-- [ ] **Support Tickets** — SUP-01 through SUP-06
 - [ ] **Dashboards, Reports & Audit Export** — RPT-01 through RPT-05
 - [ ] **Non-Functional / Launch Gates** — NFR-01 through NFR-14
 - [ ] **Software Licence & Deployment Control** — LIC-01 through LIC-08 (v1 scope per PRD, but contingent on commercial-terms approval — see Key Decisions)
@@ -112,4 +112,4 @@ Full descriptions, acceptance criteria, and phase mapping: `.planning/REQUIREMEN
 | A false-alarm certificate review flag cannot be cleared (CR-05 deferred); staff use Revoke and Reissue | Keeps the earlier locked no-Clear-flag decision; a confirm action would need its own plan | — Pending (accepted limitation, revisit if flags become operational pain) |
 
 ---
-*Last updated: 2026-09-19 after Phase 11 (Certificates & Completion Lifecycle) completed — 4/4 success criteria verified, UAT 20/20, security audit 200/200 threats closed, human PDF check passed, CR-06 migration applied.*
+*Last updated: 2026-09-25 after Phase 12 (Support Tickets) completed — goal verification passed 5/5, deployed human walkthrough approved, migration applied.*

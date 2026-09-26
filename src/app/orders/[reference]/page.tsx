@@ -7,6 +7,7 @@ import { signOutAction } from "@/app/(auth)/signin/actions";
 import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
 import { StatusPill } from "@/components/primitives/ResourceTable";
 import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
+import { GetSupportLink } from "@/components/support/GetSupportLink";
 import { SUPPORT_CONTACT_EMAIL } from "@/server/support-contact";
 
 // Rendered per request, never prerendered — this page reads a real Order.
@@ -198,6 +199,7 @@ export default async function OrderReceiptPage({
           </a>{" "}
           — reference {order.reference}.
         </p>
+        <GetSupportLink kind="ORDER" id={order.id} />
 
         <Link
           href="/dashboard"

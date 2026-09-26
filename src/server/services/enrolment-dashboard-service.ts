@@ -26,8 +26,8 @@
  * with in-memory fakes only, no Prisma. The deferred inhabitant is still
  * reachable for a card with no pinned course structure (mirrors Progress's
  * own `"unpinned"` branch — no computable obligation set is a named gap, not
- * a fake empty list). `tickets` remains untouched — Phase 12's own gap to
- * close. `certificate` was ALSO untouched through Plan 10-15 but is no
+ * a fake empty list). `tickets` was closed by Plan 12-06 as a dashboard-level
+ * `supportTickets` list (not a per-card column). `certificate` was ALSO untouched through Plan 10-15 but is no
  * longer a named gap at all — see the Plan 11-13 header block below.
  *
  * ─────────────────────────────────────────────────────────────────────────────
@@ -120,6 +120,8 @@ import {
   type AttendanceStateValue,
 } from "@/server/services/attendance-component";
 import { evaluateCompletion, type CompletionVerdict } from "@/server/services/completion-engine";
+import { loadAssessmentEvidence, type CompletionAssessmentReader } from "@/server/services/completion-service";
+import type { CourseObligationPayload } from "@/server/services/publication";
 import { parseCompletionRule } from "@/server/services/completion-rule";
 // Type-only — see the DD-18 header note above for why a runtime import here
 // would be wrong. This is deliberately the first mention of the imported
@@ -150,7 +152,27 @@ import { certificateDisplayStatus } from "@/server/services/certificate-service"
 
 const ASSESSMENT_OBLIGATIONS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
 const RESULTS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 10 };
-const TICKETS_DEFERRED: DeferredColumn = { kind: "deferred", phase: 12 };
+
+/** Plan 12-06 - the dashboard shows at most this many current tickets. */
+const MAX_DASHBOARD_TICKETS = 3;
+
+/**
+ * Plan 12-06 - the ONLY ticket fields the learner dashboard may carry. There
+ * is deliberately no priority, queue, assignee or event field: a row type that
+ * cannot represent them cannot leak them (D-05, D-14, T-12-01).
+ */
+export type DashboardTicketSummary = {
+  id: string;
+  reference: string;
+  subject: string;
+  status: string;
+  updatedAt: Date;
+};
+
+/** Injected read: the actor's own non-closed tickets, one query per request. */
+export type EnrolmentDashboardTickets = {
+  listCurrentOwn(userId: string, limit: number): Promise<DashboardTicketSummary[]>;
+};
 
 /**
  * Plan 10-15 — DD-32-precedent second inhabitant for the two columns Phase
@@ -246,7 +268,7 @@ export type DashboardCertificateStoreRow = {
   issuedAt: Date;
 };
 
-export type EnrolmentDashboardStore = {
+export type EnrolmentDashboardStore = Partial<CompletionAssessmentReader> & {
   scheduledSession: {
     findMany(args: { where: { cohortId: string } }): Promise<DashboardSessionStoreRow[]>;
   };
@@ -324,6 +346,8 @@ export type EnrolmentDashboardDeps = {
   store: EnrolmentDashboardStore;
   learnerAccess: EnrolmentDashboardLearnerAccess;
   learnerResults: EnrolmentDashboardLearnerResults;
+  /** Plan 12-06 - owner-scoped current ticket summary. */
+  tickets: EnrolmentDashboardTickets;
   /** Explicit clock — no caller may read a client-controlled value (T-09-10). */
   now?: () => Date;
 };
@@ -390,7 +414,6 @@ export type LearnerDashboardCard = {
   timezone: string;
   assessmentObligations: AssessmentObligationsColumn;
   results: ResultsColumn;
-  tickets: DeferredColumn;
   certificate: CertificateColumn;
   progress: LearnerDashboardProgress;
   accessNotice: AccessNotice;
@@ -401,6 +424,8 @@ export type LearnerDashboardCard = {
 
 export type LearnerDashboard = {
   cards: LearnerDashboardCard[];
+  /** Plan 12-06 - dashboard-level (never per card), owner-only, at most three. */
+  supportTickets: DashboardTicketSummary[];
 };
 
 // ---------------------------------------------------------------------------
@@ -563,6 +588,20 @@ export function collectRequiredLessonEvidence(path: LearnerPath): {
   return { requiredLessonIds, completedLessonIds: path.progress };
 }
 
+/** Assessments linked from pinned required lessons not since withdrawn — `completion-service.ts`'s `loadCourseObligation` rule. */
+function pinnedRequiredAssessmentIds(payload: CourseObligationPayload, path: LearnerPath): string[] {
+  const withdrawn = new Set(
+    path.courses.flatMap((c) => c.modules.flatMap((m) => m.lessons.filter((l) => l.withdrawnAt != null).map((l) => l.id))),
+  );
+  const ids = new Set<string>();
+  for (const mod of payload.modules) {
+    for (const lesson of mod.lessons) {
+      if (lesson.required && lesson.assessmentId && !withdrawn.has(lesson.id)) ids.add(lesson.assessmentId);
+    }
+  }
+  return [...ids];
+}
+
 /** A session's minimal shape for priority-1 next-action evaluation. */
 export type NextActionSession = { id: string; title: string; startsAt: Date };
 
@@ -671,7 +710,7 @@ type EnrolmentCardContext = {
 // ---------------------------------------------------------------------------
 
 export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
-  const { store, learnerAccess, learnerResults } = deps;
+  const { store, learnerAccess, learnerResults, tickets } = deps;
   const now = deps.now ?? (() => new Date());
 
   /** Most-recent-first by the result's own latest history entry (§6.1's
@@ -724,7 +763,6 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       timezone: enrolment.cohort.timezone,
       assessmentObligations: ASSESSMENT_OBLIGATIONS_DEFERRED,
       results: RESULTS_DEFERRED,
-      tickets: TICKETS_DEFERRED,
       certificate: deriveCertificateColumn(certificateContext),
       accessNotice,
       upcomingSessions,
@@ -805,12 +843,41 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
           ruleVersion: ruleSource.ruleVersion,
           cohortAttendanceThresholdPct: enrolment.cohort.attendanceThresholdPct,
         });
-        verdict = evaluateCompletion(rule, { requiredLessonIds, completedLessonIds, attendance });
+        // v2: the same evidence loader `completion-service.ts` persists from, over the same
+        // pinned required-lesson assessments. Without it the item stays NOT_YET_CHECKED —
+        // never a pass. (Programme cohorts read the programme rule here, as before.)
+        const assessments =
+          rule.version === 2 &&
+          rule.requirePassingAssessments &&
+          isCourseObligationPayload(ruleSource.json) &&
+          store.assessment &&
+          store.grade &&
+          store.attempt
+            ? await loadAssessmentEvidence(
+                { assessment: store.assessment, grade: store.grade, attempt: store.attempt },
+                enrolment.id,
+                pinnedRequiredAssessmentIds(ruleSource.json, path),
+              )
+            : undefined;
+        verdict = evaluateCompletion(rule, {
+          requiredLessonIds,
+          completedLessonIds,
+          attendance,
+          ...(assessments ? { assessments } : {}),
+        });
       }
     }
 
     // A COMPLETED enrolment is not operable (G-01), so its session and lesson
     // branches would surface links the learner cannot use: always `complete`.
+    // A programme cohort is evaluated here against the programme's own rule
+    // only; a member course's "must pass required assessments" lives in that
+    // course's rule. Only the persisted PROGRAMME CompletionRecord (which
+    // `completion-service.ts` gates on every member rule) may claim "complete".
+    const nextActionVerdict =
+      enrolment.cohort.programmeId && verdict?.satisfied && !certificateContext.hasCompletionRecord
+        ? { ...verdict, satisfied: false }
+        : verdict;
     const nextAction: NextAction = isCompleted
       ? { kind: "complete" }
       : deriveNextAction({
@@ -818,7 +885,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
           now: nowDate,
           nearestFutureSession,
           path,
-          verdict,
+          verdict: nextActionVerdict,
         });
 
     const progress: LearnerDashboardProgress = {
@@ -867,8 +934,25 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
    *  additional sort happens here. Zero enrolments returns `{ cards: [] }`;
    *  this service never fabricates a placeholder card. */
   async function loadLearnerDashboard(actor: Actor): Promise<LearnerDashboard> {
-    const enrolments = await learnerAccess.listOwnDashboardEnrolments(actor);
+    // Plan 12-06 - ONE ticket read per request, outside every enrolment loop.
+    const [enrolments, ticketRows] = await Promise.all([
+      learnerAccess.listOwnDashboardEnrolments(actor),
+      tickets.listCurrentOwn(actor.userId, MAX_DASHBOARD_TICKETS),
+    ]);
     const nowDate = now();
+    // Re-project to the safe fields and re-apply the bound defensively.
+    const supportTickets: DashboardTicketSummary[] = ticketRows
+      .filter((t) => t.status !== "CLOSED")
+      .slice()
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .slice(0, MAX_DASHBOARD_TICKETS)
+      .map((t) => ({
+        id: t.id,
+        reference: t.reference,
+        subject: t.subject,
+        status: t.status,
+        updatedAt: t.updatedAt,
+      }));
 
     // Plan 11-13 — batched ONCE across every enrolment id (never per card):
     // a 3-enrolment dashboard issues the exact same two extra queries a
@@ -941,7 +1025,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
         });
       }),
     );
-    return { cards: contexts.map((c) => c.card) };
+    return { cards: contexts.map((c) => c.card), supportTickets };
   }
 
   return { loadLearnerDashboard };
@@ -965,6 +1049,15 @@ const built = createEnrolmentDashboardService({
     assertLessonOpenable,
   },
   learnerResults: { getOwnAssessmentObligations, getOwnResults },
+  tickets: {
+    listCurrentOwn: (userId, limit) =>
+      prisma.ticket.findMany({
+        where: { userId, status: { not: "CLOSED" } },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: limit,
+        select: { id: true, reference: true, subject: true, status: true, updatedAt: true },
+      }),
+  },
 });
 
 export const loadLearnerDashboard = built.loadLearnerDashboard;

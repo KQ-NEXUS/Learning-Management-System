@@ -158,6 +158,37 @@ describe("staff account service", () => {
     });
   });
 
+  // The list feeds a client component, so every field it returns reaches the browser.
+  describe("staff list and detail projection", () => {
+    const secretUser: StaffUserRow = {
+      id: "u1",
+      name: "Ada",
+      email: "ada@kqnexus.test",
+      status: "ACTIVE",
+      isStaff: true,
+      passwordHash: "argon2-secret-hash",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      deactivatedAt: null,
+      deactivatedById: null,
+    };
+    const displayKeys = ["createdAt", "deactivatedAt", "email", "id", "name", "status"];
+
+    it("list returns only display fields, never the password hash", async () => {
+      const { service } = harness({ grants: [grant("users.view")], users: [secretUser] });
+      const rows = await service.list();
+      expect(rows).toHaveLength(1);
+      expect(Object.keys(rows[0]).sort()).toEqual(displayKeys);
+      expect(JSON.stringify(rows)).not.toContain("argon2-secret-hash");
+    });
+
+    it("get returns only display fields, never the password hash", async () => {
+      const { service } = harness({ grants: [grant("users.view")], users: [secretUser] });
+      const row = await service.get("u1");
+      expect(Object.keys(row ?? {}).sort()).toEqual(displayKeys);
+      expect(JSON.stringify(row)).not.toContain("argon2-secret-hash");
+    });
+  });
+
   describe("staff account creation", () => {
     it.each([
       [grant("users.manage")],

@@ -18,6 +18,8 @@ export type CourseFormValues = {
   prerequisites: string | null;
   durationHours: number | null;
   certificateEnabled: boolean;
+  /** Completion rule v2 switch; absent means off. */
+  requirePassingAssessments?: boolean;
   certificateIssuanceMode: "AUTOMATIC" | "MANUAL";
   certificateTemplateId: string | null;
   /** Name of the stored template, used only to label it if it has been archived. */
@@ -185,6 +187,32 @@ export function CourseForm(
             />
           )}
         </FormField>
+
+        <div className="flex items-start gap-2 rounded-md border border-input-border bg-surface px-4 py-2 text-sm">
+          <input
+            id="field-requirePassingAssessments"
+            type="checkbox"
+            name="requirePassingAssessments"
+            defaultChecked={values?.requirePassingAssessments ?? false}
+            aria-describedby="field-requirePassingAssessments-hint"
+            className="mt-1 size-4 rounded-[4px] border-[1.5px] border-input-border accent-accent"
+          />
+          <span>
+            <label
+              htmlFor="field-requirePassingAssessments"
+              className="block font-semibold text-foreground"
+            >
+              Learners must pass required assessments
+            </label>
+            <span
+              id="field-requirePassingAssessments-hint"
+              className="block text-sm text-muted-foreground"
+            >
+              Every quiz or assignment on a required lesson needs a released passing result before the course counts as
+              complete. Applies from the next time you publish this course.
+            </span>
+          </span>
+        </div>
 
         <div className="flex items-start gap-2 rounded-md border border-input-border bg-surface px-4 py-2 text-sm">
           <input

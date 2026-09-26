@@ -45,13 +45,41 @@ type CompletionRecordRow = {
   supersededAt: Date | null;
 };
 
+type AssessmentRow = {
+  id: string;
+  type: "QUIZ" | "ASSIGNMENT";
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  passMark: number | null;
+  attemptGradingMethod: "HIGHEST" | "LATEST" | "AVERAGE";
+};
+type GradeRow = {
+  id: string;
+  assessmentId: string;
+  enrolmentId: string;
+  attemptId: string | null;
+  score: number;
+  maxScore: number;
+  passed: boolean | null;
+  status: "DRAFT" | "RELEASED";
+  releasedAt: Date | null;
+};
+type AttemptRow = {
+  id: string;
+  assessmentId: string;
+  enrolmentId: string;
+  attemptNumber: number;
+  status: string;
+  score: number | null;
+  maxScore: number | null;
+};
+
 const NOW = new Date("2026-09-14T12:00:00.000Z");
 
 function courseObligationPayload(
   overrides: Partial<{
     completionRuleVersion: number;
     completionRule: unknown;
-    modules: Array<{ id: string; position: number; lessons: Array<{ id: string; position: number; required: boolean }> }>;
+    modules: Array<{ id: string; position: number; lessons: Array<{ id: string; position: number; required: boolean; assessmentId?: string | null }> }>;
   }> = {},
 ) {
   return {
@@ -102,6 +130,9 @@ function buildHarness(opts?: {
   coursePublications?: Record<string, unknown>;
   programmePublications?: Record<string, unknown>;
   completionRecords?: CompletionRecordRow[];
+  assessments?: AssessmentRow[];
+  grades?: GradeRow[];
+  attempts?: AttemptRow[];
 }) {
   const enrolments = opts?.enrolments ?? [{ id: "enr-1", cohortId: "cohort-1" }];
   const cohorts = opts?.cohorts ?? [
@@ -128,12 +159,36 @@ function buildHarness(opts?: {
   };
   const programmePublications: Record<string, unknown> = opts?.programmePublications ?? {};
   const completionRecords: CompletionRecordRow[] = opts?.completionRecords ?? [];
+  const assessments = opts?.assessments ?? [];
+  const grades = opts?.grades ?? [];
+  const attempts = opts?.attempts ?? [];
+  const gradeReads: unknown[] = [];
   const domainEvents: Array<Record<string, unknown>> = [];
   const enrolmentUpdateCalls: unknown[] = [];
   const completionDeleteCalls: unknown[] = [];
   let idCounter = 0;
 
   const rawTx = {
+    assessment: {
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+        assessments.filter((a) => where.id.in.includes(a.id)),
+    },
+    grade: {
+      findMany: async (args: { where: { enrolmentId: string; assessmentId: { in: string[] }; status: "RELEASED" } }) => {
+        gradeReads.push(args);
+        const { where } = args;
+        return grades.filter(
+          (g) =>
+            g.enrolmentId === where.enrolmentId &&
+            where.assessmentId.in.includes(g.assessmentId) &&
+            g.status === where.status,
+        );
+      },
+    },
+    attempt: {
+      findMany: async ({ where }: { where: { enrolmentId: string; assessmentId: { in: string[] } } }) =>
+        attempts.filter((a) => a.enrolmentId === where.enrolmentId && where.assessmentId.in.includes(a.assessmentId)),
+    },
     domainEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         domainEvents.push(data);
@@ -247,6 +302,7 @@ function buildHarness(opts?: {
     domainEvents,
     enrolmentUpdateCalls,
     completionDeleteCalls,
+    gradeReads,
   };
 }
 
@@ -593,7 +649,7 @@ describe("recalculateCompletion — programme-cohort", () => {
 describe("recalculateCompletion — an unevaluable rule propagates", () => {
   it("throws when the pinned completionRuleVersion is unsupported, and writes nothing", async () => {
     const h = buildHarness({
-      coursePublications: { "pub-course-1": courseObligationPayload({ completionRuleVersion: 2 }) },
+      coursePublications: { "pub-course-1": courseObligationPayload({ completionRuleVersion: 3 }) },
     });
     await expect(recalculateCompletion(h.tx, { enrolmentId: "enr-1", now: NOW })).rejects.toThrow();
     expect(h.completionRecords).toHaveLength(0);
@@ -626,5 +682,211 @@ describe("recalculateCompletion — DD-6 (never touches Enrolment.status)", () =
     h.lessonProgress.length = 0;
     await recalculateCompletion(h.tx, { enrolmentId: "enr-1", now: new Date(NOW.getTime() + 1000) });
     expect(h.enrolmentUpdateCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2 — required assessments must be passed
+// ---------------------------------------------------------------------------
+
+describe("recalculateCompletion — v2 requirePassingAssessments", () => {
+  const V2 = {
+    completionRuleVersion: 2,
+    completionRule: { version: 2, requireAllRequiredLessons: true, requirePassingAssessments: true },
+  };
+  const withAssessment = () =>
+    courseObligationPayload({
+      ...V2,
+      modules: [
+        {
+          id: "mod-1",
+          position: 0,
+          lessons: [
+            { id: "les-1", position: 0, required: true, assessmentId: "asg-1" },
+            { id: "les-2", position: 1, required: false, assessmentId: "asg-optional" },
+          ],
+        },
+      ],
+    });
+  const assignment: AssessmentRow = { id: "asg-1", type: "ASSIGNMENT", status: "PUBLISHED", passMark: 50, attemptGradingMethod: "HIGHEST" };
+  const optional: AssessmentRow = { ...assignment, id: "asg-optional" };
+  const grade = (over: Partial<GradeRow>): GradeRow => ({
+    id: "g-1",
+    assessmentId: "asg-1",
+    enrolmentId: "enr-1",
+    attemptId: null,
+    score: 80,
+    maxScore: 100,
+    passed: true,
+    status: "RELEASED",
+    releasedAt: new Date("2026-09-13T00:00:00Z"),
+    ...over,
+  });
+  const lessonsDone = [{ enrolmentId: "enr-1", lessonId: "les-1" }];
+  const pubs = () => ({ "pub-course-1": withAssessment() });
+
+  async function evaluate(h: ReturnType<typeof buildHarness>) {
+    const result = await recalculateCompletion(h.tx, { enrolmentId: "enr-1", now: NOW });
+    if (result.kind !== "evaluated") throw new Error("expected evaluated");
+    return result.results;
+  }
+
+  it("lessons done but no released result → not complete, assessments item UNMET", async () => {
+    const h = buildHarness({ coursePublications: pubs(), lessonProgress: lessonsDone, assessments: [assignment, optional] });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(false);
+    expect(course.verdict.items.find((i) => i.id === "assessments")).toMatchObject({ state: "UNMET", detail: "0 of 1 passed" });
+    expect(h.completionRecords).toHaveLength(0);
+  });
+
+  it("a released pass on the required lesson's assessment completes; the optional lesson's assessment does not count", async () => {
+    const h = buildHarness({
+      coursePublications: pubs(),
+      lessonProgress: lessonsDone,
+      assessments: [assignment, optional],
+      grades: [grade({})],
+    });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(true);
+    expect(course.action).toBe("created");
+    expect(h.completionRecords[0]).toMatchObject({ ruleVersion: 2 });
+  });
+
+  it("a released failing grade does not complete", async () => {
+    const h = buildHarness({
+      coursePublications: pubs(),
+      lessonProgress: lessonsDone,
+      assessments: [assignment],
+      grades: [grade({ score: 30, passed: false })],
+    });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(false);
+  });
+
+  it("a draft (unreleased) grade does not count", async () => {
+    const h = buildHarness({
+      coursePublications: pubs(),
+      lessonProgress: lessonsDone,
+      assessments: [assignment],
+      grades: [grade({ status: "DRAFT", releasedAt: null })],
+    });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(false);
+  });
+
+  it("an assignment's latest released grade decides", async () => {
+    const h = buildHarness({
+      coursePublications: pubs(),
+      lessonProgress: lessonsDone,
+      assessments: [assignment],
+      grades: [
+        grade({ id: "g-old", score: 90, passed: true, releasedAt: new Date("2026-09-01T00:00:00Z") }),
+        grade({ id: "g-new", score: 20, passed: false, releasedAt: new Date("2026-09-10T00:00:00Z") }),
+      ],
+    });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(false);
+  });
+
+  it("a quiz uses its grading method over released attempts (HIGHEST: fail then pass → pass)", async () => {
+    const quiz: AssessmentRow = { id: "asg-1", type: "QUIZ", status: "PUBLISHED", passMark: 5, attemptGradingMethod: "HIGHEST" };
+    const h = buildHarness({
+      coursePublications: pubs(),
+      lessonProgress: lessonsDone,
+      assessments: [quiz],
+      attempts: [
+        { id: "at-1", assessmentId: "asg-1", enrolmentId: "enr-1", attemptNumber: 1, status: "SUBMITTED", score: 2, maxScore: 10 },
+        { id: "at-2", assessmentId: "asg-1", enrolmentId: "enr-1", attemptNumber: 2, status: "SUBMITTED", score: 8, maxScore: 10 },
+      ],
+      grades: [
+        grade({ id: "g-1", attemptId: "at-1", score: 2, maxScore: 10, passed: false }),
+        grade({ id: "g-2", attemptId: "at-2", score: 8, maxScore: 10, passed: true }),
+      ],
+    });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(true);
+  });
+
+  it("a quiz attempt whose grade is not released is ignored", async () => {
+    const quiz: AssessmentRow = { id: "asg-1", type: "QUIZ", status: "PUBLISHED", passMark: 5, attemptGradingMethod: "HIGHEST" };
+    const h = buildHarness({
+      coursePublications: pubs(),
+      lessonProgress: lessonsDone,
+      assessments: [quiz],
+      attempts: [
+        { id: "at-1", assessmentId: "asg-1", enrolmentId: "enr-1", attemptNumber: 1, status: "SUBMITTED", score: 9, maxScore: 10 },
+      ],
+      grades: [grade({ attemptId: "at-1", score: 9, maxScore: 10, status: "DRAFT", releasedAt: null })],
+    });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(false);
+  });
+
+  it("an assessment archived since publishing no longer blocks completion", async () => {
+    const h = buildHarness({
+      coursePublications: pubs(),
+      lessonProgress: lessonsDone,
+      assessments: [{ ...assignment, status: "ARCHIVED" }],
+    });
+    const [course] = await evaluate(h);
+    expect(course.verdict.satisfied).toBe(true);
+  });
+
+  it("a v1 course never reads grades", async () => {
+    const h = buildHarness({
+      lessonProgress: [
+        { enrolmentId: "enr-1", lessonId: "les-1" },
+        { enrolmentId: "enr-1", lessonId: "les-2" },
+      ],
+    });
+    await evaluate(h);
+    expect(h.gradeReads).toEqual([]);
+  });
+
+  it("programme completion waits for a member course's required assessments", async () => {
+    const h = buildHarness({
+      cohorts: [
+        {
+          id: "cohort-1",
+          courseId: null,
+          programmeId: "prog-1",
+          attendanceThresholdPct: null,
+          coursePublicationId: null,
+          programmePublicationId: "pub-prog-1",
+        },
+      ],
+      cohortCourses: [{ cohortId: "cohort-1", courseId: "course-1", coursePublicationId: "pub-course-1" }],
+      coursePublications: pubs(),
+      programmePublications: { "pub-prog-1": programmeObligationPayload() },
+      lessonProgress: lessonsDone,
+      assessments: [assignment],
+    });
+    const results = await evaluate(h);
+    const programme = results.find((r) => r.scope === "PROGRAMME");
+    expect(programme?.verdict.satisfied).toBe(false);
+    expect(programme?.verdict.items.find((i) => i.id === "assessments")).toMatchObject({ state: "UNMET" });
+  });
+
+  it("programme completes once the member course's required assessment is passed", async () => {
+    const h = buildHarness({
+      cohorts: [
+        {
+          id: "cohort-1",
+          courseId: null,
+          programmeId: "prog-1",
+          attendanceThresholdPct: null,
+          coursePublicationId: null,
+          programmePublicationId: "pub-prog-1",
+        },
+      ],
+      cohortCourses: [{ cohortId: "cohort-1", courseId: "course-1", coursePublicationId: "pub-course-1" }],
+      coursePublications: pubs(),
+      programmePublications: { "pub-prog-1": programmeObligationPayload() },
+      lessonProgress: lessonsDone,
+      assessments: [assignment],
+      grades: [grade({})],
+    });
+    const results = await evaluate(h);
+    expect(results.every((r) => r.verdict.satisfied)).toBe(true);
   });
 });

@@ -241,3 +241,39 @@ describe("updateCourseAction", () => {
     expect(update.mock.calls[0][1]).not.toHaveProperty("status");
   });
 });
+
+describe("updateCourseAction — require passing assessments (completion rule v2)", () => {
+  const V2_RULE = { version: 2, requireAllRequiredLessons: true, requirePassingAssessments: true };
+
+  it("checking the box on a v1 course writes the v2 rule", async () => {
+    await updateCourseAction(INITIAL, form({ ...BASE, requirePassingAssessments: "on" }));
+    const data = update.mock.calls[0][1];
+    expect(data).toMatchObject({ completionRule: V2_RULE, completionRuleVersion: 2 });
+    expect(data).not.toHaveProperty("requirePassingAssessments");
+  });
+
+  it("unchecking it on a v2 course returns the course to the v1 rule", async () => {
+    get.mockResolvedValue({ ...CURRENT, completionRule: V2_RULE, completionRuleVersion: 2 });
+    await updateCourseAction(INITIAL, form({ ...BASE }));
+    expect(update.mock.calls[0][1]).toMatchObject({ completionRule: null, completionRuleVersion: 1 });
+  });
+
+  it("an unchanged setting writes no completion fields", async () => {
+    await updateCourseAction(INITIAL, form({ ...BASE }));
+    expect(update.mock.calls[0][1]).not.toHaveProperty("completionRule");
+    expect(update.mock.calls[0][1]).not.toHaveProperty("completionRuleVersion");
+
+    update.mockClear();
+    get.mockResolvedValue({ ...CURRENT, completionRule: V2_RULE, completionRuleVersion: 2 });
+    await updateCourseAction(INITIAL, form({ ...BASE, requirePassingAssessments: "on" }));
+    expect(update.mock.calls[0][1]).not.toHaveProperty("completionRule");
+  });
+
+  it("the schemas accept the setting but still reject raw rule fields", () => {
+    expect(updateCourseSchema.safeParse({ ...BASE, certificateEnabled: false, requirePassingAssessments: true }).success).toBe(true);
+    expect(
+      updateCourseSchema.safeParse({ ...BASE, certificateEnabled: false, completionRule: V2_RULE }).success,
+    ).toBe(false);
+    expect(createCourseSchema.safeParse({ title: "T", slug: "t", requirePassingAssessments: true }).success).toBe(true);
+  });
+});

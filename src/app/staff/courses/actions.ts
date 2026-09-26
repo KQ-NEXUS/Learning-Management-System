@@ -6,7 +6,7 @@ import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import { assertSlugMutable, SlugFrozenError } from "@/server/services/catalogue-guards";
-import { createCourseSchema, updateCourseSchema } from "./course-schema";
+import { createCourseSchema, updateCourseSchema, completionRuleFields, requiresPassingAssessments } from "./course-schema";
 import {
   assertTemplateSelectable,
   TemplateNotSelectableError,
@@ -43,6 +43,7 @@ function fields(form: FormData) {
     prerequisites: text(form, "prerequisites"),
     durationHours,
     certificateEnabled: form.get("certificateEnabled") === "on",
+    requirePassingAssessments: form.get("requirePassingAssessments") === "on",
     certificateIssuanceMode: text(form, "certificateIssuanceMode"),
     certificateTemplateId: templateId(form),
   };
@@ -93,7 +94,11 @@ export async function createCourseAction(
     // Pitfall 5 / T-11-33: re-resolve against the live selectable-template
     // list server-side — the client's <option> list is never trusted.
     await assertTemplateSelectable(parsed.certificateTemplateId);
-    const created = (await courseService.create(parsed)) as { id: string };
+    const { requirePassingAssessments, ...courseFields } = parsed;
+    const created = (await courseService.create({
+      ...courseFields,
+      ...(requirePassingAssessments ? completionRuleFields(true) : {}),
+    })) as { id: string };
     id = created.id;
   } catch (error) {
     return toFailure(error, "creating");
@@ -121,6 +126,7 @@ function updateFields(form: FormData, courseId: string) {
     // Mapped BEFORE parsing: `z.coerce.number()` would turn a blank into 0.
     durationHours: duration === undefined ? null : Number(duration),
     certificateEnabled: form.get("certificateEnabled") === "on",
+    requirePassingAssessments: form.get("requirePassingAssessments") === "on",
     certificateIssuanceMode: text(form, "certificateIssuanceMode"),
     certificateTemplateId: templateId(form),
   };
@@ -139,7 +145,13 @@ export async function updateCourseAction(
     const parsed = updateCourseSchema.parse(updateFields(form, courseId));
 
     const current = (await courseService.get(courseId)) as
-      | { slug: string; slugLockedAt: Date | null; certificateTemplateId: string | null }
+      | {
+          slug: string;
+          slugLockedAt: Date | null;
+          certificateTemplateId: string | null;
+          completionRule?: unknown;
+          completionRuleVersion?: number;
+        }
       | null;
     if (!current) {
       return { ok: false, errors: [], message: "Reload the page and try again." };
@@ -163,11 +175,16 @@ export async function updateCourseAction(
 
     // Built only from the named fields (T-11-82); undefined keys are omitted
     // so a disabled certificate control never resets the stored value.
-    const { courseId: _id, ...rest } = parsed;
+    const { courseId: _id, requirePassingAssessments, ...rest } = parsed;
     void _id;
     const data = Object.fromEntries(
       Object.entries(rest).filter(([, value]) => value !== undefined),
     );
+    // Only a CHANGED setting touches the rule, so an unrelated edit never
+    // shows up as a completion-rule change in the next publication diff.
+    if (requirePassingAssessments !== requiresPassingAssessments(current.completionRule, current.completionRuleVersion)) {
+      Object.assign(data, completionRuleFields(requirePassingAssessments));
+    }
 
     // Authorization (courses.edit at courseScope(id)) and the course.updated
     // audit both come from the resource factory, not from this file.
