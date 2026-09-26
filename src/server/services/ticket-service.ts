@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db";
-import { withPermission as liveWithPermission } from "@/server/permissions";
+import { can, withPermission as liveWithPermission, type Permission } from "@/server/permissions";
+import { cohortResourceScope, enrolmentCohortScope, orderCohortScope } from "@/server/services/cohort-scope";
 import type { Actor, createWithPermission } from "@/server/permissions/with-permission";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 import { recordAuditInTransaction } from "@/server/services/audit-service";
@@ -22,8 +23,12 @@ import {
   type TicketStatusValue,
 } from "@/server/services/ticket-lifecycle";
 import {
+  createStaffTicketContextAuthorizer,
+  createTicketContextService,
   ticketSafeContextReference,
   type TicketContextKind,
+  type TicketContextProjection,
+  type TicketContextSource,
 } from "@/server/services/ticket-context-service";
 import { generateTicketReference } from "@/server/services/ticket-reference";
 
@@ -181,6 +186,8 @@ export type TicketServiceDeps = {
   withPermission: WithPermission;
   generateReference?: () => string;
   now?: () => Date;
+  /** Staff-only: resolves the linked record with a fresh permission check (SUP-05). Absent → always locked. */
+  contextService?: { resolve: (source: TicketContextSource) => Promise<TicketContextProjection | null> };
 };
 
 export class TicketNotFoundError extends Error {
@@ -436,7 +443,16 @@ export function createTicketService(deps: TicketServiceDeps) {
       deps.repository.listAllMessages(ticket.id),
       deps.repository.listEvents(ticket.id),
     ]);
-    return staffDetailDto(ticket, messages, events);
+    const detail = staffDetailDto(ticket, messages, events);
+    if (!deps.contextService) return detail;
+    const context = await deps.contextService.resolve({
+      courseId: ticket.courseId,
+      cohortId: ticket.cohortId,
+      orderId: ticket.orderId,
+      submissionId: ticket.submissionId,
+      certificateId: ticket.certificateId,
+    });
+    return { ...detail, context };
   });
 
   async function mutateStaffTicket(
@@ -902,6 +918,7 @@ export function createPrismaBackedTicketService(
     withPermission: WithPermission;
     generateReference?: () => string;
     now?: () => Date;
+    contextService?: TicketServiceDeps["contextService"];
   },
 ) {
   return createTicketService({
@@ -910,6 +927,7 @@ export function createPrismaBackedTicketService(
     withPermission: options.withPermission,
     generateReference: options.generateReference,
     now: options.now,
+    contextService: options.contextService,
   });
 }
 
@@ -919,6 +937,25 @@ const liveService = createPrismaBackedTicketService(prisma as AnyPrisma, {
     return getCurrentActor();
   },
   withPermission: liveWithPermission,
+  contextService: createTicketContextService({
+    authorize: createStaffTicketContextAuthorizer({
+      can: (permission, scope) => can(permission as Permission, scope),
+      cohortScope: cohortResourceScope,
+      orderScope: orderCohortScope,
+      enrolmentScope: enrolmentCohortScope,
+      findSubmission: async (id) => {
+        const row = await prisma.submission.findUnique({
+          where: { id },
+          select: { assessmentId: true, enrolmentId: true, enrolment: { select: { cohortId: true } } },
+        });
+        return row ? { assessmentId: row.assessmentId, enrolmentId: row.enrolmentId, cohortId: row.enrolment.cohortId } : null;
+      },
+      findCertificateEnrolment: async (id) => {
+        const row = await prisma.certificate.findUnique({ where: { id }, select: { enrolmentId: true } });
+        return row?.enrolmentId ?? null;
+      },
+    }),
+  }),
 });
 
 export const createOwnTicket = liveService.createOwnTicket;

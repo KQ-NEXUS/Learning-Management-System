@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTicketService, StaleTicketVersionError, TicketNotFoundError } from "@/server/services/ticket-service";
+import { createTicketContextService } from "@/server/services/ticket-context-service";
 import { createTestWithPermission, grant } from "./support/harness";
 import { makeTicketHarness } from "./support/ticket-harness";
 
@@ -124,6 +125,35 @@ describe("ticket service", () => {
       "MESSAGE:msg-z",
     ]);
     expect(JSON.stringify(detail)).not.toContain("private/raw/storage-key");
+  });
+
+  it("staff detail resolves context through a fresh permission check; learner reads stay locked", async () => {
+    const harness = makeTicketHarness({ actorId: "learner-1" });
+    const { withPermission } = createTestWithPermission([grant("tickets.view")], { userId: "staff-1" });
+    const authorizeCalls: Array<{ kind: string; id: string }> = [];
+    const service = createTicketService({
+      ...harness.deps,
+      withPermission,
+      contextService: createTicketContextService({
+        authorize: async (input) => {
+          authorizeCalls.push(input);
+          return { href: `/staff/courses/${input.id}` };
+        },
+      }),
+    });
+    const created = await service.createOwnTicket({
+      category: "COURSE_CONTENT",
+      subject: "Lesson question",
+      body: "Body",
+      context: { courseId: "course-1" },
+    });
+
+    const own = await service.getOwnTicketByReference(created.reference);
+    expect(own.context).toMatchObject({ kind: "COURSE", href: null, locked: true });
+
+    const detail = await service.getStaffTicketByReference(created.reference);
+    expect(detail.context).toMatchObject({ kind: "COURSE", href: "/staff/courses/course-1", locked: false });
+    expect(authorizeCalls).toEqual([{ kind: "COURSE", id: "course-1" }]);
   });
 
   it("rejects stale command versions with one typed conflict", async () => {

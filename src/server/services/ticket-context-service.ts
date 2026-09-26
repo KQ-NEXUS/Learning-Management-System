@@ -71,3 +71,69 @@ export function createTicketContextService(deps: TicketContextServiceDeps) {
 
   return { resolve };
 }
+
+type ContextScope = { cohortId?: string; programmeId?: string; courseIds?: string[] };
+
+export type StaffTicketContextAuthorizerDeps = {
+  can: (permission: string, scope: ContextScope) => Promise<boolean>;
+  cohortScope: (cohortId: string) => Promise<ContextScope>;
+  orderScope: (orderId: string) => Promise<ContextScope>;
+  enrolmentScope: (enrolmentId: string) => Promise<ContextScope>;
+  findSubmission: (
+    submissionId: string,
+  ) => Promise<{ assessmentId: string; enrolmentId: string; cohortId: string } | null>;
+  findCertificateEnrolment: (certificateId: string) => Promise<string | null>;
+};
+
+/**
+ * SUP-05 / D-18 — decides, per staff viewer, whether a ticket's linked record
+ * opens. Each kind is checked against the same permission and scope its
+ * staff page enforces, so a link only appears where the page would open; the
+ * page still re-authorizes on arrival. Anything unresolvable stays locked.
+ */
+export function createStaffTicketContextAuthorizer(
+  deps: StaffTicketContextAuthorizerDeps,
+): TicketContextServiceDeps["authorize"] {
+  const seg = encodeURIComponent;
+
+  async function check({ kind, id }: TicketContextAuthorizationInput): Promise<{ href: string } | null> {
+    switch (kind) {
+      case "COURSE":
+        return (await deps.can("courses.view", { courseIds: [id] })) ? { href: `/staff/courses/${seg(id)}` } : null;
+      case "COHORT":
+        return (await deps.can("cohorts.view", await deps.cohortScope(id)))
+          ? { href: `/staff/cohorts/${seg(id)}` }
+          : null;
+      case "ORDER":
+        return (await deps.can("payments.view", await deps.orderScope(id)))
+          ? { href: `/staff/payments/${seg(id)}` }
+          : null;
+      case "SUBMISSION": {
+        const submission = await deps.findSubmission(id);
+        if (!submission) return null;
+        if (!(await deps.can("submissions.view", await deps.enrolmentScope(submission.enrolmentId)))) return null;
+        return {
+          href: `/staff/cohorts/${seg(submission.cohortId)}/grading/${seg(submission.assessmentId)}/${seg(id)}`,
+        };
+      }
+      case "CERTIFICATE": {
+        const enrolmentId = await deps.findCertificateEnrolment(id);
+        if (!enrolmentId) return null;
+        return (await deps.can("certificates.view", await deps.enrolmentScope(enrolmentId)))
+          ? { href: `/staff/certificates/issued/${seg(id)}` }
+          : null;
+      }
+      default:
+        // No staff page shows a learner account, so USER context never links.
+        return null;
+    }
+  }
+
+  return async (input) => {
+    try {
+      return await check(input);
+    } catch {
+      return null;
+    }
+  };
+}
