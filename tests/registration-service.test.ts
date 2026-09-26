@@ -501,3 +501,41 @@ describe("registerLearner — consent integrity", () => {
     }
   });
 });
+
+describe("F-11 — a contested unverified email never keeps a submitted password", () => {
+  const MALLORY = { ...BASE_INPUT, email: "alice@corp.test", name: "Mallory", password: "mallory-password-1" };
+  const ALICE = { ...BASE_INPUT, email: "alice@corp.test", name: "Alice", password: "alice-password-123" };
+
+  it("a second registration for a still-unverified address wipes the stored password", async () => {
+    const { registrationService, users } = sharedHarness();
+    await registrationService.registerLearner(MALLORY);
+    expect(users[0].passwordHash).toBe("fake-hash(mallory-password-1)");
+
+    NOW.value = new Date("2026-09-02T12:05:00Z");
+    await registrationService.registerLearner(ALICE);
+
+    expect(users).toHaveLength(1);
+    expect(users[0].passwordHash).toBeNull();
+  });
+
+  it("end to end: attacker registers first, owner registers and verifies → owner is sent to set a password; the attacker's password never activates", async () => {
+    const { registrationService, verificationService, users, dispatched } = sharedHarness();
+    await registrationService.registerLearner(MALLORY);
+    NOW.value = new Date("2026-09-02T12:05:00Z");
+    await registrationService.registerLearner(ALICE);
+
+    const token = extractToken(dispatched[dispatched.length - 1].textContent);
+    const result = await verificationService.verifyEmail(token);
+
+    expect(result).toMatchObject({ ok: true, setPasswordToken: expect.any(String) });
+    expect(users[0]).toMatchObject({ status: "ACTIVE", passwordHash: null });
+  });
+
+  it("an uncontested registration verifies as before, with no set-password step", async () => {
+    const { registrationService, verificationService, dispatched } = sharedHarness();
+    NOW.value = new Date("2026-09-02T12:00:00Z");
+    await registrationService.registerLearner(ALICE);
+    const result = await verificationService.verifyEmail(extractToken(dispatched[0].textContent));
+    expect(result).toEqual({ ok: true });
+  });
+});

@@ -7,7 +7,7 @@ import {
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
 
-type UserRow = { id: string; email: string; status: string };
+type UserRow = { id: string; email: string; status: string; passwordHash?: string | null };
 
 /** A recognisable rejection used by every "rejecting transport" test in this
  * file, so a failing assertion's stack trace is unambiguous about its origin. */
@@ -567,5 +567,28 @@ describe("verifyEmail — non-disclosure on the not-valid path", () => {
     // The not-valid shape is exactly `{ ok: false }` — no email, name,
     // status, or identifier field exists to leak.
     expect(Object.keys(result)).toEqual(["ok"]);
+  });
+});
+
+describe("verifyEmail — contested registration (F-11)", () => {
+  it("a verified account with no password gets a set-password token for the verifier", async () => {
+    harness_now.value = new Date("2026-09-02T12:00:00Z");
+    const { service, tokens, users } = harness({
+      users: [{ id: "u1", email: "learner@example.com", status: "PENDING_VERIFICATION", passwordHash: null }],
+    });
+    tokens.push({
+      identifier: "learner@example.com",
+      token: "tok-1",
+      purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
+      expires: new Date("2026-09-03T12:00:00Z"),
+      consumedAt: null,
+      createdAt: new Date("2026-09-02T12:00:00Z"),
+    });
+
+    const result = await service.verifyEmail("tok-1");
+    expect(result).toMatchObject({ ok: true, setPasswordToken: expect.any(String) });
+    expect(users[0].status).toBe("ACTIVE");
+    const reset = tokens.find((t) => t.purpose === TOKEN_PURPOSE.PASSWORD_RESET);
+    expect(reset).toMatchObject({ identifier: "learner@example.com", consumedAt: null });
   });
 });
