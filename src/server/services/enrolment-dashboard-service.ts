@@ -120,6 +120,8 @@ import {
   type AttendanceStateValue,
 } from "@/server/services/attendance-component";
 import { evaluateCompletion, type CompletionVerdict } from "@/server/services/completion-engine";
+import { loadAssessmentEvidence, type CompletionAssessmentReader } from "@/server/services/completion-service";
+import type { CourseObligationPayload } from "@/server/services/publication";
 import { parseCompletionRule } from "@/server/services/completion-rule";
 // Type-only — see the DD-18 header note above for why a runtime import here
 // would be wrong. This is deliberately the first mention of the imported
@@ -266,7 +268,7 @@ export type DashboardCertificateStoreRow = {
   issuedAt: Date;
 };
 
-export type EnrolmentDashboardStore = {
+export type EnrolmentDashboardStore = Partial<CompletionAssessmentReader> & {
   scheduledSession: {
     findMany(args: { where: { cohortId: string } }): Promise<DashboardSessionStoreRow[]>;
   };
@@ -586,6 +588,20 @@ export function collectRequiredLessonEvidence(path: LearnerPath): {
   return { requiredLessonIds, completedLessonIds: path.progress };
 }
 
+/** Assessments linked from pinned required lessons not since withdrawn — `completion-service.ts`'s `loadCourseObligation` rule. */
+function pinnedRequiredAssessmentIds(payload: CourseObligationPayload, path: LearnerPath): string[] {
+  const withdrawn = new Set(
+    path.courses.flatMap((c) => c.modules.flatMap((m) => m.lessons.filter((l) => l.withdrawnAt != null).map((l) => l.id))),
+  );
+  const ids = new Set<string>();
+  for (const mod of payload.modules) {
+    for (const lesson of mod.lessons) {
+      if (lesson.required && lesson.assessmentId && !withdrawn.has(lesson.id)) ids.add(lesson.assessmentId);
+    }
+  }
+  return [...ids];
+}
+
 /** A session's minimal shape for priority-1 next-action evaluation. */
 export type NextActionSession = { id: string; title: string; startsAt: Date };
 
@@ -827,12 +843,41 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
           ruleVersion: ruleSource.ruleVersion,
           cohortAttendanceThresholdPct: enrolment.cohort.attendanceThresholdPct,
         });
-        verdict = evaluateCompletion(rule, { requiredLessonIds, completedLessonIds, attendance });
+        // v2: the same evidence loader `completion-service.ts` persists from, over the same
+        // pinned required-lesson assessments. Without it the item stays NOT_YET_CHECKED —
+        // never a pass. (Programme cohorts read the programme rule here, as before.)
+        const assessments =
+          rule.version === 2 &&
+          rule.requirePassingAssessments &&
+          isCourseObligationPayload(ruleSource.json) &&
+          store.assessment &&
+          store.grade &&
+          store.attempt
+            ? await loadAssessmentEvidence(
+                { assessment: store.assessment, grade: store.grade, attempt: store.attempt },
+                enrolment.id,
+                pinnedRequiredAssessmentIds(ruleSource.json, path),
+              )
+            : undefined;
+        verdict = evaluateCompletion(rule, {
+          requiredLessonIds,
+          completedLessonIds,
+          attendance,
+          ...(assessments ? { assessments } : {}),
+        });
       }
     }
 
     // A COMPLETED enrolment is not operable (G-01), so its session and lesson
     // branches would surface links the learner cannot use: always `complete`.
+    // A programme cohort is evaluated here against the programme's own rule
+    // only; a member course's "must pass required assessments" lives in that
+    // course's rule. Only the persisted PROGRAMME CompletionRecord (which
+    // `completion-service.ts` gates on every member rule) may claim "complete".
+    const nextActionVerdict =
+      enrolment.cohort.programmeId && verdict?.satisfied && !certificateContext.hasCompletionRecord
+        ? { ...verdict, satisfied: false }
+        : verdict;
     const nextAction: NextAction = isCompleted
       ? { kind: "complete" }
       : deriveNextAction({
@@ -840,7 +885,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
           now: nowDate,
           nearestFutureSession,
           path,
-          verdict,
+          verdict: nextActionVerdict,
         });
 
     const progress: LearnerDashboardProgress = {

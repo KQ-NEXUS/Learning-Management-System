@@ -31,6 +31,7 @@ export const createCourseSchema = z
     prerequisites: z.string().trim().max(4000).optional(),
     durationHours: z.coerce.number().int().min(0).max(10_000).optional(),
     certificateEnabled: z.boolean().default(false),
+    requirePassingAssessments: z.boolean().default(false),
     // Both certificate-settings fields are absent from FormData entirely when
     // `certificateEnabled` is unchecked — the controls render `disabled` and a
     // disabled input is never submitted (plan 11-08). `.optional()` on both is
@@ -66,9 +67,34 @@ export const updateCourseSchema = z
       .nullable()
       .optional(),
     certificateEnabled: z.boolean(),
+    requirePassingAssessments: z.boolean().default(false),
     certificateIssuanceMode: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
     certificateTemplateId: z.string().min(1).nullable().optional(),
   })
   .strict();
+
+/**
+ * The form's "Learners must pass required assessments" box maps onto the
+ * course's stored completion rule: on is rule v2 with the switch set, off is
+ * the default v1 rule. The form never edits raw rule JSON.
+ */
+export function completionRuleFields(requirePassingAssessments: boolean) {
+  return requirePassingAssessments
+    ? {
+        completionRule: { version: 2, requireAllRequiredLessons: true, requirePassingAssessments: true },
+        completionRuleVersion: 2,
+      }
+    : { completionRule: null, completionRuleVersion: 1 };
+}
+
+/** Whether a stored rule already requires passing assessments. */
+export function requiresPassingAssessments(completionRule: unknown, completionRuleVersion: number | undefined): boolean {
+  return (
+    completionRuleVersion === 2 &&
+    typeof completionRule === "object" &&
+    completionRule !== null &&
+    (completionRule as Record<string, unknown>).requirePassingAssessments === true
+  );
+}
 
 export type UpdateCourseInput = z.infer<typeof updateCourseSchema>;

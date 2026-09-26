@@ -59,8 +59,13 @@ import {
   writeDomainEvent,
   type DomainEventTxClient,
 } from "@/server/services/domain-event-service";
-import { evaluateCompletion, type CompletionVerdict } from "@/server/services/completion-engine";
+import {
+  evaluateCompletion,
+  type AssessmentEvidence,
+  type CompletionVerdict,
+} from "@/server/services/completion-engine";
 import { parseCompletionRule } from "@/server/services/completion-rule";
+import { selectEffectiveAttempt, type AttemptGradingMethod } from "@/server/services/quiz-scoring";
 import {
   computeAttendanceComponent,
   type AttendanceComponent,
@@ -114,6 +119,30 @@ export type CompletionAttendanceRecordRow = { sessionId: string; state: Attendan
 
 export type CompletionRecordRow = { id: string };
 
+export type CompletionAssessmentRow = {
+  id: string;
+  type: "QUIZ" | "ASSIGNMENT";
+  status: string;
+  passMark: number | null;
+  attemptGradingMethod: AttemptGradingMethod;
+};
+
+export type CompletionGradeRow = {
+  assessmentId: string;
+  attemptId: string | null;
+  score: number;
+  maxScore: number;
+  passed: boolean | null;
+  releasedAt: Date | string | null;
+};
+
+export type CompletionAttemptRow = {
+  id: string;
+  assessmentId: string;
+  attemptNumber: number;
+  status: string;
+};
+
 /**
  * Structural — declares exactly the delegates `recalculateCompletion`
  * touches. NO `enrolment.update` and NO `completionRecord.delete` are
@@ -151,6 +180,18 @@ export type CompletionServiceTxClient = DomainEventTxClient & {
   attendanceRecord: {
     findMany(args: { where: { enrolmentId: string } }): Promise<CompletionAttendanceRecordRow[]>;
   };
+  // v2 only — read solely when a pinned rule sets `requirePassingAssessments`.
+  assessment: {
+    findMany(args: { where: { id: { in: string[] } } }): Promise<CompletionAssessmentRow[]>;
+  };
+  grade: {
+    findMany(args: {
+      where: { enrolmentId: string; assessmentId: { in: string[] }; status: "RELEASED" };
+    }): Promise<CompletionGradeRow[]>;
+  };
+  attempt: {
+    findMany(args: { where: { enrolmentId: string; assessmentId: { in: string[] } } }): Promise<CompletionAttemptRow[]>;
+  };
   completionRecord: {
     findFirst(args: {
       where: { enrolmentId: string; scope: "COURSE" | "PROGRAMME"; courseId: string | null; supersededAt: null };
@@ -185,6 +226,8 @@ type CourseObligation = {
   ruleJson: unknown;
   ruleVersion: number;
   requiredLessonIds: string[];
+  /** Assessments linked from the pinned required lessons — the v2 assessment obligation. */
+  requiredAssessmentIds: string[];
 };
 
 /**
@@ -212,11 +255,13 @@ async function loadCourseObligation(
   const withdrawnByLessonId = new Map(liveLessons.map((l) => [l.id, l.withdrawnAt]));
 
   const requiredLessonIds: string[] = [];
+  const requiredAssessmentIds = new Set<string>();
   for (const mod of payload.modules) {
     for (const lesson of mod.lessons) {
       if (!lesson.required) continue;
       if ((withdrawnByLessonId.get(lesson.id) ?? null) != null) continue;
       requiredLessonIds.push(lesson.id);
+      if (lesson.assessmentId) requiredAssessmentIds.add(lesson.assessmentId);
     }
   }
 
@@ -224,6 +269,7 @@ async function loadCourseObligation(
     ruleJson: payload.completionRule,
     ruleVersion: payload.completionRuleVersion,
     requiredLessonIds,
+    requiredAssessmentIds: [...requiredAssessmentIds],
   };
 }
 
@@ -254,6 +300,62 @@ async function loadAttendanceComponent(
       attendanceExpected: s.attendanceExpected,
       cancelledAt: s.cancelledAt,
     })),
+  });
+}
+
+/**
+ * The learner's standing on each pinned assessment, from RELEASED grades only
+ * (a draft grade is never evidence). A quiz uses its own grading method over
+ * the attempts whose grades are released — the same `selectEffectiveAttempt`
+ * the results page uses; an assignment uses its latest released grade.
+ * An assessment archived since pinning is dropped, mirroring the withdrawn-
+ * lesson rule: it can never be passed, so it must never block completion.
+ */
+export type CompletionAssessmentReader = Pick<CompletionServiceTxClient, "assessment" | "grade" | "attempt">;
+
+export async function loadAssessmentEvidence(
+  tx: CompletionAssessmentReader,
+  enrolmentId: string,
+  assessmentIds: string[],
+): Promise<AssessmentEvidence[]> {
+  if (assessmentIds.length === 0) return [];
+
+  const assessments = (await tx.assessment.findMany({ where: { id: { in: assessmentIds } } })).filter(
+    (a) => a.status !== "ARCHIVED",
+  );
+  if (assessments.length === 0) return [];
+  const ids = assessments.map((a) => a.id);
+
+  const grades = await tx.grade.findMany({
+    where: { enrolmentId, assessmentId: { in: ids }, status: "RELEASED" },
+  });
+  const quizIds = assessments.filter((a) => a.type === "QUIZ").map((a) => a.id);
+  const attempts = quizIds.length
+    ? await tx.attempt.findMany({ where: { enrolmentId, assessmentId: { in: quizIds } } })
+    : [];
+
+  return assessments.map((assessment): AssessmentEvidence => {
+    const released = grades.filter((g) => g.assessmentId === assessment.id);
+
+    if (assessment.type === "QUIZ") {
+      const gradeByAttempt = new Map(released.filter((g) => g.attemptId).map((g) => [g.attemptId as string, g]));
+      const effective = selectEffectiveAttempt(
+        assessment.attemptGradingMethod,
+        assessment.passMark,
+        attempts
+          .filter((a) => a.assessmentId === assessment.id && gradeByAttempt.has(a.id))
+          .map((a) => {
+            const grade = gradeByAttempt.get(a.id)!;
+            return { attemptNumber: a.attemptNumber, status: a.status, score: grade.score, maxScore: grade.maxScore };
+          }),
+      );
+      return { assessmentId: assessment.id, released: effective !== null, passed: effective?.passed ?? null };
+    }
+
+    const latest = released
+      .slice()
+      .sort((a, b) => new Date(b.releasedAt ?? 0).getTime() - new Date(a.releasedAt ?? 0).getTime())[0];
+    return { assessmentId: assessment.id, released: latest !== undefined, passed: latest?.passed ?? null };
   });
 }
 
@@ -325,7 +427,12 @@ async function evaluateAndApplyCourseScope(
     attendance: AttendanceComponent;
     now: Date;
   },
-): Promise<{ obligation: CourseObligation; result: CompletionScopeResult } | null> {
+): Promise<{
+  obligation: CourseObligation;
+  result: CompletionScopeResult;
+  /** Set only when this course's pinned rule requires passing assessments. */
+  assessments: AssessmentEvidence[] | null;
+} | null> {
   const obligation = await loadCourseObligation(tx, args.courseId, args.publicationId);
   if (!obligation) return null;
 
@@ -334,10 +441,15 @@ async function evaluateAndApplyCourseScope(
     ruleVersion: obligation.ruleVersion,
     cohortAttendanceThresholdPct: args.cohort.attendanceThresholdPct,
   });
+  const assessments =
+    rule.version === 2 && rule.requirePassingAssessments
+      ? await loadAssessmentEvidence(tx, args.enrolmentId, obligation.requiredAssessmentIds)
+      : null;
   const verdict = evaluateCompletion(rule, {
     requiredLessonIds: obligation.requiredLessonIds,
     completedLessonIds: args.completedLessonIds,
     attendance: args.attendance,
+    ...(assessments ? { assessments } : {}),
   });
   const action = await applyVerdict(tx, {
     enrolmentId: args.enrolmentId,
@@ -348,7 +460,7 @@ async function evaluateAndApplyCourseScope(
     now: args.now,
   });
 
-  return { obligation, result: { scope: "COURSE", courseId: args.courseId, verdict, action } };
+  return { obligation, assessments, result: { scope: "COURSE", courseId: args.courseId, verdict, action } };
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +530,9 @@ export async function recalculateCompletion(
 
     const results: CompletionScopeResult[] = [];
     const unionRequiredLessonIds = new Set<string>();
+    // A member course that requires passing assessments carries that
+    // obligation into the programme: the programme cannot complete first.
+    let memberAssessments: AssessmentEvidence[] | null = null;
 
     for (const member of members) {
       const pinId = member.coursePublicationId ?? cohort.coursePublicationId;
@@ -432,6 +547,7 @@ export async function recalculateCompletion(
       });
       if (!evaluated) return { kind: "not-evaluable", reason: "unpinned" };
       evaluated.obligation.requiredLessonIds.forEach((id) => unionRequiredLessonIds.add(id));
+      if (evaluated.assessments) memberAssessments = [...(memberAssessments ?? []), ...evaluated.assessments];
       results.push(evaluated.result);
     }
 
@@ -440,11 +556,17 @@ export async function recalculateCompletion(
       ruleVersion: programmePayload.completionRuleVersion,
       cohortAttendanceThresholdPct: cohort.attendanceThresholdPct,
     });
-    const programmeVerdict = evaluateCompletion(programmeRule, {
-      requiredLessonIds: [...unionRequiredLessonIds],
-      completedLessonIds,
-      attendance,
-    });
+    const programmeVerdict = evaluateCompletion(
+      memberAssessments
+        ? { ...programmeRule, version: 2, requirePassingAssessments: true }
+        : programmeRule,
+      {
+        requiredLessonIds: [...unionRequiredLessonIds],
+        completedLessonIds,
+        attendance,
+        ...(memberAssessments ? { assessments: memberAssessments } : {}),
+      },
+    );
     const programmeAction = await applyVerdict(tx, {
       enrolmentId,
       scope: "PROGRAMME",

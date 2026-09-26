@@ -35,6 +35,8 @@
 
 import { prisma } from "@/server/db";
 import { withPermission as liveWithPermission } from "@/server/permissions";
+import { recalculateCompletionAndIssue } from "@/server/services/certificate-issuance-service";
+import type { CompletionServiceTxClient } from "@/server/services/completion-service";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
@@ -285,6 +287,16 @@ export type GradingServiceDeps = {
   cohortScope: (cohortId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   now?: () => Date;
+  /**
+   * Re-evaluates completion inside the same transaction once a grade becomes
+   * RELEASED, so a course whose pinned rule requires passing assessments
+   * completes (and auto-issues) without waiting for another lesson or
+   * attendance write. Bound to `recalculateCompletionAndIssue` in production.
+   */
+  recalculateCompletion?: (
+    tx: unknown,
+    args: { enrolmentId: string; now: Date; actorId?: string | null },
+  ) => Promise<unknown>;
 };
 
 // ---------------------------------------------------------------------------
@@ -632,6 +644,8 @@ export function createGradingService(deps: GradingServiceDeps) {
       occurredAt: nowValue,
     });
 
+    await deps.recalculateCompletion?.(tx, { enrolmentId: after.enrolmentId, now: nowValue, actorId });
+
     return after;
   }
 
@@ -776,6 +790,8 @@ const built = createGradingService({
   enrolmentScope: enrolmentCohortScope,
   cohortScope: cohortResourceScope,
   withPermission: liveWithPermission,
+  recalculateCompletion: (tx, args) =>
+    recalculateCompletionAndIssue(tx as unknown as CompletionServiceTxClient, args),
 });
 
 export const listCohortGradingSummary = built.listCohortGradingSummary;

@@ -106,6 +106,7 @@ function harness(opts?: {
   grades?: GradeRow[];
   cohortCourses?: CohortCourseRow[];
   now?: Date;
+  recalculateCompletion?: (tx: unknown, args: { enrolmentId: string; now: Date; actorId?: string | null }) => Promise<unknown>;
 }) {
   const cohorts = new Map<string, CohortRow>((opts?.cohorts ?? []).map((c) => [c.id, { ...c }]));
   const enrolments = new Map<string, EnrolmentRow>((opts?.enrolments ?? []).map((e) => [e.id, { ...e }]));
@@ -271,6 +272,7 @@ function harness(opts?: {
     cohortScope: cohortResourceScope,
     withPermission,
     now: () => now,
+    ...(opts?.recalculateCompletion ? { recalculateCompletion: opts.recalculateCompletion } : {}),
   });
 
   return {
@@ -577,5 +579,61 @@ describe("releaseGradesBatch", () => {
     await h.service.releaseGradesBatch({ gradeIds: ["g1", "g2"] });
 
     expect(h.getTransactionCalls()).toBe(1);
+  });
+});
+
+describe("grade release re-evaluates completion (v2 assessment rule)", () => {
+  const cohortA = cohort({ id: "coh-a", courseId: "course-a" });
+  const enrA = enr({ id: "enr-a", cohortId: "coh-a" });
+  const enrA2 = enr({ id: "enr-a2", cohortId: "coh-a" });
+
+  it("releaseGrade recalculates completion for the grade's enrolment, attributed to the releasing staff user", async () => {
+    const calls: Array<{ enrolmentId: string; actorId?: string | null }> = [];
+    const h = harness({
+      cohorts: [cohortA],
+      enrolments: [enrA],
+      grades: [gradeRow({ id: "grade-1", assessmentId: "asg-a", enrolmentId: "enr-a", status: "DRAFT" })],
+      recalculateCompletion: async (_tx, args) => {
+        calls.push({ enrolmentId: args.enrolmentId, actorId: args.actorId });
+        return { kind: "evaluated", results: [] };
+      },
+    });
+    await h.service.releaseGrade({ gradeId: "grade-1" });
+    expect(calls).toEqual([{ enrolmentId: "enr-a", actorId: "user-1" }]);
+  });
+
+  it("releaseGradesBatch recalculates once per released grade", async () => {
+    const calls: string[] = [];
+    const h = harness({
+      cohorts: [cohortA],
+      enrolments: [enrA, enrA2],
+      grades: [
+        gradeRow({ id: "grade-1", assessmentId: "asg-a", enrolmentId: "enr-a", status: "DRAFT" }),
+        gradeRow({ id: "grade-2", assessmentId: "asg-a", enrolmentId: "enr-a2", status: "DRAFT" }),
+      ],
+      recalculateCompletion: async (_tx, args) => {
+        calls.push(args.enrolmentId);
+        return { kind: "evaluated", results: [] };
+      },
+    });
+    await h.service.releaseGradesBatch({ gradeIds: ["grade-1", "grade-2"] });
+    expect(calls.sort()).toEqual(["enr-a", "enr-a2"]);
+  });
+
+  it("an already-released grade does not recalculate", async () => {
+    const calls: string[] = [];
+    const h = harness({
+      cohorts: [cohortA],
+      enrolments: [enrA],
+      grades: [
+        gradeRow({ id: "grade-1", assessmentId: "asg-a", enrolmentId: "enr-a", status: "RELEASED", releasedAt: NOW }),
+      ],
+      recalculateCompletion: async (_tx, args) => {
+        calls.push(args.enrolmentId);
+        return { kind: "evaluated", results: [] };
+      },
+    });
+    await h.service.releaseGrade({ gradeId: "grade-1" });
+    expect(calls).toEqual([]);
   });
 });

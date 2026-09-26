@@ -1347,3 +1347,120 @@ describe("collectRequiredLessonEvidence", () => {
     expect(evidence.completedLessonIds.has("required-open")).toBe(true);
   });
 });
+
+describe("loadLearnerDashboard — v2 requirePassingAssessments", () => {
+  const v2Payload = coursePayload({
+    completionRuleVersion: 2,
+    completionRule: { version: 2, requireAllRequiredLessons: true, requirePassingAssessments: true },
+    modules: [
+      {
+        id: "module-1",
+        position: 0,
+        lessons: [{ id: "lesson-1", position: 0, required: true, type: "TEXT", assessmentId: "asg-1" }],
+      },
+    ],
+  });
+
+  function withGrades(grades: Array<{ passed: boolean | null }>) {
+    return (store: EnrolmentDashboardStore): EnrolmentDashboardStore => ({
+      ...store,
+      assessment: {
+        findMany: async () => [
+          { id: "asg-1", type: "ASSIGNMENT", status: "PUBLISHED", passMark: 50, attemptGradingMethod: "HIGHEST" },
+        ],
+      },
+      grade: {
+        findMany: async () =>
+          grades.map((g) => ({
+            assessmentId: "asg-1",
+            attemptId: null,
+            score: g.passed ? 80 : 20,
+            maxScore: 100,
+            passed: g.passed,
+            releasedAt: new Date("2026-09-10T00:00:00.000Z"),
+          })),
+      },
+      attempt: { findMany: async () => [] },
+    });
+  }
+
+  const fixtures = (wrap: (s: EnrolmentDashboardStore) => EnrolmentDashboardStore) =>
+    makeService({
+      enrolments: [enrolment()],
+      cohorts: [cohort()],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: v2Payload } },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+      lessonProgress: [{ enrolmentId: "enrolment-1", lessonId: "lesson-1", completedAt: NOW, source: "MANUAL" }],
+      wrapDashboardStore: wrap,
+    });
+
+  it("lessons done but the required assessment unpassed → not 'complete'", async () => {
+    const [card] = (await fixtures(withGrades([])).loadLearnerDashboard(actorA)).cards;
+    expect(card.nextAction).not.toEqual({ kind: "complete" });
+  });
+
+  it("lessons done and the required assessment passed → 'complete'", async () => {
+    const [card] = (await fixtures(withGrades([{ passed: true }])).loadLearnerDashboard(actorA)).cards;
+    expect(card.nextAction).toEqual({ kind: "complete" });
+  });
+});
+
+describe("loadLearnerDashboard — programme cohort 'complete' follows the persisted record", () => {
+  // The dashboard evaluates only the programme's own rule; a member course's
+  // "must pass required assessments" lives in that course's rule. So for a
+  // programme cohort, "complete" is claimed only once the PROGRAMME
+  // CompletionRecord (which does enforce member-course rules) exists.
+  const programmeFixtures = (extra: Parameters<typeof makeService>[0] = {}) =>
+    makeService({
+      enrolments: [enrolment({ cohortId: "cohort-prog" })],
+      cohorts: [
+        cohort({
+          id: "cohort-prog",
+          courseId: null,
+          programmeId: "programme-1",
+          coursePublicationId: null,
+          programmePublicationId: "ppub-1",
+        }),
+      ],
+      cohortCourses: [{ cohortId: "cohort-prog", courseId: "course-1", coursePublicationId: "pub-1" } as CohortCourseStoreRow],
+      courses: [course()],
+      coursePublications: { "pub-1": { payload: coursePayload() } },
+      programmePublications: {
+        "ppub-1": {
+          payload: {
+            schema: 1,
+            sequential: true,
+            completionRule: null,
+            completionRuleVersion: 1,
+            courses: [{ courseId: "course-1", position: 0 }],
+          },
+        },
+      },
+      modules: [moduleRow()],
+      lessons: [lessonRow()],
+      lessonProgress: [{ enrolmentId: "enrolment-1", lessonId: "lesson-1", completedAt: NOW, source: "MANUAL" }],
+      ...extra,
+    });
+
+  it("all lessons done but no PROGRAMME completion record → not 'complete'", async () => {
+    const [card] = (await programmeFixtures().loadLearnerDashboard(actorA)).cards;
+    expect(card.progress).toMatchObject({ requiredLessonsComplete: 1, requiredLessonsTotal: 1 });
+    expect(card.nextAction).not.toEqual({ kind: "complete" });
+  });
+
+  it("a member COURSE record alone is not enough", async () => {
+    const [card] = (
+      await programmeFixtures({ completionRecords: [{ enrolmentId: "enrolment-1", scope: "COURSE" }] }).loadLearnerDashboard(actorA)
+    ).cards;
+    expect(card.nextAction).not.toEqual({ kind: "complete" });
+  });
+
+  it("with the PROGRAMME completion record → 'complete'", async () => {
+    const [card] = (
+      await programmeFixtures({ completionRecords: [{ enrolmentId: "enrolment-1", scope: "PROGRAMME" }] }).loadLearnerDashboard(actorA)
+    ).cards;
+    expect(card.nextAction).toEqual({ kind: "complete" });
+  });
+});

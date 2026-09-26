@@ -37,6 +37,8 @@
  */
 
 import { prisma } from "@/server/db";
+import { recalculateCompletionAndIssue } from "@/server/services/certificate-issuance-service";
+import type { CompletionServiceTxClient } from "@/server/services/completion-service";
 import type { Actor } from "@/server/permissions/with-permission";
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
 import { writeDomainEvent, type DomainEventTxClient } from "@/server/services/domain-event-service";
@@ -305,6 +307,16 @@ export type AttemptServiceDeps = {
   audit: Audit;
   /** Explicit clock — never read from a client-controlled value. */
   now?: () => Date;
+  /**
+   * Re-evaluates completion inside the same transaction once a quiz grade is
+   * auto-RELEASED, so a course whose pinned rule requires passing assessments
+   * completes (and auto-issues) without waiting for another lesson or
+   * attendance write. Bound to `recalculateCompletionAndIssue` in production.
+   */
+  recalculateCompletion?: (
+    tx: unknown,
+    args: { enrolmentId: string; now: Date; actorId?: string | null },
+  ) => Promise<unknown>;
 };
 
 // ---------------------------------------------------------------------------
@@ -759,6 +771,12 @@ export function createAttemptService(deps: AttemptServiceDeps) {
         occurredAt: params.submittedAt,
       });
 
+      await deps.recalculateCompletion?.(tx, {
+        enrolmentId: params.attempt.enrolmentId,
+        now: params.submittedAt,
+        actorId: null,
+      });
+
       return updated;
     });
 
@@ -1046,6 +1064,8 @@ export function createPrismaBackedAttemptService(client: AnyPrisma, audit: Audit
     },
     runInTransaction: (fn) => client.$transaction((tx: unknown) => fn(tx as AttemptTxClient)),
     writeEvent: writeDomainEvent,
+    recalculateCompletion: (tx, args) =>
+      recalculateCompletionAndIssue(tx as unknown as CompletionServiceTxClient, args),
     audit,
   });
 }
