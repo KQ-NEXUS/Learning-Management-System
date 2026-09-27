@@ -503,7 +503,8 @@ export default async function DashboardPage() {
               ))}
             </Section>
           )}
-          {primaryActive && <ResultsSection card={primary} />}
+          {/* ASM-07: results stay readable after completion (G-01: visible, not operable). */}
+          <ResultsSection card={primary} />
         </div>
 
         <div className="flex min-w-0 flex-col gap-12 lg:border-l lg:border-border lg:pl-10">

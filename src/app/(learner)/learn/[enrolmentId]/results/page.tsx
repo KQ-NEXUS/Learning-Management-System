@@ -30,7 +30,8 @@ export default async function ResultsPage({
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
-  const path = await loadLearnerPath(actor, enrolmentId);
+  // ASM-07 — a completed learner keeps their results (read-only, G-01).
+  const path = await loadLearnerPath(actor, enrolmentId, { includeCompleted: true });
   if (!path) notFound();
 
   const results = await getOwnResults(actor, { enrolmentId });

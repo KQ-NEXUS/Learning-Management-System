@@ -350,10 +350,18 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
    * `hasActiveEnrolmentCoveringCourse` walk, but returns the enrolment id
    * itself (the boolean-only helper cannot scope a Submission row).
    */
-  async function resolveOwnEnrolmentForCourse(userId: string, courseId: string, requestedEnrolmentId?: string): Promise<string | null> {
-    const activeEnrolments = await deps.store.enrolment.findMany({ where: { userId, status: "ACTIVE" } });
+  /** ACTIVE only unless `includeCompleted` — which only the own-history read passes (ASM-07). */
+  async function resolveOwnEnrolmentForCourse(
+    userId: string,
+    courseId: string,
+    requestedEnrolmentId?: string,
+    options: { includeCompleted?: boolean } = {},
+  ): Promise<string | null> {
+    const statuses = options.includeCompleted ? ["ACTIVE", "COMPLETED"] : ["ACTIVE"];
+    const ownEnrolments: SubmissionEnrolmentStoreRow[] = [];
+    for (const status of statuses) ownEnrolments.push(...(await deps.store.enrolment.findMany({ where: { userId, status } })));
 
-    for (const enrolment of activeEnrolments) {
+    for (const enrolment of ownEnrolments) {
       if (requestedEnrolmentId && enrolment.id !== requestedEnrolmentId) continue;
       const cohort = await deps.store.cohort.findUnique({ where: { id: enrolment.cohortId } });
       if (!cohort) continue;
@@ -619,7 +627,9 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
     const assessment = await deps.resolveAssessment(input.assessmentId);
     if (!assessment) return [];
 
-    const enrolmentId = await resolveOwnEnrolmentForCourse(actor.userId, assessment.courseId, input.enrolmentId);
+    const enrolmentId = await resolveOwnEnrolmentForCourse(actor.userId, assessment.courseId, input.enrolmentId, {
+      includeCompleted: true,
+    });
     if (!enrolmentId) return [];
 
     const rows = await deps.delegate.findMany({ where: { assessmentId: assessment.id, enrolmentId } });

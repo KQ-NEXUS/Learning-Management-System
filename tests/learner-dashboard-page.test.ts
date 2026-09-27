@@ -347,10 +347,14 @@ describe("/dashboard", () => {
     expect(html).not.toContain("Upcoming sessions");
     expect(html).not.toContain("Wrap-up call");
     expect(html).not.toContain("Assessments");
-    expect(html).not.toContain("Results");
     expect(html).not.toContain("Continue learning");
     expect(html).not.toContain("Your access window has ended");
-    expect(html).not.toContain("/learn/enrolment-1/");
+    // ASM-07: results stay readable after completion, and the only
+    // /learn/ link is the read-only results page.
+    expect(html).toContain("Results");
+    expect(html).toContain("Final quiz");
+    expect(html).toContain('href="/learn/enrolment-1/results"');
+    expect(html.replaceAll("/learn/enrolment-1/results", "")).not.toContain("/learn/enrolment-1/");
   });
 
   it("the Next-up 'complete' copy no longer promises certificates are yet to ship", async () => {

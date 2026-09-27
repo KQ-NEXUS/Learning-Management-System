@@ -568,3 +568,30 @@ describe("getOwnAssessmentObligations — not-yet-attempted/not-submitted assess
     expect(after).toEqual([]);
   });
 });
+
+describe("ASM-07 — a COMPLETED learner keeps their results (visible, not operable)", () => {
+  it("returns released results for a COMPLETED enrolment, lists no obligations, and still refuses new attempts", async () => {
+    const f = await seedResultsFixture();
+    const { resultsSvc, attemptSvc } = buildResultsService();
+    const actor = { userId: f.learner1.userId };
+
+    const attempt = await attemptSvc.startAttempt(actor, { assessmentId: f.quizId });
+    await attemptSvc.submitAttempt(actor, {
+      attemptId: attempt.id,
+      responses: [{ questionId: f.question.id, selectedOptionIds: [f.question.correctOptionId] }],
+    });
+    const whileActive = await resultsSvc.getOwnResults(actor, { enrolmentId: f.learner1.enrolmentId });
+    expect(whileActive.length).toBeGreaterThan(0);
+
+    await testDb.prisma.enrolment.update({ where: { id: f.learner1.enrolmentId }, data: { status: "COMPLETED" } });
+
+    const afterCompletion = await resultsSvc.getOwnResults(actor, { enrolmentId: f.learner1.enrolmentId });
+    expect(afterCompletion.map((c) => c.assessmentId)).toEqual(whileActive.map((c) => c.assessmentId));
+    const quizCard = afterCompletion.find((c) => c.assessmentId === f.quizId);
+    expect(quizCard).toBeDefined();
+    expect(JSON.stringify(quizCard)).toContain('"score"');
+
+    expect(await resultsSvc.getOwnAssessmentObligations(actor, { enrolmentId: f.learner1.enrolmentId })).toEqual([]);
+    await expect(attemptSvc.startAttempt(actor, { assessmentId: f.quizId, startNew: true })).rejects.toThrow();
+  });
+});
