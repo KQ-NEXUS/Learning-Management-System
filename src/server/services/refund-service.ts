@@ -285,17 +285,15 @@ export type RefundTxClient = {
     /** Sum of `amountMinor` across every non-FAILED `Refund` row for this Order (D-22's "already-recorded" total) — a `PROCESSING` reservation counts, so a second locker sees the first's in-flight refund. */
     aggregateRefundedMinor(orderId: string): Promise<number>;
     create(args: { data: Record<string, unknown> }): Promise<{ id: string }>;
-  };
-};
-
-export type RefundServiceDeps = {
-  db: { $transaction: <R>(fn: (tx: RefundTxClient) => Promise<R>) => Promise<R> };
-  refund: {
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
   order: {
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
+};
+
+export type RefundServiceDeps = {
+  db: { $transaction: <R>(fn: (tx: RefundTxClient) => Promise<R>) => Promise<R> };
   /** Structural — never `ReturnType<typeof refundPaystackTransaction>` (PAY-09 discretion, see file header). */
   paystackRefund: (body: {
     transaction: string;
@@ -314,7 +312,11 @@ export type RefundServiceDeps = {
    * `buildStripeRefundRequest` (the pure builder actually called, below) is
    * what a test reads to prove the built request shape, not this deps type.
    */
-  stripeRefund: (params: Record<string, unknown>) => Promise<{ id: string; status: string; amount: number; currency: string }>;
+  stripeRefund: (
+    params: Record<string, unknown>,
+    /** F-17 — the Refund row's id, so a retried request can never refund twice. */
+    options: { idempotencyKey: string },
+  ) => Promise<{ id: string; status: string; amount: number; currency: string }>;
   orderScope: (orderId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
   audit: Audit;
@@ -403,7 +405,9 @@ export function createRefundService(deps: RefundServiceDeps) {
         if (!attempt.providerIntentId) throw new MissingProviderReferenceError(attempt.id);
         const body = buildPaystackRefundRequest({
           transactionReference: attempt.providerIntentId,
-          amountMinor: isFullRefund ? undefined : input.amountMinor,
+          // F-17 — always explicit: an omitted amount means "the whole original
+          // charge" to the provider, which after a partial refund is too much.
+          amountMinor: input.amountMinor,
           currency: order.currency,
           note: input.reason,
         });
@@ -421,7 +425,7 @@ export function createRefundService(deps: RefundServiceDeps) {
         const reverseTransfer = isFullRefund; // 07-01 Decision A — explicit, every call.
         const params = buildStripeRefundRequest({
           paymentIntentId: stripeTarget,
-          amountMinor: isFullRefund ? undefined : input.amountMinor,
+          amountMinor: input.amountMinor, // F-17 — always explicit
           reverseTransfer,
           reason: input.reason,
         });
@@ -429,7 +433,9 @@ export function createRefundService(deps: RefundServiceDeps) {
         // `buildStripeRefundRequest`'s own return type) is deliberately
         // widened here, never named — see `stripeRefund`'s own deps-type
         // comment for why the boundary is `Record<string, unknown>`.
-        const outcome = await deps.stripeRefund(params as unknown as Record<string, unknown>);
+        const outcome = await deps.stripeRefund(params as unknown as Record<string, unknown>, {
+          idempotencyKey: refundId,
+        });
         providerRef = outcome.id;
         providerOutcome = `Stripe refund ${outcome.status} (amount ${outcome.amount} ${outcome.currency}); reverse_transfer=${reverseTransfer}.`;
         status = "COMPLETED";
@@ -447,23 +453,30 @@ export function createRefundService(deps: RefundServiceDeps) {
       providerOutcome = err instanceof Error ? err.message : "Unknown provider refund error.";
     }
 
-    await deps.refund.update({
-      where: { id: refundId },
-      data: {
-        status,
-        providerRef,
-        providerOutcome,
-        completedAt: status === "FAILED" ? null : now(),
-      },
-    });
-
-    if (status !== "FAILED") {
-      const newTotalRefundedMinor = reserved.alreadyRefundedMinor + input.amountMinor;
-      await deps.order.update({
-        where: { id: input.orderId },
-        data: { status: newTotalRefundedMinor >= order.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED" },
+    // F-17 — the outcome and the Order status are written together under the
+    // same Order lock, and the status is derived from EVERY non-failed refund
+    // as it stands now, never from this call's reservation snapshot: two
+    // refunds that finish in reverse order must not leave a fully refunded
+    // order marked PARTIALLY_REFUNDED.
+    await deps.db.$transaction(async (tx) => {
+      await tx.lockOrder({ orderId: input.orderId });
+      await tx.refund.update({
+        where: { id: refundId },
+        data: {
+          status,
+          providerRef,
+          providerOutcome,
+          completedAt: status === "FAILED" ? null : now(),
+        },
       });
-    }
+      const totalRefundedMinor = await tx.refund.aggregateRefundedMinor(input.orderId);
+      if (totalRefundedMinor > 0) {
+        await tx.order.update({
+          where: { id: input.orderId },
+          data: { status: totalRefundedMinor >= order.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED" },
+        });
+      }
+    });
 
     await deps.audit({
       actorId: ctx.actor.userId,
@@ -558,15 +571,13 @@ export function createPrismaBackedRefundService(
                 return rows.reduce((sum: number, row: { amountMinor: number }) => sum + row.amountMinor, 0);
               },
               create: (args) => tx.refund.create({ data: args.data, select: { id: true } }),
+              update: (args) => tx.refund.update({ where: args.where, data: args.data }),
+            },
+            order: {
+              update: (args) => tx.order.update({ where: args.where, data: args.data }),
             },
           } satisfies RefundTxClient),
         ),
-    },
-    refund: {
-      update: (args) => client.refund.update({ where: args.where, data: args.data }),
-    },
-    order: {
-      update: (args) => client.order.update({ where: args.where, data: args.data }),
     },
     paystackRefund: (body) => refundPaystackTransaction(body),
     // Cast via `Parameters<typeof refundStripeCharge>[0]` rather than naming
@@ -574,7 +585,8 @@ export function createPrismaBackedRefundService(
     // "stripe" specifier itself, type-only or otherwise (PAY-09's Stripe
     // isolation rule flags it unconditionally, unlike Paystack's narrower
     // type-only-only rule).
-    stripeRefund: (params) => refundStripeCharge(params as Parameters<typeof refundStripeCharge>[0]),
+    stripeRefund: (params, options) =>
+      refundStripeCharge(params as Parameters<typeof refundStripeCharge>[0], options),
     orderScope: orderCohortScope,
     withPermission,
     audit,

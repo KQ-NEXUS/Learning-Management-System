@@ -148,16 +148,14 @@ function realService(
                 return rows.reduce((sum, row) => sum + row.amountMinor, 0);
               },
               create: (args) => tx.refund.create({ data: args.data as never, select: { id: true } }),
+              update: (args) => tx.refund.update({ where: args.where as never, data: args.data as never }),
+            },
+            order: {
+              update: (args) => tx.order.update({ where: args.where as never, data: args.data as never }),
             },
           };
           return fn(client);
         }),
-    },
-    refund: {
-      update: (args) => testDb.prisma.refund.update({ where: args.where as never, data: args.data as never }),
-    },
-    order: {
-      update: (args) => testDb.prisma.order.update({ where: args.where as never, data: args.data as never }),
     },
     paystackRefund: async () => opts?.paystackOutcome ?? { id: 1, status: "processed", amount: 0, currency: "NGN" },
     stripeRefund: async () => ({ id: "re_test", status: "succeeded", amount: 0, currency: "usd" }),

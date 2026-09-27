@@ -49,8 +49,11 @@ export function buildStripeRefundRequest(args: {
  * `buildStripeRefundRequest`, above; this function performs no shaping of
  * its own.
  */
-export async function refundStripeCharge(params: Stripe.RefundCreateParams): Promise<StripeRefundOutcome> {
-  const refund = await getStripe().refunds.create(params);
+export async function refundStripeCharge(
+  params: Stripe.RefundCreateParams,
+  options?: { idempotencyKey: string },
+): Promise<StripeRefundOutcome> {
+  const refund = await getStripe().refunds.create(params, options);
   return {
     id: refund.id,
     status: refund.status ?? "unknown",
