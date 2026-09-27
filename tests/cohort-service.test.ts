@@ -941,6 +941,7 @@ function cancelHarness(opts?: {
           return row;
         },
       },
+      certificate: { findFirst: async () => null },
       domainEvent: {
         create: async ({ data }: { data: Record<string, unknown> }) => {
           evStore.push(data);

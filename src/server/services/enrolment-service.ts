@@ -37,6 +37,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
@@ -97,6 +98,41 @@ type Audit = (entry: ResourceAuditEntry) => Promise<void>;
  * A transfer target that is not another cohort of the same offer (D-13), or a
  * target that is the source cohort itself. Cross-offer transfer is deferred.
  */
+/**
+ * Integration warning #4 — an enrolment that still holds a live (ACTIVE)
+ * certificate cannot be withdrawn, cancelled or transferred. Flagging a
+ * certificate for review returns the enrolment to ACTIVE, which would
+ * otherwise let staff end the enrolment while the certificate still verifies
+ * publicly. Deciding the certificate stays a separate, deliberate act by
+ * someone with `certificates.revoke`; this never revokes on its own.
+ */
+export class LiveCertificateError extends UserInputError {
+  readonly enrolmentId: string;
+  readonly verificationRef: string;
+
+  constructor(enrolmentId: string, verificationRef: string) {
+    super(
+      `This learner still has a live certificate (${verificationRef}). ` +
+        "Revoke it, or resolve its review, before withdrawing, cancelling or transferring this enrolment.",
+    );
+    this.name = "LiveCertificateError";
+    this.enrolmentId = enrolmentId;
+    this.verificationRef = verificationRef;
+  }
+}
+
+/** Throws `LiveCertificateError` when the enrolment holds an ACTIVE certificate. */
+export async function assertNoLiveCertificate(
+  tx: Pick<EnrolmentExitTxClient, "certificate">,
+  enrolmentId: string,
+): Promise<void> {
+  const live = await tx.certificate.findFirst({
+    where: { enrolmentId, status: "ACTIVE" },
+    select: { verificationRef: true },
+  });
+  if (live) throw new LiveCertificateError(enrolmentId, live.verificationRef);
+}
+
 export class CrossOfferTransferError extends Error {
   readonly sourceCohortId: string;
   readonly targetCohortId: string;
@@ -184,7 +220,8 @@ async function lockCohortWithOffer(
 
 /** The transaction client the writes need — structural, no `@prisma/client`. */
 export type EnrolmentTxClient = SeatTxClient &
-  DomainEventTxClient & {
+  DomainEventTxClient &
+  Pick<EnrolmentExitTxClient, "certificate"> & {
     enrolment: SeatTxClient["enrolment"] & {
       findUnique(args: { where: { id: string } }): Promise<EnrolmentRow | null>;
     };
@@ -218,6 +255,12 @@ export type EnrolmentExitTxClient = {
     }): Promise<unknown>;
   };
   domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
+  certificate: {
+    findFirst(args: {
+      where: { enrolmentId: string; status: "ACTIVE" };
+      select: { verificationRef: true };
+    }): Promise<{ verificationRef: string } | null>;
+  };
 };
 
 /**
@@ -247,6 +290,7 @@ export async function applyEnrolmentExit(
   const { enrolment: e, toStatus, reason, actorId, now } = args;
   const before = e.status as EnrolmentStatusValue;
   assertTransition(before, toStatus, e.id);
+  await assertNoLiveCertificate(tx, e.id);
 
   // `releaseSeat` is typed against `SeatTxClient`, which also declares
   // `enrolment.create` (needed by `takeSeat`, never by this path). The cast
@@ -276,6 +320,76 @@ export async function applyEnrolmentExit(
   });
 
   return { id: e.id, before, toStatus };
+}
+
+// ---------------------------------------------------------------------------
+// Integration warning #3 — a refund recorded with "Revoke access"
+// ---------------------------------------------------------------------------
+
+/** What the refund's transaction needs to find and end the order's enrolment. */
+export type OrderAccessTxClient = EnrolmentExitTxClient & {
+  enrolment: EnrolmentExitTxClient["enrolment"] & {
+    findFirst(args: {
+      where: { orderId: string } | { transferredFromId: string };
+      select: typeof ENROLMENT_SELECT;
+      orderBy?: { createdAt: "desc" };
+    }): Promise<EnrolmentRow | null>;
+  };
+};
+
+/**
+ * The learner's CURRENT enrolment for an order. A transfer creates a new row
+ * with `orderId: null` linked back through `transferredFromId`, so the chain
+ * is followed from the row the order bought to wherever the learner is now.
+ */
+async function findCurrentEnrolmentForOrder(tx: OrderAccessTxClient, orderId: string): Promise<EnrolmentRow | null> {
+  let enrolment = await tx.enrolment.findFirst({
+    where: { orderId },
+    select: ENROLMENT_SELECT,
+    orderBy: { createdAt: "desc" },
+  });
+  for (let hop = 0; enrolment && enrolment.status === "TRANSFERRED" && hop < 25; hop++) {
+    enrolment = await tx.enrolment.findFirst({ where: { transferredFromId: enrolment.id }, select: ENROLMENT_SELECT });
+  }
+  return enrolment;
+}
+
+/**
+ * Checked BEFORE any money moves: a refund that revokes access is refused when
+ * the learner's current enrolment still holds a live certificate (warning #4's
+ * rule) or has completed. Nothing to revoke (no enrolment, or already ended)
+ * is fine.
+ */
+export async function assertOrderAccessRevocable(tx: OrderAccessTxClient, orderId: string): Promise<void> {
+  const enrolment = await findCurrentEnrolmentForOrder(tx, orderId);
+  if (!enrolment) return;
+  await assertNoLiveCertificate(tx, enrolment.id);
+  if (enrolment.status === "COMPLETED") {
+    throw new UserInputError(
+      "This learner has completed the course, so the refund can't revoke their access. Record it with access kept.",
+    );
+  }
+}
+
+/**
+ * Ends the order's current enrolment through the same `applyEnrolmentExit`
+ * every withdrawal uses (seat release, event): ACTIVE -> WITHDRAWN,
+ * PENDING_PAYMENT -> CANCELLED. Returns null when there is nothing live to end.
+ */
+export async function revokeAccessForOrder(
+  tx: OrderAccessTxClient,
+  args: { orderId: string; reason: string; actorId: string; now: Date },
+): Promise<{ enrolmentId: string; before: EnrolmentStatusValue; toStatus: "WITHDRAWN" | "CANCELLED" } | null> {
+  const enrolment = await findCurrentEnrolmentForOrder(tx, args.orderId);
+  if (!enrolment || (enrolment.status !== "ACTIVE" && enrolment.status !== "PENDING_PAYMENT")) return null;
+  const result = await applyEnrolmentExit(tx, {
+    enrolment,
+    toStatus: enrolment.status === "ACTIVE" ? "WITHDRAWN" : "CANCELLED",
+    reason: args.reason,
+    actorId: args.actorId,
+    now: args.now,
+  });
+  return { enrolmentId: result.id, before: result.before, toStatus: result.toStatus };
 }
 
 export type EnrolmentServiceDeps = {
@@ -563,6 +677,7 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
         if (!e) throw new EnrolmentNotFoundError(input.enrolmentId);
         const before = e.status;
         assertTransition(before as EnrolmentStatusValue, "TRANSFERRED", e.id);
+        await assertNoLiveCertificate(tx, e.id);
 
         // CR-03: re-lock both cohorts and re-validate the same-offer
         // invariant inside the transaction that actually moves the seats.

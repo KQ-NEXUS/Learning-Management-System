@@ -48,6 +48,7 @@ import { writeDomainEvent } from "./domain-event-service";
 import { CohortNotFoundError, assertCohortOpen, lockCohort } from "./seat-accounting";
 import {
   applyEnrolmentExit,
+  type EnrolmentExitTxClient,
   ReasonRequiredError,
   type EnrolmentRow,
 } from "./enrolment-service";
@@ -358,7 +359,7 @@ export type ScheduledSessionCancelRow = { id: string; cancelledAt: Date | null }
  * `tx` satisfies every field; a unit-test fake only needs to implement what
  * the operation under test calls.
  */
-export type CohortPublishTx = {
+export type CohortPublishTx = Pick<EnrolmentExitTxClient, "certificate"> & {
   $queryRaw<T = unknown>(
     query: TemplateStringsArray,
     ...values: unknown[]

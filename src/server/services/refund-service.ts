@@ -23,11 +23,12 @@
  * source of truth instead of two that could disagree.
  *
  * The refund's access decision (`accessDecision`) is a separate, explicit
- * input — D-23 requires it recorded independently. This service does NOT
- * revoke or restore Enrolment access as a side effect of recording a refund;
- * it only stores the staff-made decision. Refunding never implicitly revokes
- * access, and revoking access (an `enrolment-service.ts` operation) never
- * implicitly refunds.
+ * input — D-23 requires it recorded independently. RETAINED never touches
+ * access. REVOKED (integration warning #3) withdraws the learner's current
+ * enrolment once the provider refund succeeds; it is checked up front, so a
+ * learner holding a live certificate refuses the whole refund before money
+ * moves. A failed provider refund leaves access alone. Withdrawing an
+ * enrolment on its own (an `enrolment-service.ts` operation) never refunds.
  */
 
 import { z } from "zod";
@@ -42,6 +43,7 @@ import {
   syncReconciliationEvidenceAsSystem,
 } from "@/server/services/reconciliation-case-service";
 import { orderCohortScope } from "@/server/services/cohort-scope";
+import { assertOrderAccessRevocable, revokeAccessForOrder } from "@/server/services/enrolment-service";
 // Value imports only (PAY-09) — mirrors checkout-service.ts's own
 // `initiatePaystackTransaction`/`buildCheckoutSessionParams` precedent. No
 // TYPE is imported from either provider directory; every deps-facing shape
@@ -261,6 +263,12 @@ export type RecordRefundResult = {
   status: "COMPLETED" | "FAILED" | "RECORDED_MANUALLY";
   amountMinor: number;
   components: RefundComponents;
+  /**
+   * Warning #3 — what happened to the learner's access: "revoked" (REVOKED and
+   * the enrolment was ended), "unchanged" (RETAINED, a failed refund, or no
+   * live enrolment) or "not-revoked" (REVOKED but ending it was refused).
+   */
+  access: "revoked" | "unchanged" | "not-revoked";
 };
 
 /**
@@ -289,6 +297,17 @@ export type RefundTxClient = {
   };
   order: {
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
+  };
+  /** Integration warning #3 — the "Revoke access" decision, acted on. */
+  access: {
+    /** Throws a user-facing refusal when access can't be revoked (e.g. a live certificate). */
+    assertRevocable(orderId: string): Promise<void>;
+    revoke(args: {
+      orderId: string;
+      reason: string;
+      actorId: string;
+      now: Date;
+    }): Promise<{ enrolmentId: string; before: string; toStatus: "WITHDRAWN" | "CANCELLED" } | null>;
   };
 };
 
@@ -346,6 +365,8 @@ export function createRefundService(deps: RefundServiceDeps) {
     const reserved = await deps.db.$transaction(async (tx) => {
       const order = await tx.lockOrder({ orderId: input.orderId });
       if (!order) throw new OrderNotFoundError(input.orderId);
+      // Warning #3 — refuse up front, before a reservation or provider call.
+      if (input.accessDecision === "REVOKED") await tx.access.assertRevocable(input.orderId);
 
       const attempt = await tx.paymentAttempt.findFirst({
         where: { orderId: input.orderId, status: "SUCCEEDED" },
@@ -376,8 +397,8 @@ export function createRefundService(deps: RefundServiceDeps) {
           provider: attempt.provider,
           reason: input.reason,
           approverRef: ctx.actor.userId,
-          // D-23 — recorded separately and explicitly; this write has no
-          // effect on Enrolment access whatsoever.
+          // D-23 — recorded separately and explicitly; REVOKED is acted on
+          // below, once the provider refund has succeeded.
           accessDecision: input.accessDecision,
           status: "PROCESSING",
           actorId: ctx.actor.userId,
@@ -494,6 +515,43 @@ export function createRefundService(deps: RefundServiceDeps) {
       },
     });
 
+    // Warning #3 — REVOKED ends access only when money actually moved. Its own
+    // transaction, after the outcome is safely recorded: a refusal here (say a
+    // certificate issued in the meantime) can never lose the refund's record.
+    let access: RecordRefundResult["access"] = "unchanged";
+    if (input.accessDecision === "REVOKED" && status !== "FAILED") {
+      const accessReason = `Access revoked with refund: ${input.reason}`;
+      try {
+        const revoked = await deps.db.$transaction((tx) =>
+          tx.access.revoke({ orderId: input.orderId, reason: accessReason, actorId: ctx.actor.userId, now: now() }),
+        );
+        if (revoked) {
+          access = "revoked";
+          await deps.audit({
+            actorId: ctx.actor.userId,
+            action: revoked.toStatus === "WITHDRAWN" ? "enrolment.withdrawn" : "enrolment.cancelled",
+            targetType: "Enrolment",
+            targetId: revoked.enrolmentId,
+            outcome: "SUCCESS",
+            reason: accessReason,
+            before: { status: revoked.before },
+            after: { status: revoked.toStatus, refundId },
+          });
+        }
+      } catch (err) {
+        access = "not-revoked";
+        console.error(`[refund] could not revoke access for order ${input.orderId}`, err);
+        await deps.audit({
+          actorId: ctx.actor.userId,
+          action: "refund.access_revoke_failed",
+          targetType: "Refund",
+          targetId: refundId,
+          outcome: "FAILED",
+          reason: err instanceof Error ? err.message : "Unknown error.",
+        });
+      }
+    }
+
     const reconciliationEvidence = {
       orderId: input.orderId,
       paymentAttemptId: attempt.id,
@@ -521,7 +579,7 @@ export function createRefundService(deps: RefundServiceDeps) {
       });
     }
 
-    return { id: refundId, status, amountMinor: input.amountMinor, components };
+    return { id: refundId, status, amountMinor: input.amountMinor, components, access };
   });
 
   return { recordRefund };
@@ -575,6 +633,10 @@ export function createPrismaBackedRefundService(
             },
             order: {
               update: (args) => tx.order.update({ where: args.where, data: args.data }),
+            },
+            access: {
+              assertRevocable: (orderId) => assertOrderAccessRevocable(tx, orderId),
+              revoke: (args) => revokeAccessForOrder(tx, args),
             },
           } satisfies RefundTxClient),
         ),

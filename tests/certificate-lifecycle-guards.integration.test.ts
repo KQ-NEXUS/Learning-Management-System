@@ -60,8 +60,9 @@ import type {
 import type { CompletionScopeResult } from "@/server/services/completion-service";
 
 process.env.S3_BUCKET = "lms-private";
-process.env.S3_ENDPOINT = "http://localhost:9002";
-process.env.S3_PUBLIC_ENDPOINT = "http://localhost:9002";
+// The docker-compose MinIO (MINIO_PORT, default 9000); TEST_MINIO_ENDPOINT overrides.
+process.env.S3_ENDPOINT = process.env.TEST_MINIO_ENDPOINT ?? "http://localhost:9000";
+process.env.S3_PUBLIC_ENDPOINT = process.env.S3_ENDPOINT;
 process.env.S3_ACCESS_KEY_ID = "lms-minio";
 process.env.S3_SECRET_ACCESS_KEY = "change-me-minio";
 process.env.S3_FORCE_PATH_STYLE = "true";
@@ -487,5 +488,64 @@ describe("CR-06: a duplicate live enrolment is impossible and the revoke / flag 
       await errorCodeOf(() => testDb.prisma.enrolment.create({ data: { cohortId, userId, status: "ACTIVE" } })),
     ).toBeNull();
     expect(await liveEnrolmentCount(userId, cohortId)).toBe(1);
+  }, TEST_DB_TIMEOUT_MS);
+});
+
+// ---------------------------------------------------------------------------
+// Integration warning #4 — a live certificate blocks leaving the enrolment
+// ---------------------------------------------------------------------------
+
+describe("a live certificate blocks withdraw, cancel and transfer (real Postgres)", () => {
+  async function flaggedEnrolment() {
+    const seeded = await seedEnrolment({ mode: "AUTOMATIC" });
+    const issued = await issueSystem(seeded.enrolmentId);
+    if (issued.kind !== "issued") throw new Error("fixture issuance failed");
+    await inTransaction((tx) =>
+      flagCertificateForReview(
+        tx,
+        { enrolmentId: seeded.enrolmentId, now: new Date(), reason: "grade corrected", actorId: null },
+        liveIssuanceDeps,
+      ),
+    );
+    expect(await enrolmentStatus(seeded.enrolmentId)).toBe("ACTIVE");
+    return { ...seeded, certificateId: issued.certificateId };
+  }
+
+  async function enrolmentService() {
+    const { createPrismaBackedEnrolmentService } = await import("@/server/services/enrolment-service");
+    const { withPermission } = createTestWithPermission(
+      [grant("enrolments.manage", "GLOBAL")],
+      { userId: staffUserId },
+    );
+    return createPrismaBackedEnrolmentService(testDb.prisma as never, withPermission, async () => {});
+  }
+
+  it("refuses all three with a message naming the certificate, and changes nothing", async () => {
+    const f = await flaggedEnrolment();
+    const svc = await enrolmentService();
+    const { LiveCertificateError } = await import("@/server/services/enrolment-service");
+    const { cohortId: targetCohortId } = await seedCohortFixture(testDb.prisma, { courseId: f.courseId });
+    const ref = (await certificatesFor(f.enrolmentId))[0].verificationRef;
+
+    for (const attempt of [
+      () => svc.withdrawEnrolment({ enrolmentId: f.enrolmentId, reason: "left the course" }),
+      () => svc.cancelEnrolment({ enrolmentId: f.enrolmentId, reason: "failed review" }),
+      () => svc.transferEnrolment({ enrolmentId: f.enrolmentId, targetCohortId, reason: "moving cohort" }),
+    ]) {
+      const err = await attempt().catch((e) => e);
+      expect(err).toBeInstanceOf(LiveCertificateError);
+      expect(String(err.message)).toContain(ref);
+    }
+    expect(await enrolmentStatus(f.enrolmentId)).toBe("ACTIVE");
+    expect((await certificatesFor(f.enrolmentId))[0].status).toBe("ACTIVE");
+  }, TEST_DB_TIMEOUT_MS);
+
+  it("once the certificate is revoked, the withdrawal goes through", async () => {
+    const f = await flaggedEnrolment();
+    const svc = await enrolmentService();
+    await service.revokeCertificate({ certificateId: f.certificateId, reason: REVOKE_REASON });
+
+    await svc.withdrawEnrolment({ enrolmentId: f.enrolmentId, reason: "failed review" });
+    expect(await enrolmentStatus(f.enrolmentId)).toBe("WITHDRAWN");
   }, TEST_DB_TIMEOUT_MS);
 });

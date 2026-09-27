@@ -89,6 +89,9 @@ function harness(opts?: {
       $transaction: async (fn) =>
         fn({
           lockOrder: async ({ orderId }) => orders.get(orderId) ?? null,
+          // Warning #3's access path is proven against real Postgres in
+          // refund.integration.test.ts; here there is no enrolment to end.
+          access: { assertRevocable: async () => {}, revoke: async () => null },
           paymentAttempt: {
             findFirst: async () => attempts[0] ?? null,
           },
