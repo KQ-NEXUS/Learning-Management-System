@@ -26,6 +26,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { authorizeCollection, type CollectionAuthorization } from "@/server/permissions/collection-scope";
 import { isPaystackRailEnabled, isStripeRailEnabled } from "@/server/payments/settlement-config";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
@@ -951,6 +952,78 @@ export function createCohortService(deps: CohortServiceDeps) {
 // ---------------------------------------------------------------------------
 // Prisma-backed binding
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Integration warning #1 — the staff Cohorts list, filtered to the caller's scope
+// ---------------------------------------------------------------------------
+
+export type StaffCohortListRow = {
+  id: string;
+  code: string;
+  title: string;
+  courseId: string | null;
+  programmeId: string | null;
+  deliveryMode: string;
+  timezone: string;
+  enrolmentOpensAt: Date;
+  enrolmentClosesAt: Date;
+  startsAt: Date;
+  capacity: number;
+  seatsTaken: number;
+  status: string;
+  course: { title: string } | null;
+  programme: { title: string } | null;
+};
+
+export type StaffCohortListDeps = {
+  cohort: {
+    findMany(args: {
+      where: Readonly<Record<string, unknown>>;
+      orderBy: { startsAt: "desc" };
+      select: Record<string, unknown>;
+    }): Promise<StaffCohortListRow[]>;
+  };
+  authorizeCollection: (permission: "cohorts.view") => Promise<CollectionAuthorization>;
+};
+
+/**
+ * Every cohort the caller's `cohorts.view` grants reach — all of them for a
+ * GLOBAL grant, only the in-scope ones for a COHORT/PROGRAMME/COURSE grant.
+ * The scope is part of the query, so out-of-scope rows are never fetched.
+ * No grant at all is refused (`AuthorizationError`), never an empty list.
+ */
+export function createStaffCohortListService(deps: StaffCohortListDeps) {
+  async function listCohortsForStaff(): Promise<StaffCohortListRow[]> {
+    const { cohortWhere } = await deps.authorizeCollection("cohorts.view");
+    return deps.cohort.findMany({
+      where: cohortWhere,
+      orderBy: { startsAt: "desc" },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        courseId: true,
+        programmeId: true,
+        deliveryMode: true,
+        timezone: true,
+        enrolmentOpensAt: true,
+        enrolmentClosesAt: true,
+        startsAt: true,
+        capacity: true,
+        seatsTaken: true,
+        status: true,
+        course: { select: { title: true } },
+        programme: { select: { title: true } },
+      },
+    });
+  }
+  return { listCohortsForStaff };
+}
+
+export const listCohortsForStaff = createStaffCohortListService({
+  cohort: prisma.cohort as unknown as StaffCohortListDeps["cohort"],
+  authorizeCollection,
+}).listCohortsForStaff;
 
 const built = createCohortService({
   delegate: prisma.cohort as unknown as Delegate<CohortRecord>,

@@ -10,6 +10,7 @@ const { mocks } = vi.hoisted(() => ({
   mocks: {
     getCurrentActor: vi.fn(),
     can: vi.fn(),
+    canAnywhere: vi.fn(),
     redirect: vi.fn((url: string) => {
       throw new Error(`NEXT_REDIRECT:${url}`);
     }),
@@ -18,7 +19,7 @@ const { mocks } = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurrentActor }));
-vi.mock("@/server/permissions", () => ({ can: mocks.can }));
+vi.mock("@/server/permissions", () => ({ can: mocks.can, canAnywhere: mocks.canAnywhere }));
 vi.mock("@/app/(auth)/signin/actions", () => ({ signOutAction: vi.fn() }));
 vi.mock("@/server/services/profile-service", () => ({
   profileService: { getOwnProfile: async () => ({ name: "Ada Admin", email: "ada@example.test" }) },
@@ -37,13 +38,29 @@ async function visibleNav(): Promise<NavItem[]> {
 /** The layout asks `can(permission, {})`; grant everything except the listed permissions. */
 function grantAllExcept(...denied: string[]) {
   mocks.can.mockImplementation(async (permission: string) => !denied.includes(permission));
+  mocks.canAnywhere.mockImplementation(async (permission: string) => !denied.includes(permission));
 }
 
 describe("staff layout navigation", () => {
   beforeEach(() => {
     mocks.getCurrentActor.mockReset().mockResolvedValue({ userId: "staff-1", isStaff: true, roles: [] });
     mocks.can.mockReset();
+    mocks.canAnywhere.mockReset().mockResolvedValue(false);
     mocks.redirect.mockClear();
+  });
+
+  it("integration warning #1 — a cohort-scoped instructor sees Cohorts, Enrolments and Payments, not global-only sections", async () => {
+    // Holds these at COHORT scope only: `can(p, {})` (GLOBAL) is false, `canAnywhere(p)` is true.
+    const scoped = ["cohorts.view", "enrolments.view", "payments.view", "courses.view", "users.view"];
+    mocks.can.mockResolvedValue(false);
+    mocks.canAnywhere.mockImplementation(async (permission: string) => scoped.includes(permission));
+    const hrefs = (await visibleNav()).map((item) => item.href);
+
+    expect(hrefs).toEqual(expect.arrayContaining(["/staff", "/staff/cohorts", "/staff/enrolments", "/staff/payments"]));
+    // Their pages still need a GLOBAL grant, so no link that would land on "not found".
+    expect(hrefs).not.toContain("/staff/courses");
+    expect(hrefs).not.toContain("/staff/users");
+    expect(hrefs).not.toContain("/staff/reconciliation");
   });
 
   it("shows Reconciliation and Reports in a Finance group to staff who hold both permissions", async () => {

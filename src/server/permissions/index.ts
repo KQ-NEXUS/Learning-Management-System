@@ -11,6 +11,7 @@ import { loadGrantsForUser } from "@/server/services/grant-service";
 import { recordAuthorizationAudit } from "@/server/services/audit-service";
 import { createWithPermission } from "./with-permission";
 import { hasPermission, isGrantActive, type ResourceScope } from "./scope";
+import { collectionScopeFromGrants, type CollectionScopeSnapshot } from "./collection-scope";
 import type { Permission } from "./catalogue";
 
 export const withPermission = createWithPermission({
@@ -37,6 +38,27 @@ export async function can(
     .filter((grant) => isGrantActive(grant, now))
     .map(({ permission: p, scopeType, scopeId }) => ({ permission: p, scopeType, scopeId }));
   return hasPermission(grants, permission, resource);
+}
+
+/**
+ * Integration warning #1 — the union of the caller's active grants for a
+ * permission, or null when they hold it nowhere. Like `can`, a rendering
+ * courtesy (what to show, which rows to count); every action behind it still
+ * re-checks through `withPermission`.
+ */
+export async function collectionScopeFor(permission: Permission): Promise<CollectionScopeSnapshot | null> {
+  const actor = await getCurrentActor();
+  if (!actor) return null;
+  return collectionScopeFromGrants(await loadGrantsForUser(actor.userId), permission, new Date());
+}
+
+/**
+ * Whether the caller holds `permission` at ANY scope. `can(permission, {})`
+ * is true only for a GLOBAL grant; a cohort-scoped instructor needs this to
+ * see the sections whose lists are filtered to their scope.
+ */
+export async function canAnywhere(permission: Permission): Promise<boolean> {
+  return (await collectionScopeFor(permission)) !== null;
 }
 
 export { AuthenticationError, AuthorizationError } from "./with-permission";

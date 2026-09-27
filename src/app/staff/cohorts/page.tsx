@@ -1,45 +1,17 @@
-import { cohortService, loadCohortInstructors } from "@/server/services/cohort-service";
-import { courseService } from "@/server/services/course-service";
-import { programmeService } from "@/server/services/programme-service";
+import { listCohortsForStaff, loadCohortInstructors } from "@/server/services/cohort-service";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { CohortsTable, type CohortRow } from "./CohortsTable";
 
 export const metadata = { title: "Cohorts" };
 
-type CohortListRow = {
-  id: string;
-  code: string;
-  title: string;
-  courseId: string | null;
-  programmeId: string | null;
-  deliveryMode: string;
-  timezone: string;
-  enrolmentOpensAt: Date;
-  enrolmentClosesAt: Date;
-  startsAt: Date;
-  capacity: number;
-  seatsTaken: number;
-  status: string;
-};
-
-type TitleRow = { id: string; title: string };
-
 export default async function CohortsPage() {
   let rows: CohortRow[];
 
   try {
-    const cohorts = (await cohortService.list({})) as unknown as CohortListRow[];
-
-    // Course/Programme titles are supplementary display data, not the gate
-    // for this page — cohorts.view already decided that above. A caller
-    // without courses.view / programmes.view still sees their cohorts, just
-    // with "—" in the Offer column instead of a title.
-    const [courses, programmes] = await Promise.all([
-      courseService.list({}).catch(() => [] as unknown[]) as Promise<TitleRow[]>,
-      programmeService.list({}).catch(() => [] as unknown[]) as Promise<TitleRow[]>,
-    ]);
-    const courseTitles = new Map(courses.map((c) => [c.id, c.title]));
-    const programmeTitles = new Map(programmes.map((p) => [p.id, p.title]));
+    // Integration warning #1 — every cohort for a GLOBAL grant, only the
+    // caller's in-scope cohorts otherwise; each row carries its own course or
+    // programme title, so a scoped instructor sees real titles too.
+    const cohorts = await listCohortsForStaff();
 
     // One permission-checked lookup per cohort; a cohort whose instructors this viewer cannot read
     // simply shows none, rather than failing the whole list.
@@ -58,9 +30,7 @@ export default async function CohortsPage() {
 
     rows = cohorts.map((c) => {
       const isCourse = c.courseId != null;
-      const offerTitle = isCourse
-        ? (courseTitles.get(c.courseId!) ?? "—")
-        : (programmeTitles.get(c.programmeId!) ?? "—");
+      const offerTitle = (isCourse ? c.course?.title : c.programme?.title) ?? "—";
       return {
         id: c.id,
         code: c.code,

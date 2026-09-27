@@ -19,6 +19,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { authorizeCollection, type CollectionAuthorization } from "@/server/permissions/collection-scope";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
@@ -187,7 +188,7 @@ export type PaymentDetailOrderRow = {
 
 export type PaymentReadServiceDeps = {
   order: {
-    findMany(): Promise<PaymentListOrderRow[]>;
+    findMany(args: { where: Readonly<Record<string, unknown>> }): Promise<PaymentListOrderRow[]>;
     findUnique(args: { where: { id: string } }): Promise<PaymentDetailOrderRow | null>;
   };
   user: {
@@ -195,17 +196,17 @@ export type PaymentReadServiceDeps = {
   };
   orderScope: (orderId: string) => ResourceScope | Promise<ResourceScope>;
   withPermission: WithPermission;
+  /** Integration warning #1 — the list follows the caller's `payments.view` scope. */
+  authorizeCollection: (permission: "payments.view") => Promise<CollectionAuthorization>;
 };
 
 export function createPaymentReadService(deps: PaymentReadServiceDeps) {
-  const listPaymentsForStaff = deps.withPermission<Record<string, never>>(
-    "payments.view",
-    // The list has no single Order to scope to — matching the resource-service
-    // factory's own "list with no scope requires a GLOBAL grant" convention
-    // (`resource-service.ts`).
-    () => ({}),
-  )(async (): Promise<PaymentListRow[]> => {
-    const rows = await deps.order.findMany();
+  // Integration warning #1 — every order for a GLOBAL grant, only orders for
+  // in-scope cohorts otherwise; filtered in the query, and no grant at all is
+  // refused.
+  async function listPaymentsForStaff(): Promise<PaymentListRow[]> {
+    const { cohortWhere } = await deps.authorizeCollection("payments.view");
+    const rows = await deps.order.findMany({ where: { cohort: cohortWhere } });
     return rows.map((row) => ({
       id: row.id,
       reference: row.reference,
@@ -218,7 +219,7 @@ export function createPaymentReadService(deps: PaymentReadServiceDeps) {
       status: row.status,
       settlementState: derivedSettlementState(latestSucceeded(row.paymentAttempts)),
     }));
-  });
+  }
 
   const getPaymentDetailForStaff = deps.withPermission<string>(
     "payments.view",
@@ -305,11 +306,16 @@ const ATTEMPT_ACTUALS_SELECT = {
   exceptionNote: true,
 } as const;
 
-export function createPrismaBackedPaymentReadService(client: AnyPrisma, withPermission: WithPermission) {
+export function createPrismaBackedPaymentReadService(
+  client: AnyPrisma,
+  withPermission: WithPermission,
+  authorizeCollectionFor: PaymentReadServiceDeps["authorizeCollection"] = authorizeCollection,
+) {
   return createPaymentReadService({
     order: {
-      findMany: () =>
+      findMany: (args) =>
         client.order.findMany({
+          where: args.where,
           select: {
             id: true,
             reference: true,
@@ -366,10 +372,11 @@ export function createPrismaBackedPaymentReadService(client: AnyPrisma, withPerm
     },
     orderScope: orderCohortScope,
     withPermission,
+    authorizeCollection: authorizeCollectionFor,
   });
 }
 
 const built = createPrismaBackedPaymentReadService(prisma, liveWithPermission);
 
-export const listPaymentsForStaff = () => built.listPaymentsForStaff({});
+export const listPaymentsForStaff = () => built.listPaymentsForStaff();
 export const getPaymentDetailForStaff = (orderId: string) => built.getPaymentDetailForStaff(orderId);
