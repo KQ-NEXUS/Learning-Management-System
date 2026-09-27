@@ -111,6 +111,8 @@ type ReconciliationCandidate = {
   evidence: unknown;
   orderId: string;
   reconciledAt: Date | null;
+  /** F-03 — consecutive failed attempts so far (absent in older fakes = 0). */
+  reconcileAttempts?: number;
 };
 
 /** Structural — real Prisma's `paymentAttempt` delegate satisfies this, and
@@ -121,12 +123,25 @@ type PaymentAttemptDelegate = {
       status: "SUCCEEDED";
       reconciledAt: null;
       provider: { in: Array<"PAYSTACK" | "STRIPE"> };
+      OR: Array<{ nextReconcileAt: null } | { nextReconcileAt: { lte: Date } }>;
     };
-    orderBy: { confirmedAt: "asc" };
+    orderBy: Array<Record<string, unknown>>;
     take: number;
     select: Record<string, boolean>;
   }): Promise<ReconciliationCandidate[]>;
+  /** F-03 — records a failed attempt and when the row is next due. */
+  update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
 };
+
+/** F-03 — after this many failures the row is escalated to a person. */
+export const RECONCILE_ESCALATE_AFTER_FAILURES = 5;
+const RECONCILE_BASE_BACKOFF_MS = 15 * 60_000;
+const RECONCILE_MAX_BACKOFF_MS = 24 * 60 * 60_000;
+
+/** 15 min, 30, 60, 120… capped at 24 h, for the n-th consecutive failure. */
+export function reconcileBackoffMs(failures: number): number {
+  return Math.min(RECONCILE_BASE_BACKOFF_MS * 2 ** Math.max(failures - 1, 0), RECONCILE_MAX_BACKOFF_MS);
+}
 
 type OrderExpectationRow = {
   currency: string;
@@ -207,13 +222,17 @@ export function createReconcilePayments(deps: ReconcilePaymentsDeps) {
   async function reconcilePayments(
     batchLimit: number = DEFAULT_BATCH_LIMIT,
   ): Promise<{ reconciled: number; failed: number }> {
+    const sweepAt = now();
+    // F-03 — only rows that are due; never-tried rows first, then the ones
+    // whose backoff expired longest ago, then oldest settlement.
     const candidates = await deps.paymentAttempt.findMany({
       where: {
         status: "SUCCEEDED",
         reconciledAt: null,
         provider: { in: ["PAYSTACK", "STRIPE"] },
+        OR: [{ nextReconcileAt: null }, { nextReconcileAt: { lte: sweepAt } }],
       },
-      orderBy: { confirmedAt: "asc" },
+      orderBy: [{ nextReconcileAt: { sort: "asc", nulls: "first" } }, { confirmedAt: "asc" }],
       take: batchLimit,
       select: {
         id: true,
@@ -223,6 +242,7 @@ export function createReconcilePayments(deps: ReconcilePaymentsDeps) {
         evidence: true,
         orderId: true,
         reconciledAt: true,
+        reconcileAttempts: true,
       },
     });
 
@@ -386,11 +406,35 @@ export function createReconcilePayments(deps: ReconcilePaymentsDeps) {
 
         reconciled += 1;
       } catch (err) {
-        // A failed provider lookup (or any other per-row error) leaves the
-        // row entirely untouched — `reconciledAt` stays NULL, so the next
-        // scheduled invocation retries it. No partial write, ever (D-14).
+        // A failed provider lookup (or any other per-row error) writes no
+        // settlement value — `reconciledAt` and the actual columns stay NULL
+        // (D-14). F-03: the row's retry state moves forward instead, so it
+        // steps out of the head of the queue, and a persistently failing row
+        // reaches a person as a reconciliation case.
         failed += 1;
         console.error(`[payment-reconciliation] failed to reconcile attempt ${attempt.id}`, err);
+        const failures = (attempt.reconcileAttempts ?? 0) + 1;
+        try {
+          await deps.paymentAttempt.update({
+            where: { id: attempt.id },
+            data: {
+              reconcileAttempts: failures,
+              nextReconcileAt: new Date(sweepAt.getTime() + reconcileBackoffMs(failures)),
+            },
+          });
+          if (failures === RECONCILE_ESCALATE_AFTER_FAILURES && deps.syncReconciliationEvidence) {
+            await deps.syncReconciliationEvidence({
+              subject: "PAYMENT",
+              paymentAttemptId: attempt.id,
+              risk: "MISSING_PROVIDER_DATA",
+              evidence: {
+                reason: `Provider settlement evidence was unavailable after ${failures} attempts.`,
+              },
+            } as Parameters<NonNullable<typeof deps.syncReconciliationEvidence>>[0]);
+          }
+        } catch (bookkeepingErr) {
+          console.error(`[payment-reconciliation] could not record retry state for ${attempt.id}`, bookkeepingErr);
+        }
       }
     }
 

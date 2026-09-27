@@ -1517,12 +1517,18 @@ model PaymentAttempt {
   platformGrossActualMinor    Int?
   platformNetActualMinor      Int?
   reconciledAt                DateTime?
+  // F-03 — per-row retry state for the reconciliation sweep: a row whose
+  // provider evidence keeps failing is pushed back (exponential backoff) so it
+  // can never hold the head of the queue, and is escalated after 5 failures.
+  reconcileAttempts           Int       @default(0)
+  nextReconcileAt             DateTime?
 
   order               Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
   refunds             Refund[]
   reconciliationCases ReconciliationCase[]
 
   @@index([orderId, status])
+  @@index([status, reconciledAt, nextReconcileAt])
   @@index([provider, status])
   @@index([providerRef])
 }
