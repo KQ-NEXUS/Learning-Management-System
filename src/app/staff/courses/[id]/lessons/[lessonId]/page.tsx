@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AuthorizationError } from "@/server/permissions";
 import { lessonService, type LessonRecord } from "@/server/services/lesson-service";
 import type { LessonType } from "@/lib/upload-limits";
+import { formatVideoLength } from "@/lib/lesson-input";
 import { LessonEditorClient } from "./LessonEditorClient";
 
 export const metadata = { title: "Edit lesson" };
@@ -38,6 +39,7 @@ export default async function EditLessonPage({
         required: lesson.required,
         allowManualComplete: lesson.allowManualComplete,
         assessmentId: lesson.assessmentId,
+        videoLength: formatVideoLength(lesson.videoDurationSeconds),
       }}
     />
   );

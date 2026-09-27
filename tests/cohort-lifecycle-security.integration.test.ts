@@ -11,6 +11,12 @@ import { createCohortScopeResolvers } from "@/server/services/cohort-scope";
 import { CohortClosedError } from "@/server/services/seat-accounting";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import type { Delegate, ResourceAuditEntry } from "@/server/services/resource-service";
+import {
+  createScheduledSessionService,
+  type ScheduledSessionRecord,
+  type SessionCohortInfoDelegate,
+  type SessionTxClient,
+} from "@/server/services/scheduled-session-service";
 
 let db: TestDatabase;
 let actorId: string;
@@ -231,5 +237,102 @@ describe("cohort lifecycle concurrency against PostgreSQL", () => {
     expect(after.status).toBe(status);
     expect(after.coursePublicationId).toBeNull();
     expect(service.audits).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-04 — publish and every readiness-changing write serialize on the cohort
+// row, so a cohort can never publish on readiness that stopped being true.
+// ---------------------------------------------------------------------------
+
+describe("F-04 — cohort-row lock shared by publish and readiness-changing writes", () => {
+  /** Holds the cohort row lock from outside, starts `run`, and reports whether it waited. */
+  async function waitsForCohortLock(
+    cohortId: string,
+    run: () => Promise<unknown>,
+    whileLocked: () => Promise<unknown> = async () => {},
+  ) {
+    const locked = signal();
+    const release = signal();
+    const holder = db.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Cohort" WHERE "id" = ${cohortId} FOR UPDATE`;
+        locked.resolve();
+        await release.promise;
+      },
+      { timeout: 20_000 },
+    );
+    await locked.promise;
+    let finished = false;
+    const operation = run().then(
+      (value) => { finished = true; return value; },
+      (error: unknown) => { finished = true; return error; },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const waited = !finished;
+    await whileLocked();
+    release.resolve();
+    await holder;
+    return { waited, result: await operation };
+  }
+
+  it("publishCohort reads readiness under the lock: a readiness change committed while it waits is seen, and it refuses", async () => {
+    const { cohortId, courseId } = await seedCohortFixture(db.prisma, { deliveryMode: "SELF_PACED" });
+    await db.prisma.course.update({ where: { id: courseId }, data: { status: "PUBLISHED" } });
+    await db.prisma.coursePublication.create({
+      data: { courseId, version: 1, publishedById: actorId, payload: { completionRule: { kind: "ALL_REQUIRED" } } },
+    });
+    const before = await db.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
+    const { waited, result } = await waitsForCohortLock(
+      cohortId,
+      () => services().cohort.publishCohort({ cohortId, expectedUpdatedAt: before.updatedAt }),
+      // Readiness stops being true while publish is waiting (the course is withdrawn).
+      () => db.prisma.course.update({ where: { id: courseId }, data: { status: "ARCHIVED" } }),
+    );
+    expect(waited).toBe(true);
+    expect(result).toBeInstanceOf(Error);
+    expect((await db.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } })).status).toBe("DRAFT");
+  });
+
+  it("removing an instructor waits for the cohort row lock, then removes it", async () => {
+    const { cohortId } = await seedCohortFixture(db.prisma);
+    await db.prisma.cohortInstructor.create({ data: { cohortId, userId: actorId } });
+    const { waited } = await waitsForCohortLock(cohortId, () =>
+      services().cohort.removeCohortInstructor({ cohortId, userId: actorId }),
+    );
+    expect(waited).toBe(true);
+    expect(await db.prisma.cohortInstructor.count({ where: { cohortId } })).toBe(0);
+  });
+
+  it("cancelling a session waits for the cohort row lock, then cancels it", async () => {
+    const { cohortId } = await seedCohortFixture(db.prisma);
+    const session = await db.prisma.scheduledSession.create({
+      data: {
+        cohortId,
+        title: "Kick-off",
+        startsAt: new Date(Date.now() + 86_400_000),
+        endsAt: new Date(Date.now() + 90_000_000),
+      },
+    });
+    const { withPermission } = createTestWithPermission([grant("cohorts.manage")], { userId: actorId });
+    const scopes = createCohortScopeResolvers({
+      cohort: db.prisma.cohort, session: db.prisma.scheduledSession, enrolment: db.prisma.enrolment,
+    });
+    const sessions = createScheduledSessionService({
+      delegate: db.prisma.scheduledSession as unknown as Delegate<ScheduledSessionRecord>,
+      cohort: db.prisma.cohort as unknown as SessionCohortInfoDelegate,
+      db: { $transaction: (fn) => db.prisma.$transaction((tx) => fn(tx as unknown as SessionTxClient)) },
+      runInTransaction: (fn) => db.prisma.$transaction(() => fn()),
+      sessionScope: scopes.sessionCohortScope,
+      cohortScope: scopes.cohortResourceScope,
+      isViewerEnrolled: async () => false,
+      withPermission,
+      audit: async () => {},
+    });
+    const { waited } = await waitsForCohortLock(cohortId, () =>
+      sessions.cancelSession({ sessionId: session.id, reason: "Facilitator unavailable" }),
+    );
+    expect(waited).toBe(true);
+    expect((await db.prisma.scheduledSession.findUniqueOrThrow({ where: { id: session.id } })).cancelledAt).not.toBeNull();
   });
 });

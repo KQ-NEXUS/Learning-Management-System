@@ -81,7 +81,7 @@ const lessonCtx = async (lessonId: string) =>
 function buildService(
   initial: Partial<LessonResourceRecord>[],
   grants: RawGrant[],
-  opts: { enrolledCourseIds?: string[] } = {},
+  opts: { enrolledCourseIds?: string[]; closedLessonIds?: string[] } = {},
 ) {
   const { delegate, rows } = makeDelegate(initial);
   const { withPermission } = createTestWithPermission(grants, { userId: "staff-1" });
@@ -92,9 +92,12 @@ function buildService(
     delete: vi.fn(async () => {}),
     finalKey: (key: string) => key.replace(/^lesson-uploads\//, "lessons/"),
   };
+  // F-01 — learner access is now lesson-level (pinned, unlocked, window open).
+  // "Enrolled in c1" means every lesson is openable unless listed as closed.
   const enrolledCourseIds = new Set(opts.enrolledCourseIds ?? []);
-  const hasActiveEnrolmentCoveringCourse = vi.fn(async (_userId: string, courseId: string) =>
-    enrolledCourseIds.has(courseId),
+  const closedLessonIds = new Set(opts.closedLessonIds ?? []);
+  const canOpenLesson = vi.fn(async (_actor: { userId: string }, lessonId: string) =>
+    enrolledCourseIds.has("c1") && !closedLessonIds.has(lessonId),
   );
   const service = createLessonResourceService({
     delegate,
@@ -104,10 +107,10 @@ function buildService(
       audits.push(entry as Record<string, unknown>);
     },
     storage,
-    hasActiveEnrolmentCoveringCourse,
+    canOpenLesson,
     now: () => new Date("2026-09-10T12:00:00Z"),
   });
-  return { service, rows, storage, audits, hasActiveEnrolmentCoveringCourse };
+  return { service, rows, storage, audits, canOpenLesson };
 }
 
 describe("lessonResourceScope", () => {
@@ -260,13 +263,13 @@ describe("getDownloadableResourceForLearner", () => {
   const learner = { userId: "learner-1" };
 
   it("returns null (not a thrown error) for a non-enrolled actor", async () => {
-    const { service, hasActiveEnrolmentCoveringCourse } = buildService(
+    const { service, canOpenLesson } = buildService(
       [{ id: "res1", uploadStatus: "READY" }],
       [],
       { enrolledCourseIds: [] },
     );
     await expect(service.getDownloadableResourceForLearner(learner, "res1")).resolves.toBeNull();
-    expect(hasActiveEnrolmentCoveringCourse).toHaveBeenCalledWith("learner-1", "c1");
+    expect(canOpenLesson).toHaveBeenCalledWith(learner, "lesson1");
   });
 
   it("returns null for an unknown resource id, indistinguishable from not-enrolled", async () => {
@@ -337,13 +340,13 @@ describe("listLessonResourcesForLearner", () => {
   const learner = { userId: "learner-1" };
 
   it("returns [] (not a thrown error) for a non-enrolled actor", async () => {
-    const { service, hasActiveEnrolmentCoveringCourse } = buildService(
+    const { service, canOpenLesson } = buildService(
       [{ id: "res1", lessonId: "lesson1" }],
       [],
       { enrolledCourseIds: [] },
     );
     await expect(service.listLessonResourcesForLearner(learner, "lesson1")).resolves.toEqual([]);
-    expect(hasActiveEnrolmentCoveringCourse).toHaveBeenCalledWith("learner-1", "c1");
+    expect(canOpenLesson).toHaveBeenCalledWith(learner, "lesson1");
   });
 
   it("returns [] for an unknown lesson id", async () => {
@@ -406,5 +409,25 @@ describe("import boundaries (T-04-27d)", () => {
     const src = read("src/server/services/storage-service.ts");
     expect(src).not.toMatch(/@\/server\/permissions/);
     expect(src).not.toMatch(/withPermission/);
+  });
+});
+
+describe("F-01 — an enrolled learner still cannot reach files of a lesson they cannot open", () => {
+  const learner = { userId: "learner-1" };
+
+  it("download returns null for a locked / closed-window / unpublished lesson", async () => {
+    const { service } = buildService([{ id: "res1", lessonId: "lesson1", uploadStatus: "READY" }], [], {
+      enrolledCourseIds: ["c1"],
+      closedLessonIds: ["lesson1"],
+    });
+    await expect(service.getDownloadableResourceForLearner(learner, "res1")).resolves.toBeNull();
+  });
+
+  it("listing returns [] for the same lesson", async () => {
+    const { service } = buildService([{ id: "res1", lessonId: "lesson1" }], [], {
+      enrolledCourseIds: ["c1"],
+      closedLessonIds: ["lesson1"],
+    });
+    await expect(service.listLessonResourcesForLearner(learner, "lesson1")).resolves.toEqual([]);
   });
 });

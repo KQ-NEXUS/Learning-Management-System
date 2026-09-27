@@ -7,10 +7,16 @@
  * which throws `AuthenticationError` when there is no actor.
  */
 
+import { hashToken } from "@/server/auth/token-hash";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/server/db";
 import { isInCooldown } from "@/server/auth/request-cooldown";
-import { TOKEN_PURPOSE, VERIFICATION_TOKEN_TTL_MS, type TokenPurpose } from "@/lib/identity";
+import {
+  PASSWORD_RESET_TOKEN_TTL_MS,
+  TOKEN_PURPOSE,
+  VERIFICATION_TOKEN_TTL_MS,
+  type TokenPurpose,
+} from "@/lib/identity";
 import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
@@ -31,7 +37,7 @@ export type IssueTokenResult =
 
 export type ConsumeTokenResult = { ok: true } | { ok: false };
 
-type UserForVerification = { id: string; email: string; status: string };
+type UserForVerification = { id: string; email: string; status: string; passwordHash?: string | null };
 
 /** The narrow slice of the Prisma client this service actually uses. */
 export type VerificationStore = {
@@ -51,11 +57,17 @@ export type VerificationStore = {
     findFirst(args: Record<string, unknown>): Promise<UserForVerification | null>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<UserForVerification>;
   };
+  /** F-14b — a password reset clears the address's sign-in throttle (optional in fakes). */
+  loginThrottle?: { deleteMany(args: { where: { email: string } }): Promise<unknown> };
   $transaction<T>(fn: (tx: VerificationStore) => Promise<T>): Promise<T>;
 };
 
 function buildVerificationEmailText(verifyUrl: string): string {
-  return `Click to verify: ${verifyUrl}`;
+  // F-11 — the one pre-hijack case no server rule can catch is the owner
+  // verifying an account they never registered; the copy tells them not to.
+  return `Click to verify: ${verifyUrl}
+
+If you didn't create an account with this email address, ignore this email and don't click the link.`;
 }
 
 export function createVerificationService(deps: {
@@ -99,7 +111,7 @@ export function createVerificationService(deps: {
           userId: params.userId ?? null,
           identifier,
           purpose: params.purpose,
-          token,
+          token: hashToken(token), // F-14a — the email carries the raw token
           expires: new Date(now().getTime() + params.ttlMs),
           createdAt: now(),
         },
@@ -120,7 +132,7 @@ export function createVerificationService(deps: {
       // greater-than is what makes a token expired exactly at its `expires`
       // instant.
       const result = await tx.verificationToken.updateMany({
-        where: { token: params.token, purpose: params.purpose, consumedAt: null, expires: { gt: now() } },
+        where: { token: hashToken(params.token), purpose: params.purpose, consumedAt: null, expires: { gt: now() } },
         data: { consumedAt: now() },
       });
 
@@ -129,7 +141,7 @@ export function createVerificationService(deps: {
       }
 
       const row = await tx.verificationToken.findFirst({
-        where: { token: params.token, purpose: params.purpose },
+        where: { token: hashToken(params.token), purpose: params.purpose },
       });
       if (!row) return { ok: false };
 
@@ -138,8 +150,18 @@ export function createVerificationService(deps: {
     });
   }
 
-  async function verifyEmail(token: string): Promise<{ ok: true } | { ok: false }> {
+  /**
+   * `setPasswordToken` is present only for a CONTESTED registration (F-11): the
+   * account was registered more than once before verification, so it has no
+   * password. The verifier — the only party who can read this inbox — is sent
+   * straight to choose one with a fresh password-reset token.
+   */
+  async function verifyEmail(
+    token: string,
+  ): Promise<{ ok: true; setPasswordToken?: string } | { ok: false }> {
     let verifiedUserId: string | null = null;
+    let verifiedEmail: string | null = null;
+    let needsPassword = false;
 
     const result = await consumeToken(
       { token, purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION },
@@ -150,7 +172,12 @@ export function createVerificationService(deps: {
           where: { id: user.id, email: row.identifier, status: "PENDING_VERIFICATION" },
           data: { status: "ACTIVE", emailVerified: now() },
         });
-        if (activated.count === 1) verifiedUserId = user.id;
+        if (activated.count === 1) {
+          verifiedUserId = user.id;
+          verifiedEmail = row.identifier;
+          // Exactly null: a contested registration wiped it (F-11).
+          needsPassword = user.passwordHash === null;
+        }
       },
     );
 
@@ -166,7 +193,21 @@ export function createVerificationService(deps: {
       });
     }
 
-    return result.ok && verifiedUserId ? { ok: true } : { ok: false };
+    if (!result.ok || !verifiedUserId) return { ok: false };
+
+    if (needsPassword && verifiedEmail) {
+      const issued = await issueToken({
+        userId: verifiedUserId,
+        identifier: verifiedEmail,
+        purpose: TOKEN_PURPOSE.PASSWORD_RESET,
+        ttlMs: PASSWORD_RESET_TOKEN_TTL_MS,
+      });
+      // In the reset cooldown the account is still verified and safe (it has no
+      // password); the page falls back to the normal "forgot password" route.
+      if (issued.ok) return { ok: true, setPasswordToken: issued.token };
+    }
+
+    return { ok: true };
   }
 
   /** One single result value in all cases — plans 02 and 03 both consume this entry point. */

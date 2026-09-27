@@ -133,6 +133,8 @@ export async function saveLessonAction(
     linkUrl: fieldValue(form, "linkUrl"),
     required: form.get("required") === "on",
     allowManualComplete: form.get("allowManualComplete") === "on",
+    // F-15 — a blank length clears it; only VIDEO lessons carry one.
+    ...(type === "VIDEO" ? { videoDurationSeconds: fieldValue(form, "videoDurationSeconds") ?? null } : {}),
   };
 
   let newLessonId: string | null = null;

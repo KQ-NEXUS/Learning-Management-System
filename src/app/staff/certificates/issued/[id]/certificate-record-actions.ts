@@ -8,6 +8,7 @@ import {
   reissueCertificate,
   RevocationReasonRequiredError,
   CertificateChangedError,
+  NoCompletionRecordError,
 } from "@/server/services/certificate-service";
 
 /**
@@ -62,6 +63,9 @@ function mapError(error: unknown): string {
   }
   if (error instanceof CertificateChangedError) {
     return "This certificate changed while you were working on it. Reload it and try again.";
+  }
+  if (error instanceof NoCompletionRecordError) {
+    return "This learner no longer meets the completion rules, so the certificate can't be reissued. It can be reissued once they complete again.";
   }
   return "This action could not be completed. Reload the page and try again.";
 }

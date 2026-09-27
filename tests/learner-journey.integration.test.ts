@@ -328,6 +328,13 @@ describe("the learner journey — real Postgres (LRN-01..LRN-07)", () => {
         }),
       ).toBeNull();
 
+      // F-15 — credit is paced against wall-clock time since the first tick;
+      // simulate the learner having actually watched for two minutes.
+      await testDb.prisma.lessonWatchProgress.update({
+        where: { enrolmentId_lessonId: { enrolmentId, lessonId: lesson3Id } },
+        data: { startedAt: new Date(Date.now() - 2 * 60_000) },
+      });
+
       const watchResult = await recordWatchProgress(learner, {
         enrolmentId,
         lessonId: lesson3Id,

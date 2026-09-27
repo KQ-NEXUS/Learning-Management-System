@@ -38,10 +38,8 @@
  * `await import(...)` — see `tests/learner-journey.integration.test.ts`'s
  * header for the identical technique applied to `DATABASE_URL`.
  *
- * The port below (9002, not the 9000 `storage-service.ts`'s own
- * `.env.example` documents) is this environment's actual published MinIO
- * port — verified reachable and holding the `lms-private` bucket with the
- * `.env.example` placeholder credentials before writing this file.
+ * The MinIO below is the docker-compose one (MINIO_PORT, default 9000;
+ * TEST_MINIO_ENDPOINT overrides it), holding the `lms-private` bucket.
  *
  * PREREQUISITE: Docker must be running. If it is not, `beforeAll` fails with
  * a container-start error and every case reports BLOCKED — never a silent
@@ -60,8 +58,9 @@ import type {
 } from "@/server/services/submission-service";
 
 process.env.S3_BUCKET = "lms-private";
-process.env.S3_ENDPOINT = "http://localhost:9002";
-process.env.S3_PUBLIC_ENDPOINT = "http://localhost:9002";
+// The docker-compose MinIO (MINIO_PORT, default 9000); TEST_MINIO_ENDPOINT overrides.
+process.env.S3_ENDPOINT = process.env.TEST_MINIO_ENDPOINT ?? "http://localhost:9000";
+process.env.S3_PUBLIC_ENDPOINT = process.env.S3_ENDPOINT;
 process.env.S3_ACCESS_KEY_ID = "lms-minio";
 process.env.S3_SECRET_ACCESS_KEY = "change-me-minio";
 process.env.S3_FORCE_PATH_STYLE = "true";
@@ -110,8 +109,8 @@ const storage: SubmissionStorage = {
 function buildService(): Svc {
   return createSubmissionService({
     delegate: testDb.prisma.submission as unknown as SubmissionDelegate,
-    resolveAssessment: (assessmentId) =>
-      testDb.prisma.assessment.findUnique({
+    resolveAssessment: async (assessmentId) => {
+      const row = await testDb.prisma.assessment.findUnique({
         where: { id: assessmentId },
         select: {
           id: true,
@@ -120,12 +119,21 @@ function buildService(): Svc {
           status: true,
           version: true,
           dueAt: true,
+          availableFrom: true,
           availableUntil: true,
           allowedFileTypes: true,
           maxFileSizeBytes: true,
           allowResubmission: true,
+          lessons: { select: { id: true } },
         },
-      }) as never,
+      });
+      if (!row) return null;
+      const { lessons, ...rest } = row;
+      return { ...rest, lessonIds: lessons.map((l) => l.id) } as never;
+    },
+    // F-08's lesson/access-window gate is proven in the unit suite and
+    // learner-access tests; these cases exercise storage and Postgres.
+    canWorkOnAssessment: async () => true,
     store: testDb.prisma as unknown as SubmissionStore,
     storage,
     presignDownload: (input) =>

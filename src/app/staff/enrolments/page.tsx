@@ -3,12 +3,12 @@ import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { EnrolmentsTable, type EnrolmentListRow } from "./EnrolmentsTable";
 
 /**
- * The global scoped `/staff/enrolments` list (UI-SPEC line 186).
+ * The `/staff/enrolments` list (UI-SPEC line 186).
  *
- * `loadStaffEnrolments` is gated on `enrolments.view` with NO scope resolver
- * — only a GLOBAL grant reaches it (T-05-95). A COHORT-scoped grant is
- * denied here exactly like `cohortService.list({})` denies an unscoped
- * caller in `cohorts/page.tsx` — there is no fetch-then-filter fallback.
+ * `loadStaffEnrolments` follows the caller's `enrolments.view` grants
+ * (integration warning #1): everything for a GLOBAL grant, only in-scope
+ * cohorts' enrolments otherwise, filtered in the query itself (T-05-95 — no
+ * fetch-then-filter). A caller with no grant is denied.
  */
 
 export const metadata = { title: "Enrolments" };

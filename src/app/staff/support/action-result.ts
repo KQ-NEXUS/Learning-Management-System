@@ -1,4 +1,5 @@
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { StaleTicketVersionError } from "@/server/services/ticket-service";
 import { IllegalTicketTransitionError, TicketAlreadyAssignedError, TicketReasonRequiredError } from "@/server/services/ticket-lifecycle";
 
@@ -24,7 +25,7 @@ export function mapStaffTicketFailure(error: unknown): StaffTicketActionResult {
     error instanceof TicketReasonRequiredError ||
     error instanceof TicketAlreadyAssignedError ||
     error instanceof IllegalTicketTransitionError ||
-    error instanceof TypeError
+    error instanceof UserInputError
   ) {
     return { ok: false, kind: "validation", message: error.message };
   }

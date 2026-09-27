@@ -109,6 +109,28 @@ describe("IssuedCertificatesTable — filter (UI-SPEC §6.1)", () => {
     expect(screen.getAllByText("Active Learner").length).toBeGreaterThan(0);
     expect(screen.queryByText("Flagged Learner")).toBeNull();
   });
+
+  it("starts on the filter the page passes in, so the overview's ?status=flagged link lands filtered", () => {
+    const rows = [
+      baseCert({ id: "c-active", learnerName: "Active Learner", status: "ACTIVE" }),
+      baseCert({ id: "c-flagged", learnerName: "Flagged Learner", status: "ACTIVE", reviewFlaggedAt: new Date("2026-02-01") }),
+    ];
+    render(<IssuedCertificatesTable rows={rows} initialFilter="flagged" />);
+
+    expect(screen.getAllByText("Flagged Learner").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Active Learner")).toBeNull();
+  });
+});
+
+describe("issued certificates page — ?status= query", () => {
+  it("accepts only the known filter values", async () => {
+    const { initialCertificateFilter } = await import("@/lib/certificate-display-status");
+    expect(initialCertificateFilter("flagged")).toBe("flagged");
+    expect(initialCertificateFilter("revoked")).toBe("revoked");
+    expect(initialCertificateFilter("bogus")).toBe("");
+    expect(initialCertificateFilter(["flagged", "active"])).toBe("");
+    expect(initialCertificateFilter(undefined)).toBe("");
+  });
 });
 
 describe("IssuedCertificatesTable — no inline destructive actions", () => {

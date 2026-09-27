@@ -26,6 +26,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { StaleOrderError } from "@/server/services/reorder-service";
@@ -73,6 +74,11 @@ export type CancelCohortActionResult =
 // ---------------------------------------------------------------------------
 
 function toFailure(error: unknown): CommonFailure {
+  // Integration warning #4 — e.g. a learner in the cohort still holds a live
+  // certificate. The message names it and says what to do.
+  if (error instanceof UserInputError) {
+    return { ok: false, reason: "INVALID", message: error.message };
+  }
   if (error instanceof CohortClosedError) {
     return { ok: false, reason: "INVALID", message: error.message };
   }

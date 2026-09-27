@@ -22,9 +22,19 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedLearnerFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
+import {
+  seedCohortFixture,
+  seedEnrolmentFixture,
+  seedLearnerFixture,
+  seedPaystackNgnFeeScheduleFixture,
+} from "./support/cohort-fixtures";
 import { createTestWithPermission, grant } from "./support/harness";
 import { createRefundService, type RefundServiceDeps, type RefundTxClient } from "@/server/services/refund-service";
+import {
+  assertOrderAccessRevocable,
+  LiveCertificateError,
+  revokeAccessForOrder,
+} from "@/server/services/enrolment-service";
 import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
 
 let testDb: TestDatabase;
@@ -61,7 +71,7 @@ afterAll(async () => {
  * arranged directly rather than re-run through the full checkout+webhook
  * flow.
  */
-async function seedPaidOrder(): Promise<{ orderId: string; attemptId: string }> {
+async function seedPaidOrder(): Promise<{ orderId: string; attemptId: string; cohortId: string; userId: string }> {
   const { cohortId } = await seedCohortFixture(testDb.prisma, {
     priceNgnMinor: BASE_AMOUNT_MINOR,
     priceUsdMinor: null,
@@ -102,7 +112,25 @@ async function seedPaidOrder(): Promise<{ orderId: string; attemptId: string }> 
     select: { id: true },
   });
 
-  return { orderId: order.id, attemptId: attempt.id };
+  return { orderId: order.id, attemptId: attempt.id, cohortId, userId };
+}
+
+/** A paid order plus the learner's ACTIVE enrolment it bought (holding a seat). */
+async function seedPaidEnrolment() {
+  const paid = await seedPaidOrder();
+  await testDb.prisma.cohort.update({ where: { id: paid.cohortId }, data: { seatsTaken: 1 } });
+  const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, {
+    cohortId: paid.cohortId,
+    userId: paid.userId,
+    status: "ACTIVE",
+    activatedAt: new Date(),
+    orderId: paid.orderId,
+  });
+  return { ...paid, enrolmentId };
+}
+
+async function statusOf(enrolmentId: string) {
+  return (await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } })).status;
 }
 
 /**
@@ -115,7 +143,10 @@ async function seedPaidOrder(): Promise<{ orderId: string; attemptId: string }> 
  */
 function realService(
   actorId: string,
-  opts?: { paystackOutcome?: { id: number; status: string; amount: number; currency: string } },
+  opts?: {
+    paystackOutcome?: { id: number; status: string; amount: number; currency: string };
+    paystackFails?: boolean;
+  },
 ) {
   const { withPermission } = createTestWithPermission([grant("refunds.manage")], { userId: actorId });
   const deps: RefundServiceDeps = {
@@ -148,18 +179,23 @@ function realService(
                 return rows.reduce((sum, row) => sum + row.amountMinor, 0);
               },
               create: (args) => tx.refund.create({ data: args.data as never, select: { id: true } }),
+              update: (args) => tx.refund.update({ where: args.where as never, data: args.data as never }),
+            },
+            order: {
+              update: (args) => tx.order.update({ where: args.where as never, data: args.data as never }),
+            },
+            access: {
+              assertRevocable: (orderId) => assertOrderAccessRevocable(tx as never, orderId),
+              revoke: (args) => revokeAccessForOrder(tx as never, args),
             },
           };
           return fn(client);
         }),
     },
-    refund: {
-      update: (args) => testDb.prisma.refund.update({ where: args.where as never, data: args.data as never }),
+    paystackRefund: async () => {
+      if (opts?.paystackFails) throw new Error("Paystack is unavailable.");
+      return opts?.paystackOutcome ?? { id: 1, status: "processed", amount: 0, currency: "NGN" };
     },
-    order: {
-      update: (args) => testDb.prisma.order.update({ where: args.where as never, data: args.data as never }),
-    },
-    paystackRefund: async () => opts?.paystackOutcome ?? { id: 1, status: "processed", amount: 0, currency: "NGN" },
     stripeRefund: async () => ({ id: "re_test", status: "succeeded", amount: 0, currency: "usd" }),
     orderScope: async () => ({}),
     withPermission,
@@ -278,5 +314,116 @@ describe("recordRefund — real Postgres component allocation and access decisio
     ).toBe(BREAKDOWN.totalAmountMinor);
     expect(row.accessDecision).toBe("REVOKED");
     expect(row.status).toBe("COMPLETED");
+  }, 30_000);
+});
+
+describe("integration warning #3 — 'Revoke access' on a refund ends the learner's access", () => {
+  it("REVOKED withdraws the enrolment the order bought, releases its seat and audits it", async () => {
+    const f = await seedPaidEnrolment();
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+
+    const result = await realService(staffUserId).recordRefund({
+      orderId: f.orderId,
+      amountMinor: BREAKDOWN.totalAmountMinor,
+      reason: "Learner withdrew in week one.",
+      accessDecision: "REVOKED",
+    });
+
+    expect(result.status).toBe("COMPLETED");
+    expect(result.access).toBe("revoked");
+    expect(await statusOf(f.enrolmentId)).toBe("WITHDRAWN");
+    expect((await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: f.cohortId } })).seatsTaken).toBe(0);
+    expect(
+      await testDb.prisma.auditEvent.count({ where: { action: "enrolment.withdrawn", targetId: f.enrolmentId } }),
+    ).toBe(1);
+  }, 30_000);
+
+  it("RETAINED leaves the enrolment ACTIVE", async () => {
+    const f = await seedPaidEnrolment();
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+
+    const result = await realService(staffUserId).recordRefund({
+      orderId: f.orderId,
+      amountMinor: 1_000,
+      reason: "Goodwill partial refund.",
+      accessDecision: "RETAINED",
+    });
+
+    expect(result.access).toBe("unchanged");
+    expect(await statusOf(f.enrolmentId)).toBe("ACTIVE");
+  }, 30_000);
+
+  it("follows a transfer: the learner's current enrolment is the one withdrawn", async () => {
+    const f = await seedPaidEnrolment();
+    await testDb.prisma.enrolment.update({ where: { id: f.enrolmentId }, data: { status: "TRANSFERRED" } });
+    const { cohortId: targetCohortId } = await seedCohortFixture(testDb.prisma, { seatsTaken: 1 });
+    const { enrolmentId: currentId } = await seedEnrolmentFixture(testDb.prisma, {
+      cohortId: targetCohortId,
+      userId: f.userId,
+      status: "ACTIVE",
+      activatedAt: new Date(),
+      transferredFromId: f.enrolmentId,
+    });
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+
+    const result = await realService(staffUserId).recordRefund({
+      orderId: f.orderId,
+      amountMinor: BREAKDOWN.totalAmountMinor,
+      reason: "Learner withdrew after transferring.",
+      accessDecision: "REVOKED",
+    });
+
+    expect(result.access).toBe("revoked");
+    expect(await statusOf(currentId)).toBe("WITHDRAWN");
+    expect(await statusOf(f.enrolmentId)).toBe("TRANSFERRED");
+  }, 30_000);
+
+  it("a live certificate refuses the whole refund before any money moves", async () => {
+    const f = await seedPaidEnrolment();
+    const course = await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: f.cohortId }, select: { courseId: true } });
+    await testDb.prisma.certificate.create({
+      data: {
+        enrolmentId: f.enrolmentId,
+        userId: f.userId,
+        scope: "COURSE",
+        courseId: course.courseId,
+        awardTitle: "Refund Course",
+        learnerName: "Refund Learner",
+        status: "ACTIVE",
+        verificationRef: `KQ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        storageKey: "certificates/refund-test",
+      },
+    });
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+    const service = realService(staffUserId);
+
+    const err = await service
+      .recordRefund({
+        orderId: f.orderId,
+        amountMinor: BREAKDOWN.totalAmountMinor,
+        reason: "Learner asked for a refund.",
+        accessDecision: "REVOKED",
+      })
+      .catch((e) => e);
+
+    expect(err).toBeInstanceOf(LiveCertificateError);
+    expect(await testDb.prisma.refund.count({ where: { orderId: f.orderId } })).toBe(0);
+    expect(await statusOf(f.enrolmentId)).toBe("ACTIVE");
+  }, 30_000);
+
+  it("a failed provider refund keeps access — no money moved", async () => {
+    const f = await seedPaidEnrolment();
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+
+    const result = await realService(staffUserId, { paystackFails: true }).recordRefund({
+      orderId: f.orderId,
+      amountMinor: BREAKDOWN.totalAmountMinor,
+      reason: "Learner withdrew in week one.",
+      accessDecision: "REVOKED",
+    });
+
+    expect(result.status).toBe("FAILED");
+    expect(result.access).toBe("unchanged");
+    expect(await statusOf(f.enrolmentId)).toBe("ACTIVE");
   }, 30_000);
 });

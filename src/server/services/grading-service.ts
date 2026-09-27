@@ -35,6 +35,7 @@
 
 import { prisma } from "@/server/db";
 import { withPermission as liveWithPermission } from "@/server/permissions";
+import { hasPermission, narrowScopeToCourse } from "@/server/permissions/scope";
 import { recalculateCompletionAndIssue } from "@/server/services/certificate-issuance-service";
 import type { CompletionServiceTxClient } from "@/server/services/completion-service";
 import type { ResourceScope } from "@/server/permissions/scope";
@@ -317,14 +318,26 @@ export function createGradingService(deps: GradingServiceDeps) {
   async function submissionEnrolmentScope(submissionId: string): Promise<ResourceScope> {
     const submission = await deps.submission.findUnique({ where: { id: submissionId } });
     if (!submission) return {};
-    return deps.enrolmentScope(submission.enrolmentId);
+    return assessmentBoundScope(submission.assessmentId, await deps.enrolmentScope(submission.enrolmentId));
   }
 
   /** Same shape as `submissionEnrolmentScope`, keyed on a Grade's own `enrolmentId` (T-10-23). */
   async function gradeEnrolmentScope(gradeId: string): Promise<ResourceScope> {
     const grade = await deps.grade.findUnique({ where: { id: gradeId } });
     if (!grade) return {};
-    return deps.enrolmentScope(grade.enrolmentId);
+    return assessmentBoundScope(grade.assessmentId, await deps.enrolmentScope(grade.enrolmentId));
+  }
+
+  /**
+   * F-05 — work on one assessment is scoped to that assessment's OWN course
+   * within the cohort, so a COURSE grant for another member course of the
+   * same programme cohort never matches. A missing assessment resolves to
+   * `{}` (GLOBAL only), like a missing submission or grade.
+   */
+  async function assessmentBoundScope(assessmentId: string, cohortScope: ResourceScope): Promise<ResourceScope> {
+    const assessment = await deps.assessment.findUnique({ where: { id: assessmentId } });
+    if (!assessment) return {};
+    return narrowScopeToCourse(cohortScope, assessment.courseId);
   }
 
   /**
@@ -386,7 +399,7 @@ export function createGradingService(deps: GradingServiceDeps) {
   const listCohortGradingSummary = withPermission<{ cohortId: string }>(
     "submissions.view",
     (input) => deps.cohortScope(input.cohortId),
-  )(async (input): Promise<CohortGradingSummaryRow[]> => {
+  )(async (input, ctx): Promise<CohortGradingSummaryRow[]> => {
     const cohort = await deps.cohort.findUnique({ where: { id: input.cohortId } });
     if (!cohort) return [];
 
@@ -398,9 +411,15 @@ export function createGradingService(deps: GradingServiceDeps) {
     // ASSIGNMENT-type only — D-01's auto-release means a Quiz never produces
     // a DRAFT grade a human needs to act on, so it never belongs on this
     // grader-facing landing tab.
+    // F-05 — a COURSE grant reaches the cohort, but only its own course's
+    // assessments are listed; PROGRAMME/COHORT/GLOBAL grants see them all.
     const assessments = (
       await deps.assessment.findMany({ where: { courseId: { in: courseIds } } })
-    ).filter((a) => a.type === "ASSIGNMENT");
+    ).filter(
+      (a) =>
+        a.type === "ASSIGNMENT" &&
+        hasPermission(ctx.grants, "submissions.view", narrowScopeToCourse(ctx.resource, a.courseId)),
+    );
     if (assessments.length === 0) return [];
 
     const enrolments = await deps.enrolment.findMany({ where: { cohortId: input.cohortId } });
@@ -434,7 +453,7 @@ export function createGradingService(deps: GradingServiceDeps) {
     cohortId: string;
     assessmentId: string;
     status?: GradeStatusValue;
-  }>("submissions.view", (input) => deps.cohortScope(input.cohortId))(
+  }>("submissions.view", async (input) => assessmentBoundScope(input.assessmentId, await deps.cohortScope(input.cohortId)))(
     async (input): Promise<GradingQueueRow[]> => {
       // Constrained by the enrolment's OWN cohortId — never by a
       // caller-supplied list of submission ids, which would let a crafted

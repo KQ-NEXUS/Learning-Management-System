@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { narrowScopeToCourse } from "@/server/permissions/scope";
 
 export type TicketContextSource = Partial<{
   userId: string | null;
@@ -81,7 +82,7 @@ export type StaffTicketContextAuthorizerDeps = {
   enrolmentScope: (enrolmentId: string) => Promise<ContextScope>;
   findSubmission: (
     submissionId: string,
-  ) => Promise<{ assessmentId: string; enrolmentId: string; cohortId: string } | null>;
+  ) => Promise<{ assessmentId: string; enrolmentId: string; cohortId: string; courseId: string } | null>;
   findCertificateEnrolment: (certificateId: string) => Promise<string | null>;
 };
 
@@ -111,7 +112,9 @@ export function createStaffTicketContextAuthorizer(
       case "SUBMISSION": {
         const submission = await deps.findSubmission(id);
         if (!submission) return null;
-        if (!(await deps.can("submissions.view", await deps.enrolmentScope(submission.enrolmentId)))) return null;
+        // F-05 — the same assessment-course narrowing the grading page applies.
+        const scope = narrowScopeToCourse(await deps.enrolmentScope(submission.enrolmentId), submission.courseId);
+        if (!(await deps.can("submissions.view", scope))) return null;
         return {
           href: `/staff/cohorts/${seg(submission.cohortId)}/grading/${seg(submission.assessmentId)}/${seg(id)}`,
         };

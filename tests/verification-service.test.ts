@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { hashToken } from "@/server/auth/token-hash";
 import { guardFindUnique } from "./support/prisma-contract";
 import { TOKEN_PURPOSE } from "@/lib/identity";
 import {
@@ -7,7 +8,7 @@ import {
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
 
-type UserRow = { id: string; email: string; status: string };
+type UserRow = { id: string; email: string; status: string; passwordHash?: string | null };
 
 /** A recognisable rejection used by every "rejecting transport" test in this
  * file, so a failing assertion's stack trace is unambiguous about its origin. */
@@ -168,7 +169,7 @@ describe("issueToken", () => {
     expect(second.ok).toBe(true);
 
     expect(tokens).toHaveLength(2);
-    const priorRow = tokens.find((t) => first.ok && t.token === first.token);
+    const priorRow = tokens.find((t) => first.ok && t.token === hashToken(first.token));
     expect(priorRow?.consumedAt).not.toBeNull();
 
     if (first.ok) {
@@ -187,7 +188,7 @@ describe("consumeToken", () => {
     const { service, tokens } = harness();
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-1",
+      token: hashToken("tok-1"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date("2026-09-03T12:00:00Z"),
       consumedAt: null,
@@ -211,7 +212,7 @@ describe("consumeToken", () => {
     const { service, tokens } = harness();
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-1",
+      token: hashToken("tok-1"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date("2026-09-03T12:00:00Z"),
       consumedAt: null,
@@ -238,7 +239,7 @@ describe("consumeToken", () => {
     const { service, tokens } = harness();
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-exact",
+      token: hashToken("tok-exact"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: expiresAt,
       consumedAt: null,
@@ -254,7 +255,7 @@ describe("consumeToken", () => {
 
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-before",
+      token: hashToken("tok-before"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date(expiresAt.getTime() + 1),
       consumedAt: null,
@@ -273,7 +274,7 @@ describe("consumeToken", () => {
     const { service, tokens } = harness();
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-1",
+      token: hashToken("tok-1"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date("2026-09-03T12:00:00Z"),
       consumedAt: null,
@@ -296,7 +297,7 @@ describe("verifyEmail", () => {
     });
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-1",
+      token: hashToken("tok-1"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date("2026-09-03T12:00:00Z"),
       consumedAt: null,
@@ -315,7 +316,7 @@ describe("verifyEmail", () => {
     });
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-1",
+      token: hashToken("tok-1"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date("2026-09-03T12:00:00Z"),
       consumedAt: null,
@@ -418,7 +419,7 @@ describe("consumeToken — lifecycle regression coverage", () => {
     const { service, tokens, store } = harness();
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-1",
+      token: hashToken("tok-1"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date("2026-09-03T12:00:00Z"),
       consumedAt: null,
@@ -458,7 +459,7 @@ describe("consumeToken — lifecycle regression coverage", () => {
     const { service, tokens } = harness();
     tokens.push({
       identifier: "learner@example.com",
-      token: "tok-1",
+      token: hashToken("tok-1"),
       purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
       expires: new Date("2026-09-03T12:00:00Z"),
       consumedAt: null,
@@ -494,7 +495,7 @@ describe("issueToken — invalidate-on-reissue regression coverage", () => {
     expect(second.ok).toBe(true);
 
     if (first.ok) {
-      const supersededRow = tokens.find((t) => t.token === first.token);
+      const supersededRow = tokens.find((t) => t.token === hashToken(first.token));
       // consumedAt non-null here means "superseded by a reissue," NOT "the
       // link was clicked" — a stamped consumedAt on this row was set by
       // invalidate-on-reissue, never by a claim. Any future code that reads
@@ -567,5 +568,28 @@ describe("verifyEmail — non-disclosure on the not-valid path", () => {
     // The not-valid shape is exactly `{ ok: false }` — no email, name,
     // status, or identifier field exists to leak.
     expect(Object.keys(result)).toEqual(["ok"]);
+  });
+});
+
+describe("verifyEmail — contested registration (F-11)", () => {
+  it("a verified account with no password gets a set-password token for the verifier", async () => {
+    harness_now.value = new Date("2026-09-02T12:00:00Z");
+    const { service, tokens, users } = harness({
+      users: [{ id: "u1", email: "learner@example.com", status: "PENDING_VERIFICATION", passwordHash: null }],
+    });
+    tokens.push({
+      identifier: "learner@example.com",
+      token: hashToken("tok-1"),
+      purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
+      expires: new Date("2026-09-03T12:00:00Z"),
+      consumedAt: null,
+      createdAt: new Date("2026-09-02T12:00:00Z"),
+    });
+
+    const result = await service.verifyEmail("tok-1");
+    expect(result).toMatchObject({ ok: true, setPasswordToken: expect.any(String) });
+    expect(users[0].status).toBe("ACTIVE");
+    const reset = tokens.find((t) => t.purpose === TOKEN_PURPOSE.PASSWORD_RESET);
+    expect(reset).toMatchObject({ identifier: "learner@example.com", consumedAt: null });
   });
 });

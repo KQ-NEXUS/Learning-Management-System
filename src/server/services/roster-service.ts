@@ -22,6 +22,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { authorizeCollection, type CollectionAuthorization } from "@/server/permissions/collection-scope";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
@@ -598,24 +599,22 @@ const STAFF_ENROLMENT_SELECT = {
 
 export type StaffEnrolmentListDeps = {
   store: StaffEnrolmentStore;
-  withPermission: WithPermission;
+  authorizeCollection: (permission: "enrolments.view") => Promise<CollectionAuthorization>;
 };
 
 /**
- * The `/staff/enrolments` global list. Gated on `enrolments.view` with NO
- * scope resolver — an empty `ResourceScope` (`() => ({})`) means only a
- * GLOBAL grant reaches it (`grantMatches`, `src/server/permissions/scope.ts`):
- * a COHORT/PROGRAMME/COURSE-scoped grant is DENIED by that same
- * deny-by-default rule `resource-service.ts`'s own unscoped `list`
- * documents, never fetched-then-filtered client-side (T-05-95).
+ * The `/staff/enrolments` list. Integration warning #1: it follows the
+ * caller's `enrolments.view` grants — every enrolment for a GLOBAL grant,
+ * only enrolments in in-scope cohorts otherwise. The scope is part of the
+ * query, never fetched-then-filtered (T-05-95 still holds); no grant at all
+ * is refused.
  */
 export function createStaffEnrolmentListService(deps: StaffEnrolmentListDeps) {
-  const loadStaffEnrolments = deps.withPermission<StaffEnrolmentFilters>(
-    "enrolments.view",
-    () => ({}),
-  )(async (input): Promise<StaffEnrolmentRow[]> => {
+  async function loadStaffEnrolments(input: StaffEnrolmentFilters): Promise<StaffEnrolmentRow[]> {
+    const { cohortWhere } = await deps.authorizeCollection("enrolments.view");
     const rows = await deps.store.findMany({
       where: {
+        cohort: cohortWhere,
         ...(input.cohortId ? { cohortId: input.cohortId } : {}),
         ...(input.status ? { status: input.status } : {}),
       },
@@ -645,7 +644,7 @@ export function createStaffEnrolmentListService(deps: StaffEnrolmentListDeps) {
       accessEndsAt: r.accessEndsAt,
       createdAt: r.createdAt,
     }));
-  });
+  }
 
   return { loadStaffEnrolments };
 }
@@ -828,7 +827,7 @@ export const loadAttendanceExceptions = built.loadAttendanceExceptions;
 
 const staffEnrolmentListBuilt = createStaffEnrolmentListService({
   store: prisma.enrolment as unknown as StaffEnrolmentStore,
-  withPermission: liveWithPermission,
+  authorizeCollection,
 });
 
 export const loadStaffEnrolments = staffEnrolmentListBuilt.loadStaffEnrolments;

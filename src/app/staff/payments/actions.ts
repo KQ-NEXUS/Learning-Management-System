@@ -16,6 +16,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import {
@@ -152,7 +153,12 @@ const refundSchema = z
   .strict();
 
 export type RefundActionResult =
-  | { ok: true; status: "COMPLETED" | "FAILED" | "RECORDED_MANUALLY" }
+  | {
+      ok: true;
+      status: "COMPLETED" | "FAILED" | "RECORDED_MANUALLY";
+      /** Integration warning #3 — what happened to the learner's access. */
+      access: "revoked" | "unchanged" | "not-revoked";
+    }
   | { ok: false; message: string };
 
 export async function recordRefundAction(
@@ -166,7 +172,7 @@ export async function recordRefundAction(
   try {
     const result = await recordRefund(parsed.data);
     revalidatePayment(parsed.data.orderId);
-    return { ok: true, status: result.status };
+    return { ok: true, status: result.status, access: result.access };
   } catch (error) {
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
       return { ok: false, message: "Your role does not permit this action on this order." };
@@ -180,6 +186,11 @@ export async function recordRefundAction(
       error instanceof NoCapturedPaymentError ||
       error instanceof MissingProviderReferenceError
     ) {
+      return { ok: false, message: error.message };
+    }
+    // Warning #3 — e.g. "Revoke access" for a learner with a live
+    // certificate; the message names it and says what to do.
+    if (error instanceof UserInputError) {
       return { ok: false, message: error.message };
     }
     if (error instanceof RefundOrderNotFoundError) {

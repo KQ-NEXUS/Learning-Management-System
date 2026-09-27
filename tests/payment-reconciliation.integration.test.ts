@@ -348,7 +348,7 @@ describe("reconcilePayments — real Postgres (PAY-07, PAY-11, PAY-17)", () => {
     expect(after).toEqual(before); // byte-identical — nothing changed
   });
 
-  it("an attempt whose provider lookup fails is left entirely untouched — reconciledAt stays NULL for the next invocation to retry", async () => {
+  it("an attempt whose provider lookup fails keeps every settlement value NULL, and is scheduled for a later retry (F-03)", async () => {
     const { paymentAttemptId } = await seedSucceededAttempt({
       provider: "PAYSTACK",
       providerIntentId: uniqRef(),
@@ -360,21 +360,25 @@ describe("reconcilePayments — real Postgres (PAY-07, PAY-11, PAY-17)", () => {
       schoolSettlementExpectedMinor: 45_000_000,
     });
 
-    const before = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: paymentAttemptId } });
-
+    const now = new Date(Date.now() + 365 * 86_400_000); // after every other test's rows
     const { deps, auditCalls } = buildDeps({
+      now: () => now,
       lookupPaystackActualSettlement: vi.fn(async () => {
         throw new Error("Paystack has not yet reported final settlement figures.");
       }),
+      lookupStripeActualSettlement: vi.fn(async () => {
+        throw new Error("not available");
+      }),
     });
-    const result = await createReconcilePayments(deps).reconcilePayments(10);
+    await createReconcilePayments(deps).reconcilePayments(1000);
 
-    expect(result).toEqual({ reconciled: 0, failed: 1 });
-    expect(auditCalls).toHaveLength(0);
-
+    expect(auditCalls.filter((a) => a.targetId === paymentAttemptId)).toHaveLength(0);
     const after = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: paymentAttemptId } });
-    expect(after).toEqual(before);
     expect(after.reconciledAt).toBeNull();
+    expect(after.gatewayFeeActualMinor).toBeNull();
+    expect(after.schoolSettlementActualMinor).toBeNull();
+    expect(after.reconcileAttempts).toBe(1);
+    expect(after.nextReconcileAt?.getTime()).toBe(now.getTime() + 15 * 60_000);
   });
 
   it("an actual school settlement beyond the rounding tolerance is flagged with an exception note naming both figures, and the Order's commercial columns stay byte-identical; Order.status stays PAID and the Enrolment is untouched", async () => {
@@ -466,5 +470,76 @@ describe("reconcilePayments — real Postgres (PAY-07, PAY-11, PAY-17)", () => {
   it("exposes RECONCILIATION_ROUNDING_TOLERANCE_MINOR as a small positive integer", () => {
     expect(RECONCILIATION_ROUNDING_TOLERANCE_MINOR).toBeGreaterThan(0);
     expect(Number.isInteger(RECONCILIATION_ROUNDING_TOLERANCE_MINOR)).toBe(true);
+  });
+});
+
+describe("reconcilePayments — F-03: failing rows never starve the sweep", () => {
+  const seedNgn = (providerIntentId: string) =>
+    seedSucceededAttempt({
+      provider: "PAYSTACK",
+      providerIntentId,
+      currency: "NGN",
+      amountMinor: 46_550_000,
+      baseAmountMinor: 45_000_000,
+      platformFeeMinor: 675_000,
+      gatewayFeeEstimateMinor: 875_000,
+      schoolSettlementExpectedMinor: 45_000_000,
+    });
+
+  it("three always-failing older rows cannot keep a newer good row from being reconciled", async () => {
+    const poison = [uniqRef(), uniqRef(), uniqRef()];
+    const poisonRows = [];
+    for (const ref of poison) poisonRows.push(await seedNgn(ref));
+    const good = await seedNgn(uniqRef());
+
+    const now = new Date(Date.now() + 2 * 365 * 86_400_000);
+    const { deps } = buildDeps({
+      now: () => now,
+      lookupPaystackActualSettlement: vi.fn(async (ref: string) => {
+        if (poison.includes(ref)) throw new Error("provider never reports this one");
+        return {
+          gatewayFeeActualMinor: PAYSTACK_GATEWAY_FEE_ACTUAL,
+          schoolSettlementActualMinor: PAYSTACK_SCHOOL_SETTLEMENT_ACTUAL,
+          platformGrossActualMinor: PAYSTACK_PLATFORM_GROSS_ACTUAL,
+        };
+      }),
+      lookupStripeActualSettlement: vi.fn(async () => {
+        throw new Error("not available");
+      }),
+    });
+    const sweep = createReconcilePayments(deps);
+    for (let i = 0; i < 6; i++) await sweep.reconcilePayments(3);
+
+    const goodRow = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: good.paymentAttemptId } });
+    expect(goodRow.reconciledAt).not.toBeNull();
+    for (const p of poisonRows) {
+      const row = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: p.paymentAttemptId } });
+      // Retried once, then pushed past `now` — not hammered on every sweep.
+      expect(row.reconcileAttempts).toBe(1);
+    }
+  });
+
+  it("the fifth failure opens a MISSING_PROVIDER_DATA reconciliation case", async () => {
+    const ref = uniqRef();
+    const { paymentAttemptId } = await seedNgn(ref);
+    await testDb.prisma.paymentAttempt.update({ where: { id: paymentAttemptId }, data: { reconcileAttempts: 4 } });
+    const sync = vi.fn(async () => undefined);
+    const now = new Date(Date.now() + 3 * 365 * 86_400_000);
+    const { deps } = buildDeps({
+      now: () => now,
+      syncReconciliationEvidence: sync as never,
+      lookupPaystackActualSettlement: vi.fn(async () => {
+        throw new Error("provider never reports this one");
+      }),
+      lookupStripeActualSettlement: vi.fn(async () => {
+        throw new Error("not available");
+      }),
+    });
+    await createReconcilePayments(deps).reconcilePayments(1000);
+    expect(sync).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "PAYMENT", paymentAttemptId, risk: "MISSING_PROVIDER_DATA" }),
+    );
+    const row = await testDb.prisma.paymentAttempt.findUniqueOrThrow({ where: { id: paymentAttemptId } });
+    expect(row.reconcileAttempts).toBe(5);
   });
 });

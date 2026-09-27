@@ -30,7 +30,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
+import { seedPublishedCohortFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
 import { CHECKOUT_INTENT_COOKIE } from "@/server/auth/landing";
 import { TOKEN_PURPOSE } from "@/lib/identity";
 import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
@@ -72,7 +72,26 @@ const fakeJar = vi.hoisted(() => {
   };
 });
 
-vi.mock("next/headers", () => ({ cookies: async () => fakeJar }));
+// F-13 — the resumption page only starts checkout on a same-origin
+// navigation; the real post-sign-in redirect is exactly that.
+const sentEmails = vi.hoisted(() => [] as Array<{ toEmail: string; textContent: string }>);
+vi.mock("@/server/services/email-dispatch-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/services/email-dispatch-service")>();
+  return {
+    ...actual,
+    emailDispatchService: {
+      ...actual.emailDispatchService,
+      dispatch: async (params: { toEmail: string; textContent: string }) => {
+        sentEmails.push({ toEmail: params.toEmail, textContent: params.textContent });
+        return { id: "captured", status: "SENT" };
+      },
+    },
+  };
+});
+vi.mock("next/headers", () => ({
+  cookies: async () => fakeJar,
+  headers: async () => new Headers({ "sec-fetch-site": "same-origin" }),
+}));
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new Error("redirect:" + url);
@@ -167,21 +186,19 @@ async function registerAndVerify(email: string): Promise<void> {
   });
   expect(result.ok).toBe(true);
 
-  const tokenRow = await testDb.prisma.verificationToken.findFirstOrThrow({
-    where: {
-      identifier: email.toLowerCase().trim(),
-      purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // F-14a — only the token's hash is stored, so the link is taken from the
+  // verification email the learner actually receives.
+  const mail = [...sentEmails].reverse().find((m) => m.toEmail === email.toLowerCase().trim());
+  const rawToken = mail?.textContent.match(/token=([^\s&]+)/)?.[1];
+  if (!rawToken) throw new Error(`No verification email captured for ${email}`);
 
-  const verified = await verificationService.verifyEmail(tokenRow.token);
+  const verified = await verificationService.verifyEmail(rawToken);
   expect(verified.ok).toBe(true);
 }
 
 describe("checkout-intent round trip — real Postgres (REG-02)", () => {
   it("Enroll while signed out -> register -> verify -> sign in lands on the order summary for the originally selected cohort, at its live price", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 5,
       seatsTaken: 0,
       priceMinor: 12_345,
@@ -251,7 +268,7 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
   }, 15_000);
 
   it("lands on the cohort's public offer page with no Order created when the held cohort filled up in the meantime", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 1,
       seatsTaken: 1, // already full by the time sign-in resumes
       priceMinor: 5_000,

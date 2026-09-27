@@ -41,7 +41,7 @@
  * before the dynamic storage import, `DATABASE_URL` in `beforeAll` before the
  * dynamic service imports (which pull in the `@/server/db` singleton).
  *
- * PREREQUISITE: Docker running and the local MinIO at localhost:9002. If either
+ * PREREQUISITE: Docker running and the docker-compose MinIO (localhost:9000). If either
  * is missing the hooks fail (BLOCKED), never a silent pass.
  */
 
@@ -64,8 +64,9 @@ import type {
 import type { CertificateFileStore } from "@/server/services/certificate-file-service";
 
 process.env.S3_BUCKET = "lms-private";
-process.env.S3_ENDPOINT = "http://localhost:9002";
-process.env.S3_PUBLIC_ENDPOINT = "http://localhost:9002";
+// The docker-compose MinIO (MINIO_PORT, default 9000); TEST_MINIO_ENDPOINT overrides.
+process.env.S3_ENDPOINT = process.env.TEST_MINIO_ENDPOINT ?? "http://localhost:9000";
+process.env.S3_PUBLIC_ENDPOINT = process.env.S3_ENDPOINT;
 process.env.S3_ACCESS_KEY_ID = "lms-minio";
 process.env.S3_SECRET_ACCESS_KEY = "change-me-minio";
 process.env.S3_FORCE_PATH_STYLE = "true";

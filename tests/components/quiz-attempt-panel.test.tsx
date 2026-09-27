@@ -8,7 +8,7 @@ const active: SafeQuizAttempt = { id: "a", attemptNumber: 1, responses: [], ques
   { id: "q1", prompt: "One?", type: "SINGLE_CHOICE", marks: 1, options: [{ id: "x", label: "First option" }, { id: "y", label: "Second option" }] },
   { id: "q2", prompt: "Two?", type: "MULTI_CHOICE", marks: 1, options: [{ id: "z", label: "Third option" }] },
 ] };
-const base: LearnerQuizView = { assessmentId: "quiz", title: "Quiz title", instructions: null, availableFrom: null, availableUntil: null, maxAttempts: 2, passMark: 1, attemptsRemaining: 2, feedbackBehaviour: "IMMEDIATE", active: null, history: [], result: null };
+const base: LearnerQuizView = { assessmentId: "quiz", title: "Quiz title", instructions: null, availableFrom: null, availableUntil: null, maxAttempts: 2, passMark: 1, attemptsRemaining: 2, feedbackBehaviour: "IMMEDIATE", answersRevealed: true, answersHeldUntil: null, active: null, history: [], result: null };
 function setup(overrides: Partial<LearnerQuizView> = {}) {
   const onStart = vi.fn(async () => ({ ok: true as const, attempt: active, history: [], attemptsRemaining: 1 }));
   const onSubmit = vi.fn(async () => ({ ok: true as const, result: { attemptId: "a", attemptNumber: 1, status: "SUBMITTED" as const, score: 2, maxScore: 2, passed: true, submittedAt: new Date(), perQuestion: [], expired: false } }));

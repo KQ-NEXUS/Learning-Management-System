@@ -398,6 +398,20 @@ model Session {
 }
 
 // Single-use, expiring. Covers email verification and password reset (IAM-02).
+/// F-14b — failed sign-in counters per device (IP) and per device+address,
+/// in a fixed window. Replaces per-account lockout, which let anyone lock any
+/// account and revealed which addresses had one.
+model LoginThrottle {
+  key             String   @id
+  /// Set for address-bearing keys, so a password reset can clear them.
+  email           String?
+  failures        Int
+  windowStartedAt DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([email])
+}
+
 model VerificationToken {
   // Immutable account binding for email changes; legacy unbound links fail closed.
   userId     String?
@@ -754,6 +768,10 @@ model Lesson {
   body     String?
   embedUrl String?
   linkUrl  String?
+
+  // F-15 — optional staff-set length of a VIDEO lesson. When set, the
+  // server uses it (not the player's reported duration) to decide 90%.
+  videoDurationSeconds Int?
 
   // LRN-02 — required lessons gate completion; sequencing is enforced
   // server-side.
@@ -1113,6 +1131,8 @@ model LessonWatchProgress {
   secondsWatched  Int      @default(0)
   durationSeconds Int?
   percentWatched  Int      @default(0)
+  // F-15 — first watch tick; credit is paced against time since this.
+  startedAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
@@ -1503,12 +1523,18 @@ model PaymentAttempt {
   platformGrossActualMinor    Int?
   platformNetActualMinor      Int?
   reconciledAt                DateTime?
+  // F-03 — per-row retry state for the reconciliation sweep: a row whose
+  // provider evidence keeps failing is pushed back (exponential backoff) so it
+  // can never hold the head of the queue, and is escalated after 5 failures.
+  reconcileAttempts           Int       @default(0)
+  nextReconcileAt             DateTime?
 
   order               Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
   refunds             Refund[]
   reconciliationCases ReconciliationCase[]
 
   @@index([orderId, status])
+  @@index([status, reconciledAt, nextReconcileAt])
   @@index([provider, status])
   @@index([providerRef])
 }

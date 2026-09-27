@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { AuthIconChip, AuthTitle } from "../AuthPanel";
 import { verificationService } from "@/server/services/verification-service";
@@ -21,6 +22,12 @@ export default async function VerifyPage({
     typeof token === "string" && token.length > 0
       ? await verificationService.verifyEmail(token)
       : ({ ok: false } as const);
+
+  // F-11 — this address was registered more than once before it was verified,
+  // so no submitted password was kept. The person reading this inbox chooses it.
+  if (result.ok && "setPasswordToken" in result && result.setPasswordToken) {
+    redirect(`/reset-password?token=${encodeURIComponent(result.setPasswordToken)}&set=1`);
+  }
 
   return result.ok ? (
     <>

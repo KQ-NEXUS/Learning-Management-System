@@ -1,5 +1,6 @@
 "use server";
 
+import { UserInputError } from "@/server/errors/user-input-error";
 import { z } from "zod";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import {
@@ -33,7 +34,9 @@ function failure(error: unknown, fallback: string): TicketActionResult {
   if (error instanceof TicketNotFoundError) {
     return { ok: false, kind: "error", message: "You don’t have access to this ticket." };
   }
-  if (error instanceof TypeError) return { ok: false, kind: "invalid", message: error.message };
+  if (error instanceof UserInputError) return { ok: false, kind: "invalid", message: error.message };
+  // F-14d — anything else (a runtime TypeError included) is logged, never shown.
+  console.error("Learner ticket action failed", error);
   return { ok: false, kind: "error", message: fallback };
 }
 

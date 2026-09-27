@@ -19,7 +19,7 @@ import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission, Actor } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
-import { hasActiveEnrolmentCoveringCourse } from "@/server/services/learner-access";
+import { canOpenLessonAsLearner } from "@/server/services/learner-access";
 import {
   inspectLessonObject,
   promoteLessonObject,
@@ -109,7 +109,11 @@ export type CreateLessonResourceServiceDeps = {
   audit: (entry: ResourceAuditEntry) => Promise<void>;
   storage: LessonResourceStorage;
   /** Injected so the learner predicate is unit-testable without a database (D-07/09-03). */
-  hasActiveEnrolmentCoveringCourse: (userId: string, courseId: string) => Promise<boolean>;
+  /**
+   * F-01 — may this learner open this lesson right now (pinned, unlocked,
+   * access window open)? Bound to `learner-access.ts#canOpenLessonAsLearner`.
+   */
+  canOpenLesson: (actor: Actor, lessonId: string) => Promise<boolean>;
   now?: () => Date;
 };
 
@@ -325,7 +329,7 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     const context = await resolveLessonContext(lessonId);
     if (!context) return [];
 
-    const authorized = await deps.hasActiveEnrolmentCoveringCourse(actor.userId, context.courseId);
+    const authorized = await deps.canOpenLesson(actor, lessonId);
     if (!authorized) return [];
 
     return sortedLessonResources(lessonId);
@@ -381,7 +385,7 @@ export function createLessonResourceService(deps: CreateLessonResourceServiceDep
     const context = await resolveLessonContext(row.lessonId);
     if (!context) return null;
 
-    const authorized = await deps.hasActiveEnrolmentCoveringCourse(actor.userId, context.courseId);
+    const authorized = await deps.canOpenLesson(actor, row.lessonId);
     if (!authorized) return null;
 
     return shapeDownloadable(id);
@@ -417,7 +421,7 @@ const built = createLessonResourceService({
     delete: deleteLessonObject,
     finalKey: finalStorageKeyFor,
   },
-  hasActiveEnrolmentCoveringCourse,
+  canOpenLesson: canOpenLessonAsLearner,
   audit: (entry) =>
     recordAudit({
       actorId: entry.actorId,

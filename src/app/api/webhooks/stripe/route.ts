@@ -63,6 +63,8 @@ type CheckoutSessionFacts = {
   client_reference_id: string | null;
   amount_total: number | null;
   currency: string | null;
+  /** "paid" | "unpaid" | "no_payment_required" — only "paid" may activate (F-16). */
+  payment_status?: string | null;
   payment_intent?: string | PaymentIntentSettlementFacts | null;
 };
 
@@ -158,7 +160,10 @@ export async function POST(req: Request): Promise<Response> {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as CheckoutSessionFacts;
       const orderId = session.client_reference_id;
-      if (orderId) {
+      // F-16 — a session can complete before its money settles (async payment
+      // methods); only a paid session may activate. Card-only today, so this
+      // is the guard for the day another method is enabled.
+      if (orderId && session.payment_status === "paid") {
         const settlementEvidence = buildStripeSettlementEvidence(session);
         await activateOrderAsSystem({
           orderId,

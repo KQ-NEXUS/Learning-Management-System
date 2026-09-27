@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { hashToken } from "@/server/auth/token-hash";
 import { guardFindUnique } from "./support/prisma-contract";
 import {
   PASSWORD_RESET_TOKEN_TTL_MS,
@@ -20,9 +21,6 @@ import {
   type VerificationStore,
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
-import { hashPassword, verifyPassword } from "@/server/auth/password";
-import { signIn } from "@/server/services/auth-service";
-import { prisma } from "@/server/db";
 
 const NOW = { value: new Date("2026-09-02T12:00:00Z") };
 
@@ -262,7 +260,7 @@ describe("resetPassword — happy path and session revocation", () => {
     const token = extractToken(h.dispatched[0].textContent);
     await expect(h.passwordResetService.resetPassword({ token, newPassword: "correcthorsebattery" })).rejects.toThrow("revocation unavailable");
     expect(h.users[0].passwordHash).toBe("old-hash");
-    expect(h.tokens.find((t) => t.token === token)?.consumedAt).toBeNull();
+    expect(h.tokens.find((t) => t.token === hashToken(token))?.consumedAt).toBeNull();
   });
   it("consumes the token, replaces the password hash, and revokes every session for that user", async () => {
     NOW.value = new Date("2026-09-02T12:00:00Z");
@@ -360,80 +358,5 @@ describe("password-reset-service — module boundaries", () => {
   });
 });
 
-// --- Lockout regressions for the live signIn binding ---
-//
-// Keep the production password verifier and use a serialized transaction fake.
-// identity-security.integration.test.ts proves the actual PostgreSQL locking.
-const fakeAuthUsers: {
-  id: string;
-  email: string;
-  passwordHash: string;
-  status: string;
-  failedLoginAttempts: number;
-  lockedUntil: Date | null;
-  isStaff: boolean;
-}[] = [];
-const fakeSessions: unknown[] = [];
-let authTransactions = Promise.resolve();
-
-vi.mock("@/server/db", () => ({
-  prisma: {
-    $queryRaw: async () => [],
-    user: {
-      findUnique: async ({ where }: { where: { id?: string; email?: string } }) => {
-        if (where.email) return structuredClone(fakeAuthUsers.find((u) => u.email === where.email) ?? null);
-        if (where.id) return structuredClone(fakeAuthUsers.find((u) => u.id === where.id) ?? null);
-        return null;
-      },
-      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        const u = fakeAuthUsers.find((x) => x.id === where.id);
-        if (!u) throw new Error("user not found");
-        Object.assign(u, data);
-        return u;
-      },
-    },
-    session: {
-      create: async ({ data }: { data: Record<string, unknown> }) => {
-        fakeSessions.push(data);
-        return data;
-      },
-    },
-    $transaction: async (fn: (tx: typeof prisma) => Promise<unknown>) => {
-      const result = authTransactions.then(() => fn(prisma));
-      authTransactions = result.then(() => {}, () => {});
-      return result;
-    },
-  },
-}));
-
-describe("signIn — lockout counter reset (regression, CONCERNS.md)", () => {
-  it("counts every concurrent wrong-password attempt toward lockout", async () => {
-    const passwordHash = await hashPassword("correcthorsebattery");
-    fakeAuthUsers.length = 0;
-    fakeAuthUsers.push({ id: "u1", email: "learner@example.com", passwordHash, status: "ACTIVE", failedLoginAttempts: 0, lockedUntil: null, isStaff: false });
-    await Promise.all(Array.from({ length: 5 }, () => signIn("learner@example.com", "wrongpassword")));
-    expect(fakeAuthUsers[0].failedLoginAttempts).toBe(5);
-    expect(fakeAuthUsers[0].lockedUntil?.getTime()).toBeGreaterThan(Date.now());
-  }, 30000);
-  it("a successful sign-in resets failedLoginAttempts to 0 and clears lockedUntil", async () => {
-    const passwordHash = await hashPassword("correcthorsebattery");
-    fakeAuthUsers.length = 0;
-    fakeAuthUsers.push({
-      id: "u1",
-      email: "learner@example.com",
-      passwordHash,
-      status: "ACTIVE",
-      failedLoginAttempts: 3,
-      lockedUntil: new Date("2020-01-01T00:00:00Z"), // in the past — not currently locked
-      isStaff: false,
-    });
-
-    const result = await signIn("learner@example.com", "correcthorsebattery");
-    expect(result.ok).toBe(true);
-    expect(fakeAuthUsers[0].failedLoginAttempts).toBe(0);
-    expect(fakeAuthUsers[0].lockedUntil).toBeNull();
-
-    // Sanity: verifyPassword itself still works as expected against the real hash.
-    expect(await verifyPassword("correcthorsebattery", passwordHash)).toBe(true);
-  }, 30000); // Three production-cost scrypt derivations under full-suite contention.
-});
+// Per-account lockout was replaced by per-device throttling (F-14b); its
+// behaviour is proven against real Postgres in identity-security.integration.test.ts.

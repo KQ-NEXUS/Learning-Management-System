@@ -96,8 +96,10 @@ function readyAggregateRow(over: Partial<CohortAggregateRow> = {}): CohortAggreg
 }
 
 type TxFake = {
+  $queryRaw: ReturnType<typeof vi.fn>;
   cohort: { updateMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   domainEvent: { create: ReturnType<typeof vi.fn> };
+  cohortInstructor?: { deleteMany: ReturnType<typeof vi.fn> };
 };
 
 function makeTx(over?: {
@@ -105,6 +107,8 @@ function makeTx(over?: {
   domainEvent?: Partial<TxFake["domainEvent"]>;
 }): TxFake {
   return {
+    // F-04 — publish and instructor removal take the cohort row lock first.
+    $queryRaw: vi.fn(async () => [{ status: "DRAFT", seatsTaken: 0, capacity: 10 }]),
     cohort: {
       updateMany: vi.fn(async () => ({ count: 1 })),
       findUnique: vi.fn(async () => null),
@@ -193,7 +197,16 @@ function harness(opts?: {
         return match ?? null;
       },
     ),
+    // F-04 — removal now runs inside the locked transaction via deleteMany.
+    deleteMany: vi.fn(async ({ where }: { where: { cohortId: string; userId: string } }) => {
+      const match = [...instructorRows.values()].find(
+        (r) => r.cohortId === where.cohortId && r.userId === where.userId,
+      );
+      if (match) instructorRows.delete(match.id);
+      return { count: match ? 1 : 0 };
+    }),
   };
+  tx.cohortInstructor = { deleteMany: instructor.deleteMany };
   const user = { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => users.get(where.id) ?? null) };
 
   const { withPermission } = createTestWithPermission(
@@ -334,7 +347,7 @@ describe("instructor assignment (D-27) — the readiness gate's only writer", ()
     const { service, instructor, audits } = harness();
     await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
     await service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
-    expect(instructor.delete).toHaveBeenCalledTimes(1);
+    expect(instructor.deleteMany).toHaveBeenCalledTimes(1);
     expect(audits.at(-1)).toMatchObject({ action: "cohort.instructor_removed" });
     expect(await service.loadCohortInstructors({ cohortId: "cohort-1" })).toEqual([]);
   });
@@ -344,24 +357,24 @@ describe("instructor assignment (D-27) — the readiness gate's only writer", ()
     await expect(
       service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
     ).resolves.toBeDefined();
-    expect(instructor.delete).not.toHaveBeenCalled();
+    expect(instructor.deleteMany).not.toHaveBeenCalled();
   });
 
-  it("is idempotent under a concurrent double-remove race (P2025 on delete is swallowed)", async () => {
+  it("is idempotent under a concurrent double-remove race (the locked deleteMany finds nothing)", async () => {
     const { service, instructor } = harness();
     await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
     // Simulates the check-then-delete window: findUnique said "still assigned"
-    // but a concurrent request's delete already landed first.
-    instructor.delete.mockRejectedValueOnce({ code: "P2025" });
+    // but a concurrent request's removal already landed first.
+    instructor.deleteMany.mockResolvedValueOnce({ count: 0 });
     await expect(
       service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
     ).resolves.toEqual({ cohortId: "cohort-1", userId: "user-instructor-1" });
   });
 
-  it("rethrows a non-P2025 error from delete", async () => {
+  it("rethrows an unexpected error from the removal", async () => {
     const { service, instructor } = harness();
     await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
-    instructor.delete.mockRejectedValueOnce(new Error("boom"));
+    instructor.deleteMany.mockRejectedValueOnce(new Error("boom"));
     await expect(
       service.removeCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
     ).rejects.toThrow("boom");
@@ -928,6 +941,7 @@ function cancelHarness(opts?: {
           return row;
         },
       },
+      certificate: { findFirst: async () => null },
       domainEvent: {
         create: async ({ data }: { data: Record<string, unknown> }) => {
           evStore.push(data);

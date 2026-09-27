@@ -61,8 +61,8 @@
 
 import { prisma } from "@/server/db";
 import { withPermission as liveWithPermission } from "@/server/permissions";
-import type { ResourceScope } from "@/server/permissions/scope";
-import type { createWithPermission } from "@/server/permissions/with-permission";
+import { hasPermission, type ResourceScope } from "@/server/permissions/scope";
+import { AuthorizationError, type createWithPermission } from "@/server/permissions/with-permission";
 import {
   createResourceService,
   type Delegate,
@@ -651,6 +651,20 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     const result = await runSettled(async (tx) => {
       const before = await tx.certificate.findUnique({ where: { id: input.certificateId } });
       if (!before) throw new Error("Certificate not found.");
+
+      // F-12 — reversing a revocation is a revocation decision too: it needs
+      // certificates.revoke at the same scope, not only certificates.issue.
+      if (before.status === "REVOKED" && !hasPermission(ctx.grants, "certificates.revoke", ctx.resource)) {
+        throw new AuthorizationError("certificates.revoke");
+      }
+
+      // F-12 — the same eligibility re-check as manual issue: a replacement is
+      // for a learner who still earned it (a name or template correction), not
+      // one whose completion was superseded by a later correction.
+      const record = await tx.completionRecord.findFirst({
+        where: { enrolmentId: before.enrolmentId, scope: before.scope, supersededAt: null },
+      });
+      if (!record) throw new NoCompletionRecordError();
 
       // STEP 1 — FIRST: move the old row out of ACTIVE/REVOKED into
       // SUPERSEDED. Ordering is load-bearing (T-11-52): the partial unique

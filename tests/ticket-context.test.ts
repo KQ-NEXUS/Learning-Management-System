@@ -63,7 +63,9 @@ describe("staff ticket context authorizer", () => {
       orderScope: async (id) => ({ cohortId: `cohort-of-${id}` }),
       enrolmentScope: async (id) => ({ cohortId: `cohort-of-${id}` }),
       findSubmission: async (id) =>
-        id === "submission-1" ? { assessmentId: "assessment-1", enrolmentId: "enrolment-1", cohortId: "cohort-9" } : null,
+        id === "submission-1"
+          ? { assessmentId: "assessment-1", enrolmentId: "enrolment-1", cohortId: "cohort-9", courseId: "course-7" }
+          : null,
       findCertificateEnrolment: async (id) => (id === "certificate-1" ? "enrolment-2" : null),
     });
     return { authorize, calls };
@@ -77,7 +79,7 @@ describe("staff ticket context authorizer", () => {
       "SUBMISSION",
       "submission-1",
       "submissions.view",
-      { cohortId: "cohort-of-enrolment-1" },
+      { cohortId: "cohort-of-enrolment-1", courseIds: [] },
       "/staff/cohorts/cohort-9/grading/assessment-1/submission-1",
     ],
     [

@@ -192,10 +192,28 @@ export type LessonWatchProgressRow = {
   secondsWatched: number;
   durationSeconds: number | null;
   percentWatched: number;
+  /** F-15 — when this learner's first watch tick landed; the pacing anchor. */
+  startedAt: Date;
   updatedAt: Date;
 };
 
+/**
+ * F-15 — watch credit can run at most this many times faster than wall-clock
+ * time since the first tick (covers 2x playback), plus a grace for the
+ * client's 15 s throttle and clock jitter. A learner who skips ahead is
+ * credited only as far as they could have watched.
+ */
+export const WATCH_MAX_PLAYBACK_RATE = 2;
+export const WATCH_PACING_GRACE_SECONDS = 30;
+
 export type LessonProgressTxClient = DomainEventTxClient & {
+  /** F-15 — reads the staff-set video length; absent in narrow fakes. */
+  lesson?: {
+    findUnique(args: {
+      where: { id: string };
+      select: { videoDurationSeconds: true };
+    }): Promise<{ videoDurationSeconds: number | null } | null>;
+  };
   lessonProgress: {
     findUnique(args: {
       where: { enrolmentId_lessonId: { enrolmentId: string; lessonId: string } };
@@ -505,26 +523,50 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
     // Server-side clamping — secondsWatched/durationSeconds are never
     // trusted verbatim, and percentWatched/complete are never read from the
     // request at all (the input type below carries neither field).
-    let secondsWatched = toNonNegativeInt(args.secondsWatched, "secondsWatched");
-    const durationSeconds =
+    const reportedSeconds = toNonNegativeInt(args.secondsWatched, "secondsWatched");
+    const reportedDuration =
       args.durationSeconds == null ? null : toNonNegativeInt(args.durationSeconds, "durationSeconds");
-    if (durationSeconds !== null && durationSeconds > 0 && secondsWatched > durationSeconds) {
-      secondsWatched = durationSeconds;
-    }
-
-    const percentWatched =
-      durationSeconds !== null && durationSeconds > 0
-        ? Math.floor((secondsWatched / durationSeconds) * 100)
-        : 0;
 
     const nowValue = now();
     let completedNow = false;
-    let resultingHighWaterPercent = percentWatched;
+    let resultingHighWaterPercent = 0;
 
     await deps.runInTransaction(async (tx) => {
       const existingWatch = await tx.lessonWatchProgress.findUnique({
         where: { enrolmentId_lessonId: { enrolmentId: args.enrolmentId, lessonId: args.lessonId } },
       });
+
+      // F-15 — the length is the staff-set one when there is one; otherwise
+      // the longest length ever reported, so a crafted tiny duration cannot
+      // shrink the denominator after a real one was seen.
+      const authored = tx.lesson
+        ? (
+            await tx.lesson.findUnique({
+              where: { id: args.lessonId },
+              select: { videoDurationSeconds: true },
+            })
+          )?.videoDurationSeconds ?? null
+        : null;
+      const durationSeconds =
+        authored != null && authored > 0
+          ? authored
+          : reportedDuration === null && existingWatch?.durationSeconds == null
+            ? null
+            : Math.max(existingWatch?.durationSeconds ?? 0, reportedDuration ?? 0);
+
+      // F-15 — pacing: credit no further than could have been watched since
+      // the first tick.
+      const startedAt = existingWatch?.startedAt ?? nowValue;
+      const elapsedSeconds = Math.max(0, (nowValue.getTime() - startedAt.getTime()) / 1000);
+      const pacedCap = Math.floor(elapsedSeconds * WATCH_MAX_PLAYBACK_RATE + WATCH_PACING_GRACE_SECONDS);
+      let secondsWatched = Math.min(reportedSeconds, pacedCap);
+      if (durationSeconds !== null && durationSeconds > 0 && secondsWatched > durationSeconds) {
+        secondsWatched = durationSeconds;
+      }
+      const percentWatched =
+        durationSeconds !== null && durationSeconds > 0
+          ? Math.floor((secondsWatched / durationSeconds) * 100)
+          : 0;
 
       const priorSecondsWatched = existingWatch?.secondsWatched ?? 0;
       const priorPercentWatched = existingWatch?.percentWatched ?? 0;
@@ -544,6 +586,7 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
           secondsWatched: newSecondsWatched,
           durationSeconds,
           percentWatched: newPercentWatched,
+          startedAt: nowValue,
           updatedAt: nowValue,
         },
         update: {

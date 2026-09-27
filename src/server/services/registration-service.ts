@@ -58,6 +58,7 @@ export type RegistrationStore = {
   user: {
     findUnique(args: Record<string, unknown>): Promise<RegisteredUserRow | null>;
     create(args: { data: Record<string, unknown> }): Promise<RegisteredUserRow>;
+    updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
   };
   policyAcceptance: {
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
@@ -66,7 +67,11 @@ export type RegistrationStore = {
 };
 
 function buildVerificationEmailText(verifyUrl: string): string {
-  return `Click to verify: ${verifyUrl}`;
+  // F-11 — the one pre-hijack case no server rule can catch is the owner
+  // verifying an account they never registered; the copy tells them not to.
+  return `Click to verify: ${verifyUrl}
+
+If you didn't create an account with this email address, ignore this email and don't click the link.`;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -95,8 +100,20 @@ export function createRegistrationService(deps: {
   const hash = deps.hash ?? hashPassword;
 
   /** Resends verification for an already-pending account and audits it — shared by
-   * the found-PENDING_VERIFICATION branch and the lost-insert-race fallback. */
+   * the found-PENDING_VERIFICATION branch and the lost-insert-race fallback.
+   *
+   * F-11 — a second registration for a still-unverified address is CONTESTED:
+   * nobody has proven they own the inbox, so neither submitted password may
+   * survive. The stored hash is wiped (only while still pending), and whoever
+   * verifies from the inbox is sent to set their own password
+   * (`verifyEmail` → `setPasswordToken`). Without this, an attacker who
+   * registered the address first keeps their password through the owner's
+   * verification (account pre-hijacking). */
   async function resendForPending(email: string): Promise<void> {
+    await store.user.updateMany({
+      where: { email, status: "PENDING_VERIFICATION" },
+      data: { passwordHash: null },
+    });
     const user = await store.user.findUnique({ where: { email } });
     await resendVerification(email);
     if (user) {

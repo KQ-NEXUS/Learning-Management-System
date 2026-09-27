@@ -112,9 +112,16 @@ export function QuizAttemptPanel(props: Props) {
         {result.expired && <p className="flex gap-2 text-sm text-warning"><AlertTriangle aria-hidden size={20} />This assessment&apos;s availability window has closed. Your answers as submitted were scored automatically.</p>}
         <p className="font-semibold">{result.score} / {result.maxScore} ({Math.round((result.score ?? 0) / Math.max(1, result.maxScore ?? 1) * 100)}%)</p>
         <StatusPill tone={result.passed ? "success" : "warning"} label={result.passed ? "Passed" : "Not yet passed"} />
+        {props.answersHeldUntil && <p className="text-sm text-muted-foreground">
+          {props.answersHeldUntil === "window-close"
+            ? "The correct answers will be shown after this quiz closes."
+            : "The correct answers will be shown once you've used all your attempts."}
+        </p>}
         {props.feedbackBehaviour !== "NEVER" && result.perQuestion.map(q => <div key={q.questionId} className="flex flex-col gap-1">
           <p>{q.prompt}</p><p className="text-sm text-muted-foreground">Your selection: {q.selectedOptionIds.map(id => q.optionLabels?.[id] ?? id).join(", ") || "No answer"}</p>
-          {q.correctOptionIds.length > 0 && <p className={`flex gap-1 text-sm ${q.correct ? "text-success" : "text-danger"}`}><CheckCircle2 aria-hidden size={16} />Correct answer: {q.correctOptionIds.map(id => q.optionLabels?.[id] ?? id).join(", ")}</p>}
+          {q.correctOptionIds.length > 0
+            ? <p className={`flex gap-1 text-sm ${q.correct ? "text-success" : "text-danger"}`}><CheckCircle2 aria-hidden size={16} />Correct answer: {q.correctOptionIds.map(id => q.optionLabels?.[id] ?? id).join(", ")}</p>
+            : <p className={`text-sm ${q.correct ? "text-success" : "text-danger"}`}>{q.correct ? "Correct" : "Not correct"}</p>}
           {q.explanation && <p className="text-sm text-muted-foreground">{q.explanation}</p>}
         </div>)}
       </div>}

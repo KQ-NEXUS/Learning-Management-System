@@ -28,7 +28,7 @@
 import { createHmac } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedLearnerFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
+import { seedPublishedCohortFixture, seedLearnerFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
 import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
 import type { CheckoutTxClient } from "@/server/services/checkout-service";
 
@@ -198,6 +198,14 @@ beforeAll(async () => {
     paymentAttempt: {
       update: (args: { where: { id: string }; data: Record<string, unknown> }) =>
         testDb.prisma.paymentAttempt.update({ where: args.where, data: args.data as never }),
+      // F-02 — retiring a superseded attempt.
+      findMany: (args: { where: Record<string, unknown> }) =>
+        testDb.prisma.paymentAttempt.findMany({
+          where: args.where as never,
+          select: { id: true, provider: true, providerIntentId: true, status: true },
+        }),
+      updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) =>
+        testDb.prisma.paymentAttempt.updateMany({ where: args.where as never, data: args.data as never }),
     } as never,
     user: {
       findUnique: (args: { where: { id: string } }) =>
@@ -209,6 +217,7 @@ beforeAll(async () => {
     stripe: {
       checkout: {
         sessions: {
+          expire: async (id: string) => ({ id, status: "expired" }),
           create: async () => {
             throw new Error("stripe.checkout.sessions.create is not exercised by this Paystack-only suite.");
           },
@@ -254,7 +263,7 @@ afterEach(() => {
 async function seedOrderAndAttempt(
   cohortOverrides: Record<string, unknown> = {},
 ): Promise<{ orderId: string; reference: string; enrolmentId: string }> {
-  const { cohortId } = await seedCohortFixture(testDb.prisma, {
+  const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
     capacity: 2,
     seatsTaken: 0,
     priceMinor: BASE_AMOUNT_MINOR,
@@ -266,9 +275,11 @@ async function seedOrderAndAttempt(
   const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "NGN");
   await checkoutService.initiatePaystackPayment({ userId }, orderId, FULL_CONSENT);
 
-  const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  // F-02 — each Paystack attempt has its own reference (order reference plus
+  // attempt suffix); Paystack echoes back what was sent, so use the attempt's.
+  const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId, provider: "PAYSTACK" } });
   const enrolment = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
-  return { orderId, reference: order.reference, enrolmentId: enrolment.id };
+  return { orderId, reference: attempt.providerIntentId!, enrolmentId: enrolment.id };
 }
 
 describe("Paystack webhook settlement — real Postgres (PAY-07, PAY-10, PAY-11, PAY-17)", () => {
@@ -393,4 +404,20 @@ describe("Paystack webhook settlement — real Postgres (PAY-07, PAY-10, PAY-11,
     const enrolment = await testDb.prisma.enrolment.findFirstOrThrow({ where: { orderId } });
     expect(enrolment.status).toBe("PENDING_PAYMENT");
   }, 15_000);
+});
+
+describe("F-16 — only charge.success settles; other signed events are acknowledged, not retried", () => {
+  it("a signed refund event is recorded and acknowledged with 200 without a Verify Transaction call", async () => {
+    eventCounter += 1;
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const body = JSON.stringify({ event: "refund.processed", data: { id: eventCounter, status: "processed" } });
+    const response = await POST(signedWebhookRequest(body));
+    expect(response.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const row = await testDb.prisma.webhookEvent.findUniqueOrThrow({
+      where: { provider_providerEventId: { provider: "PAYSTACK", providerEventId: String(eventCounter) } },
+    });
+    expect(row.eventType).toBe("refund.processed");
+  });
 });

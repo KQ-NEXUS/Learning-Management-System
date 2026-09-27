@@ -12,7 +12,12 @@
  */
 
 import { prisma } from "@/server/db";
-import { can } from "@/server/permissions";
+import { collectionScopeFor, type Permission } from "@/server/permissions";
+import {
+  cohortWhereForCollection,
+  submissionWhereForCollection,
+  type CollectionScopeSnapshot,
+} from "@/server/permissions/collection-scope";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -77,44 +82,79 @@ function weekStartOf(d: Date): Date {
 const ageDaysOf = (since: Date, now: Date) => Math.max(0, Math.floor((now.getTime() - since.getTime()) / DAY_MS));
 const OVERDUE_AFTER_DAYS = 3;
 
-export async function loadStaffOverview(): Promise<StaffOverview> {
-  const now = new Date();
+export type StaffOverviewDeps = {
+  /** The Prisma client — the live singleton, or a test container's client. */
+  db: typeof prisma;
+  /** The caller's collection scope for a permission, or null when they hold it nowhere. */
+  scopeFor: (permission: Permission) => Promise<CollectionScopeSnapshot | null>;
+  now?: () => Date;
+};
+
+/**
+ * Integration warning #1 — every figure and queue item follows the caller's
+ * own grants: all of it for a GLOBAL grant, only in-scope cohorts' data for a
+ * COHORT/PROGRAMME/COURSE grant, and a section is hidden (null) for a
+ * permission held nowhere. The filters are part of each query.
+ */
+export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
+  const prisma = deps.db;
+  return async function loadStaffOverview(): Promise<StaffOverview> {
+  const now = deps.now?.() ?? new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const lastMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
 
   const [
-    canEnrolments,
-    canPayments,
-    canAttendance,
-    canCohorts,
-    canGrading,
-    canCertificates,
-    canRefunds,
+    enrolmentScope,
+    paymentScope,
+    attendanceScope,
+    cohortScope,
+    gradingScope,
+    certificateScope,
+    refundScope,
   ] = await Promise.all([
-    can("enrolments.view", {}),
-    can("payments.view", {}),
-    can("attendance.view", {}),
-    can("cohorts.view", {}),
-    can("submissions.view", {}),
-    can("certificates.view", {}),
-    can("refunds.manage", {}),
+    deps.scopeFor("enrolments.view"),
+    deps.scopeFor("payments.view"),
+    deps.scopeFor("attendance.view"),
+    deps.scopeFor("cohorts.view"),
+    deps.scopeFor("submissions.view"),
+    deps.scopeFor("certificates.view"),
+    deps.scopeFor("refunds.manage"),
   ]);
+  const canEnrolments = enrolmentScope !== null;
+  const canPayments = paymentScope !== null;
+  const canAttendance = attendanceScope !== null;
+  const canCohorts = cohortScope !== null;
+  const canGrading = gradingScope !== null;
+  // The flagged-certificates item links to a list that needs a GLOBAL grant.
+  const canCertificates = certificateScope?.kind === "GLOBAL";
+  const canRefunds = refundScope !== null;
+  const cohortsIn = (scope: CollectionScopeSnapshot | null) => (scope ? cohortWhereForCollection(scope) : {});
 
   // ---- figures ----
   const learnersInDelivery = canEnrolments
     ? await Promise.all([
-        prisma.enrolment.count({ where: { status: "ACTIVE", cohort: { status: "IN_PROGRESS" } } }),
-        prisma.cohort.count({ where: { status: "IN_PROGRESS" } }),
+        prisma.enrolment.count({
+          where: { status: "ACTIVE", cohort: { AND: [{ status: "IN_PROGRESS" }, cohortsIn(enrolmentScope)] } },
+        }),
+        prisma.cohort.count({ where: { AND: [{ status: "IN_PROGRESS" }, cohortsIn(enrolmentScope)] } }),
       ]).then(([learners, cohorts]) => ({ learners, cohorts }))
     : null;
 
   const enrolments = canEnrolments
     ? await Promise.all([
         prisma.enrolment.count({
-          where: { status: { in: ["ACTIVE", "COMPLETED"] }, createdAt: { gte: monthStart } },
+          where: {
+            status: { in: ["ACTIVE", "COMPLETED"] },
+            createdAt: { gte: monthStart },
+            cohort: cohortsIn(enrolmentScope),
+          },
         }),
         prisma.enrolment.count({
-          where: { status: { in: ["ACTIVE", "COMPLETED"] }, createdAt: { gte: lastMonthStart, lt: monthStart } },
+          where: {
+            status: { in: ["ACTIVE", "COMPLETED"] },
+            createdAt: { gte: lastMonthStart, lt: monthStart },
+            cohort: cohortsIn(enrolmentScope),
+          },
         }),
       ]).then(([thisMonth, lastMonth]) => ({ thisMonth, lastMonth }))
     : null;
@@ -123,20 +163,29 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
     ? await prisma.order
         .groupBy({
           by: ["currency"],
-          where: { status: { in: ["PAID", "PARTIALLY_REFUNDED"] }, paidAt: { gte: monthStart } },
+          where: {
+            status: { in: ["PAID", "PARTIALLY_REFUNDED"] },
+            paidAt: { gte: monthStart },
+            cohort: cohortsIn(paymentScope),
+          },
           _sum: { amountMinor: true },
         })
-        .then((rows) => rows.map((r) => ({ currency: r.currency, amountMinor: r._sum.amountMinor ?? 0 })))
+        .then((rows: Array<{ currency: string; _sum: { amountMinor: number | null } }>) =>
+          rows.map((r) => ({ currency: r.currency, amountMinor: r._sum.amountMinor ?? 0 })),
+        )
     : null;
 
   const attendance = canAttendance
     ? await prisma.attendanceRecord
         .groupBy({
           by: ["state"],
-          where: { state: { in: ["PRESENT", "LATE", "ABSENT"] }, session: { startsAt: { gte: monthStart, lte: now } } },
+          where: {
+            state: { in: ["PRESENT", "LATE", "ABSENT"] },
+            session: { startsAt: { gte: monthStart, lte: now }, cohort: cohortsIn(attendanceScope) },
+          },
           _count: { _all: true },
         })
-        .then((rows) => {
+        .then((rows: Array<{ state: string; _count: { _all: number } }>) => {
           const count = (s: string) => rows.find((r) => r.state === s)?._count._all ?? 0;
           const attended = count("PRESENT") + count("LATE");
           const recorded = attended + count("ABSENT");
@@ -152,7 +201,12 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
 
     if (canGrading) {
       const subs = await prisma.submission.findMany({
-        where: { uploadStatus: "READY", grades: { none: {} }, enrolment: { status: "ACTIVE" } },
+        where: {
+          AND: [
+            { uploadStatus: "READY", grades: { none: {} }, enrolment: { status: "ACTIVE" } },
+            gradingScope ? submissionWhereForCollection(gradingScope) : {},
+          ],
+        },
         select: {
           submittedAt: true,
           assessmentId: true,
@@ -197,7 +251,7 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
           attendanceExpected: true,
           endsAt: { lt: now, gte: new Date(now.getTime() - 14 * DAY_MS) },
           attendance: { none: { state: { not: "NOT_RECORDED" } } },
-          cohort: { enrolments: { some: { status: "ACTIVE" } } },
+          cohort: { AND: [{ enrolments: { some: { status: "ACTIVE" } } }, cohortsIn(attendanceScope)] },
         },
         select: { id: true, title: true, endsAt: true, cohortId: true, cohort: { select: { code: true } } },
         orderBy: { endsAt: "asc" },
@@ -239,7 +293,7 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
 
     if (canRefunds) {
       const refunds = await prisma.refund.findMany({
-        where: { status: "REQUESTED" },
+        where: { status: "REQUESTED", order: { cohort: cohortsIn(refundScope) } },
         select: { createdAt: true, currency: true, amountMinor: true, orderId: true, order: { select: { reference: true } } },
         orderBy: { createdAt: "asc" },
         take: 5,
@@ -260,7 +314,7 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
 
     if (canPayments) {
       const exceptions = await prisma.order.findMany({
-        where: { status: "EXCEPTION" },
+        where: { status: "EXCEPTION", cohort: cohortsIn(paymentScope) },
         select: { updatedAt: true },
         orderBy: { updatedAt: "asc" },
       });
@@ -287,7 +341,7 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
     const thisWeek = weekStartOf(now);
     const first = new Date(thisWeek.getTime() - 11 * 7 * DAY_MS);
     const rows = await prisma.enrolment.findMany({
-      where: { status: { in: ["ACTIVE", "COMPLETED"] }, createdAt: { gte: first } },
+      where: { status: { in: ["ACTIVE", "COMPLETED"] }, createdAt: { gte: first }, cohort: cohortsIn(enrolmentScope) },
       select: { createdAt: true },
     });
     weekly = Array.from({ length: 12 }, (_, i) => ({ weekStart: new Date(first.getTime() + i * 7 * DAY_MS), count: 0 }));
@@ -302,7 +356,11 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
   let filling: StaffOverview["filling"] = null;
   if (canCohorts) {
     const sessions = await prisma.scheduledSession.findMany({
-      where: { cancelledAt: null, startsAt: { gte: now, lte: new Date(now.getTime() + 7 * DAY_MS) } },
+      where: {
+        cancelledAt: null,
+        startsAt: { gte: now, lte: new Date(now.getTime() + 7 * DAY_MS) },
+        cohort: cohortsIn(cohortScope),
+      },
       select: {
         id: true,
         title: true,
@@ -327,7 +385,7 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
     }));
 
     const open = await prisma.cohort.findMany({
-      where: { status: "PUBLISHED", enrolmentClosesAt: { gt: now } },
+      where: { AND: [{ status: "PUBLISHED", enrolmentClosesAt: { gt: now } }, cohortsIn(cohortScope)] },
       select: { id: true, code: true, title: true, startsAt: true, timezone: true, capacity: true },
     });
     const taken = open.length
@@ -361,4 +419,7 @@ export async function loadStaffOverview(): Promise<StaffOverview> {
     nextSessions,
     filling,
   };
+  };
 }
+
+export const loadStaffOverview = createStaffOverviewLoader({ db: prisma, scopeFor: collectionScopeFor });

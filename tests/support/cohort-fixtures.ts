@@ -51,6 +51,18 @@ export type CohortFixture = {
  * `{ holdMinutes: null }`, `{ deliveryMode: "SELF_PACED" }`). Pass
  * `overrides.courseId` to pin to an existing Course instead of creating one.
  */
+/**
+ * F-13 — learner checkout only admits PUBLISHED/IN_PROGRESS cohorts, while the
+ * base fixture keeps the schema default (DRAFT) that staff-side tests rely on.
+ * Checkout-path tests seed through this instead.
+ */
+export async function seedPublishedCohortFixture(
+  prisma: PrismaClient,
+  overrides: Overrides = {},
+): Promise<CohortFixture> {
+  return seedCohortFixture(prisma, { status: "PUBLISHED", ...overrides } as Overrides);
+}
+
 export async function seedCohortFixture(
   prisma: PrismaClient,
   overrides: Overrides = {},

@@ -25,12 +25,13 @@ import {
   CERTIFICATE_STATUS_LABEL,
   CERTIFICATE_STATUS_TONE,
   certificateDisplayStatus,
+  type CertificateFilterValue,
 } from "@/lib/certificate-display-status";
 // `import type` only — this is a client component and must not pull the service's server graph
 // into the browser bundle (same reason `certificateDisplayStatus` lives in `src/lib`).
 import type { CertificateRow, IssuanceSource } from "@/server/services/certificate-service";
 
-type FilterValue = "" | "active" | "flagged" | "revoked";
+type FilterValue = CertificateFilterValue;
 type IssuedByFilterValue = "" | "automatic" | "staff";
 
 /** Consistent with the detail page's "System (automatic issuance)" wording. A missing source is
@@ -85,13 +86,16 @@ const columns: Column<CertificateRow>[] = [
 export function IssuedCertificatesTable({
   rows,
   sources,
+  initialFilter = "",
 }: {
   rows: CertificateRow[];
+  /** Starting status filter, from the page's `?status=` query. */
+  initialFilter?: FilterValue;
   /** Issuance source per certificate id (UAT test 8). Optional: when omitted the "Issued by"
    *  column and filter are not rendered and the table is unchanged. */
   sources?: Record<string, IssuanceSource>;
 }) {
-  const [filter, setFilter] = useState<FilterValue>("");
+  const [filter, setFilter] = useState<FilterValue>(initialFilter);
   const [issuedBy, setIssuedBy] = useState<IssuedByFilterValue>("");
   const showIssuedBy = sources !== undefined;
 

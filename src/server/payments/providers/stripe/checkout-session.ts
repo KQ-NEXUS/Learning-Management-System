@@ -59,9 +59,17 @@ export function buildCheckoutSessionParams(args: {
    * argument (D-02, PAY-14, T-07-10).
    */
   connectedAccountId: string;
+  /**
+   * F-02 — Unix seconds at which Stripe must stop accepting payment on this
+   * session: the seat hold's own expiry, clamped by the caller into Stripe's
+   * allowed 30-minute-to-24-hour window. Without it a session stays payable
+   * for Stripe's 24-hour default, long after the hold (and seat) are gone.
+   */
+  expiresAt: number;
 }): Stripe.Checkout.SessionCreateParams {
   return {
     mode: "payment",
+    expires_at: args.expiresAt,
     payment_method_types: ["card"], // D-03 — card only for v1, no wallet buttons
     client_reference_id: args.orderId, // the webhook's primary lookup key
     metadata: { orderId: args.orderId, enrolmentId: args.enrolmentId }, // belt-and-suspenders

@@ -19,6 +19,7 @@ vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurrentActor }));
 vi.mock("@/server/permissions", () => ({
   can: mocks.can,
+  canAnywhere: mocks.can,
   AuthorizationError: MockAuthorizationError,
   AuthenticationError: MockAuthenticationError,
   withPermission: () => (handler: unknown) => handler,

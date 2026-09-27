@@ -183,6 +183,8 @@ function harness(opts?: {
           return c;
         },
       },
+      // Integration warning #4 — no live certificate unless a test adds one.
+      certificate: { findFirst: async () => null },
       domainEvent: {
         create: async ({ data }: { data: Record<string, unknown> }) => {
           evStore.push(data);
@@ -603,6 +605,7 @@ function directActivationTx(
         return c;
       },
     },
+    certificate: { findFirst: async () => null },
     domainEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         events.push(data);

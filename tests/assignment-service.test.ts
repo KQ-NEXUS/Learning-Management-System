@@ -6,6 +6,8 @@ import {
   assignmentTargetScope,
   createAssignmentService,
   AssignmentReasonRequiredError,
+  GrantCeilingError,
+  SelfAssignmentError,
   type AssignmentRecord,
   type AssignmentStore,
 } from "@/server/services/assignment-service";
@@ -145,7 +147,7 @@ describe("assignment service", () => {
 
   it("succeeds for a Course-scoped grant targeting that same course", async () => {
     const { service } = harness(
-      [grant("roles.manage", "COURSE", "c1")],
+      [grant("roles.manage", "COURSE", "c1"), grant("courses.view", "COURSE", "c1")],
       roles,
       [],
     );
@@ -163,7 +165,7 @@ describe("assignment service", () => {
   });
 
   it("sets startsAt to a non-null value regardless of caller input", async () => {
-    const { service, store } = harness([grant("roles.manage")], roles, []);
+    const { service, store } = harness([grant("roles.manage"), grant("courses.view")], roles, []);
     await service.create({ userId: "u1", roleId: "role-plain", scopeType: "GLOBAL", scopeId: null });
     expect(store.assignment.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ startsAt: expect.any(Date) }) }),
@@ -171,7 +173,7 @@ describe("assignment service", () => {
   });
 
   it("emits one audit entry whose scopeType and scopeId equal the assignment's own", async () => {
-    const { service, audits } = harness([grant("roles.manage")], roles, []);
+    const { service, audits } = harness([grant("roles.manage"), grant("courses.view")], roles, []);
     await service.create({ userId: "u1", roleId: "role-plain", scopeType: "COHORT", scopeId: "ch1" });
     expect(audits[0]).toMatchObject({ scopeType: "COHORT", scopeId: "ch1" });
   });
@@ -260,5 +262,70 @@ describe("assignment service", () => {
       await service.revoke({ assignmentId: "a1", reason: "Trying again" });
       expect(store.assignment.update).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("grant ceiling and self-assignment (F-07)", () => {
+  const roles: RoleRow[] = [
+    { id: "role-plain", active: true, permissions: ["courses.view"] },
+    { id: "role-finance", active: true, permissions: ["payments.confirm", "refunds.manage"] },
+  ];
+
+  it("a scoped role manager can grant a role made of permissions they hold at that scope", async () => {
+    const { service } = harness(
+      [grant("roles.manage", "COURSE", "c1"), grant("courses.view", "COURSE", "c1")],
+      roles,
+      [],
+    );
+    await expect(
+      service.create({ userId: "u2", roleId: "role-plain", scopeType: "COURSE", scopeId: "c1" }),
+    ).resolves.toMatchObject({ id: "a-new" });
+  });
+
+  it("refuses a role carrying permissions the actor does not hold, naming them, and writes nothing", async () => {
+    const { service, store } = harness(
+      [grant("roles.manage", "COURSE", "c1"), grant("payments.confirm", "COURSE", "c1")],
+      roles,
+      [],
+    );
+    const attempt = service.create({ userId: "u2", roleId: "role-finance", scopeType: "COURSE", scopeId: "c1" });
+    await expect(attempt).rejects.toBeInstanceOf(GrantCeilingError);
+    await expect(attempt).rejects.toMatchObject({ missing: ["refunds.manage"] });
+    expect(store.assignment.create).not.toHaveBeenCalled();
+  });
+
+  it("a permission held only at a different course does not count", async () => {
+    const { service, store } = harness(
+      [grant("roles.manage", "COURSE", "c1"), grant("courses.view", "COURSE", "c2")],
+      roles,
+      [],
+    );
+    await expect(
+      service.create({ userId: "u2", roleId: "role-plain", scopeType: "COURSE", scopeId: "c1" }),
+    ).rejects.toBeInstanceOf(GrantCeilingError);
+    expect(store.assignment.create).not.toHaveBeenCalled();
+  });
+
+  it("a global administrator can grant any role, anywhere, to someone else", async () => {
+    const { service } = harness(
+      [grant("roles.manage"), grant("courses.view"), grant("payments.confirm"), grant("refunds.manage")],
+      roles,
+      [],
+    );
+    await expect(
+      service.create({ userId: "u2", roleId: "role-finance", scopeType: "GLOBAL", scopeId: null }),
+    ).resolves.toMatchObject({ id: "a-new" });
+  });
+
+  it("nobody can assign a role to themselves, global administrators included", async () => {
+    const { service, store } = harness(
+      [grant("roles.manage"), grant("courses.view"), grant("payments.confirm"), grant("refunds.manage")],
+      roles,
+      [],
+    );
+    await expect(
+      service.create({ userId: "user-1", roleId: "role-plain", scopeType: "GLOBAL", scopeId: null }),
+    ).rejects.toBeInstanceOf(SelfAssignmentError);
+    expect(store.assignment.create).not.toHaveBeenCalled();
   });
 });

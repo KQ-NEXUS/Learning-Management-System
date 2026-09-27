@@ -17,7 +17,7 @@ function harness() {
   const quizResult = vi.fn<LearnerResultsDeps["quizResult"]>(async () => ({ effective: { score: 9, maxScore: 10, passed: true, attemptNumber: 2 }, attempts: [4,9,6].map((score,i) => ({ attemptId: "at"+i, attemptNumber: i+1, status: "SUBMITTED", score, maxScore: 10, passed: score>=5, submittedAt: date, perQuestion: [], expired: false })), attemptsRemaining: 1 }));
   const submissions = vi.fn<LearnerResultsDeps["submissions"]>(async () => [2,1].map(n => ({ submissionId: "s"+n, receiptId: "receipt"+n, attemptNumber: n, filename: "file.pdf", sizeBytes: 100, submittedAt: date, isLate: n===2, uploadStatus: "READY" })));
   const service = createLearnerResultsService({
-    enrolment: { findMany: async ({ where }) => where.userId === "learner" && (!where.id || where.id === "e1") ? [{ id: "e1", userId: "learner" }] : [] },
+    enrolment: { findMany: async ({ where }) => where.userId === "learner" && where.status === "ACTIVE" && (!where.id || where.id === "e1") ? [{ id: "e1", userId: "learner" }] : [] },
     loadPath: async () => ({ courses: [{ courseId: "course", modules: [{ lessons: [{ id: "l1" },{ id: "l2" },{ id: "l3" }] }] }] }) as never,
     attempt: { findMany: async () => [] }, assessment: { findMany: async () => assessments }, grade: { findMany: gradeRead },
     quizResult, submissions, user: { findMany: async () => [{ id: "staff", name: "Instructor", email: "private@example.test" }] },

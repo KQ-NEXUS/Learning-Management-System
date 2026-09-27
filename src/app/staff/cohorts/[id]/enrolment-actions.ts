@@ -24,6 +24,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { CapacityExceededError, AlreadyEnrolledError, StaleEnrolmentError, CohortClosedError } from "@/server/services/seat-accounting";
 import {
   addEnrolment,
@@ -72,6 +73,11 @@ function toFailure(error: unknown): Extract<EnrolmentActionResult, { ok: false }
       message:
         "This enrolment can only be transferred to another cohort of the same course or programme.",
     };
+  }
+  // Integration warning #4 — LiveCertificateError names the certificate and
+  // says what to do, so its message is shown as written.
+  if (error instanceof UserInputError) {
+    return { ok: false, message: error.message };
   }
   if (error instanceof IllegalTransitionError) {
     return {

@@ -83,7 +83,7 @@ import {
   lockOpenCohort,
 } from "@/server/services/seat-accounting";
 import { calculatePlatformFeeMinor } from "@/server/payments/pricing";
-import { isManualPaymentConfirmationBlocked } from "@/server/payments/order-status";
+import { isManualPaymentConfirmationBlocked, isSettledOrderStatus } from "@/server/payments/order-status";
 // D-18 — Phase 3's minimal send-wrapper, reused verbatim (no second mail
 // client, no template engine, no dedup layer). `dispatchBestEffort` is
 // imported by name here so the opt-out from `dispatch`'s throw is visible at
@@ -757,10 +757,12 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
           order.amountMinor !== input.amountMinor ||
           order.currency.toUpperCase() !== input.currency.toUpperCase();
         if (mismatched) {
-          await tx.order.update({
-            where: { id: order.id },
-            data: { status: "EXCEPTION" },
-          });
+          if (!isSettledOrderStatus(order.status)) {
+            await tx.order.update({
+              where: { id: order.id },
+              data: { status: "EXCEPTION" },
+            });
+          }
           // The mismatch is written to PaymentAttempt.exceptionNote — status is
           // deliberately NOT moved to SUCCEEDED (what settled cannot be
           // trusted to equal what this Order expected), but the note itself
@@ -809,11 +811,14 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
 
         if (!attempt) {
           // Nothing to correlate this settlement to — flag for reconciliation
-          // rather than guessing which PaymentAttempt Stripe means.
-          await tx.order.update({
-            where: { id: order.id },
-            data: { status: "EXCEPTION" },
-          });
+          // rather than guessing which PaymentAttempt Stripe means. A settled
+          // order keeps its status (F-16); the event carries the flag.
+          if (!isSettledOrderStatus(order.status)) {
+            await tx.order.update({
+              where: { id: order.id },
+              data: { status: "EXCEPTION" },
+            });
+          }
           await writeDomainEvent(tx, {
             type: "order.exception",
             payload: {
@@ -945,6 +950,9 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
             err instanceof AlreadyEnrolledError
           ) {
             const duplicateActive = err instanceof AlreadyEnrolledError;
+            // F-16 — the order was already settled by another attempt: this is
+            // a second capture of the same order, not a failed activation.
+            const alreadySettled = isSettledOrderStatus(order.status);
             await tx.paymentAttempt.update({
               where: { id: attempt.id },
               data: {
@@ -952,23 +960,29 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
                 confirmedAt: at,
                 providerRef: input.providerRef ?? input.providerIntentId,
                 evidence,
-                exceptionNote: duplicateActive
-                  ? `${input.provider} payment confirmed, but the learner already has an active enrolment in this cohort; money captured, needs reconciliation.`
-                  : `${input.provider} payment confirmed after the seat hold was no longer eligible to activate; money captured, needs reconciliation.`,
+                exceptionNote: alreadySettled
+                  ? `${input.provider} payment confirmed for an order that was already paid; duplicate money captured, refund or reconcile.`
+                  : duplicateActive
+                    ? `${input.provider} payment confirmed, but the learner already has an active enrolment in this cohort; money captured, needs reconciliation.`
+                    : `${input.provider} payment confirmed after the seat hold was no longer eligible to activate; money captured, needs reconciliation.`,
               },
             });
-            await tx.order.update({
-              where: { id: order.id },
-              data: { status: "EXCEPTION" },
-            });
+            if (!alreadySettled) {
+              await tx.order.update({
+                where: { id: order.id },
+                data: { status: "EXCEPTION" },
+              });
+            }
             await writeDomainEvent(tx, {
               type: "order.exception",
               payload: {
                 orderId: order.id,
                 providerIntentId: input.providerIntentId,
-                reason: duplicateActive
-                  ? "duplicate_active_enrolment"
-                  : "illegal_transition",
+                reason: alreadySettled
+                  ? "duplicate_payment_on_settled_order"
+                  : duplicateActive
+                    ? "duplicate_active_enrolment"
+                    : "illegal_transition",
               },
             });
             return {
@@ -1338,6 +1352,12 @@ export function createRecordSessionExpiredAsSystem(deps: SettlementDeps) {
           },
         });
         return { outcome: "EXCEPTION" as const };
+      }
+
+      // F-02/F-16 — we expire superseded sessions ourselves and mark their
+      // attempts CANCELLED first; Stripe's echo of that expiry is not news.
+      if (attempt.status === "CANCELLED") {
+        return { outcome: "CANCELLED" as const };
       }
 
       try {

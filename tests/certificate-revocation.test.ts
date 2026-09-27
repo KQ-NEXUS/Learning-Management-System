@@ -710,3 +710,41 @@ describe("reissueCertificate", () => {
     expect(Object.keys(payload)).not.toContain("reason");
   });
 });
+
+// ---------------------------------------------------------------------------
+// F-12 — reissuing a revoked certificate needs the right to revoke, and a
+// learner who still meets the completion rules
+// ---------------------------------------------------------------------------
+
+describe("reissueCertificate — F-12 guards", () => {
+  it("an issue-only role cannot reissue a REVOKED certificate (reversing a revocation needs certificates.revoke)", async () => {
+    const h = harness({
+      certificates: [cert({ status: "REVOKED" })],
+      grants: [grant("certificates.issue", "GLOBAL"), grant("certificates.view", "GLOBAL")],
+    });
+    await expect(
+      h.service.reissueCertificate({ certificateId: "cert-1", reason: "Appeal upheld, reissuing credential" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    expect(h.certificates.get("cert-1")?.status).toBe("REVOKED");
+    expect(h.certificates.size).toBe(1);
+  });
+
+  it("refuses when the learner no longer has a current completion record, and the certificate stays REVOKED", async () => {
+    const h = harness({
+      certificates: [cert({ status: "REVOKED" })],
+      completionRecords: [{ id: "cr-1", enrolmentId: "enr-1", scope: "COURSE", supersededAt: new Date("2026-02-01T00:00:00.000Z") }],
+    });
+    await expect(
+      h.service.reissueCertificate({ certificateId: "cert-1", reason: "Appeal upheld, reissuing credential" }),
+    ).rejects.toBeInstanceOf(NoCompletionRecordError);
+    expect(h.certificates.get("cert-1")?.status).toBe("REVOKED");
+    expect(h.certificates.size).toBe(1);
+  });
+
+  it("a routine correction (completion still current, issue + revoke held) reissues as designed", async () => {
+    const h = harness({ certificates: [cert({ status: "REVOKED" })] });
+    const after = await h.service.reissueCertificate({ certificateId: "cert-1", reason: "Correcting the learner's name" });
+    expect(after.status).toBe("ACTIVE");
+    expect(h.certificates.get("cert-1")?.status).toBe("SUPERSEDED");
+  });
+});

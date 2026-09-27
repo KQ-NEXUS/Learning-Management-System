@@ -242,6 +242,8 @@ export function createProfileService(deps: {
 
   async function confirmEmailChange(token: string): Promise<ConfirmEmailChangeResult> {
     let confirmedUserId: string | null = null;
+    let previousEmail: string | null = null;
+    let newEmail: string | null = null;
 
     const result = await consumeToken(
       { token, purpose: TOKEN_PURPOSE.EMAIL_CHANGE },
@@ -260,16 +262,41 @@ export function createProfileService(deps: {
         const collision = await tx.user.findFirst({ where: { email: row.identifier } });
         if (collision) return;
 
+        // Captured before the write: the address being replaced gets the notice.
+        const addressBeingReplaced = user.email;
         const changed = await tx.user.updateMany({
           where: { id: user.id, pendingEmail: row.identifier },
           data: { email: row.identifier, pendingEmail: null, emailVerified: new Date() },
         });
-        if (changed.count === 1) confirmedUserId = user.id;
+        if (changed.count === 1) {
+          confirmedUserId = user.id;
+          previousEmail = addressBeingReplaced;
+          newEmail = row.identifier;
+          // F-14c — the sign-in identity changed: every session, wherever it
+          // was opened, ends now. The confirm link can be opened anywhere, so
+          // there is no "current" session to spare; the owner signs in again.
+          await tx.session.updateMany({
+            where: { userId: user.id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+        }
       },
     );
 
     if (!result.ok || !confirmedUserId) {
       return { ok: false };
+    }
+
+    // F-14c — tell the old address, so a hijacked change does not go
+    // unnoticed. Best effort: a provider outage never undoes the change.
+    if (previousEmail && newEmail) {
+      await dispatchBestEffort(dispatch, {
+        template: "email-changed-notice",
+        toEmail: previousEmail,
+        userId: confirmedUserId,
+        subject: "Your email address was changed",
+        textContent: buildEmailChangedNoticeText(maskEmail(newEmail)),
+      });
     }
 
     await audit({
@@ -328,6 +355,21 @@ export function createProfileService(deps: {
     confirmEmailChange,
     setMarketingPreference,
   };
+}
+
+/** "new.address@example.com" -> "n•••@example.com" — enough to recognise, not to harvest. */
+function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at <= 0) return "•••";
+  return `${email[0]}•••${email.slice(at)}`;
+}
+
+function buildEmailChangedNoticeText(maskedNewEmail: string): string {
+  return [
+    `The email address on your account was just changed to ${maskedNewEmail}.`,
+    "You have been signed out everywhere; sign in again with the new address.",
+    "If you did not make this change, reset your password straight away from the sign-in page and contact support.",
+  ].join("\n\n");
 }
 
 export const profileService = createProfileService({

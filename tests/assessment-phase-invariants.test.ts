@@ -112,7 +112,16 @@ describe("Phase 10 assessment architecture", () => {
       const reads = calls(body, "enrolment", "findMany");
       expect(reads, name).toHaveLength(1);
       const where = property(reads[0], "where")!.initializer;
-      expect(property(where, "status")!.initializer).toMatchObject({ text: "ACTIVE" });
+      // ACTIVE by default; ASM-07's read paths may opt in to COMPLETED
+      // ("visible, not operable"). Nothing else is ever selectable, and the
+      // default stays ACTIVE-only so write paths cannot reach a COMPLETED row.
+      expect(nodes(where, ts.isShorthandPropertyAssignment).some(node => node.name.text === "status"), name).toBe(true);
+      const statuses = nodes(body, ts.isVariableDeclaration).find(d => ts.isIdentifier(d.name) && d.name.text === "statuses");
+      expect(statuses?.initializer && ts.isConditionalExpression(statuses.initializer), name).toBe(true);
+      const choice = statuses!.initializer as ts.ConditionalExpression;
+      const literals = (n: ts.Node) => nodes(n, ts.isStringLiteral).map(l => l.text);
+      expect(literals(choice.whenFalse), name).toEqual(["ACTIVE"]);
+      expect(literals(choice.whenTrue).sort(), name).toEqual(["ACTIVE", "COMPLETED"]);
       const owner = property(where, "userId");
       // Submission's helper accepts userId as a positional parameter, passed
       // from actor.userId at every call; the others use actor.userId directly.

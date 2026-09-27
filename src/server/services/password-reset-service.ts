@@ -146,6 +146,9 @@ export function createPasswordResetService(deps: {
         const user = await tx.user.findUnique({ where: { email: row.identifier } });
         if (!user) return;
         await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+        // F-14b — whoever can read this inbox proved ownership: lift any
+        // sign-in throttle for the address in the same transaction.
+        await tx.loginThrottle?.deleteMany({ where: { email: row.identifier } });
         // The password write locks the user row until all revocations commit.
         // Sign-in takes that same lock and rechecks its verified password hash.
         await signOutAll(user.id, tx);
