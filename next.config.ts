@@ -27,6 +27,15 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    // Turbopack's build cache (on by default since 16.3) records the values of
+    // environment variables the build reads, so real secrets (AUTH_SECRET,
+    // STRIPE_WEBHOOK_SECRET, ...) landed in .next/cache/turbopack and Netlify's
+    // secrets scan failed the deploy. Not writing the cache keeps secrets off
+    // disk; builds start cold instead (node_modules/next/dist/docs/01-app/
+    // 03-api-reference/05-config/01-next-config-js/turbopackFileSystemCache.md).
+    turbopackFileSystemCacheForBuild: false,
+  },
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
