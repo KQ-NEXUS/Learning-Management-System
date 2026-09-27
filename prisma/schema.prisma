@@ -769,6 +769,10 @@ model Lesson {
   embedUrl String?
   linkUrl  String?
 
+  // F-15 — optional staff-set length of a VIDEO lesson. When set, the
+  // server uses it (not the player's reported duration) to decide 90%.
+  videoDurationSeconds Int?
+
   // LRN-02 — required lessons gate completion; sequencing is enforced
   // server-side.
   required Boolean @default(true)
@@ -1127,6 +1131,8 @@ model LessonWatchProgress {
   secondsWatched  Int      @default(0)
   durationSeconds Int?
   percentWatched  Int      @default(0)
+  // F-15 — first watch tick; credit is paced against time since this.
+  startedAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
