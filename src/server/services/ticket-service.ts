@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { can, withPermission as liveWithPermission, type Permission } from "@/server/permissions";
 import { cohortResourceScope, enrolmentCohortScope, orderCohortScope } from "@/server/services/cohort-scope";
 import type { Actor, createWithPermission } from "@/server/permissions/with-permission";
@@ -212,7 +213,7 @@ function requireActor(actor: Actor | null): Actor {
 function trimBounded(value: string, field: string, min: number, max: number): string {
   const trimmed = value.trim();
   if (trimmed.length < min || trimmed.length > max) {
-    throw new TypeError(`${field} must be between ${min} and ${max} characters.`);
+    throw new UserInputError(`${field} must be between ${min} and ${max} characters.`);
   }
   return trimmed;
 }
@@ -220,7 +221,7 @@ function trimBounded(value: string, field: string, min: number, max: number): st
 function normalizeContext(context: TicketContextInput | undefined): TicketContextInput | undefined {
   if (!context) return undefined;
   const entries = Object.entries(context).filter(([, value]) => typeof value === "string" && value.trim());
-  if (entries.length > 1) throw new TypeError("A support ticket can reference at most one contextual record.");
+  if (entries.length > 1) throw new UserInputError("A support ticket can reference at most one contextual record.");
   if (entries.length === 0) return undefined;
   const [key, value] = entries[0] as [keyof TicketContextInput, string];
   return { [key]: value.trim() };
