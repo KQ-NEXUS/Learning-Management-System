@@ -74,6 +74,20 @@ const fakeJar = vi.hoisted(() => {
 
 // F-13 — the resumption page only starts checkout on a same-origin
 // navigation; the real post-sign-in redirect is exactly that.
+const sentEmails = vi.hoisted(() => [] as Array<{ toEmail: string; textContent: string }>);
+vi.mock("@/server/services/email-dispatch-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/services/email-dispatch-service")>();
+  return {
+    ...actual,
+    emailDispatchService: {
+      ...actual.emailDispatchService,
+      dispatch: async (params: { toEmail: string; textContent: string }) => {
+        sentEmails.push({ toEmail: params.toEmail, textContent: params.textContent });
+        return { id: "captured", status: "SENT" };
+      },
+    },
+  };
+});
 vi.mock("next/headers", () => ({
   cookies: async () => fakeJar,
   headers: async () => new Headers({ "sec-fetch-site": "same-origin" }),
@@ -172,15 +186,13 @@ async function registerAndVerify(email: string): Promise<void> {
   });
   expect(result.ok).toBe(true);
 
-  const tokenRow = await testDb.prisma.verificationToken.findFirstOrThrow({
-    where: {
-      identifier: email.toLowerCase().trim(),
-      purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // F-14a — only the token's hash is stored, so the link is taken from the
+  // verification email the learner actually receives.
+  const mail = [...sentEmails].reverse().find((m) => m.toEmail === email.toLowerCase().trim());
+  const rawToken = mail?.textContent.match(/token=([^\s&]+)/)?.[1];
+  if (!rawToken) throw new Error(`No verification email captured for ${email}`);
 
-  const verified = await verificationService.verifyEmail(tokenRow.token);
+  const verified = await verificationService.verifyEmail(rawToken);
   expect(verified.ok).toBe(true);
 }
 

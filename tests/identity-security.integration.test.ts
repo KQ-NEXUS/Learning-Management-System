@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { hashToken } from "@/server/auth/token-hash";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
 import { createAuthService } from "@/server/services/auth-service";
 import { createVerificationService, type VerificationStore } from "@/server/services/verification-service";
@@ -45,25 +46,77 @@ async function resetToken(email: string) {
 }
 
 describe("identity security — real Postgres", () => {
-  it("serializes failed attempts and enforces lockout across simultaneous requests", async () => {
+  it("F-14a: a new session and a new reset token are stored only as SHA-256 hashes", async () => {
+    const { createHash } = await import("node:crypto");
+    const sha = (v: string) => createHash("sha256").update(v, "utf8").digest("hex");
     const account = await user();
-    let arrivals = 0;
-    let open!: () => void;
-    const barrier = new Promise<void>((resolve) => { open = resolve; });
-    const auth = createAuthService({
-      store: db.prisma,
-      verify: async () => {
-        if (++arrivals === 5) open();
-        await barrier;
-        return false;
-      },
-    });
-    await Promise.all(Array.from({ length: 5 }, () => auth.signIn(account.email, "wrong")));
-    const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: account.id } });
-    expect(updated.failedLoginAttempts).toBe(5);
-    expect(updated.lockedUntil!.getTime()).toBeGreaterThan(Date.now());
-    expect(await auth.signIn(account.email, "wrong")).toEqual({ ok: false, reason: "LOCKED" });
-    expect(await db.prisma.session.count({ where: { userId: account.id } })).toBe(0);
+    const auth = createAuthService({ store: db.prisma, verify: async () => true });
+    const signedIn = await auth.signIn(account.email, "right");
+    if (!signedIn.ok) throw new Error("expected sign-in");
+    const session = await db.prisma.session.findFirstOrThrow({ where: { userId: account.id } });
+    expect(session.sessionToken).toBe(sha(signedIn.token));
+    expect(session.sessionToken).not.toBe(signedIn.token);
+
+    const raw = await resetToken(account.email);
+    const row = await db.prisma.verificationToken.findFirstOrThrow({ where: { identifier: account.email } });
+    expect(row.token).toBe(sha(raw));
+  });
+
+  it("F-14b: five failures for one address from one device throttle that device only — the owner elsewhere still signs in", async () => {
+    const account = await user();
+    const auth = createAuthService({ store: db.prisma, verify: async (password) => password === "right" });
+    const attacker = { ip: "203.0.113.50" };
+    const owner = { ip: "198.51.100.20" };
+    await Promise.all(Array.from({ length: 5 }, () => auth.signIn(account.email, "wrong", attacker)));
+    expect(await auth.signIn(account.email, "right", attacker)).toEqual({ ok: false, reason: "THROTTLED" });
+    const fromOwner = await auth.signIn(account.email, "right", owner);
+    expect(fromOwner.ok).toBe(true);
+  });
+
+  it("F-14b: an unknown address is throttled exactly like a real one (no account-existence oracle)", async () => {
+    const auth = createAuthService({ store: db.prisma, verify: async () => false });
+    const ctx = { ip: "203.0.113.51" };
+    const unknown = `${randomUUID()}@example.com`;
+    for (let i = 0; i < 5; i++) expect(await auth.signIn(unknown, "wrong", ctx)).toEqual({ ok: false, reason: "INVALID" });
+    expect(await auth.signIn(unknown, "wrong", ctx)).toEqual({ ok: false, reason: "THROTTLED" });
+  });
+
+  it("F-14b: one device spraying 20 addresses is throttled for every address", async () => {
+    const auth = createAuthService({ store: db.prisma, verify: async () => false });
+    const ctx = { ip: "203.0.113.52" };
+    for (let i = 0; i < 20; i++) await auth.signIn(`${randomUUID()}@example.com`, "wrong", ctx);
+    expect(await auth.signIn(`${randomUUID()}@example.com`, "wrong", ctx)).toEqual({ ok: false, reason: "THROTTLED" });
+  });
+
+  it("F-14b: a wrong password for an unknown address still runs a password check (equal timing)", async () => {
+    const verify = vi.fn(async () => false);
+    const auth = createAuthService({ store: db.prisma, verify });
+    await auth.signIn(`${randomUUID()}@example.com`, "wrong", { ip: "203.0.113.53" });
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
+  it("F-14b: a successful sign-in clears that device's address counter, and no account row is ever locked", async () => {
+    const account = await user();
+    const auth = createAuthService({ store: db.prisma, verify: async (password) => password === "right" });
+    const ctx = { ip: "203.0.113.54" };
+    for (let i = 0; i < 4; i++) await auth.signIn(account.email, "wrong", ctx);
+    expect((await auth.signIn(account.email, "right", ctx)).ok).toBe(true);
+    for (let i = 0; i < 4; i++) await auth.signIn(account.email, "wrong", ctx);
+    expect((await auth.signIn(account.email, "right", ctx)).ok).toBe(true);
+    const row = await db.prisma.user.findUniqueOrThrow({ where: { id: account.id } });
+    expect(row.lockedUntil).toBeNull();
+  });
+
+  it("F-14b: a password reset clears the throttle for that address", async () => {
+    const account = await user();
+    const auth = createAuthService({ store: db.prisma, verify: async () => false });
+    const ctx = { ip: "203.0.113.55" };
+    for (let i = 0; i < 5; i++) await auth.signIn(account.email, "wrong", ctx);
+    expect(await auth.signIn(account.email, "wrong", ctx)).toEqual({ ok: false, reason: "THROTTLED" });
+
+    const token = await resetToken(account.email);
+    expect(await resetService().resetPassword({ token, newPassword: "new-password" })).toEqual({ ok: true });
+    expect(await auth.signIn(account.email, "wrong", ctx)).toEqual({ ok: false, reason: "INVALID" });
   });
 
   it("commits reset, token consumption and revocation together without revoking another user", async () => {
@@ -75,7 +128,7 @@ describe("identity security — real Postgres", () => {
     const token = await resetToken(account.email);
     expect(await resetService().resetPassword({ token, newPassword: "new-password" })).toEqual({ ok: true });
     expect((await db.prisma.user.findUniqueOrThrow({ where: { id: account.id } })).passwordHash).toBe("new-hash");
-    expect((await db.prisma.verificationToken.findUniqueOrThrow({ where: { token } })).consumedAt).not.toBeNull();
+    expect((await db.prisma.verificationToken.findUniqueOrThrow({ where: { token: hashToken(token) } })).consumedAt).not.toBeNull();
     expect(await db.prisma.session.count({ where: { userId: account.id, revokedAt: null } })).toBe(0);
     expect(await db.prisma.session.count({ where: { userId: other.id, revokedAt: null } })).toBe(1);
   });
@@ -92,7 +145,7 @@ describe("identity security — real Postgres", () => {
     });
     await expect(reset.resetPassword({ token, newPassword: "new-password" })).rejects.toThrow("simulated revocation failure");
     expect((await db.prisma.user.findUniqueOrThrow({ where: { id: account.id } })).passwordHash).toBe("old-hash");
-    expect((await db.prisma.verificationToken.findUniqueOrThrow({ where: { token } })).consumedAt).toBeNull();
+    expect((await db.prisma.verificationToken.findUniqueOrThrow({ where: { token: hashToken(token) } })).consumedAt).toBeNull();
     expect((await db.prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).toBeNull();
   });
 

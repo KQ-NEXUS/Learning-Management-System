@@ -7,6 +7,7 @@
  * which throws `AuthenticationError` when there is no actor.
  */
 
+import { hashToken } from "@/server/auth/token-hash";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/server/db";
 import { isInCooldown } from "@/server/auth/request-cooldown";
@@ -56,6 +57,8 @@ export type VerificationStore = {
     findFirst(args: Record<string, unknown>): Promise<UserForVerification | null>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<UserForVerification>;
   };
+  /** F-14b — a password reset clears the address's sign-in throttle (optional in fakes). */
+  loginThrottle?: { deleteMany(args: { where: { email: string } }): Promise<unknown> };
   $transaction<T>(fn: (tx: VerificationStore) => Promise<T>): Promise<T>;
 };
 
@@ -108,7 +111,7 @@ export function createVerificationService(deps: {
           userId: params.userId ?? null,
           identifier,
           purpose: params.purpose,
-          token,
+          token: hashToken(token), // F-14a — the email carries the raw token
           expires: new Date(now().getTime() + params.ttlMs),
           createdAt: now(),
         },
@@ -129,7 +132,7 @@ export function createVerificationService(deps: {
       // greater-than is what makes a token expired exactly at its `expires`
       // instant.
       const result = await tx.verificationToken.updateMany({
-        where: { token: params.token, purpose: params.purpose, consumedAt: null, expires: { gt: now() } },
+        where: { token: hashToken(params.token), purpose: params.purpose, consumedAt: null, expires: { gt: now() } },
         data: { consumedAt: now() },
       });
 
@@ -138,7 +141,7 @@ export function createVerificationService(deps: {
       }
 
       const row = await tx.verificationToken.findFirst({
-        where: { token: params.token, purpose: params.purpose },
+        where: { token: hashToken(params.token), purpose: params.purpose },
       });
       if (!row) return { ok: false };
 

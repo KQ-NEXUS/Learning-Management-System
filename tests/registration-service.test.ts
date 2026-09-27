@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -537,5 +538,20 @@ describe("F-11 — a contested unverified email never keeps a submitted password
     await registrationService.registerLearner(ALICE);
     const result = await verificationService.verifyEmail(extractToken(dispatched[0].textContent));
     expect(result).toEqual({ ok: true });
+  });
+});
+
+describe("F-14a — verification links are stored hashed", () => {
+  it("the stored token is the hash of the emailed one; the stored value itself is not a working link", async () => {
+    const { registrationService, verificationService, tokens, dispatched } = sharedHarness();
+    NOW.value = new Date("2026-09-02T12:00:00Z");
+    await registrationService.registerLearner(BASE_INPUT);
+    const raw = extractToken(dispatched[0].textContent);
+    const stored = tokens[0].token;
+
+    expect(stored).not.toBe(raw);
+    expect(stored).toBe(createHash("sha256").update(raw, "utf8").digest("hex"));
+    await expect(verificationService.verifyEmail(stored)).resolves.toEqual({ ok: false });
+    await expect(verificationService.verifyEmail(raw)).resolves.toEqual({ ok: true });
   });
 });

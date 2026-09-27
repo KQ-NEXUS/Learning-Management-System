@@ -1,9 +1,10 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/server/services/auth-service";
 import { SESSION_COOKIE, SESSION_TTL_DAYS } from "@/server/auth/lockout";
+import { clientIpFrom } from "@/server/auth/sign-in-throttle";
 import { checkoutReturnPathFor, CHECKOUT_INTENT_COOKIE } from "@/server/auth/landing";
 
 export type SignInState = { error: string | null };
@@ -19,13 +20,14 @@ export async function signInAction(
     return { error: "Enter your email address and password." };
   }
 
-  const result = await signIn(email, password);
+  // F-14b — throttled per device, from a trusted client-IP header only.
+  const result = await signIn(email, password, { ip: clientIpFrom(await headers()) });
 
   if (!result.ok) {
     return {
       error:
-        result.reason === "LOCKED"
-          ? "Too many attempts. Try again in 15 minutes."
+        result.reason === "THROTTLED"
+          ? "Too many sign-in attempts from this device. Wait 15 minutes, or reset your password."
           : "Those details do not match an account.",
     };
   }

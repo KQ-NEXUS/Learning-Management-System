@@ -398,6 +398,20 @@ model Session {
 }
 
 // Single-use, expiring. Covers email verification and password reset (IAM-02).
+/// F-14b — failed sign-in counters per device (IP) and per device+address,
+/// in a fixed window. Replaces per-account lockout, which let anyone lock any
+/// account and revealed which addresses had one.
+model LoginThrottle {
+  key             String   @id
+  /// Set for address-bearing keys, so a password reset can clear them.
+  email           String?
+  failures        Int
+  windowStartedAt DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([email])
+}
+
 model VerificationToken {
   // Immutable account binding for email changes; legacy unbound links fail closed.
   userId     String?
