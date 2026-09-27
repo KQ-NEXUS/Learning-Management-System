@@ -113,6 +113,13 @@ services:
       EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-Professional Training LMS}
       EMAIL_SENDER_ADDRESS: ${EMAIL_SENDER_ADDRESS:-no-reply@example.com}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      # Payment providers. Empty values keep the app booting, but checkout
+      # refuses to start a payment on a rail whose keys are missing.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_CONNECTED_ACCOUNT_ID: ${STRIPE_CONNECTED_ACCOUNT_ID:-}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_SUBACCOUNT_CODE: ${PAYSTACK_SUBACCOUNT_CODE:-}
 
 volumes:
   postgres-data:
