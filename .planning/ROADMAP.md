@@ -703,7 +703,48 @@ Wave 13 *(blocked on Wave 12; human-only)*
   2. Retried or replayed events never produce duplicate messages within the same correlation. (COM-02)
   3. Important in-product notifications surface unread/current state to the right user and fail safely on stale or inaccessible links. (COM-03)
 
-**Plans**: TBD
+**Plans**: 13 plans
+
+**Wave 1**
+
+- [ ] 13-01-PLAN.md — additive communications schema, [BLOCKING] schema push, payment.failed/payment.refunded event types, and the shared communications vocabulary.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 13-02-PLAN.md — one approved sender identity, Brevo HTML+text transport with stub mode, and the 27 typed branded email templates.
+- [ ] 13-03-PLAN.md — owner-scoped notification services, unread/list/preferences endpoints, and the email preference store.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 13-04-PLAN.md — deduplicated dispatch with stable keys, retry/backoff Pass 2, audited resend, and the auth mails moved onto it.
+- [ ] 13-05-PLAN.md — access-checked notification links with one indistinguishable stale outcome, and the 90-day archive job.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 13-06-PLAN.md — bell, slide-over drawer and learner email-preferences panel in the learner and staff headers.
+- [ ] 13-07-PLAN.md — the outbox drain: per-event claim, fan-out, poison handling, recipient gating, and the scheduled Netlify task.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 13-08-PLAN.md — enrolment/payment coverage: one combined enrolment mail, direct checkout sends removed, payment.failed and payment.refunded.
+- [ ] 13-12-PLAN.md — staff delivery log with audited Resend.
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 13-09-PLAN.md — enrolment status, session change and cohort cancellation mail with coalescing and precedence.
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 13-10-PLAN.md — result, certificate and learner ticket mail carrying references only.
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 13-11-PLAN.md — staff alerts from live permission and scope, assignee/escalation/payment mail, and the failed-email administrator alert.
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 13-13-PLAN.md — opt-in live Brevo smoke test, phase invariants, and a real-Postgres acceptance run of the success criteria.
+
 **UI hint**: yes
 
 ---
