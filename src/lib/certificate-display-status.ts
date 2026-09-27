@@ -13,6 +13,18 @@
  */
 export type CertificateDisplayStatus = "revoked" | "flagged" | "superseded" | "active";
 
+/** The issued-list status filter; "" is "All". */
+export type CertificateFilterValue = "" | "active" | "flagged" | "revoked";
+
+/**
+ * Reads the issued list's `?status=` query into a starting filter, so links
+ * such as the overview's "Flagged certificates" land already filtered.
+ * Anything unknown (or repeated) falls back to "All".
+ */
+export function initialCertificateFilter(raw: string | string[] | undefined): CertificateFilterValue {
+  return raw === "active" || raw === "flagged" || raw === "revoked" ? raw : "";
+}
+
 /** StatusPill tone per display status (UI-SPEC §5) — shared by the issued list and the landing page. */
 export const CERTIFICATE_STATUS_TONE = {
   revoked: "danger",

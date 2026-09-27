@@ -6,6 +6,7 @@ import {
   certificateService,
   listCertificateIssuanceSources,
 } from "@/server/services/certificate-service";
+import { initialCertificateFilter } from "@/lib/certificate-display-status";
 import { IssuedCertificatesTable } from "./IssuedCertificatesTable";
 
 /**
@@ -19,7 +20,12 @@ import { IssuedCertificatesTable } from "./IssuedCertificatesTable";
  */
 export const metadata = { title: "All certificates" };
 
-export default async function IssuedCertificatesPage() {
+export default async function IssuedCertificatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { status } = await searchParams;
   let rows;
   let sources;
   try {
@@ -42,7 +48,7 @@ export default async function IssuedCertificatesPage() {
           </Link>
         }
       />
-      <IssuedCertificatesTable rows={rows} sources={sources} />
+      <IssuedCertificatesTable rows={rows} sources={sources} initialFilter={initialCertificateFilter(status)} />
     </div>
   );
 }
