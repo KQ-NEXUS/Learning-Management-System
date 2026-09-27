@@ -19,6 +19,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createActivateOrderAsSystem,
+  createRecordSessionExpiredAsSystem,
   createMarkWebhookEventRetryable,
   createRecordWebhookEventOrSkip,
   type SettlementTxClient,
@@ -1040,5 +1041,91 @@ describe("activateOrderAsSystem — never writes the four actual-settlement colu
     expect(attempt).not.toHaveProperty("platformGrossActualMinor");
     expect(attempt).not.toHaveProperty("platformNetActualMinor");
     expect(attempt).not.toHaveProperty("reconciledAt");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-16 — a settled order is never downgraded by a late or duplicate payment
+// ---------------------------------------------------------------------------
+
+describe("F-16 — settled orders stay settled; extra money is flagged, not the order", () => {
+  function paidSetup(extraAttempt: PaymentAttemptRow) {
+    const enrolment = baseEnrolment({ status: "ACTIVE", holdExpiresAt: null, activatedAt: new Date("2026-09-10T11:00:00Z") });
+    const order = baseOrder(enrolment, { status: "PAID" });
+    return buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 2, capacity: 3 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        { id: "pa-1", status: "SUCCEEDED", orderId: BASE_ORDER_ID, providerIntentId: SESSION_ID, provider: "STRIPE" },
+        extraAttempt,
+      ],
+      email: "learner@example.test",
+    });
+  }
+
+  it("a second successful payment on a PAID order keeps the order PAID and flags the duplicate attempt", async () => {
+    const h = paidSetup({ id: "pa-2", status: "CANCELLED", orderId: BASE_ORDER_ID, providerIntentId: "cs_test_2", provider: "STRIPE" });
+    const result = await createActivateOrderAsSystem(h.deps)({
+      orderId: BASE_ORDER_ID,
+      provider: "STRIPE",
+      providerIntentId: "cs_test_2",
+      amountMinor: 45_000_000,
+      currency: "NGN",
+      eventId: "evt-1",
+    });
+    expect(result.outcome).toBe("EXCEPTION");
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+    expect(h.attempts.get("pa-2")).toMatchObject({
+      status: "SUCCEEDED",
+      exceptionNote: expect.stringContaining("already paid"),
+    });
+    expect(h.domainEvents).toContainEqual(
+      expect.objectContaining({ type: "order.exception", payload: expect.objectContaining({ reason: "duplicate_payment_on_settled_order" }) }),
+    );
+  });
+
+  it("an amount mismatch reported against a PAID order leaves the order PAID", async () => {
+    const h = paidSetup({ id: "pa-2", status: "PROCESSING", orderId: BASE_ORDER_ID, providerIntentId: "cs_test_2", provider: "STRIPE" });
+    await createActivateOrderAsSystem(h.deps)({
+      orderId: BASE_ORDER_ID,
+      provider: "STRIPE",
+      providerIntentId: "cs_test_2",
+      amountMinor: 1,
+      currency: "NGN",
+      eventId: "evt-1",
+    });
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+  });
+
+  it("an unmatched settlement against a PAID order leaves the order PAID", async () => {
+    const h = paidSetup({ id: "pa-2", status: "PROCESSING", orderId: BASE_ORDER_ID, providerIntentId: "cs_test_2", provider: "STRIPE" });
+    await createActivateOrderAsSystem(h.deps)({
+      orderId: BASE_ORDER_ID,
+      provider: "STRIPE",
+      providerIntentId: "cs_unknown",
+      amountMinor: 45_000_000,
+      currency: "NGN",
+      eventId: "evt-1",
+    });
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+  });
+
+  it("Stripe's expiry webhook for an attempt we already retired is a quiet no-op", async () => {
+    const enrolment = baseEnrolment();
+    const h = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 2, capacity: 3 },
+      cohortId: COHORT_ID,
+      order: baseOrder(enrolment),
+      attempts: [{ id: "pa-1", status: "CANCELLED", orderId: BASE_ORDER_ID, providerIntentId: SESSION_ID, provider: "STRIPE" }],
+      email: "learner@example.test",
+    });
+    const result = await createRecordSessionExpiredAsSystem(h.deps)({
+      orderId: BASE_ORDER_ID,
+      providerIntentId: SESSION_ID,
+      eventId: "evt-1",
+    });
+    expect(result.outcome).toBe("CANCELLED");
+    expect(h.domainEvents.filter((e) => e.type === "order.exception")).toEqual([]);
   });
 });

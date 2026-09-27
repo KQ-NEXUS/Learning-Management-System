@@ -237,6 +237,45 @@ enum TicketPriority {
   URGENT
 }
 
+enum TicketCategory {
+  ACCOUNT_ACCESS
+  PAYMENT_ORDER
+  COURSE_CONTENT
+  ASSESSMENT_RESULT
+  CERTIFICATE
+  TECHNICAL_PROBLEM
+  OTHER
+}
+
+enum TicketQueue {
+  GENERAL_SUPPORT
+  ACCOUNTS
+  FINANCE
+  LEARNING_ASSESSMENT
+  TECHNICAL
+}
+
+enum TicketMessageKind {
+  INITIAL
+  REPLY
+  INTERNAL_NOTE
+}
+
+enum TicketEventType {
+  CREATED
+  CLAIMED
+  ASSIGNED
+  REASSIGNED
+  PRIORITY_CHANGED
+  QUEUE_CHANGED
+  ESCALATED
+  ESCALATION_ACCEPTED
+  RESOLVED
+  REOPENED
+  LEARNER_CLOSED
+  AUTO_CLOSED
+}
+
 // Public replies reach the learner. Internal notes never do (SUP-02).
 enum MessageVisibility {
   PUBLIC
@@ -281,22 +320,24 @@ model User {
   deactivatedAt   DateTime?
   deactivatedById String?
 
-  sessions           Session[]
-  accounts           Account[]
-  assignments        Assignment[]       @relation("AssignmentSubject")
-  assignmentsCreated Assignment[]       @relation("AssignmentCreator")
-  policyAcceptances  PolicyAcceptance[]
-  enrolments         Enrolment[]
-  orders             Order[]
-  certificates       Certificate[]
-  ticketsRaised      Ticket[]           @relation("TicketRequester")
-  ticketsAssigned    Ticket[]           @relation("TicketAssignee")
-  ticketMessages     TicketMessage[]
-  auditEvents        AuditEvent[]       @relation("AuditActor")
-  instructorOf       CohortInstructor[]
-  facilitatorOf      ScheduledSession[]
-  gradesGiven        Grade[]            @relation("Grader")
-  exportJobs         ExportJob[]
+  sessions                    Session[]
+  accounts                    Account[]
+  assignments                 Assignment[]              @relation("AssignmentSubject")
+  assignmentsCreated          Assignment[]              @relation("AssignmentCreator")
+  policyAcceptances           PolicyAcceptance[]
+  enrolments                  Enrolment[]
+  orders                      Order[]
+  certificates                Certificate[]
+  ticketsRaised               Ticket[]                  @relation("TicketRequester")
+  ticketsAssigned             Ticket[]                  @relation("TicketAssignee")
+  ticketMessages              TicketMessage[]
+  ticketEvents                TicketEvent[]
+  ticketAttachments           TicketAttachment[]        @relation("TicketAttachmentUploader")
+  auditEvents                 AuditEvent[]              @relation("AuditActor")
+  instructorOf                CohortInstructor[]
+  facilitatorOf               ScheduledSession[]
+  gradesGiven                 Grade[]                   @relation("Grader")
+  exportJobs                  ExportJob[]
   reconciliationCasesAssigned ReconciliationCase[]      @relation("ReconciliationCaseAssignee")
   reconciliationCasesResolved ReconciliationCase[]      @relation("ReconciliationCaseResolver")
   reconciliationCaseEvents    ReconciliationCaseEvent[] @relation("ReconciliationCaseEventActor")
@@ -357,6 +398,20 @@ model Session {
 }
 
 // Single-use, expiring. Covers email verification and password reset (IAM-02).
+/// F-14b — failed sign-in counters per device (IP) and per device+address,
+/// in a fixed window. Replaces per-account lockout, which let anyone lock any
+/// account and revealed which addresses had one.
+model LoginThrottle {
+  key             String   @id
+  /// Set for address-bearing keys, so a password reset can clear them.
+  email           String?
+  failures        Int
+  windowStartedAt DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([email])
+}
+
 model VerificationToken {
   // Immutable account binding for email changes; legacy unbound links fail closed.
   userId     String?
@@ -713,6 +768,10 @@ model Lesson {
   body     String?
   embedUrl String?
   linkUrl  String?
+
+  // F-15 — optional staff-set length of a VIDEO lesson. When set, the
+  // server uses it (not the player's reported duration) to decide 90%.
+  videoDurationSeconds Int?
 
   // LRN-02 — required lessons gate completion; sequencing is enforced
   // server-side.
@@ -1072,6 +1131,8 @@ model LessonWatchProgress {
   secondsWatched  Int      @default(0)
   durationSeconds Int?
   percentWatched  Int      @default(0)
+  // F-15 — first watch tick; credit is paced against time since this.
+  startedAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
@@ -1219,6 +1280,7 @@ model Submission {
   assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   enrolment  Enrolment  @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
   grades     Grade[]
+  tickets    Ticket[]
 
   @@unique([assessmentId, enrolmentId, attemptNumber])
   @@index([enrolmentId])
@@ -1329,6 +1391,7 @@ model Certificate {
   programme    Programme?   @relation(fields: [programmeId], references: [id])
   supersedes   Certificate? @relation("Reissue", fields: [supersedesId], references: [id])
   supersededBy Certificate? @relation("Reissue")
+  tickets      Ticket[]
 
   @@index([userId, status])
   @@index([status])
@@ -1460,12 +1523,18 @@ model PaymentAttempt {
   platformGrossActualMinor    Int?
   platformNetActualMinor      Int?
   reconciledAt                DateTime?
+  // F-03 — per-row retry state for the reconciliation sweep: a row whose
+  // provider evidence keeps failing is pushed back (exponential backoff) so it
+  // can never hold the head of the queue, and is escalated after 5 failures.
+  reconcileAttempts           Int       @default(0)
+  nextReconcileAt             DateTime?
 
-  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  refunds Refund[]
+  order               Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds             Refund[]
   reconciliationCases ReconciliationCase[]
 
   @@index([orderId, status])
+  @@index([status, reconciledAt, nextReconcileAt])
   @@index([provider, status])
   @@index([providerRef])
 }
@@ -1498,8 +1567,8 @@ model Refund {
   gatewayComponentMinor  Int?
   providerOutcome        String?
 
-  order          Order          @relation(fields: [orderId], references: [id])
-  paymentAttempt PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
+  order               Order                @relation(fields: [orderId], references: [id])
+  paymentAttempt      PaymentAttempt       @relation(fields: [paymentAttemptId], references: [id])
   reconciliationCases ReconciliationCase[]
 
   @@index([orderId])
@@ -1510,7 +1579,7 @@ model Refund {
 // replaces or mutates either domain state machine. PostgreSQL partial unique
 // indexes in the named migration enforce one durable case per subject row.
 model ReconciliationCase {
-  id      String                @id @default(cuid())
+  id      String                   @id @default(cuid())
   subject ReconciliationSubject
   risk    ReconciliationRisk
   status  ReconciliationCaseStatus @default(OPEN)
@@ -1530,13 +1599,13 @@ model ReconciliationCase {
   resolvedAt       DateTime?
   resolvedById     String?
 
-  openedAt DateTime @default(now())
+  openedAt  DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  paymentAttempt PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
-  refund         Refund?         @relation(fields: [refundId], references: [id], onDelete: Cascade)
-  assignedTo     User?           @relation("ReconciliationCaseAssignee", fields: [assignedToId], references: [id])
-  resolvedBy     User?           @relation("ReconciliationCaseResolver", fields: [resolvedById], references: [id])
+  paymentAttempt PaymentAttempt?           @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  refund         Refund?                   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  assignedTo     User?                     @relation("ReconciliationCaseAssignee", fields: [assignedToId], references: [id])
+  resolvedBy     User?                     @relation("ReconciliationCaseResolver", fields: [resolvedById], references: [id])
   events         ReconciliationCaseEvent[]
 
   @@index([status, risk, openedAt])
@@ -1547,18 +1616,18 @@ model ReconciliationCase {
 
 // Append-only application history for a reconciliation investigation.
 model ReconciliationCaseEvent {
-  id       String                      @id @default(cuid())
-  caseId   String
-  type     ReconciliationCaseEventType
-  actorId  String?
-  actorType String                     @default("SYSTEM")
+  id        String                      @id @default(cuid())
+  caseId    String
+  type      ReconciliationCaseEventType
+  actorId   String?
+  actorType String                      @default("SYSTEM")
 
   evidence         Json?
   fingerprint      String?
   resolutionReason ReconciliationResolutionReason?
   note             String?
   correlationId    String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime                        @default(now())
 
   case  ReconciliationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
   actor User?              @relation("ReconciliationCaseEventActor", fields: [actorId], references: [id])
@@ -1595,18 +1664,22 @@ model Ticket {
   reference String @unique
   userId    String
 
-  category String
+  category TicketCategory
   subject  String
   priority TicketPriority @default(NORMAL)
   status   TicketStatus   @default(NEW)
+  queue    TicketQueue    @default(GENERAL_SUPPORT)
+  version  Int            @default(1)
 
   assigneeId String?
 
   // SUP-05 — contextual links. Opening one performs a fresh permission check;
   // ticket access alone grants nothing.
-  cohortId String?
-  courseId String?
-  orderId  String?
+  cohortId      String?
+  courseId      String?
+  orderId       String?
+  submissionId  String?
+  certificateId String?
 
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -1617,18 +1690,21 @@ model Ticket {
   escalatedAt      DateTime?
   escalationReason String?
 
-  user     User    @relation("TicketRequester", fields: [userId], references: [id])
-  assignee User?   @relation("TicketAssignee", fields: [assigneeId], references: [id])
-  cohort   Cohort? @relation(fields: [cohortId], references: [id])
-  course   Course? @relation(fields: [courseId], references: [id])
-  order    Order?  @relation(fields: [orderId], references: [id])
+  user        User         @relation("TicketRequester", fields: [userId], references: [id])
+  assignee    User?        @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  cohort      Cohort?      @relation(fields: [cohortId], references: [id])
+  course      Course?      @relation(fields: [courseId], references: [id])
+  order       Order?       @relation(fields: [orderId], references: [id])
+  submission  Submission?  @relation(fields: [submissionId], references: [id])
+  certificate Certificate? @relation(fields: [certificateId], references: [id])
 
   messages    TicketMessage[]
   attachments TicketAttachment[]
+  events      TicketEvent[]
 
-  @@index([status, priority])
-  @@index([assigneeId, status])
-  @@index([userId])
+  @@index([queue, status, priority, updatedAt])
+  @@index([assigneeId, status, updatedAt])
+  @@index([userId, createdAt])
 }
 
 // SUP-02 — public replies and internal notes share a table but never a
@@ -1637,6 +1713,7 @@ model TicketMessage {
   id         String            @id @default(cuid())
   ticketId   String
   authorId   String
+  kind       TicketMessageKind
   visibility MessageVisibility
   body       String
   createdAt  DateTime          @default(now())
@@ -1649,22 +1726,58 @@ model TicketMessage {
 }
 
 model TicketAttachment {
-  id        String  @id @default(cuid())
-  ticketId  String
-  messageId String?
+  id           String @id @default(cuid())
+  ticketId     String
+  messageId    String
+  uploadedById String
 
   storageKey   String
   filename     String
   mimeType     String
-  sizeBytes    Int
+  sizeBytes    BigInt
   // Shared private-file lifecycle with LessonResource and Submission.
   uploadStatus UploadStatus @default(UPLOADING)
+  uploadedAt   DateTime     @default(now())
+  uploadDetail Json?
   createdAt    DateTime     @default(now())
 
-  ticket  Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  message TicketMessage? @relation(fields: [messageId], references: [id])
+  ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message    TicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  uploadedBy User          @relation("TicketAttachmentUploader", fields: [uploadedById], references: [id])
 
-  @@index([ticketId])
+  @@index([ticketId, uploadStatus])
+  @@index([messageId, uploadStatus])
+  @@index([uploadedById, uploadedAt])
+}
+
+// SUP-02/SUP-04 — append-only product chronology. Application services only
+// create rows; they never update or delete an event after it is recorded.
+model TicketEvent {
+  id            String          @id @default(cuid())
+  ticketId      String
+  actorId       String?
+  actorType     String          @default("USER")
+  type          TicketEventType
+  reason        String?
+  correlationId String?
+
+  statusBefore     TicketStatus?
+  statusAfter      TicketStatus?
+  priorityBefore   TicketPriority?
+  priorityAfter    TicketPriority?
+  queueBefore      TicketQueue?
+  queueAfter       TicketQueue?
+  assigneeBeforeId String?
+  assigneeAfterId  String?
+
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id])
+
+  @@index([ticketId, createdAt, id])
+  @@index([actorId, createdAt])
+  @@index([type, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -1674,34 +1787,34 @@ model TicketAttachment {
 // RPT-04 — queued, processing, succeeded, failed, expired, retry. Downloads
 // use short-lived authorized access and the download event is recorded.
 model ExportJob {
-  id            String    @id @default(cuid())
-  requestedById String
-  dataset       String
-  datasetVersion String   @default("1.0")
-  filters       Json?
-  asOf          DateTime  @default(now())
-  timezone      String    @default("Africa/Lagos")
-  scopeSnapshot Json?
-  columnSnapshot Json?
+  id              String    @id @default(cuid())
+  requestedById   String
+  dataset         String
+  datasetVersion  String    @default("1.0")
+  filters         Json?
+  asOf            DateTime  @default(now())
+  timezone        String    @default("Africa/Lagos")
+  scopeSnapshot   Json?
+  columnSnapshot  Json?
   sensitiveReason String?
-  idempotencyKey String?  @unique
-  retryOfId     String?
-  status        JobStatus @default(QUEUED)
-  rowCount      Int?      @default(0)
-  storageKey    String?
-  expiresAt     DateTime?
-  error         String?
-  errorCode     String?
-  errorMessage  String?
-  createdAt     DateTime  @default(now())
-  startedAt     DateTime?
-  completedAt   DateTime?
-  downloadedAt  DateTime?
-  updatedAt     DateTime  @updatedAt
+  idempotencyKey  String?   @unique
+  retryOfId       String?
+  status          JobStatus @default(QUEUED)
+  rowCount        Int?      @default(0)
+  storageKey      String?
+  expiresAt       DateTime?
+  error           String?
+  errorCode       String?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  downloadedAt    DateTime?
+  updatedAt       DateTime  @updatedAt
 
-  requestedBy User @relation(fields: [requestedById], references: [id])
-  retryOf     ExportJob? @relation("ExportRetry", fields: [retryOfId], references: [id])
-  retries     ExportJob[] @relation("ExportRetry")
+  requestedBy  User                @relation(fields: [requestedById], references: [id])
+  retryOf      ExportJob?          @relation("ExportRetry", fields: [retryOfId], references: [id])
+  retries      ExportJob[]         @relation("ExportRetry")
   snapshotRows ExportSnapshotRow[]
 
   @@index([requestedById, status])

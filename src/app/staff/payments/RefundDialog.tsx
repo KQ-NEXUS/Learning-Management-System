@@ -74,6 +74,15 @@ export function RefundDialog({ orderId, currency, eligibleRefundMinor }: RefundD
       return;
     }
 
+    // Warning #3 — the refund is recorded either way; say so if access stayed.
+    if (result.access === "not-revoked") {
+      router.refresh();
+      setError(
+        "The refund was recorded, but the learner's access could not be revoked. Withdraw the enrolment from the cohort page.",
+      );
+      return;
+    }
+
     setOpen(false);
     router.refresh();
   }
@@ -234,6 +243,11 @@ function RefundDialogBody({
             <option value="RETAINED">Learner keeps enrolment access</option>
             <option value="REVOKED">Revoke enrolment access</option>
           </select>
+          {accessDecision === "REVOKED" && (
+            <p className="text-xs text-muted-foreground">
+              The learner&apos;s enrolment is withdrawn as soon as the refund goes through.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1">

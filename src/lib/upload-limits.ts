@@ -160,6 +160,39 @@ export function validateTemplateAssetUpload(
   });
 }
 
+/** Support-ticket attachments are deliberately narrower than lesson files. */
+export const TICKET_MAX_ATTACHMENTS_PER_MESSAGE = 3;
+export const TICKET_MAX_ATTACHMENT_BYTES = 10 * MB;
+export const TICKET_UPLOAD_MIME_TYPES: readonly string[] = Object.freeze([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/pdf",
+]);
+
+export type ValidateTicketUploadInput = {
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export function validateTicketUpload(
+  input: ValidateTicketUploadInput,
+): ValidateUploadResult {
+  if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0) {
+    return { ok: false, message: "Ticket file size must be a positive byte count." };
+  }
+  if (!TICKET_UPLOAD_MIME_TYPES.includes(input.mimeType)) {
+    return {
+      ok: false,
+      message: "Ticket files must be PNG, JPEG, WebP, or PDF.",
+    };
+  }
+  if (input.sizeBytes > TICKET_MAX_ATTACHMENT_BYTES) {
+    return { ok: false, message: "Ticket file exceeds the 10 MB limit." };
+  }
+  return { ok: true };
+}
+
 /**
  * Presigned-GET lifetime, in seconds, per content type (D-37).
  *

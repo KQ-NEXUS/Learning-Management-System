@@ -13,12 +13,12 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 - [ ] **IAM-01**: Public visitor can create a Learner account with email/password and accept required policies; duplicate active email is prevented, consent versions recorded, one verification message sent.
 - [ ] **IAM-02**: Account ownership is verified through a single-use, expiring email link that activates the account once; expired/used tokens show a recoverable path without revealing unrelated account data.
-- [ ] **IAM-03**: Email/password sign-in, sign-out, password reset, and secure session management — rate-limited credentials, expiring reset tokens, selective/global session revocation. *(Sign-in/out/lockout/session revocation implemented; password reset still missing — remains Active.)*
+- [ ] **IAM-03**: Email/password sign-in, sign-out, password reset, and secure session management — rate-limited credentials, expiring reset tokens, selective/global session revocation. *(Sign-in/out/lockout/session revocation and password reset are all built — forgot-password and reset-password flows with expiring, hashed tokens. Formal verification pending.)*
 - [x] **IAM-04**: Authorized staff can create/invite staff accounts and deactivate/reactivate accounts, with actor/reason/time/resulting-state audited.
 - [ ] **IAM-05**: Users can maintain approved profile fields and communication preferences within validation and consent rules.
 - [ ] **IAM-06**: Protection against account enumeration, brute force, credential stuffing, and unsafe session reuse; non-enumerating errors; testable rate/lock controls; security events logged without secrets.
 
-<!-- IAM-03 checkbox left unchecked deliberately: password reset (part of this requirement's acceptance) is not yet implemented. See Traceability status. -->
+<!-- 2026-09-27: checkboxes are ticked only after formal verification (/gsd:verify-work); built-but-unverified requirements say so in the Traceability table. -->
 
 ### Roles, Permissions, and Access Control (RBAC)
 
@@ -126,12 +126,12 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Support Tickets (SUP)
 
-- [ ] **SUP-01**: Learners can create and view their own support tickets with category, subject, description, and permitted attachments; a ticket receives a reference and status; unsafe files are rejected.
-- [ ] **SUP-02**: Priority, status, assignment, public reply, private internal note, and closure/reopen behavior are supported; public/private content stay distinctly labeled and permission-protected; transitions are timestamped/attributed.
-- [ ] **SUP-03**: Ticket access is granted through `tickets.view`/`tickets.manage` without requiring Administrator status; a custom Support Agent role can triage/resolve while denied unrelated permissions.
-- [ ] **SUP-04**: Escalation to another staff owner/queue with reason is supported; escalation preserves history, notifies the next owner per policy, and stays visible in operational reporting.
-- [ ] **SUP-05**: Permitted contextual links to learner, Cohort, Course, order, submission, or certificate records are allowed; opening context performs a fresh permission/scope check.
-- [ ] **SUP-06**: Ticket volume, age, priority, status, ownership, response, resolution, and escalation are reportable; dashboard and CSV values reconcile for the same filters and exclude private note content.
+- [x] **SUP-01**: Learners can create and view their own support tickets with category, subject, description, and permitted attachments; a ticket receives a reference and status; unsafe files are rejected.
+- [x] **SUP-02**: Priority, status, assignment, public reply, private internal note, and closure/reopen behavior are supported; public/private content stay distinctly labeled and permission-protected; transitions are timestamped/attributed.
+- [x] **SUP-03**: Ticket access is granted through `tickets.view`/`tickets.manage` without requiring Administrator status; a custom Support Agent role can triage/resolve while denied unrelated permissions.
+- [x] **SUP-04**: Escalation to another staff owner/queue with reason is supported; escalation preserves history, notifies the next owner per policy, and stays visible in operational reporting.
+- [x] **SUP-05**: Permitted contextual links to learner, Cohort, Course, order, submission, or certificate records are allowed; opening context performs a fresh permission/scope check.
+- [x] **SUP-06**: Ticket volume, age, priority, status, ownership, response, resolution, and escalation are reportable; dashboard and CSV values reconcile for the same filters and exclude private note content.
 
 ### Dashboards, Reports, Exports, and Audit (RPT)
 
@@ -202,29 +202,29 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | RBAC-07 | Phase 2 | Complete |
 | RBAC-08 | Phase 2 | Complete |
 | IAM-04 | Phase 2 | Complete |
-| IAM-01 | Phase 3 | Pending |
-| IAM-02 | Phase 3 | Pending |
-| IAM-03 | Phase 3 | In Progress (sign-in/out/lockout/session revocation done; password reset pending) |
-| IAM-05 | Phase 3 | Pending |
-| IAM-06 | Phase 3 | Pending |
-| CAT-02 | Phase 4 | Pending |
-| CAT-03 | Phase 4 | Pending |
-| CAT-04 | Phase 4 | Pending |
-| CAT-05 | Phase 4 | Pending |
-| CAT-06 | Phase 4 | Pending |
-| CAT-07 | Phase 4 | Pending |
-| CAT-08 | Phase 4 | Pending |
-| COH-01 | Phase 5 | Pending |
-| COH-02 | Phase 5 | Pending |
-| COH-03 | Phase 5 | Pending |
-| COH-04 | Phase 5 | Pending |
-| COH-05 | Phase 5 | Pending |
-| COH-06 | Phase 5 | Pending |
-| COH-07 | Phase 5 | Pending |
-| ATT-01 | Phase 5 | Pending |
-| ATT-02 | Phase 5 | Pending |
-| ATT-03 | Phase 5 | Pending |
-| ATT-04 | Phase 5 | Pending |
+| IAM-01 | Phase 3 | Built — verification pending |
+| IAM-02 | Phase 3 | Built — verification pending |
+| IAM-03 | Phase 3 | Built — verification pending (password reset included) |
+| IAM-05 | Phase 3 | Built — verification pending |
+| IAM-06 | Phase 3 | Built — verification pending |
+| CAT-02 | Phase 4 | Built — verification pending |
+| CAT-03 | Phase 4 | Built — verification pending |
+| CAT-04 | Phase 4 | Built — verification pending |
+| CAT-05 | Phase 4 | Built — verification pending |
+| CAT-06 | Phase 4 | Built — verification pending |
+| CAT-07 | Phase 4 | Built — verification pending |
+| CAT-08 | Phase 4 | Built — verification pending |
+| COH-01 | Phase 5 | Built — verification pending |
+| COH-02 | Phase 5 | Built — verification pending |
+| COH-03 | Phase 5 | Built — verification pending |
+| COH-04 | Phase 5 | Built — verification pending |
+| COH-05 | Phase 5 | Built — verification pending |
+| COH-06 | Phase 5 | Built — verification pending |
+| COH-07 | Phase 5 | Built — verification pending |
+| ATT-01 | Phase 5 | Built — verification pending |
+| ATT-02 | Phase 5 | Built — verification pending |
+| ATT-03 | Phase 5 | Built — verification pending |
+| ATT-04 | Phase 5 | Built — verification pending |
 | REG-01 | Phase 6 | Complete |
 | REG-02 | Phase 6 | Complete |
 | REG-03 | Phase 6 | Complete |
@@ -234,31 +234,31 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | PAY-09 | Phase 6 | Complete |
 | PAY-10 | Phase 6 | Complete |
 | PAY-01 | — | Superseded by PAY-08 (document-internal revision, PRD §19) |
-| PAY-03 | Phase 7 | Pending |
-| PAY-04 | Phase 7 | Pending |
-| PAY-05 | Phase 7 | Pending |
-| PAY-07 | Phase 7 | Pending |
-| PAY-08 | Phase 7 | Pending |
-| PAY-11 | Phase 7 | Pending |
-| PAY-13 | Phase 7 | Pending |
-| PAY-14 | Phase 7 | Pending |
-| PAY-15 | Phase 7 | Pending |
-| PAY-16 | Phase 7 | Pending |
-| PAY-17 | Phase 7 | Pending |
-| PAY-06 | Phase 8 | Pending |
-| PAY-12 | Phase 8 | Pending |
-| RPT-01 | Phase 8 | Pending |
-| RPT-02 | Phase 8 | Pending |
-| RPT-03 | Phase 8 | Pending |
-| RPT-04 | Phase 8 | Pending |
-| RPT-05 | Phase 8 | Pending |
-| LRN-01 | Phase 9 | Pending |
-| LRN-02 | Phase 9 | Pending |
-| LRN-03 | Phase 9 | Pending |
+| PAY-03 | Phase 7 | Built — verification pending |
+| PAY-04 | Phase 7 | Built — verification pending |
+| PAY-05 | Phase 7 | Built — verification pending |
+| PAY-07 | Phase 7 | Built — verification pending |
+| PAY-08 | Phase 7 | Built — verification pending |
+| PAY-11 | Phase 7 | Built — verification pending |
+| PAY-13 | Phase 7 | Built — verification pending |
+| PAY-14 | Phase 7 | Built — verification pending |
+| PAY-15 | Phase 7 | Built — verification pending |
+| PAY-16 | Phase 7 | Built — verification pending |
+| PAY-17 | Phase 7 | Built — verification pending |
+| PAY-06 | Phase 8 | Built — verification pending |
+| PAY-12 | Phase 8 | Built — verification pending |
+| RPT-01 | Phase 8 | Built — verification pending |
+| RPT-02 | Phase 8 | Built — verification pending |
+| RPT-03 | Phase 8 | Built — verification pending |
+| RPT-04 | Phase 8 | Built — verification pending |
+| RPT-05 | Phase 8 | Built — verification pending |
+| LRN-01 | Phase 9 | Built — verification pending |
+| LRN-02 | Phase 9 | Built — verification pending |
+| LRN-03 | Phase 9 | Built — verification pending |
 | LRN-04 | Phase 9 | Complete |
 | LRN-05 | Phase 9 | Complete |
-| LRN-06 | Phase 9 | Pending |
-| LRN-07 | Phase 9 | Pending |
+| LRN-06 | Phase 9 | Built — verification pending |
+| LRN-07 | Phase 9 | Built — verification pending |
 | ASM-01 | Phase 10 | Complete |
 | ASM-02 | Phase 10 | Complete |
 | ASM-03 | Phase 10 | Complete |
@@ -272,12 +272,12 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | CRD-04 | Phase 11 | Complete |
 | CRD-05 | Phase 11 | Complete |
 | CRD-06 | Phase 11 | Complete |
-| SUP-01 | Phase 12 | Pending |
-| SUP-02 | Phase 12 | Pending |
-| SUP-03 | Phase 12 | Pending |
-| SUP-04 | Phase 12 | Pending |
-| SUP-05 | Phase 12 | Pending |
-| SUP-06 | Phase 12 | Pending |
+| SUP-01 | Phase 12 | Complete |
+| SUP-02 | Phase 12 | Complete |
+| SUP-03 | Phase 12 | Complete |
+| SUP-04 | Phase 12 | Complete |
+| SUP-05 | Phase 12 | Complete |
+| SUP-06 | Phase 12 | Complete |
 | COM-01 | Phase 13 | Pending |
 | COM-02 | Phase 13 | Pending |
 | COM-03 | Phase 13 | Pending |

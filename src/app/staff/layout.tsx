@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
-import { can } from "@/server/permissions";
+import { can, canAnywhere } from "@/server/permissions";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { LEARNER_LANDING_PATH } from "@/server/auth/landing";
 import { profileService } from "@/server/services/profile-service";
@@ -28,6 +28,7 @@ const NAV: StaffNavItem[] = [
   { label: "Courses", href: "/staff/courses", group: "Catalogue" },
   { label: "Programmes", href: "/staff/programmes", group: "Catalogue" },
   { label: "Certificates", href: "/staff/certificates", group: "Catalogue" },
+  { label: "Support", href: "/staff/support", group: "Operations" },
   { label: "Users", href: "/staff/users", group: "Administration" },
   { label: "Roles", href: "/staff/roles", group: "Administration" },
   { label: "Audit", href: "/staff/audit", group: "Administration" },
@@ -43,10 +44,14 @@ const NAV_PERMISSION: Record<string, Parameters<typeof can>[0]> = {
   "/staff/courses": "courses.view",
   "/staff/programmes": "programmes.view",
   "/staff/certificates": "certificates.view",
+  "/staff/support": "tickets.view",
   "/staff/users": "users.view",
   "/staff/roles": "roles.view",
   "/staff/audit": "audit.view",
 };
+
+/** Sections whose list pages filter to the caller's scope (integration warning #1). */
+const SCOPE_AWARE_SECTIONS = new Set(["/staff/cohorts", "/staff/enrolments", "/staff/payments"]);
 
 export default async function StaffLayout({
   children,
@@ -88,8 +93,15 @@ export default async function StaffLayout({
 
   // Hide sections this person cannot open, instead of offering a link that lands on a denial.
   // Overview is every staff member's home; each section is checked against its own view permission.
+  // Integration warning #1 — the delivery lists follow the caller's scope, so
+  // they appear for a grant at ANY scope (a cohort-scoped instructor sees
+  // Cohorts). Every other section's page still needs a GLOBAL grant.
   const allowed = await Promise.all(
-    NAV.map((item) => (NAV_PERMISSION[item.href] ? can(NAV_PERMISSION[item.href], {}) : true)),
+    NAV.map((item) => {
+      const permission = NAV_PERMISSION[item.href];
+      if (!permission) return true;
+      return SCOPE_AWARE_SECTIONS.has(item.href) ? canAnywhere(permission) : can(permission, {});
+    }),
   );
   const visibleNav = NAV.filter((_, i) => allowed[i]);
 

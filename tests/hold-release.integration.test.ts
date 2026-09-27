@@ -432,3 +432,52 @@ describe("releaseExpiredHolds — real Postgres (COH-06)", () => {
     expect(remaining).toBe(0);
   });
 });
+
+describe("releaseExpiredHolds — retires the order's provider sessions (F-02)", () => {
+  function serviceFor(candidate: object, retireOpenPayments: (orderId: string) => Promise<void>) {
+    return createHoldReleaseSystemService({
+      enrolment: { findMany: async () => [candidate as never] },
+      runInTransaction: (fn) => testDb.prisma.$transaction((tx) => fn(tx as unknown as ReleaseTx)),
+      writeEvent: writeDomainEvent,
+      audit: async () => {},
+      now: () => FIXED_NOW,
+      retireOpenPayments,
+    });
+  }
+
+  it("a released hold retires its order's open payment attempts", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 1 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "PENDING_PAYMENT", holdExpiresAt: PAST });
+    const row = await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } });
+    const retired: string[] = [];
+    const service = serviceFor({ ...row, orderId: "order-f02" }, async (orderId) => {
+      retired.push(orderId);
+    });
+    expect((await service.releaseExpiredHolds()).released).toBe(1);
+    expect(retired).toEqual(["order-f02"]);
+  });
+
+  it("a hold that was approved meanwhile is not released and its payments are left alone", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 1 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "PENDING_PAYMENT", holdExpiresAt: PAST });
+    const row = await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } });
+    await testDb.prisma.enrolment.update({ where: { id: enrolmentId }, data: { status: "ACTIVE", holdExpiresAt: null } });
+    const retired: string[] = [];
+    const service = serviceFor({ ...row, orderId: "order-f02b" }, async (orderId) => {
+      retired.push(orderId);
+    });
+    expect((await service.releaseExpiredHolds()).released).toBe(0);
+    expect(retired).toEqual([]);
+  });
+
+  it("a provider failure while retiring never un-releases the seat or counts as a failed release", async () => {
+    const { cohortId } = await seedCohortFixture(testDb.prisma, { capacity: 2, seatsTaken: 1 });
+    const { enrolmentId } = await seedEnrolmentFixture(testDb.prisma, { cohortId, status: "PENDING_PAYMENT", holdExpiresAt: PAST });
+    const row = await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } });
+    const service = serviceFor({ ...row, orderId: "order-f02c" }, async () => {
+      throw new Error("stripe down");
+    });
+    expect(await service.releaseExpiredHolds()).toEqual({ released: 1, failed: 0 });
+    expect((await testDb.prisma.enrolment.findUniqueOrThrow({ where: { id: enrolmentId } })).status).toBe("CANCELLED");
+  });
+});

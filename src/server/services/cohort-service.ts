@@ -26,6 +26,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { authorizeCollection, type CollectionAuthorization } from "@/server/permissions/collection-scope";
 import { isPaystackRailEnabled, isStripeRailEnabled } from "@/server/payments/settlement-config";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
@@ -48,6 +49,7 @@ import { writeDomainEvent } from "./domain-event-service";
 import { CohortNotFoundError, assertCohortOpen, lockCohort } from "./seat-accounting";
 import {
   applyEnrolmentExit,
+  type EnrolmentExitTxClient,
   ReasonRequiredError,
   type EnrolmentRow,
 } from "./enrolment-service";
@@ -358,7 +360,7 @@ export type ScheduledSessionCancelRow = { id: string; cancelledAt: Date | null }
  * `tx` satisfies every field; a unit-test fake only needs to implement what
  * the operation under test calls.
  */
-export type CohortPublishTx = {
+export type CohortPublishTx = Pick<EnrolmentExitTxClient, "certificate"> & {
   $queryRaw<T = unknown>(
     query: TemplateStringsArray,
     ...values: unknown[]
@@ -397,6 +399,10 @@ export type CohortPublishTx = {
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
   domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
+  /** F-04 — instructor removal runs under the cohort lock (optional in fakes that never remove). */
+  cohortInstructor?: {
+    deleteMany(args: { where: { cohortId: string; userId: string } }): Promise<{ count: number }>;
+  };
 };
 
 export type CohortPublishDb = {
@@ -655,12 +661,15 @@ export function createCohortService(deps: CohortServiceDeps) {
       where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
     });
     if (existing) {
-      try {
-        await deps.instructor.delete({
-          where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
-        });
-      } catch (err) {
-        if (!isRecordNotFoundError(err)) throw err;
+      // F-04 — removal can make a cohort unready, so it serializes with
+      // publishCohort on the cohort row lock. deleteMany keeps the
+      // concurrent-removal case a no-op rather than a record-not-found error.
+      const removed = await deps.db.$transaction(async (tx) => {
+        await lockCohort(tx, input.cohortId);
+        if (!tx.cohortInstructor) throw new Error("cohortInstructor delegate is required to remove an instructor.");
+        return tx.cohortInstructor.deleteMany({ where: { cohortId: input.cohortId, userId: input.userId } });
+      });
+      if (removed.count === 0) {
         return { cohortId: input.cohortId, userId: input.userId };
       }
       await deps.audit({
@@ -714,6 +723,12 @@ export function createCohortService(deps: CohortServiceDeps) {
       const publishedAt = now();
 
       const publishedPublicationId = await deps.db.$transaction(async (tx) => {
+        // F-04 — take the cohort row lock FIRST. Instructor removal and session
+        // cancellation take the same lock, so the readiness re-read below sees
+        // every change committed before this point and none can land between
+        // the read and the claim.
+        await lockCohort(tx, input.cohortId);
+
         // CR-02: re-read the aggregate and re-evaluate readiness INSIDE the
         // transaction that claims the row. Instructor assignment/removal and
         // session create/cancel do not bump `Cohort.updatedAt`, so the
@@ -937,6 +952,78 @@ export function createCohortService(deps: CohortServiceDeps) {
 // ---------------------------------------------------------------------------
 // Prisma-backed binding
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Integration warning #1 — the staff Cohorts list, filtered to the caller's scope
+// ---------------------------------------------------------------------------
+
+export type StaffCohortListRow = {
+  id: string;
+  code: string;
+  title: string;
+  courseId: string | null;
+  programmeId: string | null;
+  deliveryMode: string;
+  timezone: string;
+  enrolmentOpensAt: Date;
+  enrolmentClosesAt: Date;
+  startsAt: Date;
+  capacity: number;
+  seatsTaken: number;
+  status: string;
+  course: { title: string } | null;
+  programme: { title: string } | null;
+};
+
+export type StaffCohortListDeps = {
+  cohort: {
+    findMany(args: {
+      where: Readonly<Record<string, unknown>>;
+      orderBy: { startsAt: "desc" };
+      select: Record<string, unknown>;
+    }): Promise<StaffCohortListRow[]>;
+  };
+  authorizeCollection: (permission: "cohorts.view") => Promise<CollectionAuthorization>;
+};
+
+/**
+ * Every cohort the caller's `cohorts.view` grants reach — all of them for a
+ * GLOBAL grant, only the in-scope ones for a COHORT/PROGRAMME/COURSE grant.
+ * The scope is part of the query, so out-of-scope rows are never fetched.
+ * No grant at all is refused (`AuthorizationError`), never an empty list.
+ */
+export function createStaffCohortListService(deps: StaffCohortListDeps) {
+  async function listCohortsForStaff(): Promise<StaffCohortListRow[]> {
+    const { cohortWhere } = await deps.authorizeCollection("cohorts.view");
+    return deps.cohort.findMany({
+      where: cohortWhere,
+      orderBy: { startsAt: "desc" },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        courseId: true,
+        programmeId: true,
+        deliveryMode: true,
+        timezone: true,
+        enrolmentOpensAt: true,
+        enrolmentClosesAt: true,
+        startsAt: true,
+        capacity: true,
+        seatsTaken: true,
+        status: true,
+        course: { select: { title: true } },
+        programme: { select: { title: true } },
+      },
+    });
+  }
+  return { listCohortsForStaff };
+}
+
+export const listCohortsForStaff = createStaffCohortListService({
+  cohort: prisma.cohort as unknown as StaffCohortListDeps["cohort"],
+  authorizeCollection,
+}).listCohortsForStaff;
 
 const built = createCohortService({
   delegate: prisma.cohort as unknown as Delegate<CohortRecord>,

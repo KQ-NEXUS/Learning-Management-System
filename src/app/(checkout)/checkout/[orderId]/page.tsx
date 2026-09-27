@@ -45,10 +45,10 @@ export default async function CheckoutOrderPage({
   searchParams,
 }: {
   params: Promise<{ orderId: string }>;
-  searchParams: Promise<{ declined?: string }>;
+  searchParams: Promise<{ declined?: string; payment?: string }>;
 }) {
   const { orderId } = await params;
-  const { declined } = await searchParams;
+  const { declined, payment } = await searchParams;
 
   // TOP-LEVEL await, BEFORE any streaming boundary — "not mine" and "does
   // not exist" must produce the identical response (T-06-13's IDOR guard).
@@ -131,6 +131,9 @@ export default async function CheckoutOrderPage({
   // The verification and decline banners are mutually exclusive
   // preconditions on the same Pay action — exactly one can ever show.
   const showDeclineBanner = !emailUnverified && declined === "1" && enrolment?.holdExpiresAt;
+  // The payment never reached the provider's page (payAction's catch-all).
+  const showUnavailableBanner =
+    !emailUnverified && !showDeclineBanner && payment === "unavailable" && enrolment?.holdExpiresAt;
 
   return (
     <article className="flex flex-col gap-8">
@@ -176,8 +179,18 @@ export default async function CheckoutOrderPage({
         </div>
       )}
 
+      {showUnavailableBanner && (
+        <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
+          <p className="text-sm font-semibold text-danger">We couldn&apos;t start your payment</p>
+          <p className="text-sm text-danger">
+            Nothing was charged. The payment provider didn&apos;t accept the request — please try again in a
+            moment. Your seat is still held for {formatRemaining(new Date(enrolment!.holdExpiresAt as Date), at)}.
+          </p>
+        </div>
+      )}
+
       {showDeclineBanner && (
-        <div className="flex flex-col gap-1 border-t-2 border-danger py-3">
+        <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
           <p className="text-sm font-semibold text-danger">Your card was declined</p>
           <p className="text-sm text-danger">
             Try a different card — your seat is still held for{" "}
@@ -190,7 +203,11 @@ export default async function CheckoutOrderPage({
         orderId={order.id}
         action={payAction}
         forceDisabled={emailUnverified}
-        submitLabel={showDeclineBanner ? "Try again" : `Pay ${formatAmount(order.amountMinor, order.currency)}`}
+        submitLabel={
+          showDeclineBanner || showUnavailableBanner
+            ? "Try again"
+            : `Pay ${formatAmount(order.amountMinor, order.currency)}`
+        }
       />
       </div>
 

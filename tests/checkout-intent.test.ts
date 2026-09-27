@@ -21,7 +21,8 @@ const fakeJar = vi.hoisted(() => {
   };
 });
 
-vi.mock("next/headers", () => ({ cookies: async () => fakeJar }));
+// F-14b — sign-in reads the trusted client-IP header; none is set here.
+vi.mock("next/headers", () => ({ cookies: async () => fakeJar, headers: async () => new Headers() }));
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new Error("redirect:" + url);

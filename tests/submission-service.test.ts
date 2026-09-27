@@ -73,10 +73,12 @@ function makeAssessment(overrides: Partial<SubmissionAssessmentContext> = {}): S
     title: "Assignment 1",
     instructions: null,
     dueAt: null,
+    availableFrom: null,
     availableUntil: null,
     allowedFileTypes: ["pdf"],
     maxFileSizeBytes: 5_000_000,
     allowResubmission: false,
+    lessonIds: [],
     ...overrides,
   };
 }
@@ -117,6 +119,8 @@ function buildService(
     enrolments?: FakeEnrolment[];
     cohorts?: FakeCohort[];
     cohortCourses?: FakeCohortCourse[];
+    /** F-08 — whether the learner may work on the assignment's lesson now. */
+    lessonOpen?: boolean;
   } = {},
 ) {
   const track: string[] = [];
@@ -151,6 +155,7 @@ function buildService(
   };
 
   const presignDownload = vi.fn(async ({ key }: { key: string }) => `https://download.example/${key}`);
+  const canWorkOnAssessment = vi.fn(async () => opts.lessonOpen ?? true);
 
   const service = createSubmissionService({
     delegate,
@@ -158,6 +163,7 @@ function buildService(
     store,
     storage,
     presignDownload,
+    canWorkOnAssessment,
     audit: async (entry) => {
       audits.push(entry as Record<string, unknown>);
     },
@@ -168,7 +174,7 @@ function buildService(
     now: () => NOW,
   });
 
-  return { service, rows, storage, audits, events, presignDownload, delegate, track };
+  return { service, rows, storage, audits, events, presignDownload, delegate, track, canWorkOnAssessment };
 }
 
 const uploadInput = { assessmentId: "a1", filename: "essay.pdf", mimeType: "application/pdf", sizeBytes: 1000 };
@@ -431,5 +437,62 @@ describe("getOwnSubmissionDownloadUrl (T-10-20)", () => {
     await expect(
       service.getOwnSubmissionDownloadUrl(learner, { submissionId: "sub1" }),
     ).rejects.toBeInstanceOf(SubmissionNotAllowedError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-08 — the same gates the lesson page applies, and server-checked file facts
+// ---------------------------------------------------------------------------
+
+describe("beginSubmissionUpload — F-08 gates", () => {
+  it("refuses before availableFrom, with no write URL", async () => {
+    const { service, storage } = buildService({ assessment: { availableFrom: new Date(NOW.getTime() + 60_000) } });
+    const error = await service.beginSubmissionUpload(learner, uploadInput).catch((e) => e);
+    expect(error).toBeInstanceOf(SubmissionNotAllowedError);
+    expect(error.reason).toBe("not-published");
+    expect(storage.presign).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the assignment's lesson is locked or the access window has closed", async () => {
+    const { service, storage, canWorkOnAssessment } = buildService({
+      assessment: { lessonIds: ["lesson-a"] },
+      lessonOpen: false,
+    });
+    const error = await service.beginSubmissionUpload(learner, uploadInput).catch((e) => e);
+    expect(error).toBeInstanceOf(SubmissionNotAllowedError);
+    expect(error.reason).toBe("lesson-not-open");
+    expect(canWorkOnAssessment).toHaveBeenCalledWith(learner, "enr1", ["lesson-a"]);
+    expect(storage.presign).not.toHaveBeenCalled();
+  });
+
+  it("refuses a declared type that does not belong to the file's extension (report.pdf as text/html)", async () => {
+    const { service, storage } = buildService();
+    const error = await service
+      .beginSubmissionUpload(learner, { ...uploadInput, filename: "report.pdf", mimeType: "text/html" })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(SubmissionConstraintError);
+    expect(error.reason).toBe("file-type-not-permitted");
+    expect(storage.presign).not.toHaveBeenCalled();
+  });
+
+  it("accepts the platform aliases browsers really send (a Windows CSV as application/vnd.ms-excel)", async () => {
+    const { service } = buildService({ assessment: { allowedFileTypes: ["csv"] } });
+    await expect(
+      service.beginSubmissionUpload(learner, { ...uploadInput, filename: "marks.csv", mimeType: "application/vnd.ms-excel" }),
+    ).resolves.toMatchObject({ attemptNumber: 1 });
+  });
+
+  it("applies a 50 MB default cap when the assignment sets no size limit", async () => {
+    const { service, storage } = buildService({ assessment: { maxFileSizeBytes: null } });
+    const tooBig = await service
+      .beginSubmissionUpload(learner, { ...uploadInput, sizeBytes: 50 * 1024 * 1024 + 1 })
+      .catch((e) => e);
+    expect(tooBig).toBeInstanceOf(SubmissionConstraintError);
+    expect(tooBig.reason).toBe("file-too-large");
+    expect(storage.presign).not.toHaveBeenCalled();
+
+    await expect(
+      service.beginSubmissionUpload(learner, { ...uploadInput, sizeBytes: 10 * 1024 * 1024 }),
+    ).resolves.toMatchObject({ attemptNumber: 1 });
   });
 });

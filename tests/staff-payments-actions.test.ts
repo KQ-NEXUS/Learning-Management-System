@@ -230,11 +230,39 @@ describe("recordRefundAction", () => {
       status: "COMPLETED",
       amountMinor: 20_000_000,
       components: { baseComponentMinor: 0, platformComponentMinor: 0, gatewayComponentMinor: 0, nonRecoverableMinor: 0 },
+      access: "unchanged",
     });
 
     const result = await recordRefundAction(validRefundInput);
 
-    expect(result).toEqual({ ok: true, status: "COMPLETED" });
+    expect(result).toEqual({ ok: true, status: "COMPLETED", access: "unchanged" });
+  });
+
+  it("warning #3 — reports what happened to the learner's access", async () => {
+    mocks.recordRefund.mockResolvedValue({
+      id: "refund-1",
+      status: "COMPLETED",
+      amountMinor: 20_000_000,
+      components: { baseComponentMinor: 0, platformComponentMinor: 0, gatewayComponentMinor: 0, nonRecoverableMinor: 0 },
+      access: "revoked",
+    });
+
+    expect(await recordRefundAction({ ...validRefundInput, accessDecision: "REVOKED" })).toEqual({
+      ok: true,
+      status: "COMPLETED",
+      access: "revoked",
+    });
+  });
+
+  it("warning #3 — shows a live-certificate refusal as written", async () => {
+    const { UserInputError } = await import("@/server/errors/user-input-error");
+    mocks.recordRefund.mockRejectedValue(
+      new UserInputError("This learner still has a live certificate (KQ-7F3A). Revoke it first."),
+    );
+
+    const result = await recordRefundAction({ ...validRefundInput, accessDecision: "REVOKED" });
+
+    expect(result).toEqual({ ok: false, message: "This learner still has a live certificate (KQ-7F3A). Revoke it first." });
   });
 
   it("re-throws an unexpected error rather than swallowing it", async () => {

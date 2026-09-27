@@ -74,7 +74,6 @@ function card(over: Over = {}) {
     timezone: "Africa/Lagos",
     assessmentObligations: { kind: "deferred", phase: 10 },
     results: { kind: "deferred", phase: 10 },
-    tickets: { kind: "deferred", phase: 12 },
     // Plan 11-13 — certificate is no longer a DeferredColumn; "not-complete"
     // is the no-certificate-yet state. WR-06: CertificateSlot renders it as a
     // normal card ("will appear here once you have completed all
@@ -344,16 +343,18 @@ describe("/dashboard", () => {
     expect(html).toContain("Cohort One");
     expect(html).toContain("Next up");
     expect(html).toContain("Your progress");
-    // The unshipped Support tickets placeholder is no longer offered to learners.
-    expect(html).not.toContain("Support tickets");
     // Omitted: sections and links the COMPLETED enrolment cannot open.
     expect(html).not.toContain("Upcoming sessions");
     expect(html).not.toContain("Wrap-up call");
     expect(html).not.toContain("Assessments");
-    expect(html).not.toContain("Results");
     expect(html).not.toContain("Continue learning");
     expect(html).not.toContain("Your access window has ended");
-    expect(html).not.toContain("/learn/enrolment-1/");
+    // ASM-07: results stay readable after completion, and the only
+    // /learn/ link is the read-only results page.
+    expect(html).toContain("Results");
+    expect(html).toContain("Final quiz");
+    expect(html).toContain('href="/learn/enrolment-1/results"');
+    expect(html.replaceAll("/learn/enrolment-1/results", "")).not.toContain("/learn/enrolment-1/");
   });
 
   it("the Next-up 'complete' copy no longer promises certificates are yet to ship", async () => {
@@ -387,5 +388,42 @@ describe("/dashboard", () => {
     expect(html).toContain('href="/learn/enrolment-1/sessions"');
     expect(html).toContain('href="/learn/enrolment-1/results"');
     expect(html).toContain('href="/learn/enrolment-1/lessons/lesson-7"');
+  });
+});
+
+describe("/dashboard support tickets (plan 12-06)", () => {
+  const ticket = (n: number, extra: Over = {}) => ({
+    id: `t${n}`,
+    reference: `TKT-${n}`,
+    subject: `Subject ${n}`,
+    status: "OPEN",
+    updatedAt: new Date("2026-06-01T10:00:00.000Z"),
+    ...extra,
+  });
+
+  it("shows zero state with a Get help link", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({ cards: [card()], supportTickets: [] });
+    const html = await renderPage();
+    expect(html).toContain("Support tickets");
+    expect(html).toContain("No open support tickets");
+    expect(html).toContain('href="/support/new"');
+    expect(html).not.toContain("View all support tickets");
+  });
+
+  it("lists tickets with links and View all, exposing no priority/owner/queue", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [card()],
+      supportTickets: [ticket(1, { priority: "URGENT", queue: "ESCALATIONS", assigneeId: "staff-9" }), ticket(2), ticket(3)],
+    });
+    const html = await renderPage();
+    expect(html).toContain('href="/support/TKT-1"');
+    expect(html).toContain("Subject 3");
+    expect(html).toContain("View all support tickets");
+    expect(html).not.toMatch(/URGENT|ESCALATIONS|staff-9/);
+  });
+
+  it("renders the section even when the learner has no enrolments", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({ cards: [], supportTickets: [ticket(1)] });
+    expect(await renderPage()).toContain("Subject 1");
   });
 });

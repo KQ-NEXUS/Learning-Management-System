@@ -907,3 +907,69 @@ describe("assertLessonOpenable", () => {
     expect(result).toEqual({ ok: false, reason: "not-found" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// F-01 — the lesson-level gate a learner's file download/list goes through
+// ---------------------------------------------------------------------------
+
+describe("canOpenLessonAsLearner (F-01)", () => {
+  it("true for an open lesson on the learner's ACTIVE enrolment", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canOpenLessonAsLearner(actorFor("user-1"), "lesson-1")).resolves.toBe(true);
+  });
+
+  it("false for a lesson still locked by sequencing", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canOpenLessonAsLearner(actorFor("user-1"), "lesson-2")).resolves.toBe(false);
+  });
+
+  it("false once the access window has closed", async () => {
+    const store = twoLessonCourseStore({
+      cohort: { deliveryMode: "SELF_PACED", accessDurationDays: 30 },
+      enrolment: { activatedAt: new Date("2025-01-01T00:00:00.000Z"), accessEndsAt: null },
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    await expect(service.canOpenLessonAsLearner(actorFor("user-1"), "lesson-1")).resolves.toBe(false);
+  });
+
+  it("false for a lesson outside the pinned published structure (a draft or another course's lesson)", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canOpenLessonAsLearner(actorFor("user-1"), "lesson-from-another-course")).resolves.toBe(false);
+  });
+
+  it("false for someone else's enrolment", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canOpenLessonAsLearner(actorFor("user-2"), "lesson-1")).resolves.toBe(false);
+  });
+});
+
+describe("canWorkOnAssessmentAsLearner (F-08)", () => {
+  it("true on the learner's own open enrolment when the assignment's lesson is open", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canWorkOnAssessmentAsLearner(actorFor("user-1"), "enrolment-1", ["lesson-1"])).resolves.toBe(true);
+  });
+
+  it("false when the assignment's lesson is still locked", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canWorkOnAssessmentAsLearner(actorFor("user-1"), "enrolment-1", ["lesson-2"])).resolves.toBe(false);
+  });
+
+  it("false once the access window has closed, even for an assignment on no lesson", async () => {
+    const store = twoLessonCourseStore({
+      cohort: { deliveryMode: "SELF_PACED", accessDurationDays: 30 },
+      enrolment: { activatedAt: new Date("2025-01-01T00:00:00.000Z"), accessEndsAt: null },
+    });
+    const service = createLearnerAccessService({ store, now: () => NOW });
+    await expect(service.canWorkOnAssessmentAsLearner(actorFor("user-1"), "enrolment-1", [])).resolves.toBe(false);
+  });
+
+  it("true for an assignment on no lesson while the window is open", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canWorkOnAssessmentAsLearner(actorFor("user-1"), "enrolment-1", [])).resolves.toBe(true);
+  });
+
+  it("false for someone else's enrolment", async () => {
+    const service = createLearnerAccessService({ store: twoLessonCourseStore(), now: () => NOW });
+    await expect(service.canWorkOnAssessmentAsLearner(actorFor("user-2"), "enrolment-1", ["lesson-1"])).resolves.toBe(false);
+  });
+});

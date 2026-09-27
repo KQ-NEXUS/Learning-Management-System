@@ -5,7 +5,7 @@
 import { prisma } from "@/server/db";
 import { withPermission } from "@/server/permissions";
 import type { createWithPermission } from "@/server/permissions/with-permission";
-import type { ResourceScope } from "@/server/permissions/scope";
+import { narrowScopeToCourse, type ResourceScope } from "@/server/permissions/scope";
 import { enrolmentCohortScope } from "./cohort-scope";
 import { recordAudit } from "./audit-service";
 import type { ResourceAuditEntry } from "./resource-service";
@@ -13,8 +13,10 @@ import { writeDomainEvent, type DomainEventTxClient } from "./domain-event-servi
 import {
   flagCertificatesForGradeCorrection,
   liveIssuanceDeps,
+  recalculateCompletionAndIssue,
   type CertificateIssuanceTxClient,
 } from "./certificate-issuance-service";
+import type { CompletionServiceTxClient } from "./completion-service";
 
 export class GradeNotReleasedError extends Error {
   constructor() { super("Only a released grade can be corrected. Edit a draft grade directly."); this.name = "GradeNotReleasedError"; }
@@ -43,6 +45,8 @@ export type GradeOverrideTx = DomainEventTxClient & {
 export type GradeOverrideDeps = {
   grade: GradeOverrideTx["grade"] extends { findUnique: infer F } ? { findUnique: F } : never;
   enrolmentScope(enrolmentId: string): Promise<ResourceScope> | ResourceScope;
+  /** F-05 — the grade's assessment's course, so a COURSE grant only reaches its own course. */
+  assessmentCourseId?(assessmentId: string): Promise<string | null>;
   withPermission: ReturnType<typeof createWithPermission>;
   runInTransaction<R>(fn: (tx: GradeOverrideTx) => Promise<R>): Promise<R>;
   writeEvent: typeof writeDomainEvent;
@@ -64,7 +68,11 @@ export type GradeOverrideDeps = {
 export function createGradeOverrideService(deps: GradeOverrideDeps) {
   const overrideGrade = deps.withPermission<Input>("grades.manage", async ({ gradeId }) => {
     const grade = await deps.grade.findUnique({ where: { id: gradeId } });
-    return grade ? deps.enrolmentScope(grade.enrolmentId) : {};
+    if (!grade) return {};
+    const scope = await deps.enrolmentScope(grade.enrolmentId);
+    if (!deps.assessmentCourseId) return scope;
+    const courseId = await deps.assessmentCourseId(grade.assessmentId);
+    return courseId ? narrowScopeToCourse(scope, courseId) : {};
   })(async (input, ctx): Promise<GradeOverrideResult> => {
     const reason = input.reason.trim();
     if (reason.length < 10) throw new OverrideReasonRequiredError();
@@ -96,6 +104,8 @@ export function createGradeOverrideService(deps: GradeOverrideDeps) {
 const built = createGradeOverrideService({
   grade: prisma.grade,
   enrolmentScope: enrolmentCohortScope,
+  assessmentCourseId: async (id) =>
+    (await prisma.assessment.findUnique({ where: { id }, select: { courseId: true } }))?.courseId ?? null,
   withPermission,
   runInTransaction: (fn) => prisma.$transaction((tx) => fn(tx as unknown as GradeOverrideTx)),
   writeEvent: writeDomainEvent,
@@ -104,13 +114,21 @@ const built = createGradeOverrideService({
   // through `unknown` — the same idiom the certificate-issuance module's own
   // completion-and-issue wrapper and `enrolment-transitions.ts`'s
   // `applyEnrolmentActivation` use for their own tx-client narrowing (plan
-  // 11-10). This path never re-derives a completion verdict — grades carry
-  // no key the v1 completion rule recognises, so it only flags.
-  reactToGradeOverride: (tx, args) =>
-    flagCertificatesForGradeCorrection(
+  // 11-10). It also re-evaluates completion: a v2 rule that requires passing
+  // assessments can gain or lose its verdict when an override crosses the
+  // pass mark (a v1 rule reads no grades, so this is a no-op there).
+  reactToGradeOverride: async (tx, args) => {
+    const now = new Date();
+    await flagCertificatesForGradeCorrection(
       tx as unknown as CertificateIssuanceTxClient,
-      { ...args, now: new Date() },
+      { ...args, now },
       liveIssuanceDeps,
-    ),
+    );
+    await recalculateCompletionAndIssue(tx as unknown as CompletionServiceTxClient, {
+      enrolmentId: args.enrolmentId,
+      now,
+      actorId: args.actorId,
+    });
+  },
 });
 export const overrideGrade = built.overrideGrade;

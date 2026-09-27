@@ -17,6 +17,7 @@ import {
   type ScopeType,
 } from "@/server/permissions";
 import type { createWithPermission } from "@/server/permissions/with-permission";
+import { hasPermission, type Grant } from "@/server/permissions/scope";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 import { assertRoleManagementContinuity, lockRoleManagementContinuity, type ContinuityLockTx } from "@/server/services/continuity-service";
@@ -53,6 +54,44 @@ export function assignmentTargetScope(
     default:
       throw new ScopeError(`Unknown scope type: ${scopeType satisfies never}`);
   }
+}
+
+/**
+ * F-07 — the role carries permissions the assigning actor does not hold at the
+ * target scope. `missing` names them for the form; nothing is written.
+ */
+export class GrantCeilingError extends Error {
+  readonly missing: string[];
+
+  constructor(missing: string[]) {
+    super(`You can only assign roles made of permissions you hold here. Missing: ${missing.join(", ")}.`);
+    this.name = "GrantCeilingError";
+    this.missing = missing;
+  }
+}
+
+/** F-07 — nobody assigns a role to themselves; another role manager must. */
+export class SelfAssignmentError extends Error {
+  constructor() {
+    super("You cannot assign a role to yourself. Ask another administrator.");
+    this.name = "SelfAssignmentError";
+  }
+}
+
+/**
+ * F-07 — delegate only what you hold. Every permission the role carries must
+ * already be held by the actor at a scope covering the target, so a scoped
+ * role manager can never hand out (or be handed through a colleague) more
+ * than their own reach. A global administrator holds everything, so this
+ * never limits them.
+ */
+export function assertWithinGrantCeiling(
+  grants: readonly Grant[],
+  rolePermissions: readonly string[],
+  target: ResourceScope,
+): void {
+  const missing = rolePermissions.filter((p) => !hasPermission(grants, p as Permission, target));
+  if (missing.length > 0) throw new GrantCeilingError(missing);
 }
 
 /** D-14 — revoking an assignment now demands a reason, same MIN_REASON_LENGTH as roles. */
@@ -127,6 +166,10 @@ export function createAssignmentService(deps: {
     "roles.manage",
     (input) => assignmentTargetScope(input.scopeType, input.scopeId),
   )(async (input, ctx) => {
+    if (input.userId === ctx.actor.userId) {
+      throw new SelfAssignmentError();
+    }
+
     const role = await store.role.findUnique({ where: { id: input.roleId } });
     if (!role || !role.active) {
       throw new Error("Role not found or inactive.");
@@ -137,6 +180,8 @@ export function createAssignmentService(deps: {
     for (const permission of role.permissions) {
       assertScopeAllowed(permission as Permission, input.scopeType);
     }
+
+    assertWithinGrantCeiling(ctx.grants, role.permissions, ctx.resource);
 
     const created = await store.assignment.create({
       data: {

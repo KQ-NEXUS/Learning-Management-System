@@ -111,6 +111,8 @@ type CohortRow = {
   startsAt: Date;
   endsAt: Date;
   deliveryMode: string;
+  enrolmentOpensAt: Date;
+  enrolmentClosesAt: Date;
 };
 
 type GatewayFeeScheduleRow = GatewayFeeScheduleValues & { id: string; active: boolean; effectiveFrom: Date };
@@ -185,6 +187,8 @@ function coh(over: Partial<CohortRow> = {}): CohortRow {
     startsAt: over.startsAt ?? new Date("2026-10-01T00:00:00.000Z"),
     endsAt: over.endsAt ?? new Date("2026-10-05T00:00:00.000Z"),
     deliveryMode: over.deliveryMode ?? "INSTRUCTOR_LED",
+    enrolmentOpensAt: over.enrolmentOpensAt ?? new Date("2026-09-01T00:00:00.000Z"),
+    enrolmentClosesAt: over.enrolmentClosesAt ?? new Date("2026-09-30T00:00:00.000Z"),
   };
 }
 
@@ -193,6 +197,8 @@ function harness(opts?: {
   enrolments?: EnrolmentRow[];
   schedules?: GatewayFeeScheduleRow[];
   sessionFactory?: (params: unknown) => { id: string; url: string | null };
+  /** F-02 — make Stripe's session expire call fail. */
+  expireFails?: boolean;
   paystackFactory?: (input: unknown) => { redirectUrl: string; providerIntentId: string };
   /** Defaults to a verified learner — set false to exercise D-13's gate. */
   emailVerified?: boolean;
@@ -211,6 +217,7 @@ function harness(opts?: {
   const events: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
   const sessionsCreated: Array<{ params: unknown; options: { idempotencyKey: string } }> = [];
+  const sessionsExpired: string[] = [];
   const paystackInitiations: Array<{ input: Record<string, unknown> }> = [];
   const transactionOptions: Array<{ timeout?: number } | undefined> = [];
   let seq = 0;
@@ -246,6 +253,9 @@ function harness(opts?: {
             priceNgnMinor: c.priceNgnMinor,
             priceUsdMinor: c.priceUsdMinor,
             holdMinutes: c.holdMinutes,
+            status: c.status,
+            enrolmentOpensAt: c.enrolmentOpensAt,
+            enrolmentClosesAt: c.enrolmentClosesAt,
           };
         },
         update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -439,6 +449,16 @@ function harness(opts?: {
         Object.assign(row, data);
         return row;
       },
+      findMany: async ({ where }: { where: { orderId: string; status: { in: string[] } } }) =>
+        [...paymentAttempts.values()]
+          .filter((a) => a.orderId === where.orderId && where.status.in.includes(a.status))
+          .map((a) => ({ ...a })),
+      updateMany: async ({ where, data }: { where: { id: string; status: { in: string[] } }; data: Record<string, unknown> }) => {
+        const row = paymentAttempts.get(where.id);
+        if (!row || !where.status.in.includes(row.status)) return { count: 0 };
+        Object.assign(row, data);
+        return { count: 1 };
+      },
     } as never,
     user: {
       findUnique: async () => ({
@@ -458,6 +478,11 @@ function harness(opts?: {
                 url: `https://checkout.stripe.com/pay/cs_test_${sessionsCreated.length}`,
               }));
             return factory(params);
+          },
+          expire: async (id: string) => {
+            if (opts?.expireFails) throw new Error("stripe unavailable");
+            sessionsExpired.push(id);
+            return { id, status: "expired" };
           },
         },
       },
@@ -491,6 +516,7 @@ function harness(opts?: {
     events,
     audits,
     sessionsCreated,
+    sessionsExpired,
     paystackInitiations,
     transactionOptions,
   };
@@ -1019,7 +1045,8 @@ describe("initiatePaystackPayment", () => {
     expect(paystackInitiations).toHaveLength(1);
     expect(paystackInitiations[0]!.input).toMatchObject({
       orderId,
-      orderReference: order.reference,
+      // F-02 — a per-attempt reference: the order reference plus the attempt id suffix.
+      orderReference: expect.stringMatching(new RegExp(`^${order.reference}-[A-Z0-9-]{1,8}$`)),
       learnerEmail: "learner@example.test",
       currency: "NGN",
       amountMinor: 45_875_000,
@@ -1340,6 +1367,7 @@ describe("buildCheckoutSessionParams", () => {
       // 07-06 — now required args; arbitrary values, not asserted in this test.
       schoolSettlementMinor: 45_000_000,
       connectedAccountId: "acct_test_connected_123",
+      expiresAt: 1_790_000_000,
     });
 
     expect(params.mode).toBe("payment");
@@ -1365,6 +1393,7 @@ describe("buildCheckoutSessionParams", () => {
       cancelUrl: "https://app.example.test/checkout/order-1",
       schoolSettlementMinor: 50_000,
       connectedAccountId: "acct_test_connected_123",
+      expiresAt: 1_790_000_000,
     });
 
     // Two different intentional values, asserted separately (D-04) — a
@@ -1387,5 +1416,109 @@ describe("buildCheckoutSessionParams", () => {
     expect(params.payment_intent_data?.metadata).toEqual({ orderId: "order-1", enrolmentId: "enr-1" });
     expect(params.success_url).toBe("https://app.example.test/checkout/order-1/confirming");
     expect(params.cancel_url).toBe("https://app.example.test/checkout/order-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-02 — a provider checkout never outlives its hold or its successor
+// ---------------------------------------------------------------------------
+
+describe("F-02 — provider sessions are bounded by the hold and retired when superseded", () => {
+  const usd = () => [coh({ priceNgnMinor: null, priceUsdMinor: 100_000 })];
+  const ngn = () => [coh({ priceNgnMinor: 5_000_000, priceUsdMinor: null })];
+  const learner = { userId: "user-1" };
+
+  it("a Stripe session expires with the seat hold when the hold is long enough", async () => {
+    const { service, sessionsCreated } = harness({ cohorts: [coh({ priceNgnMinor: null, priceUsdMinor: 100_000, holdMinutes: 60 })] });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "USD");
+    await service.initiateStripePayment(learner, orderId, FULL_CONSENT);
+    const params = sessionsCreated[0]!.params as { expires_at?: number };
+    expect(params.expires_at).toBe(Math.floor((NOW.getTime() + 60 * 60_000) / 1000));
+  });
+
+  it("a shorter hold is clamped to Stripe's 30-minute minimum (plus a margin)", async () => {
+    const { service, sessionsCreated } = harness({ cohorts: usd() });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "USD");
+    await service.initiateStripePayment(learner, orderId, FULL_CONSENT);
+    const params = sessionsCreated[0]!.params as { expires_at?: number };
+    expect(params.expires_at).toBe(Math.floor((NOW.getTime() + 31 * 60_000) / 1000));
+  });
+
+  it("paying again for the same order expires the previous Stripe session and cancels its attempt", async () => {
+    const { service, paymentAttempts, sessionsExpired } = harness({ cohorts: usd() });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "USD");
+    await service.initiateStripePayment(learner, orderId, FULL_CONSENT);
+    await service.initiateStripePayment(learner, orderId, FULL_CONSENT);
+
+    expect(sessionsExpired).toEqual(["cs_test_1"]);
+    const [first, second] = [...paymentAttempts.values()];
+    expect(first).toMatchObject({ providerIntentId: "cs_test_1", status: "CANCELLED" });
+    expect(second).toMatchObject({ providerIntentId: "cs_test_2", status: "PROCESSING" });
+  });
+
+  it("a Stripe expire failure never blocks the learner's new payment", async () => {
+    const { service, paymentAttempts } = harness({ cohorts: usd(), expireFails: true });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "USD");
+    await service.initiateStripePayment(learner, orderId, FULL_CONSENT);
+    await expect(service.initiateStripePayment(learner, orderId, FULL_CONSENT)).resolves.toMatchObject({
+      url: expect.any(String),
+    });
+    expect([...paymentAttempts.values()].map((a) => a.status)).toEqual(["CANCELLED", "PROCESSING"]);
+  });
+
+  it("each Paystack attempt gets its own reference, and the previous attempt is cancelled", async () => {
+    const { service, paymentAttempts, paystackInitiations, orders } = harness({ cohorts: ngn() });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "NGN");
+    await service.initiatePaystackPayment(learner, orderId, FULL_CONSENT);
+    await service.initiatePaystackPayment(learner, orderId, FULL_CONSENT);
+
+    const [a, b] = paystackInitiations.map((p) => p.input.orderReference as string);
+    const orderReference = orders.get(orderId)!.reference;
+    expect(a).not.toBe(b);
+    expect(a.startsWith(`${orderReference}-`)).toBe(true);
+    expect(b.startsWith(`${orderReference}-`)).toBe(true);
+    expect([...paymentAttempts.values()].map((x) => x.status)).toEqual(["CANCELLED", "PROCESSING"]);
+  });
+
+  it("a new checkout for the same cohort retires the superseded order's open Stripe session", async () => {
+    const { service, orders, sessionsExpired } = harness({ cohorts: usd() });
+    const first = await service.startCheckout(learner, "cohort-1", "USD");
+    await service.initiateStripePayment(learner, first.orderId, FULL_CONSENT);
+    await service.startCheckout(learner, "cohort-1", "USD");
+
+    expect(orders.get(first.orderId)!.status).toBe("CANCELLED");
+    expect(sessionsExpired).toEqual(["cs_test_1"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-13 — learners can only check out into a published cohort, while open
+// ---------------------------------------------------------------------------
+
+describe("F-13 — learner checkout requires a published cohort inside its enrolment window", () => {
+  const learner = { userId: "user-1" };
+
+  it("refuses a DRAFT cohort (staff operations still use drafts; learners never check out into one)", async () => {
+    const { service, orders } = harness({ cohorts: [coh({ status: "DRAFT" })] });
+    await expect(service.startCheckout(learner, "cohort-1", "NGN")).rejects.toBeInstanceOf(CohortClosedError);
+    expect(orders.size).toBe(0);
+  });
+
+  it("refuses before enrolment opens and after it closes", async () => {
+    for (const cohort of [
+      coh({ enrolmentOpensAt: new Date("2026-09-11T00:00:00.000Z") }),
+      coh({ enrolmentClosesAt: new Date("2026-09-10T11:59:00.000Z") }),
+    ]) {
+      const { service, orders } = harness({ cohorts: [cohort] });
+      await expect(service.startCheckout(learner, "cohort-1", "NGN")).rejects.toBeInstanceOf(CohortClosedError);
+      expect(orders.size).toBe(0);
+    }
+  });
+
+  it("accepts a PUBLISHED or IN_PROGRESS cohort inside its window", async () => {
+    for (const status of ["PUBLISHED", "IN_PROGRESS"]) {
+      const { service } = harness({ cohorts: [coh({ status })] });
+      await expect(service.startCheckout(learner, "cohort-1", "NGN")).resolves.toMatchObject({ orderId: expect.any(String) });
+    }
   });
 });

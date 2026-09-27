@@ -36,6 +36,11 @@ import {
  *    request that skipped the UI, not a security control of its own.
  *  - `OrderNotPayableError` -> the receipt page, for an order that is
  *    already paid.
+ *  - Anything else (the provider API rejecting the request, a network
+ *    failure, missing payment configuration) -> back to the order page with
+ *    `payment=unavailable`, which renders a "nothing was charged, try again"
+ *    banner. The learner never lands on the generic error page for a payment
+ *    that simply could not start; the cause is logged for operators.
  */
 export async function payAction(formData: FormData): Promise<void> {
   const orderId = String(formData.get("orderId") ?? "");
@@ -73,7 +78,8 @@ export async function payAction(formData: FormData): Promise<void> {
     if (err instanceof OrderNotFoundError) {
       redirect("/courses");
     }
-    throw err;
+    console.error(`[checkout] could not start payment for order ${orderId}`, err);
+    redirect(`/checkout/${orderId}?payment=unavailable`);
   }
 
   redirect(url);

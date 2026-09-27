@@ -15,6 +15,8 @@ export type LessonFieldValues = {
   required?: boolean;
   allowManualComplete?: boolean;
   assessmentId?: string | null;
+  /** F-15 — the staff-set video length as "m:ss" (blank when unset). */
+  videoLength?: string;
 };
 
 export type LessonFormFieldsProps = {
@@ -122,6 +124,27 @@ export function LessonFormFields({
             error={errorFor("body")}
             optional
           />
+        )}
+
+        {lessonType === "VIDEO" && (
+          <FormField
+            name="videoDurationSeconds"
+            label="Video length"
+            error={errorFor("videoDurationSeconds")}
+            hint="Optional. Minutes:seconds, for example 12:30. When set, a learner must watch 90% of this length to complete the lesson."
+          >
+            {(field) => (
+              <TextInput
+                {...field}
+                type="text"
+                inputMode="numeric"
+                defaultValue={values.videoLength ?? ""}
+                placeholder="12:30"
+                mono
+                className="max-w-[10rem]"
+              />
+            )}
+          </FormField>
         )}
 
         {lessonType === "EMBED" && (

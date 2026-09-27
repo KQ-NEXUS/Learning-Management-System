@@ -29,3 +29,30 @@ export const ALLOWED_ASSIGNMENT_FILE_TYPES = Object.freeze([
 ] as const);
 
 export type AllowedAssignmentFileType = (typeof ALLOWED_ASSIGNMENT_FILE_TYPES)[number];
+
+/**
+ * F-08 — the content types a browser may legitimately report for each
+ * permitted extension (keys without the leading dot). The declared type must
+ * be one of these, so a learner can never store `report.pdf` as `text/html`
+ * and have it served back to a grader with that type. Aliases cover what real
+ * platforms send (Windows reports `.csv` as `application/vnd.ms-excel` and
+ * `.zip` as `application/x-zip-compressed`).
+ */
+export const ASSIGNMENT_MIME_TYPES_BY_EXTENSION: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  pdf: ["application/pdf"],
+  doc: ["application/msword"],
+  docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  xls: ["application/vnd.ms-excel"],
+  xlsx: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  ppt: ["application/vnd.ms-powerpoint"],
+  pptx: ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  txt: ["text/plain"],
+  csv: ["text/csv", "application/vnd.ms-excel", "text/plain"],
+  zip: ["application/zip", "application/x-zip-compressed"],
+  png: ["image/png"],
+  jpg: ["image/jpeg"],
+  jpeg: ["image/jpeg"],
+});
+
+/** F-08 — the size cap applied when an assignment does not set its own. */
+export const DEFAULT_SUBMISSION_MAX_BYTES = 50 * 1024 * 1024;

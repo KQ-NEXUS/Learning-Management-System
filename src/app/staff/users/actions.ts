@@ -10,6 +10,8 @@ import {
 import {
   assignmentService,
   AssignmentReasonRequiredError,
+  GrantCeilingError,
+  SelfAssignmentError,
 } from "@/server/services/assignment-service";
 import { scopeLookupService } from "@/server/services/scope-lookup-service";
 import { ContinuityError } from "@/server/services/continuity-service";
@@ -76,6 +78,9 @@ export async function createStaffAccountAction(
     }
     if (error instanceof ScopeError) {
       return { errors: [{ name: "scopeType", message: error.message }], created: null };
+    }
+    if (error instanceof GrantCeilingError) {
+      return { errors: [{ name: "roleId", message: error.message }], created: null };
     }
     if (error instanceof AuthorizationError) {
       return {
@@ -197,6 +202,12 @@ export async function createAssignmentAction(
   } catch (error) {
     if (error instanceof ScopeError) {
       return { errors: [{ name: "scopeType", message: error.message }], success: false };
+    }
+    if (error instanceof GrantCeilingError) {
+      return { errors: [{ name: "roleId", message: error.message }], success: false };
+    }
+    if (error instanceof SelfAssignmentError) {
+      return { errors: [{ name: "form", message: error.message }], success: false };
     }
     if (error instanceof AuthorizationError) {
       return {

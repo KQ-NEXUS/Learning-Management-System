@@ -3,7 +3,7 @@ status: testing
 phase: 08-finance-reconciliation-dashboards-reporting-exports
 source: [08-VERIFICATION.md]
 started: 2026-09-17T03:19:52Z
-updated: 2026-09-20T01:20:00+01:00
+updated: 2026-09-21T01:35:00+01:00
 ---
 
 ## Current Test
@@ -12,7 +12,7 @@ number: 1
 name: Deployed asynchronous export lifecycle
 expected: |
   A large authorized export progresses in the deployed Netlify/S3 environment, remains visible after leaving the page, downloads only through a short-lived owner-authorized link, and expires safely.
-awaiting: user response
+awaiting: the created job's expiry window and an available failed job for retry verification
 
 ## Tests
 
@@ -20,6 +20,12 @@ awaiting: user response
 
 expected: Configure the dispatch secret and private storage in a deployed test environment; queue a large export, leave and return, verify status/download/retry/expiry and denial behavior as described in 08-VERIFICATION.md.
 result: pending
+observed: |
+  Chrome tested the deployed site at `https://kqnexuslms.netlify.app` on 2026-09-21. Ada Admin queued a Registrations export containing 28 rows, left the report, and opened Export History. The job had progressed to `Succeeded`, retained its frozen request/as-of details, and showed availability until 2026-09-22 01:32 Africa/Lagos.
+
+  The owner-authorized download endpoint issued a 60-second signed Cloudflare R2 URL, and Chrome's download API successfully retrieved the CSV. After switching to the separate `finance@kqnexus.test` account, opening the administrator-owned job's download endpoint returned the safe `Download unavailable` response without exposing whether expiry or authorization caused the denial. The administrator session was restored after the check.
+
+  No failed or expired jobs exist for this owner in the deployed environment. Failure retry and post-expiry denial/rerun therefore remain pending; manufacturing either state would require deliberately breaking deployment configuration or waiting for the 24-hour retention window.
 
 ### 2. Responsive and 200% zoom visual check
 

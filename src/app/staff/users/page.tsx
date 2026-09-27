@@ -8,7 +8,7 @@ export default async function UsersPage() {
   let users: StaffUserRow[];
 
   try {
-    users = (await staffAccountService.list()) as unknown as StaffUserRow[];
+    users = await staffAccountService.list();
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return <p className="text-sm">Your session has ended. Sign in again.</p>;

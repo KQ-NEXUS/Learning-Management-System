@@ -23,12 +23,12 @@ export type LearnerResultCard = {
   assessmentId: string; title: string; type: "QUIZ" | "ASSIGNMENT";
   effectiveScore: number | null; maxScore: number | null; passed: boolean | null;
   passMark: number | null; feedback: string | null; attemptsRemaining: number | null;
-  history: Array<{ kind: "attempt" | "submission"; ref: string; number: number; at: Date; status: string; score: number | null; isLate?: boolean }>;
+  history: Array<{ kind: "attempt" | "submission"; ref: string; submissionId?: string; number: number; at: Date; status: string; score: number | null; isLate?: boolean }>;
   overrides: Array<{ previousScore: number; newScore: number; reason: string; actorName: string | null; at: Date }>;
 };
 export type AssessmentObligation = { assessmentId: string; title: string; type: "QUIZ" | "ASSIGNMENT"; lessonId: string | null; dueAt: Date | null; state: "not-started" | "in-progress" | "not-submitted" };
 export type LearnerResultsDeps = {
-  enrolment: { findMany(args: { where: { userId: string; id?: string; status: "ACTIVE" }; select: { id: true; userId: true } }): Promise<Array<{ id: string; userId: string }>> };
+  enrolment: { findMany(args: { where: { userId: string; id?: string; status: "ACTIVE" | "COMPLETED" }; select: { id: true; userId: true } }): Promise<Array<{ id: string; userId: string }>> };
   loadPath: typeof loadLearnerPath;
   assessment: { findMany(args: { where: { courseId: { in: string[] }; status: "PUBLISHED" }; include: { lessons: { select: { id: true } } } }): Promise<ResultsAssessment[]> };
   grade: { findMany(args: { where: { enrolmentId: string; status: "RELEASED" }; include: { overrides: { orderBy: { createdAt: "asc" } } }; orderBy: { releasedAt: "desc" } }): Promise<ResultsGrade[]> };
@@ -52,11 +52,15 @@ function orderAssessments(path: LearnerPath, assessments: ResultsAssessment[]) {
 }
 
 export function createLearnerResultsService(deps: LearnerResultsDeps) {
-  async function contexts(actor: Actor, enrolmentId?: string) {
-    const enrolments = await deps.enrolment.findMany({ where: { userId: actor.userId, ...(enrolmentId ? { id: enrolmentId } : {}), status: "ACTIVE" }, select: { id: true, userId: true } });
+  // ASM-07 — results stay readable after completion (G-01: visible, not
+  // operable); obligations ("still to do") are for ACTIVE enrolments only.
+  async function contexts(actor: Actor, enrolmentId?: string, includeCompleted = false) {
+    const statuses = includeCompleted ? (["ACTIVE", "COMPLETED"] as const) : (["ACTIVE"] as const);
+    const enrolments: Array<{ id: string; userId: string }> = [];
+    for (const status of statuses) enrolments.push(...await deps.enrolment.findMany({ where: { userId: actor.userId, ...(enrolmentId ? { id: enrolmentId } : {}), status }, select: { id: true, userId: true } }));
     const result: Array<{ enrolmentId: string; assessments: ResultsAssessment[] }> = [];
     for (const enrolment of enrolments) {
-      const path = await deps.loadPath(actor, enrolment.id);
+      const path = await deps.loadPath(actor, enrolment.id, { includeCompleted });
       if (!path) continue;
       const assessments = await deps.assessment.findMany({ where: { courseId: { in: path.courses.map(c => c.courseId) }, status: "PUBLISHED" }, include: { lessons: { select: { id: true } } } });
       result.push({ enrolmentId: enrolment.id, assessments: orderAssessments(path, assessments) });
@@ -66,7 +70,7 @@ export function createLearnerResultsService(deps: LearnerResultsDeps) {
 
   async function getOwnResults(actor: Actor, input: { enrolmentId?: string }): Promise<LearnerResultCard[]> {
     const cards: LearnerResultCard[] = [];
-    for (const context of await contexts(actor, input.enrolmentId)) {
+    for (const context of await contexts(actor, input.enrolmentId, true)) {
       const quizResults = new Map<string, Awaited<ReturnType<typeof getOwnAssessmentResult>>>();
       // Resolve lazy quiz expiry before loading grades, so a newly auto-released
       // result is visible in this very read.
@@ -91,7 +95,7 @@ export function createLearnerResultsService(deps: LearnerResultsDeps) {
           attemptsRemaining = result?.attemptsRemaining ?? null;
           history = visible.sort((a,b) => b.attemptNumber-a.attemptNumber).map(a => ({ kind: "attempt", ref: a.attemptId, number: a.attemptNumber, at: a.submittedAt ?? new Date(0), status: a.status, score: byAttempt.get(a.attemptId)!.score }));
         } else {
-          history = (await deps.submissions(actor, { assessmentId: assessment.id, enrolmentId: context.enrolmentId })).sort((a,b) => b.attemptNumber-a.attemptNumber).map(s => ({ kind: "submission", ref: s.receiptId, number: s.attemptNumber, at: s.submittedAt, status: s.uploadStatus, score: null, isLate: s.isLate }));
+          history = (await deps.submissions(actor, { assessmentId: assessment.id, enrolmentId: context.enrolmentId })).sort((a,b) => b.attemptNumber-a.attemptNumber).map(s => ({ kind: "submission", ref: s.receiptId, submissionId: s.submissionId, number: s.attemptNumber, at: s.submittedAt, status: s.uploadStatus, score: null, isLate: s.isLate }));
         }
         cards.push({ assessmentId: assessment.id, title: assessment.title, type: assessment.type, effectiveScore, maxScore, passed, passMark: assessment.passMark, attemptsRemaining, feedback: assessment.feedbackBehaviour === "NEVER" ? null : grade.feedback, history,
           overrides: released.flatMap(g => g.overrides).sort((a,b) => a.createdAt.getTime()-b.createdAt.getTime()).map(o => ({ previousScore:o.previousScore,newScore:o.newScore,reason:o.reason,actorName:o.actorId ? actors.get(o.actorId) ?? null : null,at:o.createdAt })) });

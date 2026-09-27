@@ -1,6 +1,6 @@
 import { formatDateShort } from "@/lib/format-timestamp";
 import { notFound } from "next/navigation";
-import { staffAccountService, type StaffUserRow } from "@/server/services/staff-account-service";
+import { staffAccountService, type StaffAccountSummary } from "@/server/services/staff-account-service";
 import { assignmentService, type AssignmentWithRole } from "@/server/services/assignment-service";
 import { roleService, MIN_REASON_LENGTH } from "@/server/services/role-service";
 import { AuthorizationError, can } from "@/server/permissions";
@@ -31,7 +31,7 @@ export default async function StaffUserDetailPage({
 }) {
   const { id } = await params;
 
-  let user: StaffUserRow | null;
+  let user: StaffAccountSummary | null;
   let assignments: AssignmentWithRole[];
   let roles: { id: string; name: string }[];
 

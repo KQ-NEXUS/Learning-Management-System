@@ -785,10 +785,47 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     return { ok: true, lesson };
   }
 
+  /**
+   * F-01 — the lesson-level learner gate for anything served outside the
+   * lesson page itself (resource listing and downloads). True iff one of the
+   * actor's own ACTIVE enrolments has a path in which `assertLessonOpenable`
+   * opens this lesson: the lesson is in the pinned published structure, not
+   * locked by sequencing, and the access window is still open. An enrolment
+   * merely covering the lesson's course is not enough.
+   */
+  async function canOpenLessonAsLearner(actor: Actor, lessonId: string): Promise<boolean> {
+    for (const enrolment of await listOwnActiveEnrolments(actor)) {
+      const path = await loadLearnerPath(actor, enrolment.id);
+      if (path && assertLessonOpenable(path, lessonId).ok) return true;
+    }
+    return false;
+  }
+
+  /**
+   * F-08 — may this learner submit work for an assessment on THIS enrolment
+   * now? The enrolment must be their own and ACTIVE with an open access
+   * window, and — when the assessment sits on lessons — at least one of those
+   * lessons must be openable (pinned, unlocked), exactly as the lesson page
+   * would require.
+   */
+  async function canWorkOnAssessmentAsLearner(
+    actor: Actor,
+    enrolmentId: string,
+    lessonIds: readonly string[],
+  ): Promise<boolean> {
+    const path = await loadLearnerPath(actor, enrolmentId);
+    if (!path) return false;
+    if (path.enrolment.status === "COMPLETED" || path.enrolment.accessWindow.readOnly) return false;
+    if (lessonIds.length === 0) return true;
+    return lessonIds.some((lessonId) => assertLessonOpenable(path, lessonId).ok);
+  }
+
   return {
     getOwnActiveEnrolment,
     getOwnPendingEnrolmentOrderHref,
     listOwnActiveEnrolments,
+    canOpenLessonAsLearner,
+    canWorkOnAssessmentAsLearner,
     listOwnDashboardEnrolments,
     hasActiveEnrolmentCoveringCourse,
     loadLearnerCourseStructure,
@@ -824,3 +861,5 @@ export const loadLearnerCourseStructure = built.loadLearnerCourseStructure;
 export const loadPinnedCompletionRuleSource = built.loadPinnedCompletionRuleSource;
 export const loadLearnerPath = built.loadLearnerPath;
 export const assertLessonOpenable = built.assertLessonOpenable;
+export const canOpenLessonAsLearner = built.canOpenLessonAsLearner;
+export const canWorkOnAssessmentAsLearner = built.canWorkOnAssessmentAsLearner;

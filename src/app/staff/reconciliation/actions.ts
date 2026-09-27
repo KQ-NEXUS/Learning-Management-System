@@ -1,5 +1,6 @@
 "use server";
 
+import { UserInputError } from "@/server/errors/user-input-error";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
@@ -66,7 +67,7 @@ function safeFailure(error: unknown): ReconciliationActionResult {
   if (error instanceof AuthenticationError || error instanceof AuthorizationError) {
     return { ok: false, message: "Your role does not permit this reconciliation action." };
   }
-  if (error instanceof TypeError || (error instanceof Error && error.message.includes("permitted"))) {
+  if (error instanceof UserInputError) {
     return { ok: false, message: error.message };
   }
   throw error;

@@ -30,3 +30,42 @@ describe("learner quiz read", () => {
     const view = await loadLearnerQuiz(actor, { enrolmentId: "e", lessonId: "l" }); expect(view?.history[0]).toMatchObject({ attemptId: "ab", status: "ABANDONED", score: null, perQuestion: [] });
   });
 });
+
+describe("F-15 — 'On release' quiz answers are held until the quiz window closes", () => {
+  const view = async (over: Record<string, unknown>, remaining: number | null = 1) => {
+    const assessment = await m.assessment();
+    m.assessment.mockResolvedValue({ ...assessment, feedbackBehaviour: "ON_RELEASE", ...over });
+    m.results.mockResolvedValue({
+      attemptsRemaining: remaining,
+      attempts: [{ attemptId: "new", attemptNumber: 2, status: "SUBMITTED", passed: true, perQuestion: [{ correct: false, correctOptionIds: ["key"], explanation: "secret" }] }],
+    });
+    return loadLearnerQuiz(actor, { enrolmentId: "e", lessonId: "l" });
+  };
+
+  it("an open window holds the answers, even after passing — the score and which were wrong still show", async () => {
+    const v = await view({ availableUntil: new Date(Date.now() + 86_400_000) });
+    expect(JSON.stringify(v)).not.toMatch(/"key"|secret/);
+    expect(v?.result?.perQuestion[0]).toMatchObject({ correct: false, correctOptionIds: [], explanation: null });
+    expect(v?.answersRevealed).toBe(false);
+  });
+
+  it("once the window has closed the answers are shown", async () => {
+    const v = await view({ availableUntil: new Date(Date.now() - 60_000) });
+    expect(v?.result?.perQuestion[0]).toMatchObject({ correctOptionIds: ["key"], explanation: "secret" });
+    expect(v?.answersRevealed).toBe(true);
+  });
+
+  it("no closing date: held while attempts remain, shown once none remain", async () => {
+    expect(JSON.stringify(await view({ availableUntil: null }, 1))).not.toMatch(/"key"|secret/);
+    expect((await view({ availableUntil: null }, 0))?.answersRevealed).toBe(true);
+  });
+
+  it("no closing date and unlimited attempts: never shown", async () => {
+    expect(JSON.stringify(await view({ availableUntil: null, maxAttempts: null }, null))).not.toMatch(/"key"|secret/);
+  });
+
+  it("IMMEDIATE is unchanged: answers show straight away", async () => {
+    const v = await view({ feedbackBehaviour: "IMMEDIATE", availableUntil: new Date(Date.now() + 86_400_000) });
+    expect(v?.result?.perQuestion[0]).toMatchObject({ correctOptionIds: ["key"] });
+  });
+});

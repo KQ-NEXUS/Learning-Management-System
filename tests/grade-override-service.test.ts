@@ -76,3 +76,36 @@ describe("released grade override", () => {
     expect(h.reactToGradeOverride).not.toHaveBeenCalled();
   });
 });
+
+describe("F-05 — override scope follows the assessment's own course", () => {
+  function build(courseGrant: string) {
+    const grade = { id: "g1", assessmentId: "a-course-b", enrolmentId: "e1", score: 40, maxScore: 100, passed: false, status: "RELEASED" };
+    return createGradeOverrideService({
+      grade: { findUnique: async () => grade },
+      // A programme cohort delivering two courses.
+      enrolmentScope: async () => ({ cohortId: "cohort-1", programmeId: "prog-1", courseIds: ["course-a", "course-b"] }),
+      assessmentCourseId: async () => "course-b",
+      withPermission: createTestWithPermission([grant("grades.manage", "COURSE", courseGrant)]).withPermission,
+      runInTransaction: async (fn) => fn({
+        grade: { findUnique: async () => grade, updateMany: async () => ({ count: 1 }) },
+        assessment: { findUnique: async () => ({ passMark: 50 }) },
+        gradeOverride: { create: async ({ data }: { data: object }) => ({ id: "o1", createdAt: new Date(), ...data }), findMany: async () => [] },
+      } as never),
+      writeEvent: (async () => {}) as never,
+      audit: async () => {},
+      reactToGradeOverride: async () => {},
+    });
+  }
+
+  it("a course-A grant cannot override a course-B grade in the same programme cohort", async () => {
+    await expect(
+      build("course-a").overrideGrade({ gradeId: "g1", newScore: 60, reason: "Correct grading mistake" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("a course-B grant can", async () => {
+    await expect(
+      build("course-b").overrideGrade({ gradeId: "g1", newScore: 60, reason: "Correct grading mistake" }),
+    ).resolves.toMatchObject({ grade: { score: 60 } });
+  });
+});

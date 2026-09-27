@@ -29,6 +29,7 @@
  * independent rows in one transaction. Each can be edited or cancelled alone.
  */
 
+import { lockCohort } from "@/server/services/seat-accounting";
 import { prisma } from "@/server/db";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
@@ -276,6 +277,8 @@ export type SessionCohortInfoDelegate = {
 /** The transaction client the reason-bearing writes need — structural, so a
  *  Prisma `tx` and a unit-test fake both satisfy it (no `@prisma/client` import). */
 export type SessionTxClient = DomainEventTxClient & {
+  /** F-04 — cancellation takes the cohort row lock shared with publishCohort. */
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
   scheduledSession: {
     create(args: { data: Record<string, unknown> }): Promise<ScheduledSessionRecord>;
     update(args: {
@@ -534,6 +537,9 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
     if (!before) throw new SessionNotFoundError(input.sessionId);
 
     const after = await db.$transaction(async (tx) => {
+      // F-04 — a cancelled session can make the cohort unready; serialize
+      // with publishCohort on the same cohort row lock.
+      await lockCohort(tx, before.cohortId);
       const updated = await tx.scheduledSession.update({
         where: { id: input.sessionId },
         data: { cancelledAt: now(), cancellationReason: reason },

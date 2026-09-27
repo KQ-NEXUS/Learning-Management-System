@@ -100,7 +100,10 @@ function makePath(opts?: {
 // Fake tx + deps harness
 // ---------------------------------------------------------------------------
 
+const AN_HOUR_AGO = new Date(NOW.getTime() - 60 * 60_000);
+
 function buildTxHarness() {
+  const video: { durationSeconds: number | null } = { durationSeconds: null };
   const lessonProgressRows: LessonProgressRow[] = [];
   const lessonWatchRows: LessonWatchProgressRow[] = [];
   const domainEvents: Array<Record<string, unknown>> = [];
@@ -111,6 +114,9 @@ function buildTxHarness() {
     where.enrolmentId_lessonId;
 
   const rawTx = {
+    lesson: {
+      findUnique: async () => ({ videoDurationSeconds: video.durationSeconds }),
+    },
     domainEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         domainEvents.push(data);
@@ -212,6 +218,7 @@ function buildTxHarness() {
     rawTx,
     lessonProgressRows,
     lessonWatchRows,
+    video,
     domainEvents,
     deleteManyCalls,
     updateManyCalls,
@@ -222,10 +229,26 @@ type BuildDepsOpts = {
   path: LearnerPath | null;
   now?: Date;
   enrolmentOwnerUserId?: string | null;
+  /** F-15 — pre-seeds an empty watch row for enr-1/les-1 started at this time. */
+  watchStartedAt?: Date;
+  /** F-15 — the staff-set video length for the lesson. */
+  videoDurationSeconds?: number;
 };
 
 function buildDeps(opts: BuildDepsOpts) {
   const h = buildTxHarness();
+  if (opts.videoDurationSeconds !== undefined) h.video.durationSeconds = opts.videoDurationSeconds;
+  if (opts.watchStartedAt) {
+    h.lessonWatchRows.push({
+      enrolmentId: "enr-1",
+      lessonId: "les-1",
+      secondsWatched: 0,
+      durationSeconds: null,
+      percentWatched: 0,
+      startedAt: opts.watchStartedAt,
+      updatedAt: opts.watchStartedAt,
+    });
+  }
   const auditCalls: ResourceAuditEntry[] = [];
   const recalcCalls: Array<{ tx: unknown; enrolmentId: string; now: Date }> = [];
   let txSeenByRecalc: unknown = null;
@@ -644,7 +667,7 @@ describe("countLessonsRelockedBy", () => {
 describe("recordWatchProgress", () => {
   it("stores the watch position and computes percentWatched server-side", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     const result = await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -685,7 +708,7 @@ describe("recordWatchProgress", () => {
         makeLesson({ id: "les-2", type: "VIDEO", locked: true, blockingLessonTitle: "les-1" }),
       ],
     });
-    const { deps } = buildDeps({ path });
+    const { deps } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     const err = await service
@@ -718,7 +741,7 @@ describe("recordWatchProgress", () => {
 
   it("throws InvalidWatchProgressError for a non-finite durationSeconds", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps } = buildDeps({ path });
+    const { deps } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     await expect(
@@ -733,7 +756,7 @@ describe("recordWatchProgress", () => {
 
   it("caps secondsWatched at durationSeconds when the input exceeds it", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -749,7 +772,7 @@ describe("recordWatchProgress", () => {
 
   it("a durationSeconds of 0 stores position without computing a percent or completing", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     const result = await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -767,7 +790,7 @@ describe("recordWatchProgress", () => {
 
   it("a durationSeconds of null stores position without computing a percent or completing", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     const result = await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -784,7 +807,7 @@ describe("recordWatchProgress", () => {
 
   it("does not lower the stored high-water mark on a backwards scrub", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -809,7 +832,7 @@ describe("recordWatchProgress", () => {
 
   it("creates a LessonProgress row sourced AUTO_VIDEO on crossing 90%, recalculates and emits lesson.completed", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h, auditCalls, recalcCalls } = buildDeps({ path });
+    const { deps, h, auditCalls, recalcCalls } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     const result = await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -833,7 +856,7 @@ describe("recordWatchProgress", () => {
 
   it("a second call at the same percent after crossing 90% creates no second row and emits no second event (idempotent)", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -856,7 +879,7 @@ describe("recordWatchProgress", () => {
 
   it("undo-then-recordWatchProgress at the same percent leaves the lesson incomplete (T-09-28)", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO", completed: true })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -887,7 +910,7 @@ describe("recordWatchProgress", () => {
 
   it("re-completes when the percent genuinely advances beyond the stored high-water mark after an undo", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -912,7 +935,7 @@ describe("recordWatchProgress", () => {
   it("VIDEO_COMPLETION_PCT is 90 and is used as the threshold", async () => {
     expect(VIDEO_COMPLETION_PCT).toBe(90);
     const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
-    const { deps, h } = buildDeps({ path });
+    const { deps, h } = buildDeps({ path, watchStartedAt: AN_HOUR_AGO });
     const service = createLessonProgressService(deps);
 
     await service.recordWatchProgress({ userId: "learner-1" }, {
@@ -928,6 +951,65 @@ describe("recordWatchProgress", () => {
 // ---------------------------------------------------------------------------
 // 09-12 Task 3 — getOwnWatchProgress
 // ---------------------------------------------------------------------------
+
+describe("F-15 — video completion needs real watching", () => {
+  const video = () => makePath({ lessons: [makeLesson({ id: "les-1", type: "VIDEO" })] });
+  const tick = (secondsWatched: number, durationSeconds: number | null) => ({
+    enrolmentId: "enr-1",
+    lessonId: "les-1",
+    secondsWatched,
+    durationSeconds,
+  });
+
+  it("a crafted {1s of 1s} tick does not complete a lesson whose staff length is set", async () => {
+    const { deps, h } = buildDeps({ path: video(), watchStartedAt: AN_HOUR_AGO, videoDurationSeconds: 600 });
+    const result = await createLessonProgressService(deps).recordWatchProgress({ userId: "learner-1" }, tick(1, 1));
+
+    expect(result.completed).toBe(false);
+    expect(result.percentWatched).toBe(0);
+    expect(h.lessonWatchRows[0].durationSeconds).toBe(600);
+    expect(h.lessonProgressRows).toHaveLength(0);
+  });
+
+  it("a first tick that jumps to the end is capped by the time actually spent", async () => {
+    const { deps, h } = buildDeps({ path: video() });
+    const result = await createLessonProgressService(deps).recordWatchProgress({ userId: "learner-1" }, tick(95, 100));
+
+    expect(result.completed).toBe(false);
+    expect(h.lessonWatchRows[0].secondsWatched).toBe(30);
+    expect(h.lessonWatchRows[0].startedAt).toEqual(NOW);
+    expect(h.lessonProgressRows).toHaveLength(0);
+  });
+
+  it("credit never runs ahead of twice the elapsed time plus a small grace", async () => {
+    const started = new Date(NOW.getTime() - 100_000);
+    const { deps, h } = buildDeps({ path: video(), watchStartedAt: started, videoDurationSeconds: 1000 });
+    await createLessonProgressService(deps).recordWatchProgress({ userId: "learner-1" }, tick(500, 1000));
+
+    expect(h.lessonWatchRows[0].secondsWatched).toBe(230);
+    expect(h.lessonWatchRows[0].percentWatched).toBe(23);
+  });
+
+  it("an honest watch at normal speed still completes against the staff length", async () => {
+    const started = new Date(NOW.getTime() - 10 * 60_000);
+    const { deps, h } = buildDeps({ path: video(), watchStartedAt: started, videoDurationSeconds: 600 });
+    const result = await createLessonProgressService(deps).recordWatchProgress({ userId: "learner-1" }, tick(580, 600));
+
+    expect(result.completed).toBe(true);
+    expect(h.lessonProgressRows[0].source).toBe("AUTO_VIDEO");
+  });
+
+  it("without a staff length, the reported length is pinned and can never shrink", async () => {
+    const { deps, h } = buildDeps({ path: video(), watchStartedAt: AN_HOUR_AGO });
+    const service = createLessonProgressService(deps);
+    await service.recordWatchProgress({ userId: "learner-1" }, tick(60, 600));
+    const result = await service.recordWatchProgress({ userId: "learner-1" }, tick(1, 1));
+
+    expect(result.completed).toBe(false);
+    expect(h.lessonWatchRows[0].durationSeconds).toBe(600);
+    expect(h.lessonWatchRows[0].percentWatched).toBe(10);
+  });
+});
 
 describe("getOwnWatchProgress", () => {
   it("returns null when no LessonWatchProgress row exists yet", async () => {

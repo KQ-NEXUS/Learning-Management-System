@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createWithPermission, type RawGrant } from "@/server/permissions/with-permission";
 import { ContinuityError } from "@/server/services/continuity-service";
 import { buildAuditRow } from "@/server/services/audit-service";
+import { GrantCeilingError } from "@/server/services/assignment-service";
 import {
   createStaffAccountService,
   userScope,
@@ -158,6 +159,37 @@ describe("staff account service", () => {
     });
   });
 
+  // The list feeds a client component, so every field it returns reaches the browser.
+  describe("staff list and detail projection", () => {
+    const secretUser: StaffUserRow = {
+      id: "u1",
+      name: "Ada",
+      email: "ada@kqnexus.test",
+      status: "ACTIVE",
+      isStaff: true,
+      passwordHash: "argon2-secret-hash",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      deactivatedAt: null,
+      deactivatedById: null,
+    };
+    const displayKeys = ["createdAt", "deactivatedAt", "email", "id", "name", "status"];
+
+    it("list returns only display fields, never the password hash", async () => {
+      const { service } = harness({ grants: [grant("users.view")], users: [secretUser] });
+      const rows = await service.list();
+      expect(rows).toHaveLength(1);
+      expect(Object.keys(rows[0]).sort()).toEqual(displayKeys);
+      expect(JSON.stringify(rows)).not.toContain("argon2-secret-hash");
+    });
+
+    it("get returns only display fields, never the password hash", async () => {
+      const { service } = harness({ grants: [grant("users.view")], users: [secretUser] });
+      const row = await service.get("u1");
+      expect(Object.keys(row ?? {}).sort()).toEqual(displayKeys);
+      expect(JSON.stringify(row)).not.toContain("argon2-secret-hash");
+    });
+  });
+
   describe("staff account creation", () => {
     it.each([
       [grant("users.manage")],
@@ -176,13 +208,25 @@ describe("staff account service", () => {
 
     it("allows a role manager for the exact initial assignment scope", async () => {
       const { service, assignmentCreates } = harness({
-        grants: [grant("users.manage"), grant("roles.manage", "COHORT", "target")],
+        grants: [grant("users.manage"), grant("roles.manage", "COHORT", "target"), grant("courses.view", "COHORT", "target")],
       });
       await service.create({
         name: "New Staff", email: "new@kqnexus.test", roleId: "role-plain",
         scopeType: "COHORT", scopeId: "target",
       });
       expect(assignmentCreates).toHaveLength(1);
+    });
+
+    it("does not let a scoped role manager create an account with a role above their own permissions (F-07)", async () => {
+      const { service, users, assignmentCreates } = harness({
+        grants: [grant("users.manage"), grant("roles.manage", "COHORT", "target")],
+      });
+      await expect(service.create({
+        name: "New Staff", email: "new@kqnexus.test", roleId: "role-plain",
+        scopeType: "COHORT", scopeId: "target",
+      })).rejects.toBeInstanceOf(GrantCeilingError);
+      expect(users).toHaveLength(0);
+      expect(assignmentCreates).toHaveLength(0);
     });
 
     it("does not let a scoped role manager grant global administration", async () => {
@@ -212,7 +256,7 @@ describe("staff account service", () => {
     });
 
     it("writes the User and the Assignment through the same transaction", async () => {
-      const { service, store, assignmentCreates } = harness({ grants: [grant("users.manage"), grant("roles.manage")] });
+      const { service, store, assignmentCreates } = harness({ grants: [grant("users.manage"), grant("roles.manage"), grant("courses.view")] });
       await service.create({
         name: "New Staff",
         email: "new@kqnexus.test",
@@ -226,7 +270,7 @@ describe("staff account service", () => {
     });
 
     it("lower-cases and trims the email before storing", async () => {
-      const { service, store } = harness({ grants: [grant("users.manage"), grant("roles.manage")] });
+      const { service, store } = harness({ grants: [grant("users.manage"), grant("roles.manage"), grant("courses.view")] });
       await service.create({
         name: "New Staff",
         email: "  New@KQNexus.test  ",
@@ -241,7 +285,7 @@ describe("staff account service", () => {
 
     it("throws DuplicateStaffEmailError on a unique-constraint violation and leaves zero assignments written", async () => {
       const { service, assignmentCreates } = harness({
-        grants: [grant("users.manage"), grant("roles.manage")],
+        grants: [grant("users.manage"), grant("roles.manage"), grant("courses.view")],
         createShouldThrowUniqueViolation: true,
       });
       await expect(
@@ -257,7 +301,7 @@ describe("staff account service", () => {
     });
 
     it("rejects a role carrying a global-only permission at COURSE scope before either insert", async () => {
-      const { service, store, assignmentCreates } = harness({ grants: [grant("users.manage"), grant("roles.manage")] });
+      const { service, store, assignmentCreates } = harness({ grants: [grant("users.manage"), grant("roles.manage"), grant("courses.view")] });
       await expect(
         service.create({
           name: "New Staff",
@@ -272,7 +316,7 @@ describe("staff account service", () => {
     });
 
     it("returns a non-empty temporaryPassword not present in either audit entry", async () => {
-      const { service, audits } = harness({ grants: [grant("users.manage"), grant("roles.manage")] });
+      const { service, audits } = harness({ grants: [grant("users.manage"), grant("roles.manage"), grant("courses.view")] });
       const result = await service.create({
         name: "New Staff",
         email: "new@kqnexus.test",

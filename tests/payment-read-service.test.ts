@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
+import { createTestCollectionAuthorizer } from "./support/collection-harness";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import {
   createPaymentReadService,
@@ -116,6 +117,7 @@ function harness(opts?: {
   users?: Array<{ id: string; name: string }>;
 }) {
   const { withPermission } = createTestWithPermission(opts?.grants ?? [grant("payments.view", "GLOBAL")]);
+  const { authorizeCollection } = createTestCollectionAuthorizer(opts?.grants ?? [grant("payments.view", "GLOBAL")]);
   const listCalls: number[] = [];
   const detailCalls: string[] = [];
 
@@ -136,6 +138,7 @@ function harness(opts?: {
     },
     orderScope: async (orderId) => ({ cohortId: `cohort-for-${orderId}` }),
     withPermission,
+    authorizeCollection,
   };
 
   return { deps, listCalls, detailCalls };
@@ -150,7 +153,7 @@ describe("listPaymentsForStaff — permission gating (RBAC-06)", () => {
     const h = harness({ grants: [] });
     const service = createPaymentReadService(h.deps);
 
-    await expect(service.listPaymentsForStaff({})).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(service.listPaymentsForStaff()).rejects.toBeInstanceOf(AuthorizationError);
     expect(h.listCalls).toHaveLength(0);
   });
 
@@ -158,7 +161,7 @@ describe("listPaymentsForStaff — permission gating (RBAC-06)", () => {
     const h = harness({ listRows: [listRow()] });
     const service = createPaymentReadService(h.deps);
 
-    const rows = await service.listPaymentsForStaff({});
+    const rows = await service.listPaymentsForStaff();
     expect(rows).toHaveLength(1);
     expect(h.listCalls).toHaveLength(1);
   });
@@ -178,7 +181,7 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       ],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff({});
+    const [row] = await service.listPaymentsForStaff();
 
     expect(row).toMatchObject({
       id: "order-1",
@@ -199,7 +202,7 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       listRows: [listRow({ paymentAttempts: [] })],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff({});
+    const [row] = await service.listPaymentsForStaff();
     expect(row.settlementState).toBe("ESTIMATED_ONLY");
   });
 
@@ -222,7 +225,7 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       ],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff({});
+    const [row] = await service.listPaymentsForStaff();
     expect(row.settlementState).toBe("RECONCILED");
   });
 
@@ -245,7 +248,7 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       ],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff({});
+    const [row] = await service.listPaymentsForStaff();
     expect(row.settlementState).toBe("EXCEPTION");
   });
 });

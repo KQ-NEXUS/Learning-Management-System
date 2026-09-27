@@ -40,6 +40,7 @@ import type { Actor } from "@/server/permissions/with-permission";
 import { POLICY_TYPE, POLICY_VERSIONS } from "@/lib/identity";
 import {
   AlreadyEnrolledError,
+  CohortClosedError,
   takeSeat,
   releaseSeat,
   holdExpiryFrom,
@@ -229,7 +230,18 @@ type TxCohortFacts = {
   priceNgnMinor: number | null;
   priceUsdMinor: number | null;
   holdMinutes: number | null;
+  status: string;
+  enrolmentOpensAt: Date;
+  enrolmentClosesAt: Date;
 };
+
+/**
+ * F-13 — `assertCohortOpen` admits DRAFT because staff operations (approvals,
+ * transfers) legitimately act on drafts. A LEARNER may only buy into a cohort
+ * that is published (which already requires a pinned, published catalogue
+ * version) and whose enrolment window is open now.
+ */
+const LEARNER_PURCHASABLE_STATUSES = new Set(["PUBLISHED", "IN_PROGRESS"]);
 
 /** The `GatewayFeeSchedule` columns `startCheckout` reads inside its own transaction (07-02, 07-03). */
 type TxGatewayFeeScheduleRow = {
@@ -309,6 +321,15 @@ export type CheckoutServiceDeps = {
   };
   paymentAttempt: {
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
+    /** F-02 — the order's still-open attempts, so a superseded one can be retired. */
+    findMany(args: {
+      where: { orderId: string; status: { in: string[] } };
+    }): Promise<Array<{ id: string; provider: string; providerIntentId: string | null; status: string }>>;
+    /** Conditional retire: only moves an attempt that is still open (a webhook may have settled it). */
+    updateMany(args: {
+      where: { id: string; status: { in: string[] } };
+      data: Record<string, unknown>;
+    }): Promise<{ count: number }>;
   };
   /**
    * The one-off, non-transactional `User.emailVerified` read the D-13 guard
@@ -333,6 +354,8 @@ export type CheckoutServiceDeps = {
           params: ReturnType<typeof buildCheckoutSessionParams>,
           options: { idempotencyKey: string },
         ): Promise<{ id: string; url: string | null }>;
+        /** F-02 — closes a superseded session so it can no longer take payment. */
+        expire(id: string): Promise<unknown>;
       };
     };
   };
@@ -383,6 +406,23 @@ function generateOrderReference(): string {
 
 const DEFAULT_BASE_URL = () => process.env.APP_BASE_URL ?? "http://localhost:3000";
 
+/** Stripe accepts `expires_at` between 30 minutes and 24 hours after creation. */
+const STRIPE_MIN_EXPIRY_MS = 31 * 60_000; // 30 minutes plus a clock-skew margin
+const STRIPE_MAX_EXPIRY_MS = 23 * 60 * 60_000;
+
+/**
+ * F-02 — the session closes when the seat hold does, clamped into Stripe's
+ * window. A hold shorter than Stripe's minimum still ends the session within
+ * 31 minutes, and the hold-release job expires it the moment the hold lapses.
+ */
+export function stripeSessionExpiry(holdExpiresAt: Date, at: Date): number {
+  const target = Math.min(
+    Math.max(holdExpiresAt.getTime(), at.getTime() + STRIPE_MIN_EXPIRY_MS),
+    at.getTime() + STRIPE_MAX_EXPIRY_MS,
+  );
+  return Math.floor(target / 1000);
+}
+
 export function createCheckoutService(deps: CheckoutServiceDeps) {
   const now = deps.now ?? (() => new Date());
   const baseUrl = deps.baseUrl ?? DEFAULT_BASE_URL;
@@ -402,6 +442,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
   ): Promise<{ orderId: string }> {
     const at = now();
 
+    let supersededOrderId: string | null = null;
     const { orderId } = await deps.db.$transaction(async (tx) => {
       // Serialises against cohort cancellation and capacity the same way
       // `addEnrolment` does; also the authoritative "does this cohort exist
@@ -410,12 +451,28 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
 
       const cohort = await tx.cohort.findUnique({
         where: { id: cohortId },
-        select: { title: true, priceNgnMinor: true, priceUsdMinor: true, holdMinutes: true },
+        select: {
+          title: true,
+          priceNgnMinor: true,
+          priceUsdMinor: true,
+          holdMinutes: true,
+          status: true,
+          enrolmentOpensAt: true,
+          enrolmentClosesAt: true,
+        },
       });
       if (!cohort) {
         // lockOpenCohort already proved the row exists — reachable only if a
         // concurrent hard-delete happened, which this codebase forbids.
         throw new Error(`Cohort ${cohortId} vanished mid-transaction.`);
+      }
+
+      if (
+        !LEARNER_PURCHASABLE_STATUSES.has(cohort.status) ||
+        at < cohort.enrolmentOpensAt ||
+        at > cohort.enrolmentClosesAt
+      ) {
+        throw new CohortClosedError(cohortId, cohort.status);
       }
 
       const activeEnrolment = await tx.enrolment.findFirst({
@@ -475,6 +532,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
         });
         if (existing.orderId) {
           await tx.order.update({ where: { id: existing.orderId }, data: { status: "CANCELLED" } });
+          supersededOrderId = existing.orderId;
         }
       }
 
@@ -532,6 +590,11 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
       return { orderId: order.id };
     }, { timeout: 15_000 });
 
+    // F-02 — the superseded order was cancelled above; its provider session
+    // must stop taking payment too. After commit: a network call never runs
+    // inside the seat transaction.
+    if (supersededOrderId) await retireOpenPaymentAttempts(supersededOrderId);
+
     await deps.audit({
       actorId: actor.userId,
       action: "order.created",
@@ -575,6 +638,33 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
   async function getOwnVerificationStatus(actor: Actor): Promise<{ verified: boolean; email: string }> {
     const user = await deps.user.findUnique({ where: { id: actor.userId } });
     return { verified: !!user?.emailVerified, email: user?.email ?? "" };
+  }
+
+  /**
+   * F-02 — retires every still-open PaymentAttempt of an order: a Stripe
+   * session is expired so it can no longer take payment, and the attempt is
+   * marked CANCELLED (only if still open; a webhook may have settled it).
+   * Paystack cannot expire a pending page, so its attempt is only marked;
+   * CANCELLED -> SUCCEEDED stays legal, so a late payment is still recorded.
+   * Best effort per attempt: a provider hiccup must never block the learner.
+   */
+  async function retireOpenPaymentAttempts(orderId: string): Promise<void> {
+    const open = await deps.paymentAttempt.findMany({
+      where: { orderId, status: { in: ["PENDING", "PROCESSING"] } },
+    });
+    for (const attempt of open) {
+      if (attempt.provider === "STRIPE" && attempt.providerIntentId) {
+        try {
+          await deps.stripe.checkout.sessions.expire(attempt.providerIntentId);
+        } catch (err) {
+          console.error(`[checkout] could not expire Stripe session for attempt ${attempt.id}`, err);
+        }
+      }
+      await deps.paymentAttempt.updateMany({
+        where: { id: attempt.id, status: { in: ["PENDING", "PROCESSING"] } },
+        data: { status: "CANCELLED" },
+      });
+    }
   }
 
   type PaymentConsent = { acceptedTerms: boolean; acceptedRefundCancellation: boolean; acceptedMarketing: boolean };
@@ -727,6 +817,9 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     // account unattributed. Resolved BEFORE the PaymentAttempt transaction.
     const connectedAccountId = stripeConnectedAccountId();
 
+    // F-02 — only one payable provider session per order at a time.
+    await retireOpenPaymentAttempts(order.id);
+
     const idempotencyKey = randomUUID();
     const attempt = await createPaymentAttemptWithConsent(actor, order, "STRIPE", consent, idempotencyKey);
 
@@ -755,6 +848,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
         // from the Order's own immutable snapshot and deployment config.
         schoolSettlementMinor: order.baseAmountMinor,
         connectedAccountId,
+        expiresAt: stripeSessionExpiry(enrolment.holdExpiresAt as Date, now()),
       }),
       { idempotencyKey },
     );
@@ -807,6 +901,11 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     // deployment configuration is missing.
     paystackSubaccountCode();
 
+    // F-02 — a new attempt retires the previous one (Paystack cannot expire
+    // a pending page, so a late payment on it is settled by the provider-wins
+    // CANCELLED -> SUCCEEDED transition, or flagged for reconciliation).
+    await retireOpenPaymentAttempts(order.id);
+
     const idempotencyKey = randomUUID();
     const attempt = await createPaymentAttemptWithConsent(actor, order, "PAYSTACK", consent, idempotencyKey);
 
@@ -815,7 +914,10 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     const root = baseUrl();
     const result = await deps.paystack.initiate({
       orderId: order.id,
-      orderReference: order.reference,
+      // Paystack rejects a reused transaction reference, so each attempt gets
+      // its own: the order reference plus the attempt's id suffix. Settlement,
+      // reconciliation and refunds all key on the attempt's providerIntentId.
+      orderReference: `${order.reference}-${attempt.id.slice(-8).toUpperCase()}`,
       enrolmentId: enrolment.id,
       learnerEmail: email,
       currency: order.currency,
@@ -848,6 +950,7 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
 
   return {
     startCheckout,
+    retireOpenPaymentAttempts,
     getOwnOrder,
     getOwnOrderByReference,
     getOwnVerificationStatus,
@@ -910,6 +1013,12 @@ export function createPrismaBackedCheckoutService(client: AnyPrisma) {
     },
     paymentAttempt: {
       update: (args) => client.paymentAttempt.update({ where: args.where, data: args.data }),
+      findMany: (args) =>
+        client.paymentAttempt.findMany({
+          where: args.where,
+          select: { id: true, provider: true, providerIntentId: true, status: true },
+        }),
+      updateMany: (args) => client.paymentAttempt.updateMany({ where: args.where, data: args.data }),
     },
     user: {
       findUnique: async ({ where }) =>
@@ -919,6 +1028,7 @@ export function createPrismaBackedCheckoutService(client: AnyPrisma) {
       checkout: {
         sessions: {
           create: (params, options) => getStripe().checkout.sessions.create(params, options),
+          expire: (id) => getStripe().checkout.sessions.expire(id),
         },
       },
     },
@@ -946,4 +1056,5 @@ export const getOwnOrderByReference = built.getOwnOrderByReference;
 export const getOwnVerificationStatus = built.getOwnVerificationStatus;
 export const initiateStripePayment = built.initiateStripePayment;
 export const initiatePaystackPayment = built.initiatePaystackPayment;
+export const retireOpenPaymentAttempts = built.retireOpenPaymentAttempts;
 export const getCohortOfferPath = built.getCohortOfferPath;

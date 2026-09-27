@@ -103,6 +103,14 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(null, { status: 200 });
   }
 
+  // F-16 — only a charge settles an order. Every other signed event (refunds,
+  // transfers, disputes) carries no transaction reference to verify, so it is
+  // recorded above and acknowledged here instead of failing and being
+  // retried by Paystack for days.
+  if (event.event !== "charge.success") {
+    return new Response(null, { status: 200 });
+  }
+
   try {
     const orderId = event.data.metadata?.orderId;
 

@@ -31,6 +31,32 @@ const LESSON_TYPES = [
   "ASSIGNMENT",
 ] as const;
 
+const MAX_VIDEO_SECONDS = 24 * 60 * 60;
+
+/**
+ * F-15 — a staff-typed video length: "95", "12:30" or "1:02:03" to seconds.
+ * Anything else (or zero) is NaN, which the schema reports as a field error.
+ */
+export function parseVideoLength(raw: string): number {
+  const text = raw.trim();
+  if (!/^\d+(:\d{1,2}){0,2}$/.test(text)) return Number.NaN;
+  const parts = text.split(":").map(Number);
+  if (parts.slice(1).some((p) => p > 59)) return Number.NaN;
+  const seconds = parts.reduce((total, p) => total * 60 + p, 0);
+  return seconds > 0 ? seconds : Number.NaN;
+}
+
+/** F-15 — seconds back to the editor's "m:ss" / "h:mm:ss". */
+export function formatVideoLength(seconds: number | null | undefined): string {
+  if (seconds == null) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = String(seconds % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+const VIDEO_LENGTH_MESSAGE = "Enter the video length as minutes:seconds, for example 12:30.";
+
 const baseLessonSchema = z
   .object({
     // Required on create — a Lesson has no parent otherwise and
@@ -69,6 +95,18 @@ const baseLessonSchema = z
     required: z.boolean().default(true),
     allowManualComplete: z.boolean().default(true),
     assessmentId: z.string().nullable().optional(),
+    // F-15 — optional staff-set length of a VIDEO lesson; null clears it.
+    videoDurationSeconds: z
+      .preprocess(
+        (value) => (typeof value === "string" ? parseVideoLength(value) : value),
+        z
+          .number({ message: VIDEO_LENGTH_MESSAGE })
+          .int({ message: VIDEO_LENGTH_MESSAGE })
+          .min(1, { message: VIDEO_LENGTH_MESSAGE })
+          .max(MAX_VIDEO_SECONDS, { message: "A video length must be under 24 hours." })
+          .nullable(),
+      )
+      .optional(),
   })
   .strict();
 

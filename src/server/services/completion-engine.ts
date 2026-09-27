@@ -24,11 +24,11 @@
  * v2) — not re-architecting this function.
  */
 
-import type { CompletionRuleV1 } from "./completion-rule";
+import type { CompletionRule } from "./completion-rule";
 import type { AttendanceComponent } from "./attendance-component";
 
 export type CompletionVerdictItem = {
-  id: "required-lessons" | "attendance";
+  id: "required-lessons" | "attendance" | "assessments";
   label: string;
   satisfied: boolean;
   /**
@@ -41,6 +41,9 @@ export type CompletionVerdictItem = {
   state: "SATISFIED" | "UNMET" | "NOT_YET_CHECKED";
   detail: string;
 };
+
+/** One pinned assessment's standing for this enrolment: `passed` is null when the assessment has no pass mark. */
+export type AssessmentEvidence = { assessmentId: string; released: boolean; passed: boolean | null };
 
 export type CompletionVerdict = {
   items: CompletionVerdictItem[];
@@ -87,8 +90,28 @@ function buildAttendanceItem(attendance: AttendanceComponent | null): Completion
   };
 }
 
+function buildAssessmentsItem(assessments: AssessmentEvidence[] | undefined): CompletionVerdictItem {
+  const label = "Required assessments passed";
+  if (assessments === undefined) {
+    return { id: "assessments", label, satisfied: false, state: "NOT_YET_CHECKED", detail: "Assessment results have not been evaluated yet" };
+  }
+  if (assessments.length === 0) {
+    return { id: "assessments", label, satisfied: true, state: "SATISFIED", detail: "No assessments to pass" };
+  }
+  // A released result with no pass mark (passed === null) counts; a released fail or anything unreleased does not.
+  const passed = assessments.filter((a) => a.released && a.passed !== false).length;
+  const satisfied = passed === assessments.length;
+  return {
+    id: "assessments",
+    label,
+    satisfied,
+    state: satisfied ? "SATISFIED" : "UNMET",
+    detail: `${passed} of ${assessments.length} passed`,
+  };
+}
+
 /**
- * Evaluates a v1 `completionRule` against a learner's evidence, returning a
+ * Evaluates a v1/v2 `completionRule` against a learner's evidence, returning a
  * per-rule-component item list plus an overall satisfied boolean. Item
  * order is stable: required-lessons first, attendance second (when
  * present). An attendance item is emitted ONLY when
@@ -96,11 +119,13 @@ function buildAttendanceItem(attendance: AttendanceComponent | null): Completion
  * threshold produces no attendance item at all, never a fake pass.
  */
 export function evaluateCompletion(
-  rule: CompletionRuleV1,
+  rule: CompletionRule,
   evidence: {
     requiredLessonIds: string[];
     completedLessonIds: ReadonlySet<string>;
     attendance: AttendanceComponent | null;
+    /** Required only for a v2 rule with `requirePassingAssessments`; absent means not gathered. */
+    assessments?: AssessmentEvidence[];
   },
 ): CompletionVerdict {
   const items: CompletionVerdictItem[] = [
@@ -109,6 +134,10 @@ export function evaluateCompletion(
 
   if (rule.attendanceThresholdPct !== null) {
     items.push(buildAttendanceItem(evidence.attendance));
+  }
+
+  if (rule.version === 2 && rule.requirePassingAssessments) {
+    items.push(buildAssessmentsItem(evidence.assessments));
   }
 
   return {

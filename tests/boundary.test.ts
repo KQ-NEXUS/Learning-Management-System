@@ -199,6 +199,21 @@ describe("service-layer boundary", () => {
     expect(touchesReconciliationService).toBe(true);
   });
 
+  it("rejects a Prisma import from the close-resolved-tickets Netlify scheduled function (12-04)", async () => {
+    expect(await lintAs("netlify/functions/close-resolved-tickets.ts")).toHaveLength(1);
+  });
+
+  it("keeps the close-resolved-tickets closure worker-safe and non-vacuous (12-04)", () => {
+    const closure = runtimeClosureFrom([
+      path.resolve(process.cwd(), "netlify/functions/close-resolved-tickets.ts"),
+    ]);
+    expect(findRequestOnlyOffenders(closure)).toEqual([]);
+    expect(findIsolationOffenders(closure)).toEqual([]);
+    const norm = closure.map((f) => f.replace(/\\/g, "/"));
+    expect(norm.some((f) => f.endsWith("src/server/services/ticket-auto-close-system-service.ts"))).toBe(true);
+    expect(norm.some((f) => /src\/(app|components)\//.test(f))).toBe(false);
+  });
+
   it("keeps the Stripe webhook route's runtime import closure away from request-only APIs", () => {
     expect(findRequestOnlyOffenders(webhookRuntimeClosure())).toEqual([]);
   });

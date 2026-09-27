@@ -724,3 +724,23 @@ describe("AttemptNotStartableError / AttemptNotWritableError", () => {
     expect(writable.attemptId).toBe("attempt-1");
   });
 });
+
+describe("submitAttempt re-evaluates completion (v2 assessment rule)", () => {
+  it("recalculates completion for the attempt's enrolment inside the submit transaction", async () => {
+    const attempt = makeAttemptRow({ id: "a-1" });
+    const { deps } = buildHarness({ attempts: [attempt] });
+    const calls: Array<{ enrolmentId: string; actorId?: string | null }> = [];
+    const service = createAttemptService({
+      ...deps,
+      recalculateCompletion: async (_tx, args) => {
+        calls.push({ enrolmentId: args.enrolmentId, actorId: args.actorId });
+        return { kind: "evaluated", results: [] };
+      },
+    });
+    await service.submitAttempt(
+      { userId: "learner-1" },
+      { attemptId: "a-1", responses: [{ questionId: "q-1", selectedOptionIds: ["opt-2"] }] },
+    );
+    expect(calls).toEqual([{ enrolmentId: attempt.enrolmentId, actorId: null }]);
+  });
+});

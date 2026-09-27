@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { hashToken } from "@/server/auth/token-hash";
 import type { Actor } from "@/server/permissions/with-permission";
 
 export async function getActorBySessionToken(
@@ -15,7 +16,7 @@ export async function getActorBySessionToken(
   if (!sessionToken) return null;
 
   const session = await prisma.session.findUnique({
-    where: { sessionToken },
+    where: { sessionToken: hashToken(sessionToken) }, // F-14a — stored hashed
     select: {
       expires: true,
       revokedAt: true,

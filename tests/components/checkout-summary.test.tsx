@@ -493,3 +493,30 @@ describe("CheckoutOrderPage — breakdown card (07-09 D-16/D-17)", () => {
     expect(pageMocks.notFound).toHaveBeenCalled();
   });
 });
+
+describe("CheckoutOrderPage — payment could not start", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("payment=unavailable shows an announced banner that says nothing was charged, and offers Try again", async () => {
+    seedCheckoutPage(checkoutOrderFixture());
+    render(
+      await CheckoutOrderPage({
+        params: Promise.resolve({ orderId: ORDER_ID }),
+        searchParams: Promise.resolve({ payment: "unavailable" }),
+      }),
+    );
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("We couldn't start your payment");
+    expect(alert.textContent).toContain("Nothing was charged");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("the decline banner is announced too", async () => {
+    seedCheckoutPage(checkoutOrderFixture());
+    render(await runCheckoutPage("1"));
+    expect(screen.getByRole("alert").textContent).toContain("Your card was declined");
+  });
+});

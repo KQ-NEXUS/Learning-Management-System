@@ -41,6 +41,7 @@ export type LessonRecord = {
   required: boolean;
   allowManualComplete: boolean;
   assessmentId: string | null;
+  videoDurationSeconds?: number | null;
   withdrawnAt: Date | null;
 };
 
@@ -130,6 +131,7 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
     required?: boolean;
     allowManualComplete?: boolean;
     assessmentId?: string | null;
+    videoDurationSeconds?: number | null;
   }>("courses.edit", async (input) => {
     const courseId = await resolveCourseIdForModule(input.moduleId);
     return { courseIds: courseId ? [courseId] : [] };
@@ -156,6 +158,7 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
           required: parsed.required,
           allowManualComplete: parsed.allowManualComplete,
           assessmentId: parsed.assessmentId ?? null,
+          videoDurationSeconds: parsed.type === "VIDEO" ? (parsed.videoDurationSeconds ?? null) : null,
           position,
         },
       });

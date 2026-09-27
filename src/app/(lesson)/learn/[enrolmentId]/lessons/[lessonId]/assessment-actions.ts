@@ -76,7 +76,12 @@ export async function submitAttemptAction(input: unknown) {
     saved = true;
     const result = await submitAttempt(actor, parsed.data);
     revalidatePath(`/learn/${parsed.data.enrolmentId}/lessons/${parsed.data.lessonId}`);
-    return { ok: true as const, result: quizResultForLearner(result, quiz.feedbackBehaviour) };
+    // F-15 — re-read so the reveal rule sees the attempt count AFTER this
+    // submission; if the re-read fails, answers stay held.
+    const after = await loadLearnerQuiz(actor, parsed.data);
+    const shown = after?.history.find(a => a.attemptId === result.attemptId)
+      ?? quizResultForLearner(result, quiz.feedbackBehaviour, false);
+    return { ok: true as const, result: shown };
   } catch {
     return { ok: false as const, message: "Your quiz couldn't be submitted", body: saved
       ? "Something went wrong scoring your attempt. Your answers are saved — try submitting again."

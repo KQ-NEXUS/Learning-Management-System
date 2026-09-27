@@ -31,7 +31,7 @@ import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 import { assertRoleManagementContinuity, lockRoleManagementContinuity, type ContinuityLockTx } from "@/server/services/continuity-service";
 import { MIN_REASON_LENGTH } from "@/server/services/role-service";
-import { assignmentTargetScope } from "@/server/services/assignment-service";
+import { assertWithinGrantCeiling, assignmentTargetScope } from "@/server/services/assignment-service";
 
 type WithPermission = ReturnType<typeof createWithPermission>;
 
@@ -75,6 +75,27 @@ export type StaffUserRow = {
 };
 
 export type StaffSearchRow = { id: string; name: string; email: string; status: string };
+
+/** What list/get hand to pages. The list reaches a client component, so no credential or lockout field may appear here. */
+export type StaffAccountSummary = {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  createdAt: Date;
+  deactivatedAt: Date | null;
+};
+
+function toSummary(row: StaffUserRow): StaffAccountSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    status: row.status,
+    createdAt: row.createdAt,
+    deactivatedAt: row.deactivatedAt,
+  };
+}
 
 export type CreateStaffAccountInput = {
   name: string;
@@ -149,15 +170,19 @@ export function createStaffAccountService(deps: {
   const listInternal = authorize<Record<string, never>>(
     "users.view",
     () => userScope(),
-  )(async () =>
-    store.user.findMany({
+  )(async () => {
+    const rows = await store.user.findMany({
       where: { isStaff: true },
       orderBy: { name: "asc" },
-    }),
-  );
+    });
+    return rows.map(toSummary);
+  });
 
   const getInternal = authorize<string>("users.view", () => userScope())(
-    async (id) => store.user.findUnique({ where: { id } }),
+    async (id) => {
+      const row = await store.user.findUnique({ where: { id } });
+      return row ? toSummary(row) : null;
+    },
   );
 
   const createInternal = authorize<CreateStaffAccountInput>(
@@ -179,6 +204,10 @@ export function createStaffAccountService(deps: {
     for (const permission of role.permissions) {
       assertScopeAllowed(permission as Permission, input.scopeType);
     }
+
+    // F-07 — and to the same grant ceiling as any other assignment. (A new
+    // account can never be the actor, so the self-assignment rule cannot apply.)
+    assertWithinGrantCeiling(ctx.grants, role.permissions, assignmentTargetScope(input.scopeType, input.scopeId));
 
     const email = input.email.toLowerCase().trim();
     const temporaryPassword = input.temporaryPassword ?? generateTemporaryPassword();

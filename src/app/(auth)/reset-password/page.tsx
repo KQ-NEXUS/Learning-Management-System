@@ -13,13 +13,23 @@ export default async function ResetPasswordPage({
   const params = await searchParams;
   const token = params.token;
   const hasToken = typeof token === "string" && token.length > 0;
+  // F-11 — arriving from verification of an address that was registered more
+  // than once before it was verified: no password was kept, so choose one.
+  const settingFirstPassword = params.set === "1";
 
   return hasToken ? (
     <>
-      <AuthTitle
-        title="Choose a new password"
-        subtitle="Your new password takes effect immediately."
-      />
+      {settingFirstPassword ? (
+        <AuthTitle
+          title="Set your password"
+          subtitle="Your email is verified. This address was registered more than once before it was verified, so for your security choose the password you'll use to sign in."
+        />
+      ) : (
+        <AuthTitle
+          title="Choose a new password"
+          subtitle="Your new password takes effect immediately."
+        />
+      )}
       <ResetPasswordForm token={token} />
     </>
   ) : (

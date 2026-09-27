@@ -131,13 +131,53 @@ describe("parseCompletionRule", () => {
     ).toThrow(UnsupportedCompletionRuleVersionError);
   });
 
-  it("an outer ruleVersion other than 1 throws UnsupportedCompletionRuleVersionError even with null json", () => {
+  it("an outer ruleVersion other than 1 or 2 throws UnsupportedCompletionRuleVersionError even with null json", () => {
     expect(() =>
       parseCompletionRule({
         json: null,
-        ruleVersion: 2,
+        ruleVersion: 3,
         cohortAttendanceThresholdPct: null,
       }),
+    ).toThrow(UnsupportedCompletionRuleVersionError);
+  });
+
+  it("v2 json with requirePassingAssessments parses to the v2 shape", () => {
+    expect(
+      parseCompletionRule({
+        json: { version: 2, requireAllRequiredLessons: true, requirePassingAssessments: true },
+        ruleVersion: 2,
+        cohortAttendanceThresholdPct: 80,
+      }),
+    ).toEqual({ version: 2, requireAllRequiredLessons: true, attendanceThresholdPct: 80, requirePassingAssessments: true });
+  });
+
+  it("v2 with the switch absent or null json does not require assessments", () => {
+    expect(
+      parseCompletionRule({ json: { version: 2 }, ruleVersion: 2, cohortAttendanceThresholdPct: null }),
+    ).toMatchObject({ version: 2, requirePassingAssessments: false });
+    expect(
+      parseCompletionRule({ json: null, ruleVersion: 2, cohortAttendanceThresholdPct: null }),
+    ).toMatchObject({ version: 2, requirePassingAssessments: false });
+  });
+
+  it("v2 rejects a non-boolean requirePassingAssessments and unknown keys", () => {
+    expect(() =>
+      parseCompletionRule({ json: { version: 2, requirePassingAssessments: "yes" }, ruleVersion: 2, cohortAttendanceThresholdPct: null }),
+    ).toThrow(UnsupportedCompletionRuleFieldError);
+    expect(() =>
+      parseCompletionRule({ json: { version: 2, assessmentCriteria: [] }, ruleVersion: 2, cohortAttendanceThresholdPct: null }),
+    ).toThrow(UnsupportedCompletionRuleFieldError);
+  });
+
+  it("v1 json may not carry the v2 switch", () => {
+    expect(() =>
+      parseCompletionRule({ json: { version: 1, requirePassingAssessments: true }, ruleVersion: 1, cohortAttendanceThresholdPct: null }),
+    ).toThrow(UnsupportedCompletionRuleFieldError);
+  });
+
+  it("json version 1 under a ruleVersion 2 column throws — the two must agree", () => {
+    expect(() =>
+      parseCompletionRule({ json: { version: 1 }, ruleVersion: 2, cohortAttendanceThresholdPct: null }),
     ).toThrow(UnsupportedCompletionRuleVersionError);
   });
 });
@@ -299,5 +339,64 @@ describe("evaluateCompletion", () => {
     expect(verdict).not.toHaveProperty("percentage");
     expect(verdict).not.toHaveProperty("overallPct");
     expect(verdict.items).toHaveLength(2);
+  });
+});
+
+describe("evaluateCompletion — v2 assessment item", () => {
+  const v2 = (requirePassingAssessments: boolean, attendanceThresholdPct: number | null = null) =>
+    ({ version: 2, requireAllRequiredLessons: true, attendanceThresholdPct, requirePassingAssessments }) as const;
+  const lessonsDone = { requiredLessonIds: ["l1"], completedLessonIds: new Set(["l1"]), attendance: null };
+
+  it("emits no assessment item when the switch is off", () => {
+    const verdict = evaluateCompletion(v2(false), { ...lessonsDone, assessments: [{ assessmentId: "a1", released: false, passed: null }] });
+    expect(verdict.items.map((i) => i.id)).toEqual(["required-lessons"]);
+    expect(verdict.satisfied).toBe(true);
+  });
+
+  it("is satisfied only when every assessment has a released, non-failing result", () => {
+    const passedAll = evaluateCompletion(v2(true), {
+      ...lessonsDone,
+      assessments: [
+        { assessmentId: "a1", released: true, passed: true },
+        { assessmentId: "a2", released: true, passed: null },
+      ],
+    });
+    expect(passedAll.items[1]).toMatchObject({ id: "assessments", state: "SATISFIED", satisfied: true, detail: "2 of 2 passed" });
+    expect(passedAll.satisfied).toBe(true);
+
+    const oneFailed = evaluateCompletion(v2(true), {
+      ...lessonsDone,
+      assessments: [
+        { assessmentId: "a1", released: true, passed: false },
+        { assessmentId: "a2", released: false, passed: null },
+      ],
+    });
+    expect(oneFailed.items[1]).toMatchObject({ id: "assessments", state: "UNMET", satisfied: false, detail: "0 of 2 passed" });
+    expect(oneFailed.satisfied).toBe(false);
+  });
+
+  it("an unreleased pass does not count", () => {
+    const verdict = evaluateCompletion(v2(true), { ...lessonsDone, assessments: [{ assessmentId: "a1", released: false, passed: true }] });
+    expect(verdict.satisfied).toBe(false);
+  });
+
+  it("no assessments to pass is satisfied", () => {
+    const verdict = evaluateCompletion(v2(true), { ...lessonsDone, assessments: [] });
+    expect(verdict.items[1]).toMatchObject({ id: "assessments", state: "SATISFIED", detail: "No assessments to pass" });
+  });
+
+  it("missing evidence is NOT_YET_CHECKED, never a pass", () => {
+    const verdict = evaluateCompletion(v2(true), lessonsDone);
+    expect(verdict.items[1]).toMatchObject({ id: "assessments", state: "NOT_YET_CHECKED", satisfied: false });
+    expect(verdict.satisfied).toBe(false);
+  });
+
+  it("orders items required-lessons, attendance, assessments", () => {
+    const verdict = evaluateCompletion(v2(true, 75), {
+      ...lessonsDone,
+      attendance: { kind: "computed", earnedPct: 100, requiredPct: 75, attendedCount: 5, countableCount: 5, meetsThreshold: true },
+      assessments: [],
+    });
+    expect(verdict.items.map((i) => i.id)).toEqual(["required-lessons", "attendance", "assessments"]);
   });
 });

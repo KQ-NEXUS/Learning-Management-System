@@ -30,7 +30,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import Stripe from "stripe";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedLearnerFixture, seedStripeUsdFeeScheduleFixture } from "./support/cohort-fixtures";
+import { seedPublishedCohortFixture, seedLearnerFixture, seedStripeUsdFeeScheduleFixture } from "./support/cohort-fixtures";
 import { STRIPE_API_VERSION } from "@/server/payments/providers/stripe/client";
 import type { CheckoutTxClient } from "@/server/services/checkout-service";
 import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
@@ -179,6 +179,14 @@ beforeAll(async () => {
     paymentAttempt: {
       update: (args: { where: { id: string }; data: Record<string, unknown> }) =>
         testDb.prisma.paymentAttempt.update({ where: args.where, data: args.data as never }),
+      // F-02 — retiring a superseded attempt.
+      findMany: (args: { where: Record<string, unknown> }) =>
+        testDb.prisma.paymentAttempt.findMany({
+          where: args.where as never,
+          select: { id: true, provider: true, providerIntentId: true, status: true },
+        }),
+      updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) =>
+        testDb.prisma.paymentAttempt.updateMany({ where: args.where as never, data: args.data as never }),
     } as never,
     user: {
       findUnique: (args: { where: { id: string } }) =>
@@ -190,6 +198,7 @@ beforeAll(async () => {
     stripe: {
       checkout: {
         sessions: {
+          expire: async (id: string) => ({ id, status: "expired" }),
           create: async () => {
             sessionCounter += 1;
             const id = `cs_test_stub_${sessionCounter}`;
@@ -228,7 +237,7 @@ afterAll(async () => {
 
 describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-06-36)", () => {
   it("base race: a sweep before the webhook cancels the hold; the late webhook lands EXCEPTION with correct seat arithmetic and an exceptionNote", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,
@@ -304,7 +313,7 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
   }, 15_000);
 
   it("contention variant: a different learner who took the freed seat keeps it — the late webhook does not evict them or oversell the cohort", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 1, // tight — learner B can only take the seat if it was genuinely freed
       seatsTaken: 0,
       priceMinor: 45_000_000,
@@ -362,7 +371,7 @@ describe("hold-expiry-sweep-versus-webhook race — real Postgres (Pitfall 4, T-
   }, 15_000);
 
   it("control: the same setup with no sweep in between still produces PAID and ACTIVE — the guard discriminates rather than always refusing", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
       priceMinor: 45_000_000,

@@ -37,6 +37,8 @@
  */
 
 import { prisma } from "@/server/db";
+import { recalculateCompletionAndIssue } from "@/server/services/certificate-issuance-service";
+import type { CompletionServiceTxClient } from "@/server/services/completion-service";
 import type { Actor } from "@/server/permissions/with-permission";
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
 import { writeDomainEvent, type DomainEventTxClient } from "@/server/services/domain-event-service";
@@ -271,7 +273,7 @@ export type AttemptStore = {
   attempt: AttemptDelegate;
   enrolment: {
     findMany(args: {
-      where: { userId: string; status: "ACTIVE" };
+      where: { userId: string; status: "ACTIVE" | "COMPLETED" };
     }): Promise<EnrolmentRow[]>;
     findUnique(args: { where: { id: string } }): Promise<EnrolmentRow | null>;
   };
@@ -305,6 +307,16 @@ export type AttemptServiceDeps = {
   audit: Audit;
   /** Explicit clock — never read from a client-controlled value. */
   now?: () => Date;
+  /**
+   * Re-evaluates completion inside the same transaction once a quiz grade is
+   * auto-RELEASED, so a course whose pinned rule requires passing assessments
+   * completes (and auto-issues) without waiting for another lesson or
+   * attendance write. Bound to `recalculateCompletionAndIssue` in production.
+   */
+  recalculateCompletion?: (
+    tx: unknown,
+    args: { enrolmentId: string; now: Date; actorId?: string | null },
+  ) => Promise<unknown>;
 };
 
 // ---------------------------------------------------------------------------
@@ -422,16 +434,25 @@ export function createAttemptService(deps: AttemptServiceDeps) {
    * `learner-access.ts`'s `hasActiveEnrolmentCoveringCourse` boolean check,
    * but returns the actual row this file needs to attach an Attempt to.
    */
+  /**
+   * ACTIVE only by default: every write path (start, submit) must refuse a
+   * COMPLETED enrolment (G-01, visible but not operable). Only the read of
+   * the learner's own result passes `includeCompleted` (ASM-07), so a
+   * completed learner keeps their scores.
+   */
   async function resolveOwnEnrolmentForCourse(
     actor: Actor,
     courseId: string,
     enrolmentId?: string,
+    options: { includeCompleted?: boolean } = {},
   ): Promise<EnrolmentRow | null> {
-    const activeEnrolments = await deps.store.enrolment.findMany({
-      where: { userId: actor.userId, status: "ACTIVE" },
-    });
+    const statuses = options.includeCompleted ? (["ACTIVE", "COMPLETED"] as const) : (["ACTIVE"] as const);
+    const ownEnrolments: EnrolmentRow[] = [];
+    for (const status of statuses) {
+      ownEnrolments.push(...(await deps.store.enrolment.findMany({ where: { userId: actor.userId, status } })));
+    }
 
-    for (const enrolment of activeEnrolments) {
+    for (const enrolment of ownEnrolments) {
       if (enrolmentId && enrolment.id !== enrolmentId) continue;
       const cohort = await deps.store.cohort.findUnique({ where: { id: enrolment.cohortId } });
       if (!cohort) continue;
@@ -759,6 +780,12 @@ export function createAttemptService(deps: AttemptServiceDeps) {
         occurredAt: params.submittedAt,
       });
 
+      await deps.recalculateCompletion?.(tx, {
+        enrolmentId: params.attempt.enrolmentId,
+        now: params.submittedAt,
+        actorId: null,
+      });
+
       return updated;
     });
 
@@ -927,7 +954,9 @@ export function createAttemptService(deps: AttemptServiceDeps) {
     const assessment = await deps.store.assessment.findUnique({ where: { id: input.assessmentId } });
     if (!assessment) return null;
 
-    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId, input.enrolmentId);
+    const enrolment = await resolveOwnEnrolmentForCourse(actor, assessment.courseId, input.enrolmentId, {
+      includeCompleted: true,
+    });
     if (!enrolment) return null;
 
     const rawAttempts = await deps.store.attempt.findMany({
@@ -1046,6 +1075,8 @@ export function createPrismaBackedAttemptService(client: AnyPrisma, audit: Audit
     },
     runInTransaction: (fn) => client.$transaction((tx: unknown) => fn(tx as AttemptTxClient)),
     writeEvent: writeDomainEvent,
+    recalculateCompletion: (tx, args) =>
+      recalculateCompletionAndIssue(tx as unknown as CompletionServiceTxClient, args),
     audit,
   });
 }

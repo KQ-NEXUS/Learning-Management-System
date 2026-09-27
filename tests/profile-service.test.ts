@@ -35,15 +35,23 @@ class SimulatedProviderOutage extends Error {
 }
 
 function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
-  const rejectDispatch = options.rejectDispatch ?? false;
+  let rejectDispatch = options.rejectDispatch ?? false;
   const users: ProfileUserRow[] = [];
   const policyAcceptances: PolicyAcceptanceRow[] = [];
   const tokens: VerificationTokenRow[] = [];
   const dispatched: { toEmail: string; textContent: string; subject: string }[] = [];
   const audits: unknown[] = [];
+  const sessionRevocations: Array<Record<string, unknown>> = [];
   let policyIdCounter = 0;
 
   const store = {
+    // F-14c — records "revoke every session" writes made on confirmation.
+    session: {
+      updateMany: async (args: Record<string, unknown>) => {
+        sessionRevocations.push(args);
+        return { count: 1 };
+      },
+    },
     user: {
       // Guarded: G-03-6a. A hand-written fake once answered
       // `findUnique({ where: { pendingEmail } })`, a query the real Prisma
@@ -171,6 +179,11 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
     users,
     policyAcceptances,
     tokens,
+    sessionRevocations,
+    /** Flip the simulated provider outage on after setup. */
+    failDispatchFromNowOn: () => {
+      rejectDispatch = true;
+    },
     dispatched,
     audits,
     store,
@@ -551,5 +564,41 @@ describe("profile-service — audit coverage across all four mutating entry poin
       expect(matching).toHaveLength(1);
       expect((matching[0] as { actorId: string }).actorId).toBe("u1");
     }
+  });
+});
+
+describe("confirmEmailChange — F-14c: the old address is told, and every session is signed out", () => {
+  async function confirmedChange(opts: { failNotice?: boolean } = {}) {
+    const h = sharedHarness();
+    h.users.push(makeUser());
+    await h.profileService.requestEmailChange({ userId: "u1" }, { currentPassword: "correct", newEmail: "new.address@example.com" });
+    const token = extractToken(h.dispatched[0].textContent);
+    if (opts.failNotice) h.failDispatchFromNowOn();
+    const result = await h.profileService.confirmEmailChange(token);
+    return { ...h, result };
+  }
+
+  it("revokes every session of the account", async () => {
+    const h = await confirmedChange();
+    expect(h.result).toEqual({ ok: true });
+    expect(h.sessionRevocations).toEqual([
+      expect.objectContaining({ where: { userId: "u1", revokedAt: null }, data: { revokedAt: expect.any(Date) } }),
+    ]);
+  });
+
+  it("emails the previous address, naming the new one only partly", async () => {
+    const h = await confirmedChange();
+    const notice = h.dispatched.find((d) => d.toEmail === "learner@example.com");
+    expect(notice).toBeDefined();
+    expect(notice!.subject).toBe("Your email address was changed");
+    expect(notice!.textContent).toContain("@example.com");
+    expect(notice!.textContent).not.toContain("new.address@example.com");
+    expect(notice!.textContent).toMatch(/reset your password/i);
+  });
+
+  it("a failing email provider never undoes a confirmed change", async () => {
+    const h = await confirmedChange({ failNotice: true });
+    expect(h.result).toEqual({ ok: true });
+    expect(h.users[0].email).toBe("new.address@example.com");
   });
 });

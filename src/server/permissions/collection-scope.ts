@@ -113,6 +113,24 @@ export function cohortWhereForCollection(scope: CollectionScopeSnapshot): Cohort
   return Object.freeze(clauses.length > 0 ? { OR: clauses } : { id: { in: [] } });
 }
 
+/**
+ * Integration warning #1 — submissions (and anything else keyed to ONE
+ * course's assessment) narrow a COURSE grant to that assessment's course, not
+ * to every course a programme cohort delivers (F-05's rule). COHORT and
+ * PROGRAMME grants still reach through the enrolment's cohort.
+ */
+export function submissionWhereForCollection(scope: CollectionScopeSnapshot): Readonly<Record<string, unknown>> {
+  if (scope.kind === "GLOBAL") return Object.freeze({});
+
+  const clauses: Record<string, unknown>[] = [];
+  if (scope.cohortIds.length > 0) clauses.push({ enrolment: { cohortId: { in: [...scope.cohortIds] } } });
+  if (scope.programmeIds.length > 0) {
+    clauses.push({ enrolment: { cohort: { programmeId: { in: [...scope.programmeIds] } } } });
+  }
+  if (scope.courseIds.length > 0) clauses.push({ assessment: { courseId: { in: [...scope.courseIds] } } });
+  return Object.freeze(clauses.length > 0 ? { OR: clauses } : { id: { in: [] } });
+}
+
 export function createCollectionAuthorizer(deps: CollectionAuthorizationDeps) {
   const now = deps.now ?? (() => new Date());
 

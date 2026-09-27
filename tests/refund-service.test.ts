@@ -60,6 +60,8 @@ function harness(opts?: {
   stripeOutcome?: { id: string; status: string; amount: number; currency: string };
   paystackThrows?: Error;
   stripeThrows?: Error;
+  /** F-17 — runs inside the Stripe refund call, to interleave a second refund. */
+  onStripeRefund?: () => Promise<void>;
 }) {
   const orders = new Map<string, RefundOrderRow>((opts?.orders ?? [order()]).map((o) => [o.id, { ...o }]));
   const attempts = opts?.attempts ?? [attempt()];
@@ -68,6 +70,7 @@ function harness(opts?: {
   const audits: Array<Record<string, unknown>> = [];
   const paystackCalls: Array<Record<string, unknown>> = [];
   const stripeCalls: Array<Record<string, unknown>> = [];
+  const stripeOptions: Array<Record<string, unknown> | undefined> = [];
 
   const { withPermission } = createTestWithPermission(opts?.grants ?? [grant("refunds.manage", "GLOBAL")]);
 
@@ -86,6 +89,9 @@ function harness(opts?: {
       $transaction: async (fn) =>
         fn({
           lockOrder: async ({ orderId }) => orders.get(orderId) ?? null,
+          // Warning #3's access path is proven against real Postgres in
+          // refund.integration.test.ts; here there is no enrolment to end.
+          access: { assertRevocable: async () => {}, revoke: async () => null },
           paymentAttempt: {
             findFirst: async () => attempts[0] ?? null,
           },
@@ -96,31 +102,31 @@ function harness(opts?: {
               refunds.push({ id, ...data });
               return { id };
             },
+            update: async ({ where, data }) => {
+              const existing = refunds.find((r) => r.id === where.id);
+              if (existing) Object.assign(existing, data);
+              return null;
+            },
+          },
+          order: {
+            update: async ({ where, data }) => {
+              orderUpdates.push({ id: where.id, data });
+              const existing = orders.get(where.id);
+              if (existing) Object.assign(existing, data);
+              return null;
+            },
           },
         }),
-    },
-    refund: {
-      update: async ({ where, data }) => {
-        const existing = refunds.find((r) => r.id === where.id);
-        if (existing) Object.assign(existing, data);
-        return null;
-      },
-    },
-    order: {
-      update: async ({ where, data }) => {
-        orderUpdates.push({ id: where.id, data });
-        const existing = orders.get(where.id);
-        if (existing) Object.assign(existing, data);
-        return null;
-      },
     },
     paystackRefund: async (body) => {
       paystackCalls.push(body);
       if (opts?.paystackThrows) throw opts.paystackThrows;
       return opts?.paystackOutcome ?? { id: 999, status: "processed", amount: 45_875_000, currency: "NGN" };
     },
-    stripeRefund: async (params) => {
+    stripeRefund: async (params, options) => {
       stripeCalls.push(params);
+      stripeOptions.push(options);
+      if (opts?.onStripeRefund) await opts.onStripeRefund();
       if (opts?.stripeThrows) throw opts.stripeThrows;
       return opts?.stripeOutcome ?? { id: "re_123", status: "succeeded", amount: 45_875_000, currency: "usd" };
     },
@@ -132,7 +138,7 @@ function harness(opts?: {
     now: () => NOW,
   };
 
-  return { deps, orders, refunds, orderUpdates, audits, paystackCalls, stripeCalls };
+  return { deps, orders, refunds, orderUpdates, audits, paystackCalls, stripeCalls, stripeOptions };
 }
 
 const FULL_INPUT: RefundRawInput = {
@@ -289,8 +295,9 @@ describe("recordRefund — routes to the original provider", () => {
     expect(result.status).toBe("COMPLETED");
     expect(h.paystackCalls).toHaveLength(1);
     expect(h.paystackCalls[0]).toMatchObject({ transaction: "PSK-TXN-1", currency: "NGN" });
-    // A full refund omits `amount` entirely (Paystack's own "refund everything" shape).
-    expect(h.paystackCalls[0]).not.toHaveProperty("amount");
+    // F-17 — the amount is always explicit: "everything" to the provider means
+    // the whole original charge, not what is still refundable here.
+    expect(h.paystackCalls[0]).toMatchObject({ amount: 45_875_000 });
     expect(h.refunds[0]).toMatchObject({ provider: "PAYSTACK", providerRef: "999" });
   });
 
@@ -481,5 +488,56 @@ describe("recordRefund — Order not found", () => {
     const service = createRefundService(h.deps);
 
     await expect(service.recordRefund(FULL_INPUT)).rejects.toBeInstanceOf(OrderNotFoundError);
+  });
+});
+
+describe("F-17 — refund amounts, idempotency and final status", () => {
+  it("refunding the rest after a partial refund sends the explicit remaining amount, never 'everything'", async () => {
+    const h = harness({
+      attempts: [attempt({ provider: "PAYSTACK", providerIntentId: "PSK-TXN-1" })],
+      alreadyRefundedMinor: 10_000_000,
+    });
+    await createRefundService(h.deps).recordRefund({ ...FULL_INPUT, amountMinor: 35_875_000 });
+    expect(h.paystackCalls[0]).toMatchObject({ amount: 35_875_000 });
+  });
+
+  it("a Stripe refund sends an explicit amount and the refund's own id as the idempotency key", async () => {
+    const h = harness({
+      orders: [order({ currency: "USD" })],
+      attempts: [attempt({ provider: "STRIPE", providerIntentId: "cs_test_session_123", evidence: { paymentIntentId: "pi_123" } })],
+    });
+    await createRefundService(h.deps).recordRefund(FULL_INPUT);
+    expect(h.stripeCalls[0]).toMatchObject({ amount: 45_875_000 });
+    expect(h.stripeOptions[0]).toEqual({ idempotencyKey: h.refunds[0]!.id });
+  });
+
+  it("two partial refunds that finish in reverse order still leave a fully refunded order REFUNDED", async () => {
+    const box: { service?: ReturnType<typeof createRefundService> } = {};
+    let nested = false;
+    const h = harness({
+      orders: [order({ currency: "USD" })],
+      attempts: [attempt({ provider: "STRIPE", providerIntentId: "cs_test_session_123", evidence: { paymentIntentId: "pi_123" } })],
+      onStripeRefund: async () => {
+        if (nested) return;
+        nested = true;
+        // While the first refund's provider call is in flight, a second refund
+        // for the rest reserves, completes and finalises first.
+        await box.service!.recordRefund({ ...FULL_INPUT, amountMinor: 25_875_000 });
+      },
+    });
+    box.service = createRefundService(h.deps);
+    await box.service.recordRefund({ ...FULL_INPUT, amountMinor: 20_000_000 });
+    expect(h.orderUpdates.at(-1)?.data.status).toBe("REFUNDED");
+  });
+
+  it("a failed provider refund leaves the order's status reflecting only refunds that did not fail", async () => {
+    const h = harness({
+      orders: [order({ currency: "USD" })],
+      attempts: [attempt({ provider: "STRIPE", providerIntentId: "cs_test_session_123", evidence: { paymentIntentId: "pi_123" } })],
+      alreadyRefundedMinor: 10_000_000,
+      stripeThrows: new Error("card network down"),
+    });
+    await createRefundService(h.deps).recordRefund({ ...FULL_INPUT, amountMinor: 35_875_000 });
+    expect(h.orderUpdates.at(-1)?.data.status).toBe("PARTIALLY_REFUNDED");
   });
 });

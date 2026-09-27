@@ -4,7 +4,8 @@
  * PURE MODULE — no imports at all. Same discipline as `readiness-service.ts`
  * and `attendance-component.ts`.
  *
- * DD-3: the v1 payload is `{ "version": 1, "requireAllRequiredLessons": true }`.
+ * DD-3: the v1 payload is `{ "version": 1, "requireAllRequiredLessons": true }`;
+ * v2 (see `CompletionRuleV2`) adds `requirePassingAssessments`.
  * The attendance component of D-10(b) is switched on by
  * `Cohort.attendanceThresholdPct` being non-null — NOT by a field inside the
  * JSON — because D-10(b) names that column as the threshold source. This
@@ -28,12 +29,29 @@ export type CompletionRuleV1 = {
 };
 
 /**
- * The recognised v1 key set. Declared once here so a future phase widens
- * ONE list rather than hunting through branches — Phase 10 will add
- * assessment criteria deliberately (bumping to v2), not silently smuggle a
- * new key into v1's closed set.
+ * v2 adds one per-course switch: every assessment linked from the pinned
+ * lessons must have a released, non-failing result. Stored as
+ * `{ "version": 2, "requireAllRequiredLessons": true, "requirePassingAssessments": true }`
+ * with `completionRuleVersion = 2`. A course that never opts in stays v1.
  */
-const RECOGNISED_V1_KEYS = ["version", "requireAllRequiredLessons"] as const;
+export type CompletionRuleV2 = {
+  version: 2;
+  requireAllRequiredLessons: true;
+  attendanceThresholdPct: number | null;
+  requirePassingAssessments: boolean;
+};
+
+export type CompletionRule = CompletionRuleV1 | CompletionRuleV2;
+
+/**
+ * The recognised key set per version. Declared once here so a future version
+ * widens ONE list rather than hunting through branches, and an unknown key is
+ * never silently smuggled into an older version's closed set.
+ */
+const RECOGNISED_KEYS: Record<1 | 2, readonly string[]> = {
+  1: ["version", "requireAllRequiredLessons"],
+  2: ["version", "requireAllRequiredLessons", "requirePassingAssessments"],
+};
 
 export class UnsupportedCompletionRuleVersionError extends Error {
   readonly version: unknown;
@@ -55,10 +73,6 @@ export class UnsupportedCompletionRuleFieldError extends Error {
   }
 }
 
-function isRecognisedV1Key(key: string): key is (typeof RECOGNISED_V1_KEYS)[number] {
-  return (RECOGNISED_V1_KEYS as readonly string[]).includes(key);
-}
-
 /**
  * Parses a stored `completionRule` JSON blob (plus its sibling
  * `completionRuleVersion` column and the cohort's attendance threshold)
@@ -67,20 +81,22 @@ function isRecognisedV1Key(key: string): key is (typeof RECOGNISED_V1_KEYS)[numb
  * A `null`/absent `json` still requires all required lessons — D-10(a)
  * always applies, with or without a stored rule. `ruleVersion` is the
  * authoritative version (the `completionRuleVersion` column); if the JSON
- * blob itself carries its own `version` field, the two must agree — either
- * one being anything other than `1` throws, it never silently falls back to
+ * blob itself carries its own `version` field, the two must agree — any
+ * version other than `1` or `2` throws, it never silently falls back to
  * v1 behavior.
  */
 export function parseCompletionRule(input: {
   json: unknown;
   ruleVersion: number;
   cohortAttendanceThresholdPct: number | null;
-}): CompletionRuleV1 {
+}): CompletionRule {
   const { json, ruleVersion, cohortAttendanceThresholdPct } = input;
 
-  if (ruleVersion !== 1) {
+  if (ruleVersion !== 1 && ruleVersion !== 2) {
     throw new UnsupportedCompletionRuleVersionError(ruleVersion);
   }
+
+  let requirePassingAssessments = false;
 
   if (json != null) {
     if (typeof json !== "object" || Array.isArray(json)) {
@@ -90,14 +106,30 @@ export function parseCompletionRule(input: {
     const record = json as Record<string, unknown>;
 
     for (const key of Object.keys(record)) {
-      if (!isRecognisedV1Key(key)) {
+      if (!RECOGNISED_KEYS[ruleVersion].includes(key)) {
         throw new UnsupportedCompletionRuleFieldError(key);
       }
     }
 
-    if ("version" in record && record.version !== 1) {
+    if ("version" in record && record.version !== ruleVersion) {
       throw new UnsupportedCompletionRuleVersionError(record.version);
     }
+
+    if ("requirePassingAssessments" in record) {
+      if (typeof record.requirePassingAssessments !== "boolean") {
+        throw new UnsupportedCompletionRuleFieldError("requirePassingAssessments");
+      }
+      requirePassingAssessments = record.requirePassingAssessments;
+    }
+  }
+
+  if (ruleVersion === 2) {
+    return {
+      version: 2,
+      requireAllRequiredLessons: true,
+      attendanceThresholdPct: cohortAttendanceThresholdPct,
+      requirePassingAssessments,
+    };
   }
 
   return {

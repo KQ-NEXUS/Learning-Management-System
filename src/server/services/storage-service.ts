@@ -151,6 +151,25 @@ export function finalSubmissionKeyFor(stagedKey: string): string {
 }
 
 /**
+ * `ticket-uploads/<ticketId>/<randomUUID()>` — the only key a browser may PUT
+ * a support-ticket file to. The filename never appears in a key.
+ */
+export function buildStagedTicketAttachmentKey({ ticketId }: { ticketId: string }): string {
+  return `ticket-uploads/${ticketId}/${randomUUID()}`;
+}
+
+/**
+ * Deterministic final private key for a verified ticket file. Only a staged
+ * `ticket-uploads/` key can be promoted (retry-safe, domain-isolated).
+ */
+export function finalTicketAttachmentKeyFor(stagedKey: string): string {
+  if (!stagedKey.startsWith("ticket-uploads/")) {
+    throw new Error("A final key can only be derived from a staged ticket upload.");
+  }
+  return stagedKey.replace(/^ticket-uploads\//, "ticket-attachments/");
+}
+
+/**
  * A presigned `PUT` URL bound to one staged key and one `Content-Type`, valid
  * for `UPLOAD_URL_TTL_SECONDS`. The browser sends the file straight to private
  * storage with this URL, bypassing the platform request-body limit.

@@ -29,7 +29,7 @@
  * Testcontainers instance starts, both strictly before the one dynamic
  * `await import(...)` block that pulls in the app modules this file drives.
  *
- * The port below (9002) is this environment's actual published MinIO port —
+ * The MinIO below is the docker-compose one (default port 9000) —
  * the same one `tests/submission-service.integration.test.ts` already
  * verified reachable, holding the `lms-private` bucket with the
  * `.env.example` placeholder credentials.
@@ -69,8 +69,9 @@ import type {
 import type { CertificateFileStore } from "@/server/services/certificate-file-service";
 
 process.env.S3_BUCKET = "lms-private";
-process.env.S3_ENDPOINT = "http://localhost:9002";
-process.env.S3_PUBLIC_ENDPOINT = "http://localhost:9002";
+// The docker-compose MinIO (MINIO_PORT, default 9000); TEST_MINIO_ENDPOINT overrides.
+process.env.S3_ENDPOINT = process.env.TEST_MINIO_ENDPOINT ?? "http://localhost:9000";
+process.env.S3_PUBLIC_ENDPOINT = process.env.S3_ENDPOINT;
 process.env.S3_ACCESS_KEY_ID = "lms-minio";
 process.env.S3_SECRET_ACCESS_KEY = "change-me-minio";
 process.env.S3_FORCE_PATH_STYLE = "true";

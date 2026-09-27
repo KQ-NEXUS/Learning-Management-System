@@ -43,12 +43,12 @@ describe("report registry", () => {
       REPORT_REGISTRY.filter((definition) => definition.availability === "AVAILABLE").map(
         (definition) => definition.id,
       ),
-    ).toEqual(["registrations", "payments", "enrolments", "attendance"]);
+    ).toEqual(["registrations", "payments", "enrolments", "attendance", "support"]);
     expect(
       REPORT_REGISTRY.filter(
         (definition) => definition.availability === "NOT_AVAILABLE_YET",
       ).map((definition) => definition.id),
-    ).toEqual(["progress", "submissions", "grades", "completion", "certificates", "support"]);
+    ).toEqual(["progress", "submissions", "grades", "completion", "certificates"]);
   });
 
   it("owns the prescribed business-event date labels", () => {

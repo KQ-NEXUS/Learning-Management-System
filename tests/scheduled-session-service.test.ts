@@ -112,6 +112,8 @@ function harness(opts?: {
       const staged = new Map<string, ScheduledSessionRecord>();
       const stagedEvents: Array<Record<string, unknown>> = [];
       const tx = {
+        // F-04 — cancellation takes the cohort row lock first.
+        $queryRaw: async () => [{ status: "PUBLISHED", seatsTaken: 0, capacity: 10 }],
         scheduledSession: {
           create: async ({ data }: { data: Record<string, unknown> }) => {
             const row = await create({ data }, staged);

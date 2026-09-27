@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/server/db";
 import {
@@ -210,7 +211,7 @@ function assertSubjectIdentity(input: SyncReconciliationEvidenceInput): void {
     (input.subject === "PAYMENT" && payment !== null && refund === null) ||
     (input.subject === "REFUND" && refund !== null && payment === null);
   if (!valid) {
-    throw new TypeError("A reconciliation case must identify exactly one matching payment or refund subject.");
+    throw new UserInputError("A reconciliation case must identify exactly one matching payment or refund subject.");
   }
 }
 
@@ -441,7 +442,7 @@ export function createReconciliationCaseService(deps: ReconciliationCaseServiceD
       .filter((grant) => isGrantActive(grant, now()))
       .map(({ permission, scopeType, scopeId }) => ({ permission, scopeType, scopeId }));
     if (!users[0]?.isStaff || resources.some((resource) => !hasPermission(grants, "payments.view", resource))) {
-      throw new Error("The selected Finance assignee is not permitted for every selected case.");
+      throw new UserInputError("The selected Finance assignee is not permitted for every selected case.");
     }
   }
 
@@ -450,7 +451,7 @@ export function createReconciliationCaseService(deps: ReconciliationCaseServiceD
     assigneeId: string | null;
   }): Promise<{ changed: number }> {
     const caseIds = [...new Set(input.caseIds.map((id) => id.trim()).filter(Boolean))].sort();
-    if (caseIds.length === 0) throw new TypeError("Select at least one reconciliation case.");
+    if (caseIds.length === 0) throw new UserInputError("Select at least one reconciliation case.");
     const contexts = await Promise.all(caseIds.map((caseId) => authorizeCase(caseId)));
     if (input.assigneeId) {
       await assertAssigneeAllowed(input.assigneeId, contexts.map((context) => context.resource));
@@ -499,10 +500,10 @@ export function createReconciliationCaseService(deps: ReconciliationCaseServiceD
     note: string;
   }): Promise<{ changed: boolean }> {
     if (!(input.reason in RECONCILIATION_RESOLUTION_LABELS)) {
-      throw new TypeError("Choose a valid resolution reason.");
+      throw new UserInputError("Choose a valid resolution reason.");
     }
     const note = input.note.trim();
-    if (!note) throw new TypeError("A case-specific resolution note is required.");
+    if (!note) throw new UserInputError("A case-specific resolution note is required.");
     const context = await authorizeCase(input.caseId);
     const at = now();
     const changed = await deps.client.$transaction(async (tx) => {
