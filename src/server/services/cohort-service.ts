@@ -397,6 +397,10 @@ export type CohortPublishTx = {
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
   domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
+  /** F-04 — instructor removal runs under the cohort lock (optional in fakes that never remove). */
+  cohortInstructor?: {
+    deleteMany(args: { where: { cohortId: string; userId: string } }): Promise<{ count: number }>;
+  };
 };
 
 export type CohortPublishDb = {
@@ -655,12 +659,15 @@ export function createCohortService(deps: CohortServiceDeps) {
       where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
     });
     if (existing) {
-      try {
-        await deps.instructor.delete({
-          where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
-        });
-      } catch (err) {
-        if (!isRecordNotFoundError(err)) throw err;
+      // F-04 — removal can make a cohort unready, so it serializes with
+      // publishCohort on the cohort row lock. deleteMany keeps the
+      // concurrent-removal case a no-op rather than a record-not-found error.
+      const removed = await deps.db.$transaction(async (tx) => {
+        await lockCohort(tx, input.cohortId);
+        if (!tx.cohortInstructor) throw new Error("cohortInstructor delegate is required to remove an instructor.");
+        return tx.cohortInstructor.deleteMany({ where: { cohortId: input.cohortId, userId: input.userId } });
+      });
+      if (removed.count === 0) {
         return { cohortId: input.cohortId, userId: input.userId };
       }
       await deps.audit({
@@ -714,6 +721,12 @@ export function createCohortService(deps: CohortServiceDeps) {
       const publishedAt = now();
 
       const publishedPublicationId = await deps.db.$transaction(async (tx) => {
+        // F-04 — take the cohort row lock FIRST. Instructor removal and session
+        // cancellation take the same lock, so the readiness re-read below sees
+        // every change committed before this point and none can land between
+        // the read and the claim.
+        await lockCohort(tx, input.cohortId);
+
         // CR-02: re-read the aggregate and re-evaluate readiness INSIDE the
         // transaction that claims the row. Instructor assignment/removal and
         // session create/cancel do not bump `Cohort.updatedAt`, so the
