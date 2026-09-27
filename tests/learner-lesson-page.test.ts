@@ -61,6 +61,10 @@ vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurren
 vi.mock("@/server/services/learner-access", () => ({
   loadLearnerPath: mocks.loadLearnerPath,
   assertLessonOpenable: mocks.assertLessonOpenable,
+  // F-01/F-08 — imported by the resource and submission services' live
+  // bindings; this page's tests never reach them.
+  canOpenLessonAsLearner: async () => true,
+  canWorkOnAssessmentAsLearner: async () => true,
 }));
 vi.mock("@/server/services/lesson-service", () => ({
   getLessonContentForLearner: mocks.getLessonContentForLearner,

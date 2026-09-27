@@ -29,6 +29,8 @@
  */
 
 import { prisma } from "@/server/db";
+import { ASSIGNMENT_MIME_TYPES_BY_EXTENSION, DEFAULT_SUBMISSION_MAX_BYTES } from "@/lib/assignment-file-types";
+import { canWorkOnAssessmentAsLearner } from "@/server/services/learner-access";
 import type { Actor } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
@@ -55,7 +57,8 @@ export type SubmissionNotAllowedReason =
   | "not-published"
   | "window-closed"
   | "resubmission-not-allowed"
-  | "upload-in-progress";
+  | "upload-in-progress"
+  | "lesson-not-open";
 
 /**
  * A structural refusal before any storage operation happens. `"not-found"`
@@ -86,6 +89,8 @@ export class SubmissionNotAllowedError extends Error {
         return "You have already submitted this assignment and resubmission is not allowed.";
       case "upload-in-progress":
         return "An upload is already in progress for this assignment.";
+      case "lesson-not-open":
+        return "You can't submit to this assignment right now: its lesson is still locked, or your course access has ended.";
     }
   }
 }
@@ -177,10 +182,14 @@ export type SubmissionAssessmentContext = {
   title: string;
   instructions: string | null;
   dueAt: Date | null;
+  /** F-08 — before this instant the assignment accepts nothing. */
+  availableFrom: Date | null;
   availableUntil: Date | null;
   allowedFileTypes: string[];
   maxFileSizeBytes: number | null;
   allowResubmission: boolean;
+  /** F-08 — lessons this assessment sits on; submitting needs one to be openable. */
+  lessonIds: string[];
 };
 
 export type SubmissionEnrolmentStoreRow = { id: string; userId: string; cohortId: string; status: string };
@@ -233,6 +242,13 @@ export type SubmissionTxClient = DomainEventTxClient & {
 export type CreateSubmissionServiceDeps = {
   delegate: SubmissionDelegate;
   resolveAssessment: (assessmentId: string) => Promise<SubmissionAssessmentContext | null>;
+  /**
+   * F-08 — the lesson page's own gate, applied to submissions: the learner's
+   * enrolment is ACTIVE with an open access window and one of the
+   * assessment's lessons is openable. Bound to
+   * `learner-access.ts#canWorkOnAssessmentAsLearner`.
+   */
+  canWorkOnAssessment: (actor: Actor, enrolmentId: string, lessonIds: string[]) => Promise<boolean>;
   store: SubmissionStore;
   storage: SubmissionStorage;
   /** A time-limited presigned GET for the FINAL key only (T-10-20). */
@@ -378,6 +394,16 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
 
     const nowValue = now();
 
+    // F-08 — nothing is accepted before the assignment opens.
+    if (assessment.availableFrom !== null && nowValue < assessment.availableFrom) {
+      throw new SubmissionNotAllowedError("not-published");
+    }
+
+    // F-08 — the lesson page's lock and access-window rules apply here too.
+    if (!(await deps.canWorkOnAssessment(actor, enrolmentId, assessment.lessonIds))) {
+      throw new SubmissionNotAllowedError("lesson-not-open");
+    }
+
     // D-03: the due date is informational, never a block. Only the hard
     // cutoff (`availableUntil`) refuses.
     if (assessment.availableUntil !== null && nowValue > assessment.availableUntil) {
@@ -390,11 +416,19 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
     if (!ext || !allowed.includes(ext)) {
       throw new SubmissionConstraintError("file-type-not-permitted", ext ?? "", assessment.allowedFileTypes.join(", "));
     }
+    // F-08 — the declared type must belong to the extension; completion then
+    // verifies the stored object carries exactly this type and size.
+    const declaredMime = input.mimeType.trim().toLowerCase();
+    if (!(ASSIGNMENT_MIME_TYPES_BY_EXTENSION[ext] ?? []).includes(declaredMime)) {
+      throw new SubmissionConstraintError("file-type-not-permitted", input.mimeType, assessment.allowedFileTypes.join(", "));
+    }
     if (!(input.sizeBytes > 0)) {
       throw new SubmissionConstraintError("empty-file", input.sizeBytes, null);
     }
-    if (assessment.maxFileSizeBytes !== null && input.sizeBytes > assessment.maxFileSizeBytes) {
-      throw new SubmissionConstraintError("file-too-large", input.sizeBytes, assessment.maxFileSizeBytes);
+    // F-08 — an assignment with no authored limit still has one.
+    const maxBytes = assessment.maxFileSizeBytes ?? DEFAULT_SUBMISSION_MAX_BYTES;
+    if (input.sizeBytes > maxBytes) {
+      throw new SubmissionConstraintError("file-too-large", input.sizeBytes, maxBytes);
     }
 
     // D-04 — resubmission is always a NEW row, never an overwrite.
@@ -411,7 +445,7 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
     const isLate = assessment.dueAt !== null && nowValue > assessment.dueAt;
 
     const stagedKey = deps.storage.stagedKey({ enrolmentId, assessmentId: assessment.id });
-    const uploadUrl = await deps.storage.presign({ key: stagedKey, contentType: input.mimeType });
+    const uploadUrl = await deps.storage.presign({ key: stagedKey, contentType: declaredMime });
 
     const created = await deps.delegate.create({
       data: {
@@ -421,7 +455,7 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
         versionUsed: assessment.version,
         storageKey: stagedKey,
         filename: input.filename,
-        mimeType: input.mimeType,
+        mimeType: declaredMime,
         sizeBytes: input.sizeBytes,
         uploadStatus: "UPLOADING",
         isLate,
@@ -696,14 +730,19 @@ const built = createSubmissionService({
         title: true,
         instructions: true,
         dueAt: true,
+        availableFrom: true,
         availableUntil: true,
         allowedFileTypes: true,
         maxFileSizeBytes: true,
         allowResubmission: true,
+        lessons: { select: { id: true } },
       },
     });
-    return row;
+    if (!row) return null;
+    const { lessons, ...rest } = row;
+    return { ...rest, lessonIds: lessons.map((lesson: { id: string }) => lesson.id) };
   },
+  canWorkOnAssessment: canWorkOnAssessmentAsLearner,
   // Cast the whole client to the narrow structural store — the same
   // `prisma as unknown as <Store>` idiom `learner-access.ts` uses — so
   // `status` stays a plain `string` in this module's own type (no

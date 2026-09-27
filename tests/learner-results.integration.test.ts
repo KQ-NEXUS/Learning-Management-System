@@ -116,8 +116,8 @@ function buildSubmissionsReader() {
   };
   const svc = createSubmissionService({
     delegate: testDb.prisma.submission as unknown as SubmissionDelegate,
-    resolveAssessment: (assessmentId) =>
-      testDb.prisma.assessment.findUnique({
+    resolveAssessment: async (assessmentId) => {
+      const row = await testDb.prisma.assessment.findUnique({
         where: { id: assessmentId },
         select: {
           id: true,
@@ -126,12 +126,21 @@ function buildSubmissionsReader() {
           status: true,
           version: true,
           dueAt: true,
+          availableFrom: true,
           availableUntil: true,
           allowedFileTypes: true,
           maxFileSizeBytes: true,
           allowResubmission: true,
+          lessons: { select: { id: true } },
         },
-      }) as never,
+      });
+      if (!row) return null;
+      const { lessons, ...rest } = row;
+      return { ...rest, lessonIds: lessons.map((l) => l.id) } as never;
+    },
+    // F-08's lesson/access-window gate is proven in the unit suite and
+    // learner-access tests; these cases exercise storage and Postgres.
+    canWorkOnAssessment: async () => true,
     store: testDb.prisma as unknown as SubmissionStore,
     storage: {
       presign: throwStub,
