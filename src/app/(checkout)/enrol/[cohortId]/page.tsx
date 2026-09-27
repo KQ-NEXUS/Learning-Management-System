@@ -1,4 +1,7 @@
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
+import { enrollAction } from "@/app/(checkout)/actions";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import {
   startCheckout,
@@ -42,6 +45,12 @@ import {
  *      tab — releases the previous live hold and takes the new one inside
  *      the SAME transaction, net seat delta zero. Even a manual reload
  *      cannot oversell the cohort (T-06-23).
+ *   4. F-13 — invariants 1–2 stop OUR pages linking here, but not another
+ *      site: a top-level cross-site GET carries the session cookie
+ *      (SameSite=Lax). So the side effect only runs when the browser reports
+ *      `Sec-Fetch-Site: same-origin` (our own post-sign-in redirect);
+ *      anything else — or a browser that sends no such header — gets a
+ *      "Continue to checkout" button that POSTs to `enrollAction` instead.
  */
 export const dynamic = "force-dynamic";
 
@@ -67,6 +76,28 @@ export default async function EnrolResumptionPage({
   // offer page rather than assuming either rail.
   if (!currencyInput || !isSupportedCurrency(currencyInput)) {
     redirect(await getCohortOfferPath(cohortId));
+  }
+
+  const fetchSite = (await headers()).get("sec-fetch-site");
+  if (fetchSite !== "same-origin") {
+    return (
+      <div className="flex flex-col gap-8">
+        <LearnerPageHeader title="Continue to checkout" />
+        <form action={enrollAction} className="flex flex-col items-start gap-4 pb-12">
+          <input type="hidden" name="cohortId" value={cohortId} />
+          <input type="hidden" name="currency" value={currencyInput} />
+          <p className="max-w-prose text-sm text-muted-foreground">
+            We&apos;ll hold your seat and take you to the order summary. Nothing is charged until you pay.
+          </p>
+          <button
+            type="submit"
+            className="inline-flex min-h-11 items-center rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+          >
+            Continue to checkout
+          </button>
+        </form>
+      </div>
+    );
   }
 
   let orderId: string;

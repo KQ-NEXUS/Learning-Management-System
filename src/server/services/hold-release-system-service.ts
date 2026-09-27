@@ -73,6 +73,8 @@ type ExpiredHoldRow = {
   userId: string;
   status: string;
   holdExpiresAt: Date | null;
+  /** F-02 — the hold's order, whose provider sessions must stop taking payment. */
+  orderId?: string | null;
 };
 
 /** The transaction client one release needs — structural, so this file
@@ -106,6 +108,12 @@ export type CreateHoldReleaseSystemServiceDeps = {
   writeEvent: typeof writeDomainEvent;
   runInTransaction: <R>(fn: (tx: ReleaseTxClient) => Promise<R>) => Promise<R>;
   now?: () => Date;
+  /**
+   * F-02 — after a hold is released, expires the order's open provider
+   * sessions so the learner cannot pay for a seat they no longer hold.
+   * Best effort, after commit: a provider outage never un-releases a seat.
+   */
+  retireOpenPayments?: (orderId: string) => Promise<void>;
 };
 
 export function createHoldReleaseSystemService(
@@ -184,6 +192,14 @@ export function createHoldReleaseSystemService(
         });
 
         released += 1;
+
+        if (row.orderId && deps.retireOpenPayments) {
+          try {
+            await deps.retireOpenPayments(row.orderId);
+          } catch (retireErr) {
+            console.error(`[hold-release] could not retire payments for order ${row.orderId}`, retireErr);
+          }
+        }
       } catch (err) {
         // Approval, extension or another sweep won. No release/event was committed.
         if (err instanceof StaleEnrolmentError) continue;
@@ -207,6 +223,9 @@ const built = createHoldReleaseSystemService({
   writeEvent: writeDomainEvent,
   runInTransaction: (fn) =>
     prisma.$transaction((tx) => fn(tx as unknown as ReleaseTxClient)),
+  // Lazy import: the checkout module is heavy and this runs from a scheduled job.
+  retireOpenPayments: async (orderId) =>
+    (await import("@/server/services/checkout-service")).retireOpenPaymentAttempts(orderId),
 });
 
 /**

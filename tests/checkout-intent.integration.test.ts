@@ -30,7 +30,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
+import { seedPublishedCohortFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
 import { CHECKOUT_INTENT_COOKIE } from "@/server/auth/landing";
 import { TOKEN_PURPOSE } from "@/lib/identity";
 import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/server/payments/pricing";
@@ -72,7 +72,12 @@ const fakeJar = vi.hoisted(() => {
   };
 });
 
-vi.mock("next/headers", () => ({ cookies: async () => fakeJar }));
+// F-13 — the resumption page only starts checkout on a same-origin
+// navigation; the real post-sign-in redirect is exactly that.
+vi.mock("next/headers", () => ({
+  cookies: async () => fakeJar,
+  headers: async () => new Headers({ "sec-fetch-site": "same-origin" }),
+}));
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new Error("redirect:" + url);
@@ -181,7 +186,7 @@ async function registerAndVerify(email: string): Promise<void> {
 
 describe("checkout-intent round trip — real Postgres (REG-02)", () => {
   it("Enroll while signed out -> register -> verify -> sign in lands on the order summary for the originally selected cohort, at its live price", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 5,
       seatsTaken: 0,
       priceMinor: 12_345,
@@ -251,7 +256,7 @@ describe("checkout-intent round trip — real Postgres (REG-02)", () => {
   }, 15_000);
 
   it("lands on the cohort's public offer page with no Order created when the held cohort filled up in the meantime", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 1,
       seatsTaken: 1, // already full by the time sign-in resumes
       priceMinor: 5_000,

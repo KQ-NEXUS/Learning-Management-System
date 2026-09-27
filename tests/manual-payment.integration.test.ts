@@ -20,7 +20,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { seedCohortFixture, seedLearnerFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
+import { seedPublishedCohortFixture, seedLearnerFixture, seedPaystackNgnFeeScheduleFixture } from "./support/cohort-fixtures";
 import { createTestWithPermission, grant } from "./support/harness";
 import { calculatePlatformFeeMinor } from "@/server/payments/pricing";
 
@@ -57,7 +57,7 @@ function serviceWithGrants(actorId: string) {
 
 describe("confirmManualPayment — real Postgres (PAY-03, PAY-04, PAY-10)", () => {
   it("moves a real Order to PAID and the Enrolment to ACTIVE through the shared settlement transition, with exactly one actor-attributed audit row and exactly one enrolment activation", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
       priceNgnMinor: BASE_AMOUNT_MINOR,
@@ -121,7 +121,7 @@ describe("confirmManualPayment — real Postgres (PAY-03, PAY-04, PAY-10)", () =
   }, 30_000);
 
   it("a second confirmation against the now-PAID Order returns ALREADY_PAID and creates no second attempt, no second audit row, and no second enrolment effect", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
       priceNgnMinor: BASE_AMOUNT_MINOR,
@@ -168,7 +168,7 @@ describe("confirmManualPayment — real Postgres (PAY-03, PAY-04, PAY-10)", () =
   }, 30_000);
 
   it("serializes concurrent confirmations with the same reference into one activation and one idempotent ALREADY_PAID result", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
+    const { cohortId } = await seedPublishedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
       priceNgnMinor: BASE_AMOUNT_MINOR,
