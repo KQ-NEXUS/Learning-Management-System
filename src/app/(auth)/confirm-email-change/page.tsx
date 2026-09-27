@@ -25,7 +25,7 @@ export default async function ConfirmEmailChangePage({
       <AuthIconChip icon={Check} tone="success" />
       <AuthTitle
         title="Email address updated"
-        subtitle="You now sign in with your new email address."
+        subtitle="You've been signed out on every device. Sign in with your new email address."
       />
       <Link href="/signin" className="text-sm font-semibold text-accent underline underline-offset-2">
         Continue to sign in
