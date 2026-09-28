@@ -94,6 +94,19 @@ describe("createStaffMappers registration", () => {
       ].sort(),
     );
   });
+
+  it("every staff-exclusive event type reaches EVENT_MAPPER_GROUPS through exactly one mapper; ticket.created and order.exception each fan out to two (the support/enrolment-payment groups also register them for their own learner-facing mail)", () => {
+    for (const type of [
+      "ticket.assigned",
+      "ticket.escalated",
+      "payment.reconciliation_exception",
+      "submission.created",
+    ] as const) {
+      expect(mapperTable[type]).toHaveLength(1);
+    }
+    expect(mapperTable["ticket.created"]).toHaveLength(2);
+    expect(mapperTable["order.exception"]).toHaveLength(2);
+  });
 });
 
 describe("ticket.created staff alert (D-08)", () => {
