@@ -688,6 +688,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
 - Every protected read and mutation is server-authorized, while contextual records independently re-check their own domain permissions.
 - Lifecycle mutations use version-guarded transactions that atomically persist state, attributable ticket history, security audit, and minimal redacted Phase 13 events.
 - Ticket attachments use private storage, strict type/count/size verification, denial-parity downloads, and bounded cleanup; no malware-scanner capability is implied.
+
 **UI hint**: yes
 
 ---
@@ -703,43 +704,43 @@ Wave 13 *(blocked on Wave 12; human-only)*
   2. Retried or replayed events never produce duplicate messages within the same correlation. (COM-02)
   3. Important in-product notifications surface unread/current state to the right user and fail safely on stale or inaccessible links. (COM-03)
 
-**Plans**: 13 plans
+**Plans**: 12/13 plans executed
 
 **Wave 1**
 
-- [ ] 13-01-PLAN.md — additive communications schema, [BLOCKING] schema push, payment.failed/payment.refunded event types, and the shared communications vocabulary.
+- [x] 13-01-PLAN.md — additive communications schema, [BLOCKING] schema push, payment.failed/payment.refunded event types, and the shared communications vocabulary.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 13-02-PLAN.md — one approved sender identity, Brevo HTML+text transport with stub mode, and the 27 typed branded email templates.
-- [ ] 13-03-PLAN.md — owner-scoped notification services, unread/list/preferences endpoints, and the email preference store.
+- [x] 13-02-PLAN.md — one approved sender identity, Brevo HTML+text transport with stub mode, and the 27 typed branded email templates.
+- [x] 13-03-PLAN.md — owner-scoped notification services, unread/list/preferences endpoints, and the email preference store.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 13-04-PLAN.md — deduplicated dispatch with stable keys, retry/backoff Pass 2, audited resend, and the auth mails moved onto it.
-- [ ] 13-05-PLAN.md — access-checked notification links with one indistinguishable stale outcome, and the 90-day archive job.
+- [x] 13-04-PLAN.md — deduplicated dispatch with stable keys, retry/backoff Pass 2, audited resend, and the auth mails moved onto it.
+- [x] 13-05-PLAN.md — access-checked notification links with one indistinguishable stale outcome, and the 90-day archive job.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 13-06-PLAN.md — bell, slide-over drawer and learner email-preferences panel in the learner and staff headers.
-- [ ] 13-07-PLAN.md — the outbox drain: per-event claim, fan-out, poison handling, recipient gating, and the scheduled Netlify task.
+- [x] 13-06-PLAN.md — bell, slide-over drawer and learner email-preferences panel in the learner and staff headers.
+- [x] 13-07-PLAN.md — the outbox drain: per-event claim, fan-out, poison handling, recipient gating, and the scheduled Netlify task.
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 13-08-PLAN.md — enrolment/payment coverage: one combined enrolment mail, direct checkout sends removed, payment.failed and payment.refunded.
-- [ ] 13-12-PLAN.md — staff delivery log with audited Resend.
+- [x] 13-08-PLAN.md — enrolment/payment coverage: one combined enrolment mail, direct checkout sends removed, payment.failed and payment.refunded.
+- [x] 13-12-PLAN.md — staff delivery log with audited Resend.
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 13-09-PLAN.md — enrolment status, session change and cohort cancellation mail with coalescing and precedence.
+- [x] 13-09-PLAN.md — enrolment status, session change and cohort cancellation mail with coalescing and precedence.
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 13-10-PLAN.md — result, certificate and learner ticket mail carrying references only.
+- [x] 13-10-PLAN.md — result, certificate and learner ticket mail carrying references only.
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 13-11-PLAN.md — staff alerts from live permission and scope, assignee/escalation/payment mail, and the failed-email administrator alert.
+- [x] 13-11-PLAN.md — staff alerts from live permission and scope, assignee/escalation/payment mail, and the failed-email administrator alert.
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
@@ -802,6 +803,6 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
 | 12. Support Tickets | 9/9 | Complete    | 2026-09-25 |
-| 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
+| 13. Transactional Communications & Notifications | 12/13 | In Progress|  |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |
