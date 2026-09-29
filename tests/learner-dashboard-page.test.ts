@@ -114,7 +114,7 @@ describe("/dashboard", () => {
 
     const html = await renderPage();
 
-    expect(html).toContain("Nothing to pick up right now");
+    expect(html).toContain("not enrolled in a course yet");
     expect(html).toContain("Your dashboard");
   });
 
@@ -227,8 +227,8 @@ describe("/dashboard", () => {
     const html = await renderPage();
     const anchors = html.match(/<a\b[^>]*>[\s\S]*?<\/a>/g) ?? [];
     const gapStrings = [
-      "Assignments and quizzes — arriving in a future update",
-      "Results — arriving in a future update",
+      "No quizzes or assignments are set for this course yet.",
+      "No results yet.",
     ];
 
     for (const anchor of anchors) {

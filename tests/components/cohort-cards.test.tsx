@@ -47,7 +47,7 @@ describe("CohortCards", () => {
   it("renders a working Pay in NGN with Paystack control and the seat count when seatsAvailable is 1 (the last-seat boundary)", () => {
     render(<CohortCards cohorts={[cohort({ id: "c1", seatsAvailable: 1 })]} />);
     expect(screen.getByRole("button", { name: "Pay in NGN with Paystack" })).toBeTruthy();
-    expect(screen.getByText("1 seats left")).toBeTruthy();
+    expect(screen.getByText("1 seat left")).toBeTruthy();
     const hidden = document.querySelector('input[name="cohortId"]') as HTMLInputElement | null;
     expect(hidden?.value).toBe("c1");
   });

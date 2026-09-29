@@ -155,7 +155,7 @@ describe("/learn/[enrolmentId]/results", () => {
 
     const html = await renderPage();
 
-    expect(html).toContain("You haven&#x27;t yet passed Retry Quiz. 2 attempt(s) remaining.");
+    expect(html).toContain("You haven&#x27;t yet passed Retry Quiz. 2 attempts remaining.");
     expect(html).toContain("Not yet passed");
   });
 

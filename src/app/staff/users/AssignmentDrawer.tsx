@@ -21,8 +21,8 @@ const SCOPE_TYPES: { value: ScopeType; label: string }[] = [
 ];
 
 const EMPTY_STATE_COPY: Partial<Record<ScopeType, string>> = {
-  PROGRAMME: "No Programmes exist yet — check back once catalogue authoring (Phase 4) lands.",
-  COHORT: "No Cohorts exist yet — check back once scheduling (Phase 5) lands.",
+  PROGRAMME: "No programmes yet. Create one under Programmes first.",
+  COHORT: "No cohorts yet. Create one under Cohorts first.",
 };
 
 const RESULT_CAP = 10;

@@ -30,7 +30,7 @@ describe("grading queue", () => {
     fireEvent.click(screen.getByRole("button", { name: "Release grades" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(onRelease).toHaveBeenCalledExactlyOnceWith({ cohortId: "c", gradeIds: ["g1", "g2"] });
-    expect(screen.queryByText("2 selected")).toBeNull(); expect(screen.getByText(/already released grades skipped/)).toBeTruthy();
+    expect(screen.queryByText("2 selected")).toBeNull(); expect(screen.getByText(/already released and skipped/)).toBeTruthy();
   });
   it("keeps confirmation pending for the whole transaction", async () => {
     let finish!: (result: { ok: true; released: string[]; skipped: string[] }) => void;

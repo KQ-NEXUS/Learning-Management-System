@@ -261,7 +261,7 @@ function HeroSection({ card }: { card: LearnerDashboardCard }) {
             />
           )}
           {obligations.kind === "deferred" ? (
-            <DeferredSlot title="Assessments" copy="Assignments and quizzes — arriving in a future update" />
+            <DeferredSlot title="Assessments" copy="No quizzes or assignments are set for this course yet." />
           ) : (
             <RailItem
               label="Assessment due"
@@ -308,7 +308,7 @@ function ResultsSection({ card }: { card: LearnerDashboardCard }) {
   const col = card.results;
 
   if (col.kind === "deferred") {
-    return <DeferredSlot title="Results" copy="Results — arriving in a future update" />;
+    return <DeferredSlot title="Results" copy="No results yet." />;
   }
 
   return (
@@ -450,10 +450,9 @@ export default async function DashboardPage() {
       <div className="flex flex-col gap-6">
         <LearnerPageHeader size="hero" title="Your dashboard" />
         <div className="flex flex-col items-start gap-3 border-t border-foreground pt-5">
-          <p className="text-[16px] font-semibold text-foreground">Nothing to pick up right now</p>
+          <p className="text-[16px] font-semibold text-foreground">You&apos;re not enrolled in a course yet</p>
           <p className="text-sm text-muted-foreground">
-            Check back once your instructor schedules the next session, or explore what&apos;s next
-            in your course.
+            Browse the catalogue to find a course or programme, and it will appear here once you enrol.
           </p>
           <Link
             href="/courses"

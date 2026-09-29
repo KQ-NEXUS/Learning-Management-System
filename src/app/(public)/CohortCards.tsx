@@ -114,8 +114,10 @@ export function CohortCards({ cohorts, durationLabel }: { cohorts: PublicCohort[
                       </span>
                     )}
                   </div>
-                  <span className="text-sm font-medium tabular-nums text-success">
-                    {cohort.seatsAvailable} seats left
+                  <span
+                    className={`text-sm font-medium tabular-nums ${cohort.seatsAvailable <= 3 ? "text-warning" : "text-success"}`}
+                  >
+                    {cohort.seatsAvailable} {cohort.seatsAvailable === 1 ? "seat" : "seats"} left
                   </span>
                 </div>
 

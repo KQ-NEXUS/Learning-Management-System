@@ -90,10 +90,11 @@ const STATUS_LABEL: Record<string, string> = {
  *  off. Never computed via a template so the strings are physically present
  *  in this file, not merely producible at runtime. */
 const DEFERRED_LABEL: Record<9 | 10 | 11 | 12, string> = {
-  9: "not tracked yet · Phase 9",
-  10: "not tracked yet · Phase 10",
-  11: "not tracked yet · Phase 11",
-  12: "not tracked yet · Phase 12",
+  // Progress is deferred when the cohort's offer has no published version pinned yet.
+  9: "No published content yet",
+  10: "Not tracked",
+  11: "Not tracked",
+  12: "Not tracked",
 };
 
 function DeferredCell({ column }: { column: DeferredColumn }) {
