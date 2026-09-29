@@ -106,7 +106,7 @@ describe("AuditTable — mobile detail card (task 1)", () => {
     const card = within(cards[0]);
     expect(card.getByText("Ada Lovelace")).toBeTruthy();
     expect(card.getByText("ada.lovelace@example.com")).toBeTruthy();
-    expect(card.getByText("course.publish")).toBeTruthy();
+    expect(card.getByText("Course publish")).toBeTruthy(); // UX batch C: same words as the desktop row
     expect(card.getByText(LONG_TARGET_ID)).toBeTruthy();
     expect(card.getByText(formatTimestamp(row.createdAt))).toBeTruthy();
   });
@@ -223,7 +223,7 @@ describe("AuditTable — state parity and narrow text (task 2)", () => {
     expect(target.className).toMatch(/overflow-wrap:anywhere/);
     expect(target.closest("[class*='min-w-0']")).toBeTruthy();
 
-    const action = card.getByText("role.assignment.create");
+    const action = card.getByText("Role assignment create");
     expect(action.className).toMatch(/overflow-wrap:anywhere/);
     expect(action.className).toMatch(/min-w-0/);
   });

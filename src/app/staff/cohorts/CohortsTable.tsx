@@ -8,6 +8,7 @@ import {
   type Column,
   type SortState,
 } from "@/components/primitives";
+import { humanizeCode } from "@/lib/humanize";
 
 /**
  * The Cohorts index row shape (COH-02). Kept intentionally flat — dates are
@@ -89,7 +90,7 @@ const columns: Column<CohortRow>[] = [
   {
     key: "deliveryMode",
     header: "Format",
-    render: (c) => DELIVERY_LABEL[c.deliveryMode] ?? c.deliveryMode,
+    render: (c) => DELIVERY_LABEL[c.deliveryMode] ?? humanizeCode(c.deliveryMode),
     width: "14%",
   },
   {
@@ -122,7 +123,7 @@ const columns: Column<CohortRow>[] = [
     key: "status",
     header: "Status",
     render: (c) => (
-      <StatusPill label={STATUS_LABEL[c.status] ?? c.status} tone={STATUS_TONE[c.status] ?? "neutral"} />
+      <StatusPill label={STATUS_LABEL[c.status] ?? humanizeCode(c.status)} tone={STATUS_TONE[c.status] ?? "neutral"} />
     ),
     width: "14%",
   },

@@ -29,6 +29,7 @@ import type { AttendanceComponent } from "@/server/services/attendance-component
 import type { DeferredColumn, TrackedProgress } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import { humanizeCode } from "@/lib/humanize";
 
 export type RosterTransitionView = {
   action: string;
@@ -185,7 +186,7 @@ export function RosterTab({
       header: "Enrolment",
       render: (r) => (
         <span className="flex flex-col gap-1">
-          <StatusPill label={STATUS_LABEL[r.status] ?? r.status} tone={STATUS_TONE[r.status] ?? "neutral"} />
+          <StatusPill label={STATUS_LABEL[r.status] ?? humanizeCode(r.status)} tone={STATUS_TONE[r.status] ?? "neutral"} />
           <details className="text-xs">
             <summary className="cursor-pointer text-accent underline underline-offset-2 [&::-webkit-details-marker]:hidden">
               history{r.transitionCount > 0 ? ` (${r.transitionCount})` : ""}

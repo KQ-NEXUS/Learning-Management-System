@@ -2,6 +2,7 @@ import { Paperclip } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
 import { TicketTime } from "@/components/support/ticket-labels";
 import { QUEUE_OPTIONS } from "@/lib/support-queue";
+import { humanizeCode } from "@/lib/humanize";
 
 /**
  * Staff chronology: public messages, amber staff-only notes and compact
@@ -97,7 +98,7 @@ export function describeTicketEvent(event: StaffTimelineEvent, names: Readonly<R
     case "AUTO_CLOSED":
       return "The ticket closed automatically after the grace period";
     default:
-      return `${actor} updated the ticket${event.statusAfter ? ` to ${STATUS_LABEL[event.statusAfter] ?? event.statusAfter}` : ""}`;
+      return `${actor} updated the ticket${event.statusAfter ? ` to ${STATUS_LABEL[event.statusAfter] ?? humanizeCode(event.statusAfter)}` : ""}`;
   }
 }
 

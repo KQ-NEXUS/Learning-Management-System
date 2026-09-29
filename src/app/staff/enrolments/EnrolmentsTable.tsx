@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "@/app/staff/cohorts/[id]/EnrolmentActionModals";
+import { humanizeCode } from "@/lib/humanize";
 
 /** Dates are ISO strings — converted once at the RSC boundary in `page.tsx`,
  *  the same way `CohortsTable`/`SessionsTab` do. */
@@ -149,7 +150,7 @@ export function EnrolmentsTable({
       key: "status",
       header: "Status",
       render: (r) => (
-        <StatusPill label={STATUS_LABEL[r.status] ?? r.status} tone={STATUS_TONE[r.status] ?? "neutral"} />
+        <StatusPill label={STATUS_LABEL[r.status] ?? humanizeCode(r.status)} tone={STATUS_TONE[r.status] ?? "neutral"} />
       ),
       width: "12%",
     },

@@ -5,6 +5,7 @@ import { loadLearnerPath } from "@/server/services/learner-access";
 import { enrolmentCohortScope } from "@/server/services/cohort-scope";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { ProgressOverridePanel, type ProgressLessonRow } from "./ProgressOverridePanel";
+import { humanizeCode } from "@/lib/humanize";
 
 /**
  * The staff per-learner progress page (D-14, DD-31, plan 09-13 Task 3).
@@ -116,7 +117,7 @@ export default async function LearnerProgressPage({
       identifier={rosterRow.learnerEmail}
       badges={
         <StatusPill
-          label={STATUS_LABEL[rosterRow.status] ?? rosterRow.status}
+          label={STATUS_LABEL[rosterRow.status] ?? humanizeCode(rosterRow.status)}
           tone={STATUS_TONE[rosterRow.status] ?? "neutral"}
         />
       }
@@ -132,7 +133,7 @@ export default async function LearnerProgressPage({
                   { label: "Email", value: rosterRow.learnerEmail },
                   {
                     label: "Enrolment status",
-                    value: STATUS_LABEL[rosterRow.status] ?? rosterRow.status,
+                    value: STATUS_LABEL[rosterRow.status] ?? humanizeCode(rosterRow.status),
                   },
                   {
                     label: "Attendance",

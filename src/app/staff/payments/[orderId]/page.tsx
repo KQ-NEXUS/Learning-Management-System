@@ -8,6 +8,7 @@ import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
 import { ManualPaymentDialog } from "@/app/staff/payments/ManualPaymentDialog";
 import { RefundDialog } from "@/app/staff/payments/RefundDialog";
 import { SessionEnded } from "@/components/shell/SessionEnded";
+import { humanizeCode } from "@/lib/humanize";
 
 /**
  * The Finance payment detail (PAY-03, PAY-04, PAY-05, PAY-07, PAY-13, PAY-17,
@@ -162,11 +163,11 @@ export default async function PaymentDetailPage({
       badges={
         <>
           <StatusPill
-            label={PAYMENT_STATUS_LABEL[detail.status] ?? detail.status}
+            label={PAYMENT_STATUS_LABEL[detail.status] ?? humanizeCode(detail.status)}
             tone={PAYMENT_STATUS_TONE[detail.status] ?? "neutral"}
           />
           <StatusPill
-            label={SETTLEMENT_LABEL[detail.settlementState] ?? detail.settlementState}
+            label={SETTLEMENT_LABEL[detail.settlementState] ?? humanizeCode(detail.settlementState)}
             tone={SETTLEMENT_TONE[detail.settlementState] ?? "neutral"}
           />
         </>
@@ -308,7 +309,7 @@ export default async function PaymentDetailPage({
                         </td>
                         <td className="py-2 pr-2">
                           <StatusPill
-                            label={REFUND_STATUS_LABEL[refund.status] ?? refund.status}
+                            label={REFUND_STATUS_LABEL[refund.status] ?? humanizeCode(refund.status)}
                             tone={REFUND_STATUS_TONE[refund.status] ?? "neutral"}
                           />
                         </td>

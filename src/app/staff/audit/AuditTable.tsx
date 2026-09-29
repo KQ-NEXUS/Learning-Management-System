@@ -499,11 +499,12 @@ export function AuditTable({
                             {row.actorEmail ?? "—"}
                           </span>
                         </span>
-                        <span className="min-w-0 font-mono text-sm text-foreground [overflow-wrap:anywhere]">
-                          {row.action}
+                        <span className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+                          {humanizeAction(row.action)}
                         </span>
                         <span className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
                           {row.targetType}{" "}
+                          {/* The full id, wrapped: the audit log is evidence. */}
                           <span className="font-mono [overflow-wrap:anywhere]">
                             {row.targetId ?? "—"}
                           </span>

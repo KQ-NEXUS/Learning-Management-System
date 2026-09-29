@@ -1,6 +1,7 @@
 import { enrollAction } from "@/app/(checkout)/actions";
 import type { PublicCohort } from "@/server/services/public-catalogue-service";
 import { SUPPORT_CONTACT_EMAIL } from "@/server/support-contact";
+import { humanizeCode } from "@/lib/humanize";
 
 /**
  * The "Upcoming cohorts" stack REG-01 needs on a course/programme detail page (06-UI-SPEC.md
@@ -81,7 +82,7 @@ export function CohortCards({ cohorts, durationLabel }: { cohorts: PublicCohort[
                 Starts {formatStartDate(cohort.startsAt)}
               </span>
               <span className="text-sm text-muted-foreground">
-                <span>{DELIVERY_MODE_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode}</span>
+                <span>{DELIVERY_MODE_LABEL[cohort.deliveryMode] ?? humanizeCode(cohort.deliveryMode)}</span>
                 {durationLabel && <span> · {durationLabel}</span>}
               </span>
             </div>

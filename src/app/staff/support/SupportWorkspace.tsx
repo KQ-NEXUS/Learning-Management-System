@@ -14,6 +14,7 @@ import type {
   TicketAssigneeOption,
 } from "@/server/services/ticket-staff-queue-service";
 import { QUEUE_OPTIONS, QUEUE_TABS, QUEUE_TAB_LABEL, type QueueTab } from "@/lib/support-queue";
+import { humanizeCode } from "@/lib/humanize";
 
 const EMPTY_COPY: Record<QueueTab, string> = {
   "my-work": "No tickets assigned to you.",
@@ -215,7 +216,7 @@ export function SupportWorkspace({ view, assignees = [], denied = false, error =
                       <td className={TD}><TicketPriorityPill priority={row.priority} /></td>
                       <td className={TD}><TicketStatusPill status={row.status} /></td>
                       <td className={`${TD} text-sm`}>
-                        <p>{QUEUE_LABEL[row.queue] ?? row.queue}</p>
+                        <p>{QUEUE_LABEL[row.queue] ?? humanizeCode(row.queue)}</p>
                         <p className="text-[13px] text-muted-foreground">{ownerText(row)}</p>
                       </td>
                       <td className={TD}><TicketTime value={row.updatedAt} /></td>
@@ -233,7 +234,7 @@ export function SupportWorkspace({ view, assignees = [], denied = false, error =
                       <TicketPriorityPill priority={row.priority} />
                       <TicketStatusPill status={row.status} />
                     </div>
-                    <p className="text-[13px] text-muted-foreground">{QUEUE_LABEL[row.queue] ?? row.queue} · Owner: {ownerText(row)}</p>
+                    <p className="text-[13px] text-muted-foreground">{QUEUE_LABEL[row.queue] ?? humanizeCode(row.queue)} · Owner: {ownerText(row)}</p>
                     <TicketTime value={row.updatedAt} />
                   </li>
                 ))}

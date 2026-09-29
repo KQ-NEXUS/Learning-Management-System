@@ -29,6 +29,7 @@ import { ExceptionsTab, type AttendanceExceptionView } from "./ExceptionsTab";
 import { InstructorsPanel, type InstructorRow } from "./InstructorsPanel";
 import { GradingTab } from "./GradingTab";
 import { SessionEnded } from "@/components/shell/SessionEnded";
+import { humanizeCode } from "@/lib/humanize";
 
 export const metadata = { title: "Cohort" };
 
@@ -324,11 +325,11 @@ export default async function CohortDetailPage({
       badges={
         <>
           <StatusPill
-            label={STATUS_LABEL[cohort.status] ?? cohort.status}
+            label={STATUS_LABEL[cohort.status] ?? humanizeCode(cohort.status)}
             tone={STATUS_TONE[cohort.status] ?? "neutral"}
           />
           <StatusPill
-            label={DELIVERY_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode}
+            label={DELIVERY_LABEL[cohort.deliveryMode] ?? humanizeCode(cohort.deliveryMode)}
           />
         </>
       }
