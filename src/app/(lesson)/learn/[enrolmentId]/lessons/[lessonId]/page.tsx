@@ -79,11 +79,30 @@ export default async function LessonReadingPage({
 
   const openResult = assertLessonOpenable(path, lessonId);
   if (!openResult.ok) {
-    // "not-found" and "locked" both resolve to notFound() — a learner who
-    // typed the URL for a locked lesson learns nothing they could not
-    // already see on the list page, and a distinct "locked" screen here
-    // would be a second lock surface to keep in sync (T-09-34).
-    if (openResult.reason !== "access-window-closed") notFound();
+    // "not-found" and "locked" share ONE generic in-course state (UX batch B).
+    // The enrolment is already proven to be the caller's own (`path` above),
+    // so this reveals nothing about anyone else. It names no blocker and no
+    // lesson — the course page stays the only lock surface (T-09-34) — but
+    // it keeps the learner inside their course instead of the catalogue 404.
+    if (openResult.reason !== "access-window-closed") {
+      return (
+        <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
+          <div className="flex flex-col items-start gap-3 border-t border-foreground py-12">
+            <p className="text-base font-semibold text-foreground">This lesson isn&apos;t available right now</p>
+            <p className="max-w-prose text-sm text-muted-foreground">
+              It may still be locked until you finish an earlier lesson, or the link may be out of date.
+              Your course page shows what to do next.
+            </p>
+            <Link
+              href={`/learn/${enrolmentId}`}
+              className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+            >
+              Back to your course
+            </Link>
+          </div>
+        </LessonFrame>
+      );
+    }
 
     // D-03's ended-access panel renders INSTEAD of content — no lesson
     // title, module structure, or body text leaks through this branch

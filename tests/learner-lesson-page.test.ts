@@ -268,15 +268,20 @@ describe("/learn/[enrolmentId]/lessons/[lessonId]", () => {
     expect(html).toContain("Lesson body text for Lesson One");
   });
 
-  it("calls notFound() for a locked lesson id, and no lesson body text appears", async () => {
+  it("a locked lesson in the learner's own course shows an in-course 'not available' state — no content, no blocker named (UX batch B)", async () => {
     mocks.loadLearnerPath.mockResolvedValue(
       pathFixture({
         courses: [courseFixture({ modules: [moduleFixture({ lessons: [lessonFixture({ locked: true })] })] })],
       }),
     );
 
-    await expect(run()).rejects.toThrow(NOT_FOUND);
-    expect(mocks.notFound).toHaveBeenCalled();
+    const html = await renderPage();
+
+    expect(mocks.notFound).not.toHaveBeenCalled();
+    expect(html).toContain("This lesson isn&#x27;t available right now");
+    expect(html).toContain('href="/learn/enrolment-1"');
+    expect(html).not.toContain("Lesson body text for Lesson One");
+    expect(html).not.toContain("Lesson One");
     expect(mocks.getLessonContentForLearner).not.toHaveBeenCalled();
   });
 
