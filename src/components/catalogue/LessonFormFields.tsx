@@ -19,8 +19,18 @@ export type LessonFieldValues = {
   videoLength?: string;
 };
 
+/** A course assessment a Quiz/Assignment lesson can link to. */
+export type LinkableAssessment = {
+  id: string;
+  title: string;
+  type: "QUIZ" | "ASSIGNMENT";
+  status: string;
+};
+
 export type LessonFormFieldsProps = {
   lessonType: LessonType;
+  /** This course's assessments; the picker offers the ones matching the lesson type. */
+  assessmentOptions?: LinkableAssessment[];
   lessonId?: string;
   values?: LessonFieldValues;
   errors?: FieldError[];
@@ -79,6 +89,7 @@ export function LessonFormFields({
   errors = [],
   initialResources,
   typeControl,
+  assessmentOptions,
 }: LessonFormFieldsProps) {
   const errorFor = (name: string) =>
     errors.find((error) => error.name === name)?.message;
@@ -203,24 +214,40 @@ export function LessonFormFields({
           </>
         )}
 
-        {(lessonType === "QUIZ" || lessonType === "ASSIGNMENT") && (
-          <FormField
-            name="assessmentId"
-            label="Assessment"
-            hint="No assessments exist yet — assessment authoring arrives in Phase 10."
-          >
-            {(field) => (
-              <select
-                {...field}
-                disabled
-                defaultValue=""
-                className="h-12 rounded-md border border-input-border bg-surface-2 px-4 py-2 text-sm text-muted-foreground"
-              >
-                <option value="">No assessments available</option>
-              </select>
-            )}
-          </FormField>
-        )}
+        {(lessonType === "QUIZ" || lessonType === "ASSIGNMENT") && (() => {
+          const kind = lessonType === "QUIZ" ? "quiz" : "assignment";
+          const matching = (assessmentOptions ?? []).filter(
+            (a) => a.type === lessonType && a.status !== "ARCHIVED",
+          );
+          return (
+            <FormField
+              name="assessmentId"
+              label={lessonType === "QUIZ" ? "Quiz" : "Assignment"}
+              error={errorFor("assessmentId")}
+              hint={
+                matching.length === 0
+                  ? `This course has no ${kind} yet. Create one under Assessments, then link it here.`
+                  : `Learners see the linked ${kind} in this lesson once it is published.`
+              }
+            >
+              {(field) => (
+                <select
+                  {...field}
+                  defaultValue={values.assessmentId ?? ""}
+                  className="h-12 rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+                >
+                  <option value="">{matching.length === 0 ? `No ${kind} to link` : `Choose a ${kind}`}</option>
+                  {matching.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.title}
+                      {a.status === "PUBLISHED" ? "" : " (draft)"}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+          );
+        })()}
       </div>
 
       <aside className="flex min-w-0 flex-col gap-8 lg:border-l lg:border-border lg:pl-10 [&_fieldset]:min-w-0">

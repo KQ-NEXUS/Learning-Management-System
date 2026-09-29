@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { useRouter } from "next/navigation";
 import { ConfirmModal, ResourceForm } from "@/components/primitives";
 import { LessonFormFields, type LessonFieldValues } from "@/components/catalogue";
+import type { LinkableAssessment } from "@/components/catalogue/LessonFormFields";
 import type { LessonType } from "@/lib/upload-limits";
 import { saveLessonAction, withdrawLessonAction, type SaveLessonState } from "./actions";
 
@@ -26,6 +27,8 @@ type LessonEditorClientProps = {
   courseId: string;
   initialType: LessonType;
   values?: LessonFieldValues;
+  /** This course's assessments, for the Quiz/Assignment picker. */
+  assessmentOptions?: LinkableAssessment[];
 } & (
   | { mode: "create"; moduleId: string; lessonId?: undefined }
   | { mode: "edit"; lessonId: string; moduleId?: undefined }
@@ -171,6 +174,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
           lessonId={props.mode === "edit" ? props.lessonId : undefined}
           values={values}
           errors={state.errors}
+          assessmentOptions={props.assessmentOptions}
         />
       </ResourceForm>
 

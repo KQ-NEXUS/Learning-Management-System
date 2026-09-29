@@ -613,3 +613,71 @@ describe("createLesson positioning mirrors createModule", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("linking a Quiz/Assignment lesson to its assessment (UX batch A — the picker)", () => {
+  const ASSESSMENTS: Record<string, { courseId: string; type: "QUIZ" | "ASSIGNMENT"; status: string }> = {
+    "quiz-c1": { courseId: "c1", type: "QUIZ", status: "PUBLISHED" },
+    "draft-quiz-c1": { courseId: "c1", type: "QUIZ", status: "DRAFT" },
+    "assign-c1": { courseId: "c1", type: "ASSIGNMENT", status: "PUBLISHED" },
+    "quiz-c2": { courseId: "c2", type: "QUIZ", status: "PUBLISHED" },
+    "archived-quiz-c1": { courseId: "c1", type: "QUIZ", status: "ARCHIVED" },
+  };
+
+  function service(opts: { withLookup?: boolean } = {}) {
+    const { rows: moduleRows } = makeModuleDelegate([
+      { id: "m1", courseId: "c1", title: "A", summary: null, position: 0, withdrawnAt: null },
+    ]);
+    const { delegate: lessonDelegate, rows } = makeLessonDelegate([]);
+    const { withPermission } = createTestWithPermission([grant("courses.edit")]);
+    const built = createLessonService({
+      delegate: lessonDelegate,
+      resolveCourseIdForModule: resolveCourseIdFromModules(moduleRows),
+      withPermission,
+      audit: async () => {},
+      ...(opts.withLookup === false ? {} : { findAssessment: async (id: string) => ASSESSMENTS[id] ?? null }),
+    });
+    return { ...built, rows };
+  }
+
+  it("saves a same-course assessment of the matching type — draft or published", async () => {
+    const { createLesson } = service();
+    const quiz = await createLesson({ moduleId: "m1", title: "Q", type: "QUIZ", assessmentId: "quiz-c1" });
+    const draft = await createLesson({ moduleId: "m1", title: "Q2", type: "QUIZ", assessmentId: "draft-quiz-c1" });
+    const assignment = await createLesson({ moduleId: "m1", title: "A", type: "ASSIGNMENT", assessmentId: "assign-c1" });
+    expect([quiz.assessmentId, draft.assessmentId, assignment.assessmentId]).toEqual(["quiz-c1", "draft-quiz-c1", "assign-c1"]);
+  });
+
+  it("refuses another course's assessment, the wrong type, an archived one, or an unknown id", async () => {
+    const { createLesson } = service();
+    for (const [type, assessmentId] of [
+      ["QUIZ", "quiz-c2"],
+      ["QUIZ", "assign-c1"],
+      ["ASSIGNMENT", "quiz-c1"],
+      ["QUIZ", "archived-quiz-c1"],
+      ["QUIZ", "missing"],
+    ] as const) {
+      await expect(createLesson({ moduleId: "m1", title: "X", type, assessmentId })).rejects.toThrow(
+        /assessment/i,
+      );
+    }
+  });
+
+  it("an update re-checks the link against the lesson's own course and type", async () => {
+    const { createLesson, updateLesson } = service();
+    const lesson = await createLesson({ moduleId: "m1", title: "Q", type: "QUIZ", assessmentId: null });
+    const updated = await updateLesson(lesson.id, { assessmentId: "quiz-c1" });
+    expect(updated.assessmentId).toBe("quiz-c1");
+    await expect(updateLesson(lesson.id, { assessmentId: "quiz-c2" })).rejects.toThrow(/assessment/i);
+    await expect(updateLesson(lesson.id, { assessmentId: "assign-c1" })).rejects.toThrow(/assessment/i);
+  });
+
+  it("fails closed: with no assessment lookup wired, a link is refused rather than saved unchecked", async () => {
+    const { createLesson } = service({ withLookup: false });
+    await expect(
+      createLesson({ moduleId: "m1", title: "Q", type: "QUIZ", assessmentId: "quiz-c1" }),
+    ).rejects.toThrow(/assessment/i);
+    // No link at all still works without the lookup.
+    const plain = await createLesson({ moduleId: "m1", title: "Q", type: "QUIZ", assessmentId: null });
+    expect(plain.assessmentId).toBeNull();
+  });
+});

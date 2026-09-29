@@ -97,19 +97,47 @@ describe("LessonFormFields", () => {
     expect(screen.getByText("Optional introductory prose")).toBeTruthy();
   });
 
-  it.each(["QUIZ", "ASSIGNMENT"] as const)(
-    "keeps the empty Phase 10 assessment picker visible without blocking %s",
-    (lessonType) => {
-      render(<LessonFormFields lessonType={lessonType} />);
-      const picker = screen.getByLabelText("Assessment") as HTMLSelectElement;
-      expect(picker.disabled).toBe(true);
-      expect(
-        screen.getByText(
-          "No assessments exist yet — assessment authoring arrives in Phase 10.",
-        ),
-      ).toBeTruthy();
-    },
-  );
+  const OPTIONS = [
+    { id: "q-pub", title: "Safety quiz", type: "QUIZ" as const, status: "PUBLISHED" },
+    { id: "q-draft", title: "Draft quiz", type: "QUIZ" as const, status: "DRAFT" },
+    { id: "q-old", title: "Old quiz", type: "QUIZ" as const, status: "ARCHIVED" },
+    { id: "a-pub", title: "Final essay", type: "ASSIGNMENT" as const, status: "PUBLISHED" },
+  ];
+
+  it("a Quiz lesson offers this course's quizzes only — drafts marked, archived and assignments left out", () => {
+    render(<LessonFormFields lessonType="QUIZ" assessmentOptions={OPTIONS} />);
+    const picker = screen.getByLabelText("Quiz") as HTMLSelectElement;
+    expect(picker.disabled).toBe(false);
+    expect(Array.from(picker.options).map((o) => o.textContent)).toEqual([
+      "Choose a quiz",
+      "Safety quiz",
+      "Draft quiz (draft)",
+    ]);
+  });
+
+  it("an Assignment lesson offers assignments only, and pre-selects the saved link", () => {
+    render(<LessonFormFields lessonType="ASSIGNMENT" assessmentOptions={OPTIONS} values={{ assessmentId: "a-pub" }} />);
+    const picker = screen.getByLabelText("Assignment") as HTMLSelectElement;
+    expect(Array.from(picker.options).map((o) => o.value)).toEqual(["", "a-pub"]);
+    expect(picker.value).toBe("a-pub");
+  });
+
+  it("explains what to do when the course has nothing to link — and never mentions a phase", () => {
+    render(<LessonFormFields lessonType="QUIZ" assessmentOptions={[]} />);
+    expect(screen.getByText("This course has no quiz yet. Create one under Assessments, then link it here.")).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/Phase \d/);
+  });
+
+  it("shows a refused link's message on the picker", () => {
+    render(
+      <LessonFormFields
+        lessonType="QUIZ"
+        assessmentOptions={OPTIONS}
+        errors={[{ name: "assessmentId", message: "Choose an assessment from this course." }]}
+      />,
+    );
+    expect(screen.getByText("Choose an assessment from this course.")).toBeTruthy();
+  });
 
   it.each(["TEXT", "FILE", "IMAGE", "VIDEO", "EMBED", "LINK"] as const)(
     "wires a server body error to the rich editor and the summary target for %s",
