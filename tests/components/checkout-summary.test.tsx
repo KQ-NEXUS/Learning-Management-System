@@ -471,7 +471,7 @@ describe("CheckoutOrderPage — breakdown card (07-09 D-16/D-17)", () => {
   it("still renders the Phase 6 decline banner unchanged when declined=1 and the hold is still live", async () => {
     seedCheckoutPage(checkoutOrderFixture());
     render(await runCheckoutPage("1"));
-    expect(screen.getByText("Your card was declined")).toBeTruthy();
+    expect(screen.getByText("Your payment didn't go through")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
@@ -482,7 +482,11 @@ describe("CheckoutOrderPage — breakdown card (07-09 D-16/D-17)", () => {
       }),
     );
     render(await runCheckoutPage());
-    expect(screen.getByText("Your seat hold has expired")).toBeTruthy();
+    // UX batch D: one h1 that states what happened, no contradictory "Review your order".
+    const headings = screen.getAllByRole("heading", { level: 1 });
+    expect(headings.map((h) => h.textContent)).toEqual(["Your seat hold has expired"]);
+    expect(screen.queryByText("Review your order")).toBeNull();
+    expect(screen.getByRole("link", { name: /back to cohort/i }).className).toMatch(/bg-accent/);
     expect(screen.queryByText("School fee")).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
@@ -517,6 +521,8 @@ describe("CheckoutOrderPage — payment could not start", () => {
   it("the decline banner is announced too", async () => {
     seedCheckoutPage(checkoutOrderFixture());
     render(await runCheckoutPage("1"));
-    expect(screen.getByRole("alert").textContent).toContain("Your card was declined");
+    expect(screen.getByRole("alert").textContent).toContain("Your payment didn't go through");
+    // Provider-neutral: Paystack payments may be bank transfer or USSD, not a card.
+    expect(screen.getByRole("alert").textContent).not.toMatch(/card/i);
   });
 });

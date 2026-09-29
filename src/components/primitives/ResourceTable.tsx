@@ -11,6 +11,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { permissionPhrase } from "@/lib/humanize";
 
 /**
  * ResourceTable — the list primitive.
@@ -427,19 +428,20 @@ export function ResourceTable<T>({
         )}
         <Panel>
           <span className="font-mono text-sm text-muted-foreground">403</span>
-          <h2 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
-            You do not have access to {noun}
-          </h2>
+          {/* One h2 per page: under a titled table this is the h3. */}
+          {(() => {
+            const Heading = title ? "h3" : "h2";
+            return (
+              <Heading className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
+                You do not have access to {noun}
+              </Heading>
+            );
+          })()}
           <p className="max-w-prose text-base text-foreground-soft">
-            Your role does not include{" "}
-            {state.permission ? (
-              <code className="rounded-sm bg-accent-wash px-2 font-mono text-sm">
-                {state.permission}
-              </code>
-            ) : (
-              "the required permission"
-            )}{" "}
-            at this scope. Ask a workspace administrator to grant it.
+            {state.permission
+              ? `Your role doesn't include permission to ${permissionPhrase(state.permission)} here.`
+              : "Your role doesn't include the permission this needs here."}{" "}
+            Ask a workspace administrator if you need it.
           </p>
         </Panel>
       </div>

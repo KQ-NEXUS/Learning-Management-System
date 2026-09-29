@@ -74,20 +74,19 @@ export default async function CheckoutOrderPage({
   if (holdExpired) {
     const backHref = await getCohortOfferPath(order.cohort.id);
     return (
+      // UX batch D: the state IS the page heading (it used to sit under a
+      // contradictory "Review your order" h1), and recovery is a real button.
       <div className="flex flex-col gap-8">
-        <LearnerPageHeader title="Review your order" />
-      <div className="flex w-full max-w-[640px] flex-col items-start gap-3 border-t border-foreground py-12">
+        <LearnerPageHeader title="Your seat hold has expired" />
+      <div className="flex w-full max-w-[640px] flex-col items-start gap-4 border-t border-foreground py-8">
         <AlertCircle aria-hidden className="size-6 text-danger" />
-        <h1 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
-          Your seat hold has expired
-        </h1>
         <p className="max-w-prose text-sm text-muted-foreground">
-          This seat was only held for a limited time and it&apos;s no longer available. Check the
-          cohort page for current availability.
+          This seat was only held for a limited time and it&apos;s no longer available. Nothing was
+          charged. Check the cohort page for current availability.
         </p>
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-sm text-accent hover:underline"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
         >
           <ChevronLeft aria-hidden className="size-4" />
           Back to cohort
@@ -191,9 +190,9 @@ export default async function CheckoutOrderPage({
 
       {showDeclineBanner && (
         <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
-          <p className="text-sm font-semibold text-danger">Your card was declined</p>
+          <p className="text-sm font-semibold text-danger">Your payment didn&apos;t go through</p>
           <p className="text-sm text-danger">
-            Try a different card — your seat is still held for{" "}
+            Try again or use a different payment method — your seat is still held for{" "}
             {formatRemaining(new Date(enrolment!.holdExpiresAt as Date), at)}.
           </p>
         </div>

@@ -40,3 +40,13 @@ export function providerLabel(provider: string | null | undefined): string {
   if (!provider) return "—";
   return PROVIDERS[provider] ?? humanizeCode(provider);
 }
+
+/**
+ * "payments.view" -> "view payments"; "roles.manage" -> "manage roles". For
+ * denied states, which used to print the raw permission key in a code chip.
+ */
+export function permissionPhrase(permission: string): string {
+  const [resource, action] = permission.split(".");
+  if (!resource || !action) return humanizeCode(permission).toLowerCase();
+  return `${action.replace(/_/g, " ")} ${resource.replace(/_/g, " ")}`;
+}

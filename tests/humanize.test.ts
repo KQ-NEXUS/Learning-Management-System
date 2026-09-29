@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { humanizeCode, humanizeKey, providerLabel, shortId } from "@/lib/humanize";
+import { humanizeCode, humanizeKey, permissionPhrase, providerLabel, shortId } from "@/lib/humanize";
 
 describe("humanize — UX batch C: codes never reach staff as SCREAMING_CASE", () => {
   it("turns enum and event codes into sentence case", () => {
@@ -29,5 +29,13 @@ describe("humanize — UX batch C: codes never reach staff as SCREAMING_CASE", (
     expect(providerLabel("STRIPE")).toBe("Stripe");
     expect(providerLabel("MANUAL")).toBe("Manual");
     expect(providerLabel("SOMETHING_NEW")).toBe("Something new");
+  });
+});
+
+describe("permissionPhrase — UX batch D", () => {
+  it("reads a permission key as words", () => {
+    expect(permissionPhrase("payments.view")).toBe("view payments");
+    expect(permissionPhrase("roles.manage")).toBe("manage roles");
+    expect(permissionPhrase("oddkey")).toBe("oddkey");
   });
 });
