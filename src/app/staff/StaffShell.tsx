@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { BrandMark } from "@/components/shell/BrandMark";
+import { MAIN_CONTENT_ID, SkipLink } from "@/components/shell/SkipLink";
 
 /**
  * StaffShell — the client half of the staff workspace shell (D-19, D-20).
@@ -201,6 +202,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
     // instead of the viewport — so it scrolled away with the page on tall
     // routes. Horizontal bleed is clipped on the content column instead.
     <div className="flex min-h-screen bg-sidebar-bg">
+      <SkipLink />
       {mobileOpen && (
         <div
           aria-hidden
@@ -325,7 +327,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 rounded-t-[28px] bg-surface px-6 pt-9 pb-14 lg:px-10">
+        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 rounded-t-[28px] bg-surface px-6 pt-9 pb-14 focus:outline-none lg:px-10">
           {children}
         </main>
       </div>

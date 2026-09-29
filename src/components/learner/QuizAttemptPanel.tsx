@@ -84,7 +84,8 @@ export function QuizAttemptPanel(props: Props) {
     </dl>
 
     {active ? <form onSubmit={e => { e.preventDefault(); setConfirmSubmit(true); }} className="flex flex-col gap-6">
-      <div role="status" className="sticky top-0 z-10 bg-surface py-3 font-semibold">
+      {/* Not a live region: it would announce on every answer. */}
+      <div className="sticky top-0 z-10 bg-surface py-3 font-semibold">
         <span className="text-accent">{answered} of {active.questions.length} answered</span>
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-accent-wash"><div className="h-full rounded-full bg-progress-fill" style={{ width: `${Math.round((answered / Math.max(1, active.questions.length)) * 100)}%` }} /></div>
       </div>

@@ -117,7 +117,7 @@ export function SupportWorkspace({ view, assignees = [], denied = false, error =
       <ul aria-label="Queue health" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {health.map((item) => (
           <li key={item.label}>
-            <Link href={item.href} className="flex min-h-11 flex-col gap-1 rounded-md border border-border bg-surface p-4 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-focus">
+            <Link href={item.href} className="flex min-h-11 flex-col gap-1 rounded-md border border-border bg-surface p-4 hover:bg-surface-2">
               <span className="text-[13px] text-muted-foreground">{item.label}</span>
               <span className="font-mono text-2xl font-semibold tabular-nums">{item.value}</span>
             </Link>
