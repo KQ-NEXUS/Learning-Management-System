@@ -52,3 +52,13 @@ Either wire it up at write time or remove the dead column/field.
 - INFO-01 (`RefundStatus.REQUESTED` unreachable enum value, no comment) —
   cosmetic, not tracked here; add a comment noting it's reserved, same as
   `PaymentStatus.PENDING_MANUAL_REVIEW`, whenever this file is next touched.
+
+## Resolution (2026-09-29)
+
+Closed during the v1.0 milestone verification catch-up (07-VERIFICATION.md). All three items are fixed in code:
+
+- **CR-01:** `manual-payment-service.ts` routes through `activateOrderAsSystem`, which takes `SELECT ... FOR UPDATE` on the Order and re-checks the blocked status under the lock (`checkout-webhook-system-service.ts`).
+- **WR-01:** a second confirmation serializes on the Order lock and returns `ALREADY_PAID`; an existing `idempotencyKey` is found before create.
+- **WR-02:** `providerRef` is written for manual, online-success and exception settlements.
+
+Evidence: `tests/manual-payment.integration.test.ts` 3/3 on real Postgres, re-run 2026-09-29, including "serializes concurrent confirmations with the same reference into one activation and one idempotent ALREADY_PAID result".
