@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { humanizeCode, providerLabel } from "@/lib/humanize";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -67,7 +68,15 @@ function pageHref(report: ClientAvailableDatasetReport, page: number) {
 }
 
 function label(value: string) {
-  return value.replaceAll("_", " ");
+  return humanizeCode(value);
+}
+
+/** UX batch C — a filter date reads like every other date on this page. */
+function filterDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("en-NG", { dateStyle: "medium", timeZone: "Africa/Lagos" });
 }
 
 function duration(minutes: number) {
@@ -80,7 +89,7 @@ function rowFields(row: ReportRow): Array<[string, string]> {
   switch (row.kind) {
     case "registrations": return [
       ["Registration", row.reference], ["Learner", row.learnerName], ["Cohort", row.cohortTitle],
-      ["Verification", row.status.replaceAll("_", " ")], ["Registration date", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
+      ["Verification", humanizeCode(row.status)], ["Registration date", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
     ];
     case "payments": return [
       ["Reference", row.reference], ["Learner", row.learnerName], ["Cohort", row.cohortTitle],
@@ -100,7 +109,7 @@ function rowFields(row: ReportRow): Array<[string, string]> {
     ];
     case "enrolments": return [
       ["Enrolment", row.id], ["Learner", row.learnerName], ["Cohort", row.cohortTitle],
-      ["State", row.status.replaceAll("_", " ")], ["Transition date", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
+      ["State", humanizeCode(row.status)], ["Transition date", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
     ];
     case "support": return [
       ["Reference", row.reference], ["Created", row.businessDate.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })],
@@ -229,8 +238,8 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
         <BandFact label="Data as of">{dateTime(request.asOf)}</BandFact>
       </dl>
       {definition.id === "support" ? (
-        <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ?? "30 days before data time"} to {request.filters.to ?? "data as of"}; {request.filters.category ? label(request.filters.category) : "all categories"}; {request.filters.priority ? label(request.filters.priority) : "all priorities"}; {request.filters.queue ? label(request.filters.queue) : "all queues"}; {request.filters.owner ? (request.filters.owner === "UNASSIGNED" ? "unassigned" : "selected owner") : "all owners"}{request.filters.status ? `; ${label(request.filters.status)}` : ""}. Current health counts every open ticket now; performance uses the range shown.</p>
-      ) : <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ?? "All dates"} to {request.filters.to ?? "data as of"}; {request.filters.programmeId ? "selected programme" : "all authorised programmes"}; {request.filters.cohortId ? "selected cohort" : "all authorised cohorts"}{request.filters.provider ? `; ${request.filters.provider}` : ""}{request.filters.currency ? `; ${request.filters.currency}` : ""}{request.filters.status ? `; ${request.filters.status.replaceAll("_", " ")}` : ""}</p>}
+        <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ? filterDate(request.filters.from) : "30 days before data time"} to {request.filters.to ? filterDate(request.filters.to) : "data as of"}; {request.filters.category ? label(request.filters.category) : "all categories"}; {request.filters.priority ? label(request.filters.priority) : "all priorities"}; {request.filters.queue ? label(request.filters.queue) : "all queues"}; {request.filters.owner ? (request.filters.owner === "UNASSIGNED" ? "unassigned" : "selected owner") : "all owners"}{request.filters.status ? `; ${label(request.filters.status)}` : ""}. Current health counts every open ticket now; performance uses the range shown.</p>
+      ) : <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ? filterDate(request.filters.from) : "All dates"} to {request.filters.to ? filterDate(request.filters.to) : "data as of"}; {request.filters.programmeId ? "selected programme" : "all authorised programmes"}; {request.filters.cohortId ? "selected cohort" : "all authorised cohorts"}{request.filters.provider ? `; ${providerLabel(request.filters.provider)}` : ""}{request.filters.currency ? `; ${request.filters.currency}` : ""}{request.filters.status ? `; ${humanizeCode(request.filters.status)}` : ""}</p>}
     </div>
   );
 

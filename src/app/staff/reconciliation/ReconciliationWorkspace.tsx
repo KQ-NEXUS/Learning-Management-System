@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { humanizeCode } from "@/lib/humanize";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -310,7 +311,7 @@ function RefundExportDialog({ searchParams, asOf, canExportSensitive, onClose, o
         <label className={FIELD}>Refund status
           <select value={refundStatus} disabled={pending} onChange={(event) => setRefundStatus(event.target.value)} className={CONTROL}>
             <option value="">All refund statuses</option>
-            {REFUND_STATUSES.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
+            {REFUND_STATUSES.map((status) => <option key={status} value={status}>{humanizeCode(status)}</option>)}
           </select>
         </label>
         {canExportSensitive && (
