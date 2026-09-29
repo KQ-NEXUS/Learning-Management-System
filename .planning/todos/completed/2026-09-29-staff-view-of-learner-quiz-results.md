@@ -21,3 +21,11 @@ because they only held placeholders.
 Add a "Results" section to the staff per-learner page (`learners/[enrolmentId]`) listing each
 assessment's effective score, pass/fail, attempts used and release state, scoped by
 `submissions.view` with F-05's assessment-course narrowing. Then re-verify COH-07.
+
+## Resolution (2026-09-29)
+
+Built the same day: a Results section on the staff per-learner page
+(`learners/[enrolmentId]`), backed by `staff-learner-results-service.ts`
+(`submissions.view` over the cohort, F-05 course narrowing per assessment,
+read on the learner's behalf). The page also opens for COMPLETED learners now.
+COH-07 re-verified and ticked.

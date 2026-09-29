@@ -50,7 +50,7 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 - [x] **COH-04**: A Cohort publishes only when catalogue, schedule, pricing, instructor, capacity, and completion readiness checks pass; pass/fail readiness items are shown; publish is permission-gated.
 - [ ] **COH-05**: Authorized staff can add, approve, transfer, withdraw, or cancel enrolments with a reason; state transitions are validated, audited, communicated, and never create duplicate active enrolments.
 - [x] **COH-06**: Capacity is enforced during checkout and administrative enrolment; concurrent attempts cannot exceed capacity; released/expired reservations become available per policy.
-- [ ] **COH-07**: Cohort-level views of learners, access, progress, attendance, assessment, completion, and exceptions are available; staff can filter and open a learner detail without viewing out-of-scope Cohorts.
+- [x] **COH-07**: Cohort-level views of learners, access, progress, attendance, assessment, completion, and exceptions are available; staff can filter and open a learner detail without viewing out-of-scope Cohorts.
 
 ### Registration, Orders, and Enrolment (REG)
 
@@ -220,7 +220,7 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | COH-04 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
 | COH-05 | Phase 5 | Verified except notification delivery — pending Phase 13 (COM-01) |
 | COH-06 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
-| COH-07 | Phase 5 | Partial — staff cannot see per-learner quiz results (05-VERIFICATION.md) |
+| COH-07 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
 | ATT-01 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
 | ATT-02 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
 | ATT-03 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
