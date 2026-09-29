@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthorizationError, AuthenticationError } from "@/server/permissions";
 import { ResourceForm } from "@/components/primitives";
 import { StaffAccountForm, type RoleOption } from "../StaffAccountForm";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "New staff account" };
 
@@ -14,7 +15,7 @@ export default async function NewStaffAccountPage() {
     roles = rows.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name }));
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       return (

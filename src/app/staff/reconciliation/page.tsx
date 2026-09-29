@@ -12,6 +12,7 @@ import {
   type ReconciliationSummaryRow,
 } from "@/server/services/reconciliation-case-service";
 import { ReconciliationWorkspace } from "./ReconciliationWorkspace";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Reconciliation" };
 
@@ -58,7 +59,7 @@ export default async function ReconciliationPage({
     ]);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) return <ReconciliationWorkspace denied />;
     return <ReconciliationWorkspace error asOf={new Date()} />;

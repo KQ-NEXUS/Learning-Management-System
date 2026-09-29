@@ -1,6 +1,7 @@
 import { roleService } from "@/server/services/role-service";
 import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { RolesTable, type RoleRow } from "./RolesTable";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Roles" };
 
@@ -11,7 +12,7 @@ export default async function RolesPage() {
     roles = (await roleService.list()) as unknown as RoleRow[];
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       return <RolesTable denied={{ permission: "roles.view" }} />;

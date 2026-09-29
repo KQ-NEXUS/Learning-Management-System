@@ -4,6 +4,7 @@ import { AuditTable, type AuditTableFilters } from "./AuditTable";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { loadGrantsForUser } from "@/server/services/grant-service";
 import { collectionScopeFromGrants } from "@/server/permissions/collection-scope";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Audit" };
 
@@ -62,7 +63,7 @@ export default async function AuditPage({
     }
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // Same response whether or not any event exists — no counts leak.

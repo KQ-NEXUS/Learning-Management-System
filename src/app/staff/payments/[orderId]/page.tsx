@@ -7,6 +7,7 @@ import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
 import { ManualPaymentDialog } from "@/app/staff/payments/ManualPaymentDialog";
 import { RefundDialog } from "@/app/staff/payments/RefundDialog";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 /**
  * The Finance payment detail (PAY-03, PAY-04, PAY-05, PAY-07, PAY-13, PAY-17,
@@ -109,7 +110,7 @@ export default async function PaymentDetailPage({
     detail = await getPaymentDetailForStaff(orderId);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // Identical to a missing record — RBAC-06, matching the Cohort/Course

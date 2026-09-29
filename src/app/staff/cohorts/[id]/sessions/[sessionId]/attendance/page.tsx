@@ -4,6 +4,7 @@ import { loadSessionRegister } from "@/server/services/attendance-service";
 import { listSessionsForCohort } from "@/server/services/scheduled-session-service";
 import { UnsavedOrderProvider, GuardedLink } from "@/components/catalogue";
 import { AttendanceMarkClient, type RegisterRow } from "./AttendanceMarkClient";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Mark attendance" };
 
@@ -23,7 +24,7 @@ export default async function AttendanceMarkPage({
     ]);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // Identical copy regardless of whether the session exists (RBAC-06).

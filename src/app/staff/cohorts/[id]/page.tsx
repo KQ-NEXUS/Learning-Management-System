@@ -28,6 +28,7 @@ import { RosterTab, type RosterRowView } from "./RosterTab";
 import { ExceptionsTab, type AttendanceExceptionView } from "./ExceptionsTab";
 import { InstructorsPanel, type InstructorRow } from "./InstructorsPanel";
 import { GradingTab } from "./GradingTab";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Cohort" };
 
@@ -119,11 +120,7 @@ export default async function CohortDetailPage({
     readinessAggregate = await loadCohortReadinessAggregate(cohortId);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return (
-        <p className="text-sm text-foreground">
-          Your session has ended. Sign in again.
-        </p>
-      );
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       notFound();
