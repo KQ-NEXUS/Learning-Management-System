@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     loadCohortRoster: vi.fn(),
     loadLearnerPath: vi.fn(),
     enrolmentCohortScope: vi.fn(),
+    loadLearnerResultsForStaff: vi.fn(),
     can: vi.fn(),
     notFound: vi.fn(() => {
       throw new Error("notFound");
@@ -52,6 +53,10 @@ vi.mock("@/server/services/learner-access", () => ({
 
 vi.mock("@/server/services/cohort-scope", () => ({
   enrolmentCohortScope: mocks.enrolmentCohortScope,
+}));
+
+vi.mock("@/server/services/staff-learner-results-service", () => ({
+  loadLearnerResultsForStaff: mocks.loadLearnerResultsForStaff,
 }));
 
 import { overrideLessonProgressAction } from "@/app/staff/cohorts/[id]/progress-actions";
@@ -268,6 +273,38 @@ describe("LearnerProgressPage (D-14, DD-31)", () => {
   beforeEach(() => {
     mocks.can.mockResolvedValue(true);
     mocks.enrolmentCohortScope.mockResolvedValue({ cohortId: "cohort-1" });
+    mocks.loadLearnerResultsForStaff.mockResolvedValue([]);
+  });
+
+  const resultsOf = (page: unknown) =>
+    collectDescendants(page as AnyElement).find((el) => el?.props && "results" in el.props)?.props?.results;
+
+  it("COH-07: the learner's results reach the Results section", async () => {
+    const card = { assessmentId: "q1", courseId: "course-1", title: "Safety quiz", type: "QUIZ", effectiveScore: 8, maxScore: 10, passed: true, passMark: 5, feedback: null, attemptsRemaining: 1, history: [], overrides: [] };
+    mocks.loadCohortRoster.mockResolvedValue([rosterRow()]);
+    mocks.loadLearnerPath.mockResolvedValue(learnerPath([decoratedLesson()]));
+    mocks.loadLearnerResultsForStaff.mockResolvedValue([card]);
+
+    const page = await LearnerProgressPage(pageParams());
+    expect(mocks.loadLearnerResultsForStaff).toHaveBeenCalledWith({ enrolmentId: "enr-1" });
+    expect(resultsOf(page)).toEqual([card]);
+  });
+
+  it("COH-07: without submissions.view the page still renders, with results withheld (null), not a 404", async () => {
+    mocks.loadCohortRoster.mockResolvedValue([rosterRow()]);
+    mocks.loadLearnerPath.mockResolvedValue(learnerPath([decoratedLesson()]));
+    mocks.loadLearnerResultsForStaff.mockRejectedValue(new FakeAuthorizationError("submissions.view"));
+
+    const page = await LearnerProgressPage(pageParams());
+    expect(mocks.notFound).not.toHaveBeenCalled();
+    expect(resultsOf(page)).toBeNull();
+  });
+
+  it("a COMPLETED learner's page opens (read-only, includeCompleted)", async () => {
+    mocks.loadCohortRoster.mockResolvedValue([rosterRow({ status: "COMPLETED" })]);
+    mocks.loadLearnerPath.mockResolvedValue(learnerPath([decoratedLesson()]));
+    await LearnerProgressPage(pageParams());
+    expect(mocks.loadLearnerPath).toHaveBeenCalledWith({ userId: "user-1" }, "enr-1", { includeCompleted: true });
   });
 
   it("maps AuthorizationError from loadCohortRoster to notFound()", async () => {
@@ -296,7 +333,7 @@ describe("LearnerProgressPage (D-14, DD-31)", () => {
     mocks.loadCohortRoster.mockResolvedValue([rosterRow({ learnerId: "user-42" })]);
     mocks.loadLearnerPath.mockResolvedValue(learnerPath([decoratedLesson()]));
     await LearnerProgressPage(pageParams());
-    expect(mocks.loadLearnerPath).toHaveBeenCalledWith({ userId: "user-42" }, "enr-1");
+    expect(mocks.loadLearnerPath).toHaveBeenCalledWith({ userId: "user-42" }, "enr-1", { includeCompleted: true });
   });
 
   it("passes each pinned lesson through to the override panel, including an AUTO_VIDEO source and its timestamp", async () => {

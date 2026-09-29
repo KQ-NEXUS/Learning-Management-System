@@ -6,6 +6,11 @@ import { enrolmentCohortScope } from "@/server/services/cohort-scope";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { ProgressOverridePanel, type ProgressLessonRow } from "./ProgressOverridePanel";
 import { humanizeCode } from "@/lib/humanize";
+import { formatTimestamp } from "@/lib/format-timestamp";
+import {
+  loadLearnerResultsForStaff,
+  type LearnerResultCard,
+} from "@/server/services/staff-learner-results-service";
 
 /**
  * The staff per-learner progress page (D-14, DD-31, plan 09-13 Task 3).
@@ -56,6 +61,76 @@ const STATUS_LABEL: Record<string, string> = {
   COMPLETED: "Completed",
 };
 
+/**
+ * COH-07 — the learner's released results, as staff see them. `null` means the
+ * viewer's role does not include submissions.view for this cohort.
+ */
+function ResultsSection({ results }: { results: LearnerResultCard[] | null }) {
+  if (results === null) {
+    return (
+      <p className="pt-4 text-sm text-muted-foreground">
+        Your role doesn&apos;t include permission to view submissions for this cohort, so results
+        aren&apos;t shown.
+      </p>
+    );
+  }
+  if (results.length === 0) {
+    return (
+      <p className="pt-4 text-sm text-muted-foreground">
+        No released results yet. Quiz results appear once a quiz is submitted; assignment grades
+        once they are released.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-left text-sm">
+        <thead>
+          <tr className="border-b border-foreground text-[13px] text-muted-foreground">
+            <th className="py-3 pr-4 font-medium">Assessment</th>
+            <th className="py-3 pr-4 font-medium">Score</th>
+            <th className="py-3 pr-4 font-medium">Result</th>
+            <th className="py-3 pr-4 font-medium">Attempts</th>
+            <th className="py-3 font-medium">Latest</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((r) => {
+            const latest = r.history[0];
+            const used = r.type === "QUIZ" ? r.history.length : null;
+            return (
+              <tr key={r.assessmentId} className="border-b border-border align-top">
+                <td className="py-4 pr-4">
+                  <span className="block font-semibold text-foreground">{r.title}</span>
+                  <span className="text-[13px] text-muted-foreground">{r.type === "QUIZ" ? "Quiz" : "Assignment"}</span>
+                </td>
+                <td className="py-4 pr-4 font-mono tabular-nums">
+                  {r.effectiveScore !== null && r.maxScore !== null ? `${r.effectiveScore} / ${r.maxScore}` : "—"}
+                </td>
+                <td className="py-4 pr-4">
+                  {r.passed === null ? (
+                    <span className="text-muted-foreground">No pass mark</span>
+                  ) : (
+                    <StatusPill label={r.passed ? "Passed" : "Not yet passed"} tone={r.passed ? "success" : "warning"} />
+                  )}
+                </td>
+                <td className="py-4 pr-4 tabular-nums">
+                  {used === null
+                    ? `${r.history.length} ${r.history.length === 1 ? "submission" : "submissions"}`
+                    : `${used} used${r.attemptsRemaining === null ? "" : ` · ${r.attemptsRemaining} left`}`}
+                </td>
+                <td className="py-4 font-mono text-[13px] tabular-nums text-muted-foreground">
+                  {latest ? formatTimestamp(new Date(latest.at)) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function attendanceFactValue(
   attendance: Awaited<ReturnType<typeof loadCohortRoster>>[number]["attendance"],
 ): string {
@@ -85,10 +160,21 @@ export default async function LearnerProgressPage({
   const rosterRow = rosterRows.find((r) => r.enrolmentId === enrolmentId);
   if (!rosterRow) notFound(); // T-09-44 — also covers an unknown enrolment id
 
-  const path = await loadLearnerPath({ userId: rosterRow.learnerId }, enrolmentId);
-  if (!path) notFound(); // defensive — the roster row above already confirmed the enrolment is ACTIVE and in this cohort
+  // Read-only here, so a COMPLETED enrolment opens too (it used to 404 once a
+  // learner finished — the same gap as integration warning #5).
+  const path = await loadLearnerPath({ userId: rosterRow.learnerId }, enrolmentId, { includeCompleted: true });
+  if (!path) notFound(); // defensive — the roster row above already confirmed the enrolment is in this cohort
 
   const canOverride = await can("enrolments.manage", await enrolmentCohortScope(enrolmentId));
+
+  // COH-07 — null when the viewer lacks submissions.view here (not an error).
+  let results: LearnerResultCard[] | null;
+  try {
+    results = await loadLearnerResultsForStaff({ enrolmentId });
+  } catch (error) {
+    if (!(error instanceof AuthorizationError)) throw error;
+    results = null;
+  }
 
   const lessonRows: ProgressLessonRow[] = path.courses.flatMap((course) =>
     course.modules.flatMap((mod) =>
@@ -164,6 +250,11 @@ export default async function LearnerProgressPage({
               />
             </div>
           ),
+        },
+        {
+          id: "results",
+          label: "Results",
+          content: <ResultsSection results={results} />,
         },
         {
           id: "override",
