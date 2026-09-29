@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { getOwnOrder } from "@/server/services/checkout-service";
 import { PollForPayment } from "@/app/(checkout)/checkout/[orderId]/confirming/PollForPayment";
@@ -33,8 +32,8 @@ export default async function ConfirmingPaymentPage({
 
   return (
     <div className="flex flex-col items-start gap-6">
-      <PollForPayment />
-      <Loader2 aria-hidden className="size-8 animate-spin text-accent" />
+      {/* The spinner lives inside PollForPayment so it stops when the timeout copy appears. */}
+      <PollForPayment orderId={order.id} />
     </div>
   );
 }

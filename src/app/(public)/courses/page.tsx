@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CheckoutNotice } from "@/app/(public)/CheckoutNotice";
 import { ArrowRight } from "lucide-react";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { DELIVERY_MODE_LABEL, formatPrice } from "@/app/(public)/CohortCards";
@@ -30,12 +31,18 @@ function headlinePrice(cohort: PublicCohort | null): string | null {
   return null;
 }
 
-export default async function PublicCoursesPage() {
+export default async function PublicCoursesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const courses = await listPublicCourses();
+  const { notice } = await searchParams;
 
   return (
     <div className="flex flex-col gap-6">
       <LearnerPageHeader size="hero" title="Courses" subtitle="Professional training you can enrol on." />
+      <CheckoutNotice notice={notice} />
       {courses.length === 0 ? (
         <p className="border-t border-foreground py-12 text-sm text-muted-foreground">
           No courses are listed right now.
