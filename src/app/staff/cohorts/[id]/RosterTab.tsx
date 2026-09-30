@@ -29,6 +29,7 @@ import type { AttendanceComponent } from "@/server/services/attendance-component
 import type { DeferredColumn, TrackedProgress } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import { humanizeCode } from "@/lib/humanize";
 
 export type RosterTransitionView = {
   action: string;
@@ -90,10 +91,11 @@ const STATUS_LABEL: Record<string, string> = {
  *  off. Never computed via a template so the strings are physically present
  *  in this file, not merely producible at runtime. */
 const DEFERRED_LABEL: Record<9 | 10 | 11 | 12, string> = {
-  9: "not tracked yet · Phase 9",
-  10: "not tracked yet · Phase 10",
-  11: "not tracked yet · Phase 11",
-  12: "not tracked yet · Phase 12",
+  // Progress is deferred when the cohort's offer has no published version pinned yet.
+  9: "No published content yet",
+  10: "Not tracked",
+  11: "Not tracked",
+  12: "Not tracked",
 };
 
 function DeferredCell({ column }: { column: DeferredColumn }) {
@@ -184,7 +186,7 @@ export function RosterTab({
       header: "Enrolment",
       render: (r) => (
         <span className="flex flex-col gap-1">
-          <StatusPill label={STATUS_LABEL[r.status] ?? r.status} tone={STATUS_TONE[r.status] ?? "neutral"} />
+          <StatusPill label={STATUS_LABEL[r.status] ?? humanizeCode(r.status)} tone={STATUS_TONE[r.status] ?? "neutral"} />
           <details className="text-xs">
             <summary className="cursor-pointer text-accent underline underline-offset-2 [&::-webkit-details-marker]:hidden">
               history{r.transitionCount > 0 ? ` (${r.transitionCount})` : ""}

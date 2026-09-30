@@ -26,7 +26,7 @@ import { z } from "zod";
 import type { FieldError } from "@/components/primitives";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
-import { createLesson, lessonService, updateLesson } from "@/server/services/lesson-service";
+import { AssessmentLinkError, createLesson, lessonService, updateLesson } from "@/server/services/lesson-service";
 
 const LESSON_TYPES = [
   "TEXT",
@@ -93,6 +93,10 @@ function toFailure(error: unknown): SaveLessonState {
   if (error instanceof z.ZodError) {
     return { ok: false, errors: zodFieldErrors(error), message: null };
   }
+  // The assessment link was refused (another course, wrong type, archived).
+  if (error instanceof AssessmentLinkError) {
+    return { ok: false, errors: [{ name: "assessmentId", message: error.message }], message: null };
+  }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
       ok: false,
@@ -133,6 +137,10 @@ export async function saveLessonAction(
     linkUrl: fieldValue(form, "linkUrl"),
     required: form.get("required") === "on",
     allowManualComplete: form.get("allowManualComplete") === "on",
+    // A blank choice clears the link; only Quiz/Assignment lessons carry one.
+    ...(type === "QUIZ" || type === "ASSIGNMENT"
+      ? { assessmentId: fieldValue(form, "assessmentId") ?? null }
+      : {}),
     // F-15 — a blank length clears it; only VIDEO lessons carry one.
     ...(type === "VIDEO" ? { videoDurationSeconds: fieldValue(form, "videoDurationSeconds") ?? null } : {}),
   };

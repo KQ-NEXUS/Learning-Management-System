@@ -159,6 +159,7 @@ function assessmentObligation(overrides: Partial<AssessmentObligation> = {}): As
 function resultCard(overrides: Partial<LearnerResultCard> = {}): LearnerResultCard {
   return {
     assessmentId: "assessment-1",
+    courseId: "course-1",
     title: "Module Quiz",
     type: "QUIZ",
     effectiveScore: 8,

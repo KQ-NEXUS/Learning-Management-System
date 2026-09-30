@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { GetSupportLink } from "@/components/support/GetSupportLink";
 
 /**
  * The confirming interstitial's backstop (D-05, UI-SPEC 6.1/7.3, section 8's
@@ -40,7 +42,7 @@ const POLL_INTERVAL_MS = 2_500;
  * remount), so the mount-triggered announcement never re-fires on a poll
  * tick (UI-SPEC 7.3).
  */
-export function PollForPayment() {
+export function PollForPayment({ orderId }: { orderId: string }) {
   const router = useRouter();
   const [timedOut, setTimedOut] = useState(false);
 
@@ -66,9 +68,20 @@ export function PollForPayment() {
         <>
           <LearnerPageHeader title="This is taking longer than usual" />
           <p className="max-w-prose text-base text-muted-foreground">
-            Your payment may still be processing. Refresh this page in a minute, or contact
-            support below if it doesn&apos;t update.
+            Your payment may still be processing, and you won&apos;t be charged twice. Refresh this
+            page in a minute. If it still hasn&apos;t updated, contact support and we&apos;ll check
+            the payment for you.
           </p>
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="inline-flex min-h-11 items-center rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+            >
+              Refresh
+            </button>
+            <GetSupportLink kind="ORDER" id={orderId} label="Contact support about this payment" />
+          </div>
         </>
       ) : (
         <>
@@ -76,6 +89,7 @@ export function PollForPayment() {
           <p className="max-w-prose text-base text-muted-foreground">
             This usually takes a few seconds. Don&apos;t close this page.
           </p>
+          <Loader2 aria-hidden className="size-8 animate-spin text-accent" />
         </>
       )}
     </>

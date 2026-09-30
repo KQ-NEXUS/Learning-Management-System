@@ -1,6 +1,7 @@
 import { courseService } from "@/server/services/course-service";
 import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { CoursesTable, type CourseRow } from "./CoursesTable";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Courses" };
 
@@ -11,7 +12,7 @@ export default async function CoursesPage() {
     courses = (await courseService.list({})) as unknown as CourseRow[];
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // The primitive renders the denial. Copy is identical whether or not

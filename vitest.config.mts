@@ -20,7 +20,11 @@ export default defineConfig({
           name: "node",
           environment: "node",
           include: ["tests/**/*.test.ts"],
-          exclude: ["tests/components/**"],
+          // Performance budgets (*.perf.test.ts) run on their own, sequentially,
+          // via `npm run test:perf` (vitest.perf.config.mts): under a parallel
+          // full run dozens of Postgres containers compete for the machine and a
+          // timing budget fails for reasons unrelated to the code.
+          exclude: ["tests/components/**", "tests/**/*.perf.test.ts"],
         },
       },
       {

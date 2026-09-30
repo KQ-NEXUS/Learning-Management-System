@@ -1,6 +1,7 @@
 import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { listProgrammesForIndex, type ProgrammeIndexRow } from "@/server/services/programme-service";
 import { ProgrammesTable } from "./ProgrammesTable";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Programmes" };
 
@@ -11,7 +12,7 @@ export default async function ProgrammesPage() {
     programmes = await listProgrammesForIndex();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // The primitive renders the denial. Copy is identical whether or not any

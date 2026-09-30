@@ -89,8 +89,10 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
           <p className="mt-4 text-sm text-warning">You&apos;ve used all your attempts for {result.title}.</p>
         ) : (
           <p className="mt-4 text-sm text-warning">
-            You haven&apos;t yet passed {result.title}. {result.attemptsRemaining ?? "Unlimited"} attempt(s)
-            remaining.
+            You haven&apos;t yet passed {result.title}.{" "}
+            {result.attemptsRemaining == null
+              ? "You can try again."
+              : `${result.attemptsRemaining} ${result.attemptsRemaining === 1 ? "attempt" : "attempts"} remaining.`}
           </p>
         ))}
 

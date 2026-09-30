@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ResourceTable, StatusPill, type Column, type SortState } from "@/components/primitives";
 import type { PaymentListRow } from "@/server/services/payment-read-service";
+import { humanizeCode } from "@/lib/humanize";
 
 /**
  * The Finance payments list (07-UI-SPEC §7.5). `PaymentRow` mirrors
@@ -98,7 +99,7 @@ const columns: Column<PaymentRow>[] = [
     key: "provider",
     header: "Provider",
     // Plain text, never a StatusPill — provider isn't a status (§5's guard note).
-    render: (r) => (r.provider ? (PROVIDER_LABEL[r.provider] ?? r.provider) : "—"),
+    render: (r) => (r.provider ? (PROVIDER_LABEL[r.provider] ?? humanizeCode(r.provider)) : "—"),
     width: "10%",
   },
   {
@@ -106,7 +107,7 @@ const columns: Column<PaymentRow>[] = [
     header: "Payment",
     render: (r) => (
       <StatusPill
-        label={PAYMENT_STATUS_LABEL[r.status] ?? r.status}
+        label={PAYMENT_STATUS_LABEL[r.status] ?? humanizeCode(r.status)}
         tone={PAYMENT_STATUS_TONE[r.status] ?? "neutral"}
       />
     ),
@@ -117,7 +118,7 @@ const columns: Column<PaymentRow>[] = [
     header: "Settlement",
     render: (r) => (
       <StatusPill
-        label={SETTLEMENT_LABEL[r.settlementState] ?? r.settlementState}
+        label={SETTLEMENT_LABEL[r.settlementState] ?? humanizeCode(r.settlementState)}
         tone={SETTLEMENT_TONE[r.settlementState] ?? "neutral"}
       />
     ),

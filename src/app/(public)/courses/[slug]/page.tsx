@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { getPublicCourseBySlug } from "@/server/services/public-catalogue-service";
 import { CohortCards, DELIVERY_MODE_LABEL } from "@/app/(public)/CohortCards";
+import { CheckoutNotice } from "@/app/(public)/CheckoutNotice";
 
 // Rendered per request, never prerendered — the Docker builder has no
 // DATABASE_URL (04-15 planner fallback; 04-10 `docker build` requirement).
@@ -31,10 +32,13 @@ function Section({ title, aside, children }: { title: string; aside?: string; ch
 
 export default async function PublicCourseDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug } = await params;
+  const { notice } = await searchParams;
 
   // TOP-LEVEL await, BEFORE any streaming boundary in this file. Once the
   // response begins streaming the status code is fixed and `notFound()` only
@@ -147,6 +151,7 @@ export default async function PublicCourseDetailPage({
           <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
             Upcoming cohorts
           </h2>
+          <CheckoutNotice notice={notice} />
           {course.upcomingCohorts.length === 0 ? (
             <p className="text-sm text-muted-foreground">No dates are scheduled yet.</p>
           ) : (

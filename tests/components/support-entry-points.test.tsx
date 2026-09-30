@@ -66,7 +66,7 @@ describe("certificate surface", () => {
 
 describe("submission/result surface", () => {
   const base = {
-    type: "ASSIGNMENT" as const, effectiveScore: 8, maxScore: 10, passed: true, passMark: 5,
+    type: "ASSIGNMENT" as const, courseId: "course-1", effectiveScore: 8, maxScore: 10, passed: true, passMark: 5,
     feedback: null, attemptsRemaining: null, overrides: [],
   };
   it("links the latest concrete submission, not quiz attempts or receipt ids", () => {

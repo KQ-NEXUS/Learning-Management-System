@@ -1,6 +1,7 @@
 import { listCohortsForStaff, loadCohortInstructors } from "@/server/services/cohort-service";
 import { AuthenticationError, AuthorizationError, can } from "@/server/permissions";
 import { CohortsTable, type CohortRow } from "./CohortsTable";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Cohorts" };
 
@@ -52,7 +53,7 @@ export default async function CohortsPage() {
     });
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // The primitive renders the denial. Copy is identical whether or not

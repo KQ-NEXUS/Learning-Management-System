@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { AuthFooterLine, AuthTitle } from "../AuthPanel";
+import { CheckEmail } from "../CheckEmail";
 import { registerAction, type RegisterState } from "./actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/identity";
 import { PasswordInput } from "@/components/primitives/PasswordInput";
@@ -15,9 +16,9 @@ export function RegisterForm() {
 
   if (state.sent) {
     return (
-      <AuthTitle
-        title="Check your email"
+      <CheckEmail
         subtitle={`We've sent a verification link to ${state.email}. Click it to activate your account.`}
+        expiresIn="24 hours"
       />
     );
   }

@@ -34,23 +34,23 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 ### Catalogue, Programmes, Courses, and Content (CAT)
 
 - [x] **CAT-01**: Reusable Courses with title, summary, outcomes, audience, prerequisites, duration, media, and status can be created and maintained — draft, validate, preview, archive, locate without duplicate source content.
-- [ ] **CAT-02**: Programmes are created as ordered sets of one or more existing Courses; Courses can be added/removed/reordered in draft; one Course can belong to multiple Programmes without cloning.
-- [ ] **CAT-03**: Ordered Modules and Lessons can be created inside a Course; add, reorder, edit, preview, and mark required content; ordering is stable after save.
-- [ ] **CAT-04**: Text, files, images, uploaded standard video, embedded video links, external links, Quizzes, and Assignments are supported; each validates supported format/size and renders an accessible learner view.
-- [ ] **CAT-05**: Published Course content is versioned; active Cohorts are protected from silent requirement changes — staff select whether a later version applies to future or explicitly selected Cohorts.
-- [ ] **CAT-06**: An Instructor with `courses.publish` in matching scope can publish an assigned Course; the control and server action are gated on the permission; publication records actor, version, time.
-- [ ] **CAT-07**: Public Course and Programme catalogue pages are published independently from learning-content publication state; only readiness-passing offers appear publicly; direct unpublished URLs reveal nothing.
-- [ ] **CAT-08**: Catalogue records can be archived without breaking historical enrolments, results, or certificates; archived records disappear from new-sale flows but remain readable where policy permits.
+- [x] **CAT-02**: Programmes are created as ordered sets of one or more existing Courses; Courses can be added/removed/reordered in draft; one Course can belong to multiple Programmes without cloning.
+- [x] **CAT-03**: Ordered Modules and Lessons can be created inside a Course; add, reorder, edit, preview, and mark required content; ordering is stable after save.
+- [x] **CAT-04**: Text, files, images, uploaded standard video, embedded video links, external links, Quizzes, and Assignments are supported; each validates supported format/size and renders an accessible learner view.
+- [x] **CAT-05**: Published Course content is versioned; active Cohorts are protected from silent requirement changes — staff select whether a later version applies to future or explicitly selected Cohorts.
+- [x] **CAT-06**: An Instructor with `courses.publish` in matching scope can publish an assigned Course; the control and server action are gated on the permission; publication records actor, version, time.
+- [x] **CAT-07**: Public Course and Programme catalogue pages are published independently from learning-content publication state; only readiness-passing offers appear publicly; direct unpublished URLs reveal nothing.
+- [x] **CAT-08**: Catalogue records can be archived without breaking historical enrolments, results, or certificates; archived records disappear from new-sale flows but remain readable where policy permits.
 
 ### Cohorts, Scheduling, and Enrolment Operations (COH)
 
-- [ ] **COH-01**: A Cohort is created for either one standalone Course or one Programme; the offer type is unambiguous and immutable after enrolment begins except through an approved migration path.
-- [ ] **COH-02**: Enrolment window, start/end dates, time zone, capacity, independently administrator-entered NGN and USD base prices, delivery mode, instructors, and status can be set; the LMS performs no FX conversion and missing enabled-rail pricing blocks publication.
-- [ ] **COH-03**: Scheduled sessions can be created with title, date/time, duration, location/meeting link, facilitator, and attendance expectation; link visibility follows enrolment and access-timing rules.
-- [ ] **COH-04**: A Cohort publishes only when catalogue, schedule, pricing, instructor, capacity, and completion readiness checks pass; pass/fail readiness items are shown; publish is permission-gated.
+- [x] **COH-01**: A Cohort is created for either one standalone Course or one Programme; the offer type is unambiguous and immutable after enrolment begins except through an approved migration path.
+- [x] **COH-02**: Enrolment window, start/end dates, time zone, capacity, independently administrator-entered NGN and USD base prices, delivery mode, instructors, and status can be set; the LMS performs no FX conversion and missing enabled-rail pricing blocks publication.
+- [x] **COH-03**: Scheduled sessions can be created with title, date/time, duration, location/meeting link, facilitator, and attendance expectation; link visibility follows enrolment and access-timing rules.
+- [x] **COH-04**: A Cohort publishes only when catalogue, schedule, pricing, instructor, capacity, and completion readiness checks pass; pass/fail readiness items are shown; publish is permission-gated.
 - [ ] **COH-05**: Authorized staff can add, approve, transfer, withdraw, or cancel enrolments with a reason; state transitions are validated, audited, communicated, and never create duplicate active enrolments.
-- [ ] **COH-06**: Capacity is enforced during checkout and administrative enrolment; concurrent attempts cannot exceed capacity; released/expired reservations become available per policy.
-- [ ] **COH-07**: Cohort-level views of learners, access, progress, attendance, assessment, completion, and exceptions are available; staff can filter and open a learner detail without viewing out-of-scope Cohorts.
+- [x] **COH-06**: Capacity is enforced during checkout and administrative enrolment; concurrent attempts cannot exceed capacity; released/expired reservations become available per policy.
+- [x] **COH-07**: Cohort-level views of learners, access, progress, attendance, assessment, completion, and exceptions are available; staff can filter and open a learner detail without viewing out-of-scope Cohorts.
 
 ### Registration, Orders, and Enrolment (REG)
 
@@ -64,39 +64,39 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 - **PAY-01**: *Superseded within the PRD itself* — the original "one approved online payment gateway" pilot assumption is replaced by PAY-08 onward (§19, multi-gateway payments). Not tracked as an independent v1 item; see PAY-08.
 - [x] **PAY-02**: Payment states (pending, processing, succeeded, failed, cancelled, refunded, partially refunded where supported) are represented; transitions are valid, idempotent, timestamped, and visible appropriately.
-- [ ] **PAY-03**: Authorized staff with `payments.confirm` can confirm an approved offline/manual payment; amount, currency, date, channel, reference, evidence/note, and reason are required; one audit event and one enrolment effect result.
-- [ ] **PAY-04**: Duplicate or conflicting online/manual confirmation is prevented; a second success attempt is rejected or safely reconciled, showing staff the existing transaction and a corrective path.
-- [ ] **PAY-05**: Authorized staff with `refunds.manage` can record/initiate approved refunds; amount, reason, approver/reference, resulting access decision, actor, and time are preserved; amount cannot exceed eligible paid value.
-- [ ] **PAY-06**: Payment and refund reconciliation views and CSV exports are available; totals reconcile to transaction rows for the same filters; manual and gateway records are distinguishable; exports are permission-protected.
-- [ ] **PAY-07**: Delayed, duplicated, or out-of-order gateway notifications are handled safely; webhook replay/ordering does not duplicate enrolment, receipt, or financial effect; ambiguous cases enter a visible exception state.
-- [ ] **PAY-08**: Before order creation a learner selects an available administrator-entered currency price: NGN routes only to Paystack, USD routes only to Stripe, and approved manual payment is shown only when configured. Currency and gateway cannot be paired differently by the client, and no FX conversion occurs. *(Supersedes PAY-01's single-gateway assumption and Phase 6 D-07's future use.)*
+- [x] **PAY-03**: Authorized staff with `payments.confirm` can confirm an approved offline/manual payment; amount, currency, date, channel, reference, evidence/note, and reason are required; one audit event and one enrolment effect result.
+- [x] **PAY-04**: Duplicate or conflicting online/manual confirmation is prevented; a second success attempt is rejected or safely reconciled, showing staff the existing transaction and a corrective path.
+- [x] **PAY-05**: Authorized staff with `refunds.manage` can record/initiate approved refunds; amount, reason, approver/reference, resulting access decision, actor, and time are preserved; amount cannot exceed eligible paid value.
+- [x] **PAY-06**: Payment and refund reconciliation views and CSV exports are available; totals reconcile to transaction rows for the same filters; manual and gateway records are distinguishable; exports are permission-protected.
+- [x] **PAY-07**: Delayed, duplicated, or out-of-order gateway notifications are handled safely; webhook replay/ordering does not duplicate enrolment, receipt, or financial effect; ambiguous cases enter a visible exception state.
+- [x] **PAY-08**: Before order creation a learner selects an available administrator-entered currency price: NGN routes only to Paystack, USD routes only to Stripe, and approved manual payment is shown only when configured. Currency and gateway cannot be paired differently by the client, and no FX conversion occurs. *(Supersedes PAY-01's single-gateway assumption and Phase 6 D-07's future use.)*
 - [x] **PAY-09**: Provider-specific Paystack and Stripe integrations sit behind one product-owned payment interface and shared state machine; provider differences do not change the learner's enrolment/receipt/audit/support model.
 - [x] **PAY-10**: Paystack and Stripe results are verified server-side using approved correlation/signature controls before payment success is recorded; redirect manipulation and invalid webhooks cannot mark an order paid.
-- [ ] **PAY-11**: Payment initiation, confirmation, failure, cancellation, refund, and reconciliation are idempotent across methods; repeated/reordered events and method switching produce at most one successful payment effect and active enrolment.
-- [ ] **PAY-12**: Provider, currency, base price, platform fee, estimated/actual gateway fee, learner total, school settlement, KQ NEXUS gross/net, transaction/reference, payment state, and safe exception context are exposed to authorized Finance/Operations users with provider-filtered reconciliation/export views.
-- [ ] **PAY-13**: An authorized refund routes to the original provider where supported, or records a controlled manual refund outcome; amount cannot exceed eligible paid value; reason/approver/outcome/actor/time are auditable.
-- [ ] **PAY-14**: Gateway credentials and webhook secrets stay in deployment-managed secret storage — never in the browser, exports, audit detail, staff UI, or source control; staff may see enabled provider status but not secrets.
+- [x] **PAY-11**: Payment initiation, confirmation, failure, cancellation, refund, and reconciliation are idempotent across methods; repeated/reordered events and method switching produce at most one successful payment effect and active enrolment.
+- [x] **PAY-12**: Provider, currency, base price, platform fee, estimated/actual gateway fee, learner total, school settlement, KQ NEXUS gross/net, transaction/reference, payment state, and safe exception context are exposed to authorized Finance/Operations users with provider-filtered reconciliation/export views.
+- [x] **PAY-13**: An authorized refund routes to the original provider where supported, or records a controlled manual refund outcome; amount cannot exceed eligible paid value; reason/approver/outcome/actor/time are auditable.
+- [x] **PAY-14**: Gateway credentials and webhook secrets stay in deployment-managed secret storage — never in the browser, exports, audit detail, staff UI, or source control; staff may see enabled provider status but not secrets.
 
-- [ ] **PAY-15**: KQ NEXUS's learner-paid platform fee is exactly 1.5% of the administrator-entered base Cohort price in the selected currency, rounded in integer minor units, and is never calculated as 1.5% of the grossed total.
-- [ ] **PAY-16**: The learner-paid gateway gross-up is calculated from an explicit versioned provider fee schedule with percentage, fixed fee, threshold, cap, tax treatment, and rounding; the immutable order snapshot remains reproducible after configuration changes.
-- [ ] **PAY-17**: Online payments use provider-native split settlement: the school receives the immutable base price, KQ NEXUS receives the platform allocation and bears the actual gateway charge, and expected-versus-actual settlement values are reconcilable.
+- [x] **PAY-15**: KQ NEXUS's learner-paid platform fee is exactly 1.5% of the administrator-entered base Cohort price in the selected currency, rounded in integer minor units, and is never calculated as 1.5% of the grossed total.
+- [x] **PAY-16**: The learner-paid gateway gross-up is calculated from an explicit versioned provider fee schedule with percentage, fixed fee, threshold, cap, tax treatment, and rounding; the immutable order snapshot remains reproducible after configuration changes.
+- [x] **PAY-17**: Online payments use provider-native split settlement: the school receives the immutable base price, KQ NEXUS receives the platform allocation and bears the actual gateway charge, and expected-versus-actual settlement values are reconcilable.
 
 ### Learning Delivery and Progress (LRN)
 
-- [ ] **LRN-01**: Each learner sees an enrolment dashboard with next action, progress, scheduled sessions, assessment obligations, results, tickets, and certificate state — own records only.
-- [ ] **LRN-02**: Published Modules and Lessons render in defined order with prerequisite locks where configured; required sequencing is enforced server-side; locked content explains the unmet condition.
-- [ ] **LRN-03**: Supported lesson content is delivered securely and accessibly — text, images, permitted files, uploaded video, embeds, links — with appropriate labels, keyboard behavior, and authorized file access.
+- [x] **LRN-01**: Each learner sees an enrolment dashboard with next action, progress, scheduled sessions, assessment obligations, results, tickets, and certificate state — own records only.
+- [x] **LRN-02**: Published Modules and Lessons render in defined order with prerequisite locks where configured; required sequencing is enforced server-side; locked content explains the unmet condition.
+- [x] **LRN-03**: Supported lesson content is delivered securely and accessibly — text, images, permitted files, uploaded video, embeds, links — with appropriate labels, keyboard behavior, and authorized file access.
 - [x] **LRN-04**: Learner progress is tracked using completion rules appropriate to each content type; progress is idempotent, attributable, timestamped, recalculable, and not advanced by unauthorized requests.
 - [x] **LRN-05**: Manual Lesson completion is allowed only where the published rule permits it, only by the enrolled learner in the valid access window, reversible only per policy.
-- [ ] **LRN-06**: Scheduled-session details and meeting links are provided to eligible learners; links are hidden before the visibility window and from unenrolled users; time-zone/access guidance is clear.
-- [ ] **LRN-07**: Course and Programme completion is calculated from versioned rules and current learner evidence; the calculation identifies each satisfied/unmet rule, handles corrections, and records completion time and rule version.
+- [x] **LRN-06**: Scheduled-session details and meeting links are provided to eligible learners; links are hidden before the visibility window and from unenrolled users; time-zone/access guidance is clear.
+- [x] **LRN-07**: Course and Programme completion is calculated from versioned rules and current learner evidence; the calculation identifies each satisfied/unmet rule, handles corrections, and records completion time and rule version.
 
 ### Attendance (ATT)
 
-- [ ] **ATT-01**: Authorized staff can mark attendance for scheduled sessions using present/absent/late/excused/not-recorded; each change records actor, time, state, optional note; bulk entry cannot affect out-of-scope learners.
-- [ ] **ATT-02**: A configured attendance threshold is supported as a Course/Programme completion rule; learner and staff see earned/required attendance; completion recalculates after correction.
-- [ ] **ATT-03**: Authorized attendance correction after the normal marking window requires a mandatory reason; before/after values and reason remain in audit history and are reflected consistently.
-- [ ] **ATT-04**: Attendance exceptions (missing registers, at-risk learners, disputed/corrected states) are exposed to staff dashboards and learner detail, filterable with matching CSV values.
+- [x] **ATT-01**: Authorized staff can mark attendance for scheduled sessions using present/absent/late/excused/not-recorded; each change records actor, time, state, optional note; bulk entry cannot affect out-of-scope learners.
+- [x] **ATT-02**: A configured attendance threshold is supported as a Course/Programme completion rule; learner and staff see earned/required attendance; completion recalculates after correction.
+- [x] **ATT-03**: Authorized attendance correction after the normal marking window requires a mandatory reason; before/after values and reason remain in audit history and are reflected consistently.
+- [x] **ATT-04**: Attendance exceptions (missing registers, at-risk learners, disputed/corrected states) are exposed to staff dashboards and learner detail, filterable with matching CSV values.
 
 ### Quizzes, Assignments, Grading, and Feedback (ASM)
 
@@ -119,10 +119,10 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Communications and Notifications (COM)
 
-- [ ] **COM-01**: Transactional emails are sent for verification, password reset, order/payment outcome, enrolment, session change, result release, certificate issuance/revocation, and ticket activity — approved template, correct recipient, delivery record, no sensitive secrets.
-- [ ] **COM-02**: Duplicate transactional messages during retries/idempotent processing are prevented; repeated events within the same correlation produce at most one intended notification.
-- [ ] **COM-03**: Important in-product notifications/dashboard alerts are shown for learner and staff actions; users see unread/current state and open the relevant authorized record; stale links fail safely.
-- [ ] **COM-04**: One approved client sender identity and brand, configured at deployment, is used consistently; no tenant-level editor is required.
+- [x] **COM-01**: Transactional emails are sent for verification, password reset, order/payment outcome, enrolment, session change, result release, certificate issuance/revocation, and ticket activity — approved template, correct recipient, delivery record, no sensitive secrets.
+- [x] **COM-02**: Duplicate transactional messages during retries/idempotent processing are prevented; repeated events within the same correlation produce at most one intended notification.
+- [x] **COM-03**: Important in-product notifications/dashboard alerts are shown for learner and staff actions; users see unread/current state and open the relevant authorized record; stale links fail safely.
+- [x] **COM-04**: One approved client sender identity and brand, configured at deployment, is used consistently; no tenant-level editor is required.
 
 ### Support Tickets (SUP)
 
@@ -135,11 +135,11 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Dashboards, Reports, Exports, and Audit (RPT)
 
-- [ ] **RPT-01**: Fixed operational dashboards exist for registrations, payments, enrolments, attendance, progress, submissions, grades, completion, certificates, and support; each states metric definition, filter context, last-refreshed time, and empty/error behavior.
-- [ ] **RPT-02**: The requesting user's permissions and scope apply to every dashboard, aggregate, drill-down, and export; out-of-scope data cannot be inferred through totals, filters, identifiers, downloads, or direct requests.
-- [ ] **RPT-03**: CSV export is provided for the defined operational datasets, with stable column definitions, applied filters, generation time, and a row-level reconciliation path.
-- [ ] **RPT-04**: Large exports process asynchronously with queued, processing, succeeded, failed, expired, and retry states; users can leave the screen, see job state later, retry safely, and download only via time-limited authorized access.
-- [ ] **RPT-05**: An authorized, filterable audit view and export exists for security and sensitive business actions; audit records are append-only, include correlation data, and redact secrets while preserving investigative value.
+- [x] **RPT-01**: Fixed operational dashboards exist for registrations, payments, enrolments, attendance, progress, submissions, grades, completion, certificates, and support; each states metric definition, filter context, last-refreshed time, and empty/error behavior.
+- [x] **RPT-02**: The requesting user's permissions and scope apply to every dashboard, aggregate, drill-down, and export; out-of-scope data cannot be inferred through totals, filters, identifiers, downloads, or direct requests.
+- [x] **RPT-03**: CSV export is provided for the defined operational datasets, with stable column definitions, applied filters, generation time, and a row-level reconciliation path.
+- [x] **RPT-04**: Large exports process asynchronously with queued, processing, succeeded, failed, expired, and retry states; users can leave the screen, see job state later, retry safely, and download only via time-limited authorized access.
+- [x] **RPT-05**: An authorized, filterable audit view and export exists for security and sensitive business actions; audit records are append-only, include correlation data, and redact secrets while preserving investigative value.
 
 ### Non-Functional, Security, Accessibility, and Operational Requirements (NFR)
 
@@ -207,24 +207,24 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | IAM-03 | Phase 3 | Built — verification pending (password reset included) |
 | IAM-05 | Phase 3 | Built — verification pending |
 | IAM-06 | Phase 3 | Built — verification pending |
-| CAT-02 | Phase 4 | Built — verification pending |
-| CAT-03 | Phase 4 | Built — verification pending |
-| CAT-04 | Phase 4 | Built — verification pending |
-| CAT-05 | Phase 4 | Built — verification pending |
-| CAT-06 | Phase 4 | Built — verification pending |
-| CAT-07 | Phase 4 | Built — verification pending |
-| CAT-08 | Phase 4 | Built — verification pending |
-| COH-01 | Phase 5 | Built — verification pending |
-| COH-02 | Phase 5 | Built — verification pending |
-| COH-03 | Phase 5 | Built — verification pending |
-| COH-04 | Phase 5 | Built — verification pending |
-| COH-05 | Phase 5 | Built — verification pending |
-| COH-06 | Phase 5 | Built — verification pending |
-| COH-07 | Phase 5 | Built — verification pending |
-| ATT-01 | Phase 5 | Built — verification pending |
-| ATT-02 | Phase 5 | Built — verification pending |
-| ATT-03 | Phase 5 | Built — verification pending |
-| ATT-04 | Phase 5 | Built — verification pending |
+| CAT-02 | Phase 4 | Complete (verified 2026-09-29, 04-VERIFICATION.md) |
+| CAT-03 | Phase 4 | Complete (verified 2026-09-29, 04-VERIFICATION.md) |
+| CAT-04 | Phase 4 | Complete (verified 2026-09-29, 04-VERIFICATION.md) |
+| CAT-05 | Phase 4 | Complete (verified 2026-09-29, 04-VERIFICATION.md) |
+| CAT-06 | Phase 4 | Complete (verified 2026-09-29, 04-VERIFICATION.md) |
+| CAT-07 | Phase 4 | Complete (verified 2026-09-29, 04-VERIFICATION.md) |
+| CAT-08 | Phase 4 | Complete (verified 2026-09-29, 04-VERIFICATION.md) |
+| COH-01 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| COH-02 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| COH-03 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| COH-04 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| COH-05 | Phase 5 | Verified except notification delivery — pending Phase 13 (COM-01) |
+| COH-06 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| COH-07 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| ATT-01 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| ATT-02 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| ATT-03 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
+| ATT-04 | Phase 5 | Complete (verified 2026-09-29, 05-VERIFICATION.md) |
 | REG-01 | Phase 6 | Complete |
 | REG-02 | Phase 6 | Complete |
 | REG-03 | Phase 6 | Complete |
@@ -234,31 +234,31 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | PAY-09 | Phase 6 | Complete |
 | PAY-10 | Phase 6 | Complete |
 | PAY-01 | — | Superseded by PAY-08 (document-internal revision, PRD §19) |
-| PAY-03 | Phase 7 | Built — verification pending |
-| PAY-04 | Phase 7 | Built — verification pending |
-| PAY-05 | Phase 7 | Built — verification pending |
-| PAY-07 | Phase 7 | Built — verification pending |
-| PAY-08 | Phase 7 | Built — verification pending |
-| PAY-11 | Phase 7 | Built — verification pending |
-| PAY-13 | Phase 7 | Built — verification pending |
-| PAY-14 | Phase 7 | Built — verification pending |
-| PAY-15 | Phase 7 | Built — verification pending |
-| PAY-16 | Phase 7 | Built — verification pending |
-| PAY-17 | Phase 7 | Built — verification pending |
-| PAY-06 | Phase 8 | Built — verification pending |
-| PAY-12 | Phase 8 | Built — verification pending |
-| RPT-01 | Phase 8 | Built — verification pending |
-| RPT-02 | Phase 8 | Built — verification pending |
-| RPT-03 | Phase 8 | Built — verification pending |
-| RPT-04 | Phase 8 | Built — verification pending |
-| RPT-05 | Phase 8 | Built — verification pending |
-| LRN-01 | Phase 9 | Built — verification pending |
-| LRN-02 | Phase 9 | Built — verification pending |
-| LRN-03 | Phase 9 | Built — verification pending |
-| LRN-04 | Phase 9 | Complete |
-| LRN-05 | Phase 9 | Complete |
-| LRN-06 | Phase 9 | Built — verification pending |
-| LRN-07 | Phase 9 | Built — verification pending |
+| PAY-03 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-04 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-05 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-07 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-08 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-11 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-13 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-14 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-15 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-16 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-17 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
+| PAY-06 | Phase 8 | Complete |
+| PAY-12 | Phase 8 | Complete |
+| RPT-01 | Phase 8 | Complete |
+| RPT-02 | Phase 8 | Complete |
+| RPT-03 | Phase 8 | Complete |
+| RPT-04 | Phase 8 | Complete |
+| RPT-05 | Phase 8 | Complete |
+| LRN-01 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
+| LRN-02 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
+| LRN-03 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
+| LRN-04 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
+| LRN-05 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
+| LRN-06 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
+| LRN-07 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
 | ASM-01 | Phase 10 | Complete |
 | ASM-02 | Phase 10 | Complete |
 | ASM-03 | Phase 10 | Complete |
@@ -278,10 +278,10 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | SUP-04 | Phase 12 | Complete |
 | SUP-05 | Phase 12 | Complete |
 | SUP-06 | Phase 12 | Complete |
-| COM-01 | Phase 13 | Pending |
-| COM-02 | Phase 13 | Pending |
-| COM-03 | Phase 13 | Pending |
-| COM-04 | Phase 13 | Pending |
+| COM-01 | Phase 13 | Complete |
+| COM-02 | Phase 13 | Complete |
+| COM-03 | Phase 13 | Complete |
+| COM-04 | Phase 13 | Complete |
 | LIC-01 | Phase 14 | Pending |
 | LIC-02 | Phase 14 | Pending |
 | LIC-03 | Phase 14 | Pending |

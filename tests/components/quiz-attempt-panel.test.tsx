@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QuizAttemptPanel } from "@/components/learner/QuizAttemptPanel";
 import type { LearnerQuizView, SafeQuizAttempt } from "@/server/services/learner-quiz-service";
 vi.mock("@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions", () => ({ startAttemptAction: vi.fn(), submitAttemptAction: vi.fn(), saveAttemptAnswersAction: vi.fn() }));
@@ -60,7 +60,12 @@ describe("QuizAttemptPanel", () => {
     expect(container.innerHTML).not.toMatch(/Correct answer|isCorrect|text-success|text-danger/);
     fireEvent.click(screen.getByLabelText("First option")); fireEvent.click(screen.getByLabelText("Third option"));
     expect(screen.getByText("2 of 2 answered")).toBeTruthy(); expect((screen.getByText("Submit quiz") as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByText("Submit quiz")); await screen.findByText("2 / 2 (100%)");
+    fireEvent.click(screen.getByText("Submit quiz"));
+    // UX batch A: submitting asks first, because it uses up an attempt.
+    const dialog = await screen.findByRole("dialog");
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(within(dialog).getByText(/This is your last attempt/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Submit quiz" })); await screen.findByText("2 / 2 (100%)");
     expect(onSubmit).toHaveBeenCalledTimes(1); expect(onSubmit.mock.calls[0]).toEqual([{ enrolmentId: "e", lessonId: "l", attemptId: "a", responses: [{ questionId: "q1", selectedOptionIds: ["x"] }, { questionId: "q2", selectedOptionIds: ["z"] }] }]);
   });
   it("uses a warning verdict and explains expiry", () => {
@@ -74,6 +79,7 @@ describe("QuizAttemptPanel", () => {
   it("keeps the form on submit failure and offers retry", async () => {
     render(<QuizAttemptPanel {...base} enrolmentId="e" lessonId="l" onStart={async () => ({ ok: true, attempt: active, history: [], attemptsRemaining: 1 })} onSubmit={async () => ({ ok: false, message: "Your quiz couldn't be submitted", body: "Your answers are saved — try submitting again." })} />);
     fireEvent.click(screen.getByText("Start quiz")); await screen.findByText("One?"); fireEvent.click(screen.getByLabelText("First option")); fireEvent.click(screen.getByLabelText("Third option")); fireEvent.click(screen.getByText("Submit quiz"));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Submit quiz" }));
     await waitFor(() => expect(screen.getByText("Try again")).toBeTruthy()); expect(screen.getByText(/answers are saved/)).toBeTruthy(); expect(screen.getByLabelText("First option")).toBeTruthy();
   });
 });

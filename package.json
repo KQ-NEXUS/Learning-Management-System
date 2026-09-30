@@ -10,6 +10,7 @@
     "docker:up": "docker compose up -d --build",
     "lint": "eslint",
     "test": "vitest run --no-file-parallelism",
+    "test:perf": "vitest run --config vitest.perf.config.mts",
     "db:seed": "prisma db seed",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"

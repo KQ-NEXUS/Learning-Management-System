@@ -6,6 +6,7 @@ import { roleService, MIN_REASON_LENGTH } from "@/server/services/role-service";
 import { AuthorizationError, can } from "@/server/permissions";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { AssignmentsPanel, AccountStatusControl, type AssignmentRow } from "../AssignmentsPanel";
+import { humanizeCode } from "@/lib/humanize";
 
 const TONE: Record<string, "success" | "warning" | "neutral"> = {
   ACTIVE: "success",
@@ -74,7 +75,7 @@ export default async function StaffUserDetailPage({
       ]}
       title={user.name}
       identifier={user.email}
-      badges={<StatusPill label={STATUS_LABEL[user.status] ?? user.status} tone={TONE[user.status] ?? "neutral"} />}
+      badges={<StatusPill label={STATUS_LABEL[user.status] ?? humanizeCode(user.status)} tone={TONE[user.status] ?? "neutral"} />}
       actions={
         canManageUsers ? (
           <AccountStatusControl
@@ -94,7 +95,7 @@ export default async function StaffUserDetailPage({
               facts={[
                 { label: "Name", value: user.name },
                 { label: "Email", value: user.email, mono: true },
-                { label: "Status", value: <StatusPill label={STATUS_LABEL[user.status] ?? user.status} tone={TONE[user.status] ?? "neutral"} /> },
+                { label: "Status", value: <StatusPill label={STATUS_LABEL[user.status] ?? humanizeCode(user.status)} tone={TONE[user.status] ?? "neutral"} /> },
                 { label: "Created", value: fmtDate(user.createdAt) },
                 ...(user.deactivatedAt
                   ? [{ label: "Deactivated", value: fmtDate(user.deactivatedAt) }]

@@ -26,7 +26,7 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 5: Cohorts, Scheduling, Enrolment Operations & Attendance** *(Track B, parallel-eligible with Phases 2–3)* - Staff stand up Cohorts, schedule sessions, manage enrolment lifecycle and capacity, mark and correct attendance. (completed 2026-09-07)
 - [x] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement. (completed 2026-09-12)
 - [x] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
-- [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
+- [x] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available. (completed 2026-09-30)
 - [x] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion. (completed 2026-09-15)
 - [x] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides. (completed 2026-09-16)
 - [x] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly. (completed 2026-09-19)
@@ -688,6 +688,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
 - Every protected read and mutation is server-authorized, while contextual records independently re-check their own domain permissions.
 - Lifecycle mutations use version-guarded transactions that atomically persist state, attributable ticket history, security audit, and minimal redacted Phase 13 events.
 - Ticket attachments use private storage, strict type/count/size verification, denial-parity downloads, and bounded cleanup; no malware-scanner capability is implied.
+
 **UI hint**: yes
 
 ---
@@ -703,7 +704,48 @@ Wave 13 *(blocked on Wave 12; human-only)*
   2. Retried or replayed events never produce duplicate messages within the same correlation. (COM-02)
   3. Important in-product notifications surface unread/current state to the right user and fail safely on stale or inaccessible links. (COM-03)
 
-**Plans**: TBD
+**Plans**: 13/13 plans executed
+
+**Wave 1**
+
+- [x] 13-01-PLAN.md — additive communications schema, [BLOCKING] schema push, payment.failed/payment.refunded event types, and the shared communications vocabulary.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 13-02-PLAN.md — one approved sender identity, Brevo HTML+text transport with stub mode, and the 27 typed branded email templates.
+- [x] 13-03-PLAN.md — owner-scoped notification services, unread/list/preferences endpoints, and the email preference store.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 13-04-PLAN.md — deduplicated dispatch with stable keys, retry/backoff Pass 2, audited resend, and the auth mails moved onto it.
+- [x] 13-05-PLAN.md — access-checked notification links with one indistinguishable stale outcome, and the 90-day archive job.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 13-06-PLAN.md — bell, slide-over drawer and learner email-preferences panel in the learner and staff headers.
+- [x] 13-07-PLAN.md — the outbox drain: per-event claim, fan-out, poison handling, recipient gating, and the scheduled Netlify task.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 13-08-PLAN.md — enrolment/payment coverage: one combined enrolment mail, direct checkout sends removed, payment.failed and payment.refunded.
+- [x] 13-12-PLAN.md — staff delivery log with audited Resend.
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 13-09-PLAN.md — enrolment status, session change and cohort cancellation mail with coalescing and precedence.
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 13-10-PLAN.md — result, certificate and learner ticket mail carrying references only.
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 13-11-PLAN.md — staff alerts from live permission and scope, assignee/escalation/payment mail, and the failed-email administrator alert.
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 13-13-PLAN.md — opt-in live Brevo smoke test, phase invariants, and a real-Postgres acceptance run of the success criteria.
+
 **UI hint**: yes
 
 ---
@@ -756,11 +798,11 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 5. Cohorts, Scheduling, Enrolment Operations & Attendance | 16/16 | Complete | 2026-09-07 |
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
-| 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
+| 8. Finance Reconciliation, Dashboards & Reporting Exports | 12/12 | Complete | 2026-09-30 |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
 | 12. Support Tickets | 9/9 | Complete    | 2026-09-25 |
-| 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
+| 13. Transactional Communications & Notifications | 13/13 | In Progress|  |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |

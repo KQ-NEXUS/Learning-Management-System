@@ -4,6 +4,8 @@ import { can, canAnywhere } from "@/server/permissions";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { LEARNER_LANDING_PATH } from "@/server/auth/landing";
 import { profileService } from "@/server/services/profile-service";
+import { notificationService } from "@/server/services/notification-service";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { StaffShell, type StaffIdentity, type StaffNavItem } from "./StaffShell";
 
 /**
@@ -32,6 +34,7 @@ const NAV: StaffNavItem[] = [
   { label: "Users", href: "/staff/users", group: "Administration" },
   { label: "Roles", href: "/staff/roles", group: "Administration" },
   { label: "Audit", href: "/staff/audit", group: "Administration" },
+  { label: "Email log", href: "/staff/email-log", group: "Administration" },
 ];
 
 /** The view permission each section needs; a section is shown only to staff who hold it. */
@@ -48,6 +51,7 @@ const NAV_PERMISSION: Record<string, Parameters<typeof can>[0]> = {
   "/staff/users": "users.view",
   "/staff/roles": "roles.view",
   "/staff/audit": "audit.view",
+  "/staff/email-log": "audit.view",
 };
 
 /** Sections whose list pages filter to the caller's scope (integration warning #1). */
@@ -91,6 +95,16 @@ export default async function StaffLayout({
     </form>
   );
 
+  // A database blip must never remove the header chrome (UI-SPEC chrome
+  // persistence, D-22) — the bell falls back to a 0 badge, never a crash.
+  let unread = 0;
+  try {
+    unread = await notificationService.unreadCount(actor);
+  } catch {
+    unread = 0;
+  }
+  const bell = <NotificationBell initialUnread={unread} variant="staff" />;
+
   // Hide sections this person cannot open, instead of offering a link that lands on a denial.
   // Overview is every staff member's home; each section is checked against its own view permission.
   // Integration warning #1 — the delivery lists follow the caller's scope, so
@@ -106,7 +120,7 @@ export default async function StaffLayout({
   const visibleNav = NAV.filter((_, i) => allowed[i]);
 
   return (
-    <StaffShell nav={visibleNav} identity={identity} signOut={signOut}>
+    <StaffShell nav={visibleNav} identity={identity} signOut={signOut} bell={bell}>
       {children}
     </StaffShell>
   );

@@ -146,6 +146,9 @@ function realService(
   opts?: {
     paystackOutcome?: { id: number; status: string; amount: number; currency: string };
     paystackFails?: boolean;
+    paystackThrows?: Error;
+    /** Plan 08 (D-09) — forces the completion transaction's event write to fail, proving the Refund/Order writes roll back with it against a REAL Postgres transaction. */
+    domainEventShouldThrow?: boolean;
   },
 ) {
   const { withPermission } = createTestWithPermission([grant("refunds.manage")], { userId: actorId });
@@ -188,12 +191,19 @@ function realService(
               assertRevocable: (orderId) => assertOrderAccessRevocable(tx as never, orderId),
               revoke: (args) => revokeAccessForOrder(tx as never, args),
             },
+            domainEvent: {
+              create: (args) =>
+                (opts?.domainEventShouldThrow
+                  ? Promise.reject(new Error("simulated event write failure"))
+                  : tx.domainEvent.create({ data: args.data as never })) as Promise<unknown>,
+            },
           };
           return fn(client);
         }),
     },
     paystackRefund: async () => {
       if (opts?.paystackFails) throw new Error("Paystack is unavailable.");
+      if (opts?.paystackThrows) throw opts.paystackThrows;
       return opts?.paystackOutcome ?? { id: 1, status: "processed", amount: 0, currency: "NGN" };
     },
     stripeRefund: async () => ({ id: "re_test", status: "succeeded", amount: 0, currency: "usd" }),
@@ -425,5 +435,93 @@ describe("integration warning #3 — 'Revoke access' on a refund ends the learne
     expect(result.status).toBe("FAILED");
     expect(result.access).toBe("unchanged");
     expect(await statusOf(f.enrolmentId)).toBe("ACTIVE");
+  }, 30_000);
+});
+
+describe("recordRefund — real Postgres payment.refunded outbox event, same transaction as the completion writes (D-09)", () => {
+  it("a COMPLETED refund commits the Refund row, the Order status and exactly one payment.refunded DomainEvent together, with no reason key in the payload", async () => {
+    const { orderId } = await seedPaidOrder();
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+    const service = realService(staffUserId);
+
+    const result = await service.recordRefund({
+      orderId,
+      amountMinor: BREAKDOWN.totalAmountMinor,
+      reason: "Learner requested a refund — staff-internal detail, must never reach the event.",
+      accessDecision: "RETAINED",
+    });
+
+    expect(result.status).toBe("COMPLETED");
+
+    const refundRow = await testDb.prisma.refund.findUniqueOrThrow({ where: { id: result.id } });
+    expect(refundRow.status).toBe("COMPLETED");
+
+    const orderRow = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(orderRow.status).toBe("REFUNDED");
+
+    const events = await testDb.prisma.domainEvent.findMany({ where: { type: "payment.refunded" } });
+    const mine = events.filter((e) => (e.payload as { refundId?: string }).refundId === result.id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.payload).not.toHaveProperty("reason");
+    expect(JSON.stringify(mine[0]!.payload)).not.toContain("staff-internal");
+    expect(mine[0]!.payload).toMatchObject({
+      orderId,
+      refundId: result.id,
+      amountMinor: BREAKDOWN.totalAmountMinor,
+      status: "COMPLETED",
+    });
+  }, 30_000);
+
+  it("a FAILED provider refund leaves 0 payment.refunded events", async () => {
+    const { orderId } = await seedPaidOrder();
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+    const service = realService(staffUserId, { paystackThrows: new Error("Paystack: transaction not found") });
+
+    const result = await service.recordRefund({
+      orderId,
+      amountMinor: BREAKDOWN.totalAmountMinor,
+      reason: "Provider outage simulation.",
+      accessDecision: "RETAINED",
+    });
+
+    expect(result.status).toBe("FAILED");
+    const events = await testDb.prisma.domainEvent.findMany({ where: { type: "payment.refunded" } });
+    const mine = events.filter((e) => (e.payload as { refundId?: string }).refundId === result.id);
+    expect(mine).toHaveLength(0);
+
+    const orderRow = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(orderRow.status).not.toBe("REFUNDED");
+    expect(orderRow.status).not.toBe("PARTIALLY_REFUNDED");
+  }, 30_000);
+
+  it("with the event write forced to throw, the Refund and Order rows are unchanged from their pre-transaction state", async () => {
+    const { orderId } = await seedPaidOrder();
+    const { userId: staffUserId } = await seedLearnerFixture(testDb.prisma);
+    const orderBefore = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    const service = realService(staffUserId, { domainEventShouldThrow: true });
+
+    await expect(
+      service.recordRefund({
+        orderId,
+        amountMinor: BREAKDOWN.totalAmountMinor,
+        reason: "Forced event-write failure.",
+        accessDecision: "RETAINED",
+      }),
+    ).rejects.toThrow("simulated event write failure");
+
+    // The reservation's PROCESSING row was written by the FIRST, separate
+    // transaction and is unaffected — but it never advances past PROCESSING,
+    // since the completion transaction (status update + Order update + the
+    // event write) rolled back as one unit against the SAME real Postgres.
+    const refunds = await testDb.prisma.refund.findMany({ where: { orderId } });
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]!.status).toBe("PROCESSING");
+
+    const orderAfter = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(orderAfter.status).toBe(orderBefore.status);
+
+    const events = await testDb.prisma.domainEvent.findMany({ where: { type: "payment.refunded" } });
+    const mine = events.filter((e) => (e.payload as { orderId?: string }).orderId === orderId);
+    expect(mine).toHaveLength(0);
   }, 30_000);
 });

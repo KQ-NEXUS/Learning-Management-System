@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { ConfirmModal } from "@/components/primitives";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { overrideLessonProgressAction } from "../../progress-actions";
+import { humanizeCode } from "@/lib/humanize";
 
 export type ProgressLessonRow = {
   id: string;
@@ -115,7 +116,7 @@ export function ProgressOverridePanel({
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {lesson.completed
-                    ? `${SOURCE_LABEL[lesson.completedSource ?? ""] ?? lesson.completedSource} · ${
+                    ? `${SOURCE_LABEL[lesson.completedSource ?? ""] ?? humanizeCode(lesson.completedSource)} · ${
                         lesson.completedAt ? formatTimestamp(new Date(lesson.completedAt)) : "—"
                       }`
                     : "Not completed"}

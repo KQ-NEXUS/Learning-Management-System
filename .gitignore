@@ -77,4 +77,8 @@ reference/
 .planning/current-agent-id.txt
 .planning/async-jobs/
 .planning/**/.review-fix-recovery-pending.json
+# one-off vitest/eslint JSON reports and script logs saved during verification runs
+.planning/*-tests.json
+.planning/*-lint.json
+.planning/*.log
 _tmp-*

@@ -20,7 +20,8 @@ export type ResultsGrade = {
   overrides: Array<{ previousScore: number; newScore: number; reason: string; actorId: string | null; createdAt: Date }>;
 };
 export type LearnerResultCard = {
-  assessmentId: string; title: string; type: "QUIZ" | "ASSIGNMENT";
+  /** The assessment's own course — staff reads narrow a COURSE grant to it (F-05). */
+  assessmentId: string; courseId: string; title: string; type: "QUIZ" | "ASSIGNMENT";
   effectiveScore: number | null; maxScore: number | null; passed: boolean | null;
   passMark: number | null; feedback: string | null; attemptsRemaining: number | null;
   history: Array<{ kind: "attempt" | "submission"; ref: string; submissionId?: string; number: number; at: Date; status: string; score: number | null; isLate?: boolean }>;
@@ -97,7 +98,7 @@ export function createLearnerResultsService(deps: LearnerResultsDeps) {
         } else {
           history = (await deps.submissions(actor, { assessmentId: assessment.id, enrolmentId: context.enrolmentId })).sort((a,b) => b.attemptNumber-a.attemptNumber).map(s => ({ kind: "submission", ref: s.receiptId, submissionId: s.submissionId, number: s.attemptNumber, at: s.submittedAt, status: s.uploadStatus, score: null, isLate: s.isLate }));
         }
-        cards.push({ assessmentId: assessment.id, title: assessment.title, type: assessment.type, effectiveScore, maxScore, passed, passMark: assessment.passMark, attemptsRemaining, feedback: assessment.feedbackBehaviour === "NEVER" ? null : grade.feedback, history,
+        cards.push({ assessmentId: assessment.id, courseId: assessment.courseId, title: assessment.title, type: assessment.type, effectiveScore, maxScore, passed, passMark: assessment.passMark, attemptsRemaining, feedback: assessment.feedbackBehaviour === "NEVER" ? null : grade.feedback, history,
           overrides: released.flatMap(g => g.overrides).sort((a,b) => a.createdAt.getTime()-b.createdAt.getTime()).map(o => ({ previousScore:o.previousScore,newScore:o.newScore,reason:o.reason,actorName:o.actorId ? actors.get(o.actorId) ?? null : null,at:o.createdAt })) });
       }
     }

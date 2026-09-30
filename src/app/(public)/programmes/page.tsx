@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { DELIVERY_MODE_LABEL, formatPrice } from "@/app/(public)/CohortCards";
 import { listPublicProgrammes, type PublicCohort } from "@/server/services/public-catalogue-service";
+import { humanizeCode } from "@/lib/humanize";
 
 // Rendered per request, never prerendered — the Docker builder has no
 // DATABASE_URL (04-15 planner fallback; 04-10 `docker build` requirement).
@@ -54,7 +55,7 @@ export default async function PublicProgrammesPage() {
                   <div>
                     {programme.nextCohort && (
                       <div className="text-[13px] text-muted-foreground">
-                        {DELIVERY_MODE_LABEL[programme.nextCohort.deliveryMode] ?? programme.nextCohort.deliveryMode}
+                        {DELIVERY_MODE_LABEL[programme.nextCohort.deliveryMode] ?? humanizeCode(programme.nextCohort.deliveryMode)}
                       </div>
                     )}
                     <div className={`mt-1 font-semibold ${programme.nextCohort ? "" : "text-muted-foreground"}`}>

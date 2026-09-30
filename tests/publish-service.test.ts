@@ -331,6 +331,28 @@ describe("publishCourse — authorization (D-09)", () => {
   });
 });
 
+describe("publishCourse — CAT-06: an Instructor publishes only their assigned Course", () => {
+  it("a COURSE-scoped courses.publish grant publishes that Course, recording actor and version", async () => {
+    const h = makeHarness();
+    const svc = h.buildService([grant("courses.publish", "COURSE", "course-1")]);
+
+    const result = await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 });
+
+    expect(result.version).toBe(1);
+    expect(h.state.coursePublications[0].publishedById).toBe("actor-9");
+  });
+
+  it("a courses.publish grant scoped to a different Course is denied and writes nothing", async () => {
+    const h = makeHarness();
+    const svc = h.buildService([grant("courses.publish", "COURSE", "some-other-course")]);
+
+    await expect(
+      svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    expect(h.state.coursePublications).toHaveLength(0);
+  });
+});
+
 describe("publishCourse — the immutable version", () => {
   it("inserts one CoursePublication at version 1 with the frozen payload, schema, and actor", async () => {
     const h = makeHarness();

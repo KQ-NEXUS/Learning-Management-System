@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ClipboardList, ListChecks } from "lucide-react";
 import { ResourceTable, StatusPill, type Column } from "@/components/primitives";
+import { humanizeCode } from "@/lib/humanize";
 
 /**
  * The Course-scoped assessment list (ASM-01, ASM-03 — `10-UI-SPEC.md` §7.1).
@@ -50,7 +51,7 @@ const columns: Column<AssessmentRow>[] = [
         ) : (
           <ClipboardList aria-hidden className="size-3.5 text-muted-foreground" />
         )}
-        {TYPE_LABEL[row.type] ?? row.type}
+        {TYPE_LABEL[row.type] ?? humanizeCode(row.type)}
       </span>
     ),
     width: "22%",

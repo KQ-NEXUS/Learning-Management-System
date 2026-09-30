@@ -17,7 +17,8 @@ import {
   VERIFICATION_TOKEN_TTL_MS,
   type TokenPurpose,
 } from "@/lib/identity";
-import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { sendAuthEmail } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -61,14 +62,6 @@ export type VerificationStore = {
   loginThrottle?: { deleteMany(args: { where: { email: string } }): Promise<unknown> };
   $transaction<T>(fn: (tx: VerificationStore) => Promise<T>): Promise<T>;
 };
-
-function buildVerificationEmailText(verifyUrl: string): string {
-  // F-11 — the one pre-hijack case no server rule can catch is the owner
-  // verifying an account they never registered; the copy tells them not to.
-  return `Click to verify: ${verifyUrl}
-
-If you didn't create an account with this email address, ignore this email and don't click the link.`;
-}
 
 export function createVerificationService(deps: {
   store: VerificationStore;
@@ -222,15 +215,15 @@ export function createVerificationService(deps: {
         ttlMs: VERIFICATION_TOKEN_TTL_MS,
       });
       if (issued.ok) {
-        const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-        const verifyUrl = `${baseUrl}/verify?token=${issued.token}`;
-        // G-03-3 — best-effort: a provider outage must not crash a resend.
-        await dispatchBestEffort(dispatch, {
+        // G-03-3 — best-effort (inside sendAuthEmail): a provider outage must
+        // not crash a resend.
+        await sendAuthEmail(dispatch, {
           template: "email-verification",
           toEmail: identifier,
           userId: user.id,
-          subject: "Verify your account",
-          textContent: buildVerificationEmailText(verifyUrl),
+          path: "/verify",
+          token: issued.token,
+          ttlMs: VERIFICATION_TOKEN_TTL_MS,
         });
       }
     }

@@ -4,6 +4,7 @@ import { lessonService, type LessonRecord } from "@/server/services/lesson-servi
 import type { LessonType } from "@/lib/upload-limits";
 import { formatVideoLength } from "@/lib/lesson-input";
 import { LessonEditorClient } from "./LessonEditorClient";
+import { loadLinkableAssessments } from "../linkable-assessments";
 
 export const metadata = { title: "Edit lesson" };
 
@@ -24,6 +25,7 @@ export default async function EditLessonPage({
   }
 
   if (!lesson) notFound();
+  const assessmentOptions = await loadLinkableAssessments(courseId);
 
   return (
     <LessonEditorClient
@@ -31,6 +33,7 @@ export default async function EditLessonPage({
       courseId={courseId}
       lessonId={lesson.id}
       initialType={lesson.type as LessonType}
+      assessmentOptions={assessmentOptions}
       values={{
         title: lesson.title,
         body: lesson.body ?? "",

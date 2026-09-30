@@ -9,6 +9,7 @@ import {
   type Column,
   type SortState,
 } from "@/components/primitives";
+import { humanizeCode } from "@/lib/humanize";
 
 export type StaffUserRow = {
   id: string;
@@ -59,7 +60,7 @@ const columns: Column<StaffUserRow>[] = [
   {
     key: "status",
     header: "Status",
-    render: (u) => <StatusPill label={STATUS_LABEL[u.status] ?? u.status} tone={TONE[u.status] ?? "neutral"} />,
+    render: (u) => <StatusPill label={STATUS_LABEL[u.status] ?? humanizeCode(u.status)} tone={TONE[u.status] ?? "neutral"} />,
     width: "14%",
   },
   {

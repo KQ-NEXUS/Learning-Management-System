@@ -109,7 +109,12 @@ export type DomainEventType =
   | "ticket.escalated"
   | "ticket.resolved"
   | "ticket.reopened"
-  | "ticket.closed";
+  | "ticket.closed"
+  // Phase 13 (D-09) — payment outcome events feeding the communications
+  // drain. Payloads carry ids, provider and amounts only: never a provider
+  // failure reason or a staff refund reason.
+  | "payment.failed"
+  | "payment.refunded";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction

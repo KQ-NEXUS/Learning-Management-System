@@ -16,6 +16,7 @@
  */
 
 import { prisma } from "@/server/db";
+import { UserInputError } from "@/server/errors/user-input-error";
 import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission, Actor } from "@/server/permissions/with-permission";
@@ -61,7 +62,28 @@ export type CreateLessonServiceDeps = {
   withPermission: WithPermissionFn;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
   runInTransaction?: <R>(fn: () => Promise<R>) => Promise<R>;
+  /**
+   * Looks up an assessment a QUIZ/ASSIGNMENT lesson links to. When absent, a
+   * save that links one is REFUSED (fail closed) — the course/type check can
+   * never be silently skipped.
+   */
+  findAssessment?: (
+    id: string,
+  ) => Promise<{ courseId: string; type: "QUIZ" | "ASSIGNMENT"; status: string } | null>;
 };
+
+/**
+ * A lesson may only link an assessment that belongs to the SAME course and
+ * matches its type (a Quiz lesson a quiz, an Assignment lesson an
+ * assignment), and is not archived. Drafts are allowed: the course's
+ * readiness check reports an unpublished linked assessment.
+ */
+export class AssessmentLinkError extends UserInputError {
+  constructor(message: string) {
+    super(message);
+    this.name = "AssessmentLinkError";
+  }
+}
 
 /**
  * Builds the whole Lesson surface against injected dependencies, in the
@@ -71,6 +93,29 @@ export type CreateLessonServiceDeps = {
 export function createLessonService(deps: CreateLessonServiceDeps) {
   const { delegate, resolveCourseIdForModule } = deps;
   const runInTransaction = deps.runInTransaction ?? (<R,>(fn: () => Promise<R>) => fn());
+
+  async function assertAssessmentLink(
+    courseId: string | null,
+    lessonType: string | undefined,
+    assessmentId: string | null | undefined,
+  ): Promise<void> {
+    if (!assessmentId) return;
+    if (!deps.findAssessment) {
+      throw new AssessmentLinkError("This assessment can't be linked right now. Try again.");
+    }
+    if (lessonType !== "QUIZ" && lessonType !== "ASSIGNMENT") {
+      throw new AssessmentLinkError("Only Quiz and Assignment lessons link to an assessment.");
+    }
+    const assessment = await deps.findAssessment(assessmentId);
+    if (!assessment || assessment.courseId !== courseId || assessment.status === "ARCHIVED") {
+      throw new AssessmentLinkError("Choose an assessment from this course.");
+    }
+    if (assessment.type !== lessonType) {
+      throw new AssessmentLinkError(
+        lessonType === "QUIZ" ? "A Quiz lesson needs a quiz assessment." : "An Assignment lesson needs an assignment assessment.",
+      );
+    }
+  }
 
   /**
    * Resolves through Lesson -> Module -> Course rather than trusting a
@@ -137,6 +182,7 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
     return { courseIds: courseId ? [courseId] : [] };
   })(async (input, ctx) => {
     const parsed = parseLessonInput(input);
+    await assertAssessmentLink(await resolveCourseIdForModule(parsed.moduleId), parsed.type, parsed.assessmentId);
 
     const created = await runInTransaction(async () => {
       const liveSiblings = (
@@ -181,8 +227,13 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
   // optional — an update is not a re-parenting surface) before delegating
   // to the factory's `update`, which already gates on courses.edit via
   // `lessonScope`. No separate withPermission wrapper needed here.
-  const updateLesson = (id: string, data: Record<string, unknown>, reason?: string) => {
+  const updateLesson = async (id: string, data: Record<string, unknown>, reason?: string) => {
     const parsed = parseLessonUpdateInput(data);
+    if (parsed.assessmentId) {
+      const existing = await delegate.findUnique({ where: { id } });
+      const courseId = existing ? await resolveCourseIdForModule(existing.moduleId) : null;
+      await assertAssessmentLink(courseId, parsed.type ?? existing?.type, parsed.assessmentId);
+    }
     return lessonService.update(id, parsed, reason);
   };
 
@@ -234,6 +285,8 @@ const built = createLessonService({
       outcome: entry.outcome,
     }),
   runInTransaction: (fn) => prisma.$transaction(fn),
+  findAssessment: (id) =>
+    prisma.assessment.findUnique({ where: { id }, select: { courseId: true, type: true, status: true } }),
 });
 
 export const lessonScope = built.lessonScope;

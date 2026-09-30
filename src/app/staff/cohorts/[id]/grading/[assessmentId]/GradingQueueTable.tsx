@@ -25,7 +25,8 @@ export function GradingQueueTable({ cohortId, assessmentId, rows, onRelease = re
         const result = await onRelease({ cohortId, gradeIds });
         if (!result.ok) { setError(result.message); return; }
         setOpen(false); setSelected([]);
-        setNotice(`${result.released.length} grades released.${result.skipped.length ? ` ${result.skipped.length} already released grades skipped.` : ""}`);
+        const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+        setNotice(`${plural(result.released.length, "grade", "grades")} released.${result.skipped.length ? ` ${plural(result.skipped.length, "grade was", "grades were")} already released and skipped.` : ""}`);
       } catch { setError("These grades could not be released. Try again."); }
     });
   }
@@ -45,7 +46,7 @@ export function GradingQueueTable({ cohortId, assessmentId, rows, onRelease = re
       emptyHeading="Nothing to grade yet" emptyBody="Submissions will appear here once learners in this Cohort submit their work." />
     {notice && <p role="status" className="mt-2 text-sm text-muted-foreground">{notice}</p>}
     <ConfirmModal open={open} tone="default" title={`Release ${gradeIds.length} grades`} confirmLabel="Release grades"
-      description={`These grades will become visible to the ${gradeIds.length} learner(s) immediately. This can't be undone from this screen — a released grade can only be corrected with an audited override.`}
+      description={`These grades will become visible to ${gradeIds.length === 1 ? "the learner" : `the ${gradeIds.length} learners`} immediately. This can't be undone from this screen — a released grade can only be corrected with an audited override.`}
       pending={pending} error={error} onConfirm={release} onCancel={() => setOpen(false)} />
   </>;
 }

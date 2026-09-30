@@ -12,7 +12,8 @@
 import { prisma } from "@/server/db";
 import { hashPassword } from "@/server/auth/password";
 import { verificationService, type VerificationStore, type VerificationTokenRow } from "@/server/services/verification-service";
-import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { sendAuthEmail } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 import { MIN_PASSWORD_LENGTH, PASSWORD_RESET_TOKEN_TTL_MS, TOKEN_PURPOSE } from "@/lib/identity";
@@ -47,10 +48,6 @@ export type PasswordResetStore = {
     findUnique(args: Record<string, unknown>): Promise<PasswordResetUserRow | null>;
   };
 };
-
-function buildResetEmailText(resetUrl: string): string {
-  return `Click to reset your password: ${resetUrl}`;
-}
 
 export function createPasswordResetService(deps: {
   store: PasswordResetStore;
@@ -97,9 +94,10 @@ export function createPasswordResetService(deps: {
     // escaping send failure was observable only for real accounts: a
     // provider outage was a live account-enumeration oracle, crashing the
     // active branch while an unknown address returned the normal frozen
-    // confirmation. Routing the send through dispatchBestEffort is what
-    // keeps all five outcomes (active, unknown, pending, deactivated,
-    // cooldown-refused) returning the one frozen value in every weather.
+    // confirmation. Routing the send through sendAuthEmail's best-effort
+    // wrapper is what keeps all five outcomes (active, unknown, pending,
+    // deactivated, cooldown-refused) returning the one frozen value in every
+    // weather.
     const issued = await issueToken({
       identifier,
       purpose: TOKEN_PURPOSE.PASSWORD_RESET,
@@ -107,14 +105,15 @@ export function createPasswordResetService(deps: {
     });
 
     if (issued.ok && user && user.status === "ACTIVE") {
-      const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-      const resetUrl = `${baseUrl}/reset-password?token=${issued.token}`;
-      await dispatchBestEffort(dispatch, {
+      // G-03-3 — best-effort (inside sendAuthEmail): a provider outage must
+      // not crash a reset request.
+      await sendAuthEmail(dispatch, {
         template: "password-reset",
         toEmail: identifier,
         userId: user.id,
-        subject: "Reset your password",
-        textContent: buildResetEmailText(resetUrl),
+        path: "/reset-password",
+        token: issued.token,
+        ttlMs: PASSWORD_RESET_TOKEN_TTL_MS,
       });
       await audit({
         actorId: user.id,

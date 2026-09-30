@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { AuthTitle } from "../AuthPanel";
+import { AuthFooterLine, AuthTitle } from "../AuthPanel";
+import { CheckEmail } from "../CheckEmail";
 import { forgotPasswordAction, type ForgotPasswordState } from "./actions";
 
 const INITIAL: ForgotPasswordState = { error: null, sent: false };
@@ -11,9 +12,11 @@ export function ForgotPasswordForm() {
 
   if (state.sent) {
     return (
-      <AuthTitle
-        title="Check your email"
+      <CheckEmail
         subtitle="If an account exists for that email, we've sent a link to reset your password."
+        expiresIn="1 hour"
+        retryHref="/forgot-password"
+        retryLabel="Try a different email"
       />
     );
   }
@@ -54,6 +57,7 @@ export function ForgotPasswordForm() {
           {pending ? "Sending…" : "Send reset link"}
         </button>
       </form>
+      <AuthFooterLine text="Remembered it?" href="/signin" linkLabel="Back to sign in" />
     </>
   );
 }

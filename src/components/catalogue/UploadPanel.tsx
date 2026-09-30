@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileText, Upload } from "lucide-react";
 import { StatusPill } from "@/components/primitives";
+import { ConfirmModal } from "@/components/primitives/ConfirmModal";
 import {
   UPLOAD_LIMITS,
   validateUpload,
@@ -70,6 +71,8 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
   const [message, setMessage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  // UX batch D: removal confirms in the app's own dialog, not window.confirm.
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   const loadResources = useCallback(
     async (signal?: AbortSignal): Promise<LessonResourceView[]> => {
@@ -189,7 +192,7 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
   }
 
   async function remove(resourceId: string) {
-    if (!window.confirm("Remove this resource? This cannot be undone.")) return;
+    setConfirmRemoveId(null);
     setRemovingId(resourceId);
     setMessage(null);
     try {
@@ -295,7 +298,7 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
                       type="button"
                       aria-label="Remove resource"
                       disabled={removingId === resource.id}
-                      onClick={() => void remove(resource.id)}
+                      onClick={() => setConfirmRemoveId(resource.id)}
                       className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold disabled:opacity-50"
                     >
                       {removingId === resource.id ? "Removing…" : "Remove"}
@@ -307,6 +310,15 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
           })}
         </ul>
       )}
+      <ConfirmModal
+        open={confirmRemoveId !== null}
+        eyebrow="Remove resource"
+        title="Remove this resource?"
+        description="Learners will no longer see this file. This cannot be undone."
+        confirmLabel="Remove resource"
+        onCancel={() => setConfirmRemoveId(null)}
+        onConfirm={() => { if (confirmRemoveId) void remove(confirmRemoveId); }}
+      />
     </fieldset>
   );
 }

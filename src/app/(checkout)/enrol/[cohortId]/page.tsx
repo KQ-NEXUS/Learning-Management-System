@@ -113,14 +113,14 @@ export default async function EnrolResumptionPage({
     // back to the cohort's own public offer page (or the catalogue index if
     // that page can't be resolved), never an error boundary that would
     // confirm anything about why.
-    if (
-      err instanceof AlreadyEnrolledError ||
-      err instanceof CapacityExceededError ||
-      err instanceof CohortClosedError ||
-      err instanceof CurrencyUnavailableError
-    ) {
-      redirect(await getCohortOfferPath(cohortId));
-    }
+    // UX batch B: the offer page says which of these happened (CheckoutNotice).
+    const notice =
+      err instanceof AlreadyEnrolledError ? "enrolled"
+      : err instanceof CapacityExceededError ? "full"
+      : err instanceof CohortClosedError ? "closed"
+      : err instanceof CurrencyUnavailableError ? "currency"
+      : null;
+    if (notice) redirect(`${await getCohortOfferPath(cohortId)}?notice=${notice}`);
     throw err;
   }
 

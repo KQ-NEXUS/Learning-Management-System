@@ -109,7 +109,9 @@ describe("Cohorts — six render states", () => {
   it("denied — identical copy regardless of whether any cohort exists, no code/title/count leak", () => {
     render(<CohortsTable denied={{ permission: "cohorts.view" }} />);
     expect(screen.getByText("You do not have access to cohorts", { exact: false })).toBeTruthy();
-    expect(screen.getByText("cohorts.view")).toBeTruthy();
+    // UX batch D: the permission in words, never the raw key.
+    expect(screen.getByText(/permission to view cohorts/)).toBeTruthy();
+    expect(screen.queryByText("cohorts.view")).toBeNull();
 
     expect(screen.queryByText("CH-2601")).toBeNull();
     expect(screen.queryByText("Foundations Cohort")).toBeNull();
