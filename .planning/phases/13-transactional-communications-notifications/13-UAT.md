@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: partial
 phase: 13-transactional-communications-notifications
 source: [13-01-SUMMARY.md, 13-02-SUMMARY.md, 13-03-SUMMARY.md, 13-04-SUMMARY.md, 13-05-SUMMARY.md, 13-06-SUMMARY.md, 13-07-SUMMARY.md, 13-08-SUMMARY.md, 13-09-SUMMARY.md, 13-10-SUMMARY.md, 13-11-SUMMARY.md, 13-12-SUMMARY.md, 13-13-SUMMARY.md]
 started: 2026-09-28T21:29:51.309Z
-updated: 2026-09-30T01:30:00.000Z
+updated: 2026-09-30T13:08:36.0857991+01:00
 ---
 
 ## Current Test
@@ -140,9 +140,9 @@ coverage_id: D3
 ### 22. [13-06/D2] The drawer: grouped Today/Earlier list, 4-skeleton loading, empty/error states with retry, cursor-paged Load older, optimistic Mark all read with revert-on-failure, access-checked item activation (ok-href navigate+close, unavailable safe-fail, failure revert), full focus/scroll-lock mechanics, and plain-text-only rendering
 expected: The drawer: grouped Today/Earlier list, 4-skeleton loading, empty/error states with retry, cursor-paged Load older, optimistic Mark all read with revert-on-failure, access-checked item activation (ok-href navigate+close, unavailable safe-fail, failure revert), full focus/scroll-lock mechanics, and plain-text-only rendering
     Rationale: Three UI-SPEC backstop truths (200-char title/meta clamp under real layout, the drawer's keyboard/focus 'feel', and the reduced-motion collapse) explicitly require a real browser — jsdom has no layout engine. The class-level and mechanics-level assertions above are automated; the visual/feel confirmation itself is not.
-result: issue
-reported: "Held-out browser screenshot shows the long notification title wrapping to 3 lines and metadata wrapping to 2 lines; the UI-SPEC requires title clamp to 2 lines and metadata clamp to 1 line. Focus trapping, Escape focus restoration, and background scroll lock passed."
-severity: cosmetic
+result: pass
+source: manual
+verified: "Real-browser screenshot on 2026-09-30 shows the exact long notification title clamped to two lines with ellipsis and metadata clamped to one line with ellipsis. Previously passing focus, Escape restoration, scroll lock, and activation behavior remain covered by the focused component suite."
 
 ### 23. [13-07/D1] A ticket.public_reply_added event drains into exactly one QUEUED-then-SENT EmailDispatch (correlationId = event id, allow-listed templateParams) and one ticket.reply Notification, exactly once across replay and reset-and-redrain, and exactly once per event across two concurrent drain runs on 10 events
 expected: A ticket.public_reply_added event drains into exactly one QUEUED-then-SENT EmailDispatch (correlationId = event id, allow-listed templateParams) and one ticket.reply Notification, exactly once across replay and reset-and-redrain, and exactly once per event across two concurrent drain runs on 10 events
@@ -405,9 +405,9 @@ coverage_id: D2
 ### 66. [13-12/D3] The staff page filters by status/template, shows the exact UI-SPEC empty/error/denied copy, hides Resend from viewers without users.manage, and the sidebar shows Email log only to audit.view holders, positioned after Audit
 expected: The staff page filters by status/template, shows the exact UI-SPEC empty/error/denied copy, hides Resend from viewers without users.manage, and the sidebar shows Email log only to audit.view holders, positioned after Audit
     Rationale: The 200-character truncation readability backstop (must-have T-13-… 'long recipient and error text') needs a real browser — jsdom measures no layout. The truncate+title mechanism is implemented; visual confirmation is deferred to the phase's held-out UI-state pass, same as Plan 06's own outstanding backstops.
-result: issue
-reported: "Held-out browser screenshots show the long recipient expanding the table so that columns move off-screen instead of truncating within the recipient column. The long error text truncates and the administrator Resend control renders correctly. Email log visibility after Audit and instructor denial visibility both passed."
-severity: minor
+result: pass
+source: manual
+verified: "Real-browser screenshot on 2026-09-30 shows long recipient values truncated with ellipsis while Status through Actions remain within the desktop Email Log table. Full-value title and Resend behavior remain covered by the focused component suite."
 
 ### 67. [13-13/D2] Phase 13 structural invariants pinned: permission catalogue size, DomainEventType membership, append-only Notification/EmailPreference/EmailDispatch/DomainEvent, single sender identity with no hard-coded fallback, auth-service isolation from APP_BASE_URL/plain-text bodies, and safe notification-component rendering
 expected: Phase 13 structural invariants pinned: permission catalogue size, DomainEventType membership, append-only Notification/EmailPreference/EmailDispatch/DomainEvent, single sender identity with no hard-coded fallback, auth-service isolation from APP_BASE_URL/plain-text bodies, and safe notification-component rendering
@@ -430,8 +430,8 @@ source: manual
 ## Summary
 
 total: 69
-passed: 66
-issues: 2
+passed: 68
+issues: 0
 pending: 0
 skipped: 0
 blocked: 1
@@ -440,7 +440,7 @@ blocked: 1
 
 - gap_id: G-13-1
   truth: "Notification titles clamp to 2 lines and metadata to 1 line in the real drawer layout"
-  status: failed
+  status: resolved
   reason: "Held-out browser screenshot shows the long title at 3 lines and metadata at 2 lines despite the line-clamp utility classes."
   severity: cosmetic
   test: 22
@@ -454,9 +454,11 @@ blocked: 1
     - "Remove the conflicting block utilities while preserving full-width text behavior."
     - "Add browser-level regression coverage for a 200-character title and metadata value."
   debug_session: ".planning/debug/notification-text-clamp-fails.md"
+  resolved_by: "13-14-PLAN.md"
+  verification: "Focused component tests passed 40/40; TypeScript and focused ESLint exited 0; real-browser screenshot confirms the 2-line title and 1-line metadata clamps with ellipses."
 - gap_id: G-13-2
   truth: "Long recipient and error values truncate without widening or breaking the Email Log table"
-  status: failed
+  status: resolved
   reason: "Held-out desktop screenshots show a long recipient expanding the table and pushing columns off-screen; error text truncation and Resend rendering work correctly."
   severity: minor
   test: 66
@@ -472,3 +474,5 @@ blocked: 1
     - "Bound and truncate the recipient value while preserving mono styling and full-value access via title."
     - "Add browser-level regression coverage proving later columns remain visible with a long recipient."
   debug_session: ".planning/debug/email-log-recipient-overflow.md"
+  resolved_by: "13-14-PLAN.md"
+  verification: "Focused component tests passed 40/40; TypeScript and focused ESLint exited 0; real-browser screenshot confirms recipient truncation and visibility of later columns through Actions."
