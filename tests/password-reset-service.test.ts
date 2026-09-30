@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashToken } from "@/server/auth/token-hash";
 import { guardFindUnique } from "./support/prisma-contract";
 import {
@@ -21,6 +21,18 @@ import {
   type VerificationStore,
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
+import { buildAuthCorrelationId, type DispatchParams } from "@/server/services/email-dispatch-service";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function stubEmailEnv() {
+  vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+  vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+  vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+  vi.stubEnv("APP_BASE_URL", "https://lms.acme.test");
+}
 
 const NOW = { value: new Date("2026-09-02T12:00:00Z") };
 
@@ -33,11 +45,14 @@ class SimulatedProviderOutage extends Error {
   }
 }
 
-function sharedHarness(options: { rejectDispatch?: boolean; rejectRevocation?: boolean } = {}) {
+function sharedHarness(
+  options: { rejectDispatch?: boolean; rejectRevocation?: boolean; skipEmailEnv?: boolean } = {},
+) {
+  if (!options.skipEmailEnv) stubEmailEnv();
   const rejectDispatch = options.rejectDispatch ?? false;
   const users: (PasswordResetUserRow & { passwordHash: string | null })[] = [];
   const tokens: VerificationTokenRow[] = [];
-  const dispatched: { toEmail: string; textContent: string; subject: string }[] = [];
+  const dispatched: DispatchParams[] = [];
   const audits: unknown[] = [];
   const signOutCalls: string[] = [];
 
@@ -109,7 +124,7 @@ function sharedHarness(options: { rejectDispatch?: boolean; rejectRevocation?: b
     store: store as unknown as VerificationStore,
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -125,7 +140,7 @@ function sharedHarness(options: { rejectDispatch?: boolean; rejectRevocation?: b
     consumeToken: (params, apply) => verificationService.consumeToken(params, apply),
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -173,6 +188,55 @@ describe("requestReset — TTL", () => {
     const token = tokens.find((t) => t.purpose === TOKEN_PURPOSE.PASSWORD_RESET);
     expect(token).toBeDefined();
     expect(token?.expires.getTime()).toBe(NOW.value.getTime() + PASSWORD_RESET_TOKEN_TTL_MS);
+  });
+});
+
+describe("requestReset — dispatched params", () => {
+  it("dispatches under template password-reset with a correlationId starting with auth: that equals buildAuthCorrelationId(token), and never the raw token in correlationId or as a bare field", async () => {
+    NOW.value = new Date("2026-09-02T12:00:00Z");
+    const { passwordResetService, users, dispatched } = sharedHarness();
+    users.push({ id: "u1", email: "learner@example.com", status: "ACTIVE", passwordHash: "hash" });
+
+    await passwordResetService.requestReset("learner@example.com");
+
+    expect(dispatched).toHaveLength(1);
+    const params = dispatched[0];
+    expect(params.template).toBe("password-reset");
+    const token = extractToken(params.textContent);
+    expect(params.correlationId).toBe(buildAuthCorrelationId(token));
+    expect(params.correlationId?.startsWith("auth:")).toBe(true);
+    expect(params.correlationId).not.toContain(token);
+    expect(Object.keys(params)).not.toContain("token");
+  });
+
+  it("still returns the frozen accepted value and dispatches nothing when the base URL is unconfigured in production", async () => {
+    NOW.value = new Date("2026-09-02T12:00:00Z");
+    const { passwordResetService, users, dispatched } = sharedHarness({ skipEmailEnv: true });
+    users.push({ id: "u1", email: "learner@example.com", status: "ACTIVE", passwordHash: "hash" });
+    vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+    vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+    vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_BASE_URL", ""); // unconfigured, and production disallows the localhost fallback
+
+    const result = await passwordResetService.requestReset("learner@example.com");
+    expect(result).toBe(PASSWORD_RESET_ACCEPTED);
+    expect(dispatched).toHaveLength(0);
+  });
+
+  it("sends once for the first issued token and again for a fresh token issued after the cooldown", async () => {
+    NOW.value = new Date("2026-09-02T12:00:00Z");
+    const { passwordResetService, users, dispatched } = sharedHarness();
+    users.push({ id: "u1", email: "learner@example.com", status: "ACTIVE", passwordHash: "hash" });
+
+    await passwordResetService.requestReset("learner@example.com");
+    expect(dispatched).toHaveLength(1);
+    const firstCorrelationId = dispatched[0].correlationId;
+
+    NOW.value = new Date("2026-09-02T12:01:01Z"); // past the 60s cooldown
+    await passwordResetService.requestReset("learner@example.com");
+    expect(dispatched).toHaveLength(2);
+    expect(dispatched[1].correlationId).not.toBe(firstCorrelationId);
   });
 });
 

@@ -1,20 +1,21 @@
 /**
- * Plan 06-08 Task 1 — unit coverage for the confirmation-email dispatch
- * `activateOrderAsSystem` performs after settlement, exercised against fully
- * faked deps (no Docker, no real Postgres — the same in-memory staged-commit
- * fake `$transaction` pattern `tests/checkout-service.test.ts` and
- * `tests/enrolment-service.test.ts` already use for this module's sibling
- * services). The settlement transaction's OWN correctness against a real
- * database is proven separately by `tests/checkout-webhook.integration.test.ts`.
+ * Unit coverage for `activateOrderAsSystem`'s settlement transaction,
+ * exercised against fully faked deps (no Docker, no real Postgres — the same
+ * in-memory staged-commit fake `$transaction` pattern
+ * `tests/checkout-service.test.ts` and `tests/enrolment-service.test.ts`
+ * already use for this module's sibling services). The settlement
+ * transaction's OWN correctness against a real database is proven separately
+ * by `tests/checkout-webhook.integration.test.ts`.
  *
- * Why this file exists alongside that one: `EmailDispatch` has no body
- * column (see `email-dispatch-service.ts`'s own row shape — `template`,
- * `toEmail`, `status`, timestamps, but never `textContent`), so a real-DB
- * assertion can prove a row was created but cannot prove what the email
- * SAYS. This file captures the exact `DispatchParams` passed to
- * `dispatchEmail` instead, so the plan's own transparency prohibition — the
- * exception-branch body never claims enrolment — has a direct, deterministic
- * assertion rather than an inferred one.
+ * Plan 08 (D-07, D-02) removed this module's direct confirmation-email send
+ * entirely — the checkout path now only ever writes `order.paid`/
+ * `order.exception`/`enrolment.activated` outbox rows, and the Phase 13 drain
+ * (proven separately, `tests/enrolment-payment-drain.integration.test.ts`)
+ * is the only sender. `SettlementDeps` therefore carries no
+ * `orderEmailFacts`/`dispatchEmail` member at all — a test literal that
+ * tried to pass either would fail to compile (TypeScript's excess-property
+ * check on an object literal assigned to a typed variable), which is this
+ * file's own proof that the dependency is gone, not merely unused.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -22,11 +23,10 @@ import {
   createRecordSessionExpiredAsSystem,
   createMarkWebhookEventRetryable,
   createRecordWebhookEventOrSkip,
+  createRecordPaymentFailureAsSystem,
   type SettlementTxClient,
   type SettlementDeps,
-  type OrderEmailFacts,
 } from "@/server/services/checkout-webhook-system-service";
-import type { DispatchParams } from "@/server/services/email-dispatch-service";
 
 type CohortRow = { status: string; seatsTaken: number; capacity: number };
 
@@ -151,7 +151,6 @@ function buildHarness(args: {
   cohortId: string;
   order: OrderRow;
   attempts: PaymentAttemptRow[];
-  email: string | null;
   /**
    * 07-04 Task 2 — the seeded `WebhookEvent` row's own `provider`. Defaults
    * to `"STRIPE"` (every pre-existing test in this file settles a Stripe
@@ -183,7 +182,6 @@ function buildHarness(args: {
   const domainEvents: Array<Record<string, unknown>> = [];
   const transactionOptions: Array<{ timeout?: number } | undefined> = [];
   const auditEvents: Array<Record<string, unknown>> = [];
-  const dispatchCalls: DispatchParams[] = [];
   const rawQueries: string[] = [];
 
   const tx: SettlementTxClient = {
@@ -289,30 +287,10 @@ function buildHarness(args: {
     audit: async (event) => {
       auditEvents.push(event);
     },
-    orderEmailFacts: {
-      findUnique: async ({ where }) => {
-        const o = orders.get(where.id);
-        if (!o) return null;
-        const facts: OrderEmailFacts = {
-          reference: `ORD-${o.id}`,
-          cohortTitle: "Advanced Testing",
-          userId: o.enrolments[0]?.userId ?? "user-unknown",
-          email: args.email,
-        };
-        return facts;
-      },
-    },
-    dispatchEmail: async (params) => {
-      dispatchCalls.push(params);
-      return { id: "ed-1", status: "SENT" };
-    },
-    baseUrl: () => "https://app.example.test",
-    now: () => new Date("2026-09-10T12:00:00Z"),
   };
 
   return {
     deps,
-    dispatchCalls,
     auditEvents,
     domainEvents,
     orders,
@@ -357,7 +335,7 @@ function baseOrder(
   };
 }
 
-describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
+describe("activateOrderAsSystem — settlement writes outbox events, never dispatches email directly (D-07, D-02)", () => {
   it("locks the Order row before reading settlement state", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
@@ -373,7 +351,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: null,
     });
 
     await createActivateOrderAsSystem(deps)({
@@ -403,7 +380,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
       cohortId: COHORT_ID,
       order,
       attempts: [],
-      email: null,
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -454,7 +430,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: null,
     });
 
     await createActivateOrderAsSystem(deps)({
@@ -492,7 +467,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           confirmedAt: new Date("2026-09-14T09:59:00Z"),
         },
       ],
-      email: null,
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -541,7 +515,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     await createActivateOrderAsSystem(deps)({
@@ -556,10 +529,10 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     expect(transactionOptions).toEqual([{ timeout: 15_000 }]);
   });
 
-  it("a successful settlement dispatches exactly one confirmation email naming the reference, cohort, amount and receipt link", async () => {
+  it("a successful settlement writes order.paid with the settled amount and currency, and touches no email dependency", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -571,7 +544,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -584,51 +556,22 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("ACTIVATED");
-    expect(dispatchCalls).toHaveLength(1);
-    expect(dispatchCalls[0].template).toBe("order-confirmation");
-    expect(dispatchCalls[0].toEmail).toBe("learner@example.test");
-    expect(dispatchCalls[0].userId).toBe("user-1");
-    expect(dispatchCalls[0].textContent).toContain("ORD-order-1");
-    expect(dispatchCalls[0].textContent).toContain("Advanced Testing");
-    expect(dispatchCalls[0].textContent).toContain(
-      "https://app.example.test/orders/ORD-order-1",
+    // D-07/D-02 — the checkout path only ever writes the outbox row; the
+    // Phase 13 drain (proven separately) is the only sender, and
+    // `SettlementDeps` above carries no email member for this test to fake.
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.paid",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          amountMinor: 45_000_000,
+          currency: "NGN",
+        }),
+      }),
     );
-    // Never a secret, a raw Stripe object, or a raw provider error string.
-    expect(dispatchCalls[0].textContent).not.toMatch(/sk_|whsec_|pi_|cs_test_/);
   });
 
-  it("skips dispatch entirely when the order's owner has no email on file, without changing the settlement outcome", async () => {
-    const enrolment = baseEnrolment();
-    const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
-      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
-      cohortId: COHORT_ID,
-      order,
-      attempts: [
-        {
-          id: "pa-1",
-          status: "PROCESSING",
-          orderId: BASE_ORDER_ID,
-          providerIntentId: SESSION_ID,
-        },
-      ],
-      email: null,
-    });
-
-    const result = await createActivateOrderAsSystem(deps)({
-      orderId: BASE_ORDER_ID,
-      provider: "STRIPE",
-      providerIntentId: SESSION_ID,
-      amountMinor: 45_000_000,
-      currency: "NGN",
-      eventId: "evt-1",
-    });
-
-    expect(result.outcome).toBe("ACTIVATED");
-    expect(dispatchCalls).toHaveLength(0);
-  });
-
-  it("the Pitfall-4 exception branch (hold already expired) dispatches exactly one email that never claims enrolment", async () => {
+  it("the Pitfall-4 exception branch (hold already expired) writes order.exception with reason illegal_transition, never touching email", async () => {
     // The enrolment is already CANCELLED (the hold-sweep worker beat the
     // webhook here) — VALID_TRANSITIONS.CANCELLED is empty, so
     // applyEnrolmentActivation throws IllegalTransitionError.
@@ -637,7 +580,7 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
       holdExpiresAt: null,
     });
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 0, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -649,7 +592,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -662,14 +604,18 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(1);
-    expect(dispatchCalls[0].template).toBe("order-payment-exception");
-    expect(dispatchCalls[0].subject).not.toMatch(/enroll/i);
-    // The transparency prohibition, directly: the body must never use
-    // success-framing enrolment language for a seat that is not ACTIVE.
-    expect(dispatchCalls[0].textContent).not.toMatch(/enroll(ed|ment)?/i);
-    expect(dispatchCalls[0].textContent).toContain("no action is needed");
-    expect(dispatchCalls[0].textContent).toContain("ORD-order-1");
+    // The "payment received, finishing up" mail is now the drain's own
+    // enrolment-payment mapper's job (tests/enrolment-payment-drain.integration.test.ts) —
+    // this module's own responsibility ends at writing the event.
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          reason: "illegal_transition",
+        }),
+      }),
+    );
   });
 
   it("settles a successful retry after the same provider attempt was previously marked FAILED", async () => {
@@ -687,7 +633,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -720,7 +665,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -753,7 +697,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
       activeEnrolmentId: "enr-already-active",
     });
 
@@ -775,10 +718,10 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     expect(enrolment.status).toBe("PENDING_PAYMENT");
   });
 
-  it("an amount/currency mismatch (REG-03) never dispatches — the PaymentAttempt never reached SUCCEEDED, so 'your payment succeeded' would be false", async () => {
+  it("an amount/currency mismatch (REG-03) writes order.exception with reason amount_or_currency_mismatch — the PaymentAttempt never reached SUCCEEDED, so 'your payment succeeded' would be false", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -790,7 +733,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -803,18 +745,22 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(0);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "amount_or_currency_mismatch" }),
+      }),
+    );
   });
 
-  it("no matching PaymentAttempt never dispatches — nothing can be correlated or trusted yet", async () => {
+  it("no matching PaymentAttempt writes order.exception with reason payment_attempt_not_found — nothing can be correlated or trusted yet", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
       attempts: [], // no PaymentAttempt row at all
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -827,13 +773,18 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(0);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "payment_attempt_not_found" }),
+      }),
+    );
   });
 
-  it("an echo of an already-settled event (illegal payment transition) never dispatches a second copy", async () => {
+  it("an echo of an already-settled event writes order.exception with reason illegal_payment_transition, never a second order.paid", async () => {
     const enrolment = baseEnrolment({ status: "ACTIVE", holdExpiresAt: null });
     const order = baseOrder(enrolment, { status: "PAID" });
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -846,7 +797,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -859,7 +809,13 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(0);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "illegal_payment_transition" }),
+      }),
+    );
+    expect(domainEvents.filter((e) => e.type === "order.paid")).toHaveLength(0);
   });
 });
 
@@ -888,7 +844,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
           providerIntentId: "ORD-REF-1",
         },
       ],
-      email: null,
       webhookEventProvider: "PAYSTACK",
     });
 
@@ -920,7 +875,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
           providerIntentId: "ORD-REF-1",
         },
       ],
-      email: null,
       webhookEventProvider: "PAYSTACK",
     });
 
@@ -949,7 +903,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
       cohortId: COHORT_ID,
       order,
       attempts: [],
-      email: null,
       webhookEventProvider: "PAYSTACK",
     });
 
@@ -981,7 +934,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
           providerIntentId: "ORD-REF-1",
         },
       ],
-      email: null,
       webhookEventProvider: "STRIPE", // seeded row is STRIPE, event below claims PAYSTACK
     });
 
@@ -1016,7 +968,6 @@ describe("activateOrderAsSystem — never writes the four actual-settlement colu
           providerIntentId: SESSION_ID,
         },
       ],
-      email: null,
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -1060,7 +1011,6 @@ describe("F-16 — settled orders stay settled; extra money is flagged, not the 
         { id: "pa-1", status: "SUCCEEDED", orderId: BASE_ORDER_ID, providerIntentId: SESSION_ID, provider: "STRIPE" },
         extraAttempt,
       ],
-      email: "learner@example.test",
     });
   }
 
@@ -1118,7 +1068,6 @@ describe("F-16 — settled orders stay settled; extra money is flagged, not the 
       cohortId: COHORT_ID,
       order: baseOrder(enrolment),
       attempts: [{ id: "pa-1", status: "CANCELLED", orderId: BASE_ORDER_ID, providerIntentId: SESSION_ID, provider: "STRIPE" }],
-      email: "learner@example.test",
     });
     const result = await createRecordSessionExpiredAsSystem(h.deps)({
       orderId: BASE_ORDER_ID,
@@ -1127,5 +1076,83 @@ describe("F-16 — settled orders stay settled; extra money is flagged, not the 
     });
     expect(result.outcome).toBe("CANCELLED");
     expect(h.domainEvents.filter((e) => e.type === "order.exception")).toEqual([]);
+  });
+});
+
+describe("recordPaymentFailureAsSystem — payment.failed outbox event (D-09)", () => {
+  it("writes exactly one payment.failed event, on the same transaction as the FAILED update, with orderId/paymentAttemptId/provider only", async () => {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment);
+    const { deps, domainEvents, attempts } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+        },
+      ],
+    });
+
+    const result = await createRecordPaymentFailureAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      eventId: "evt-payment-failed-1",
+      providerIntentId: SESSION_ID,
+      failureReason: "card_declined",
+    });
+
+    expect(result.outcome).toBe("FAILED");
+    expect(attempts.get("pa-1")?.status).toBe("FAILED");
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "payment.failed",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          paymentAttemptId: "pa-1",
+          provider: "STRIPE",
+        }),
+      }),
+    );
+    // T-13-03 — the provider failure reason never reaches the outbox payload.
+    expect(JSON.stringify(domainEvents)).not.toContain("card_declined");
+  });
+
+  it("an illegal-transition failure (already SUCCEEDED) writes order.exception and no payment.failed event", async () => {
+    const enrolment = baseEnrolment({ status: "ACTIVE", holdExpiresAt: null });
+    const order = baseOrder(enrolment, { status: "PAID" });
+    const { deps, domainEvents } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "SUCCEEDED",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+        },
+      ],
+    });
+
+    const result = await createRecordPaymentFailureAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      eventId: "evt-payment-failed-2",
+      providerIntentId: SESSION_ID,
+      failureReason: "late_failure_echo",
+    });
+
+    expect(result.outcome).toBe("EXCEPTION");
+    expect(domainEvents.some((e) => e.type === "payment.failed")).toBe(false);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "illegal_payment_transition" }),
+      }),
+    );
   });
 });

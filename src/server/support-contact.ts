@@ -10,3 +10,17 @@
  * second placeholder string for the same purpose.
  */
 export const SUPPORT_CONTACT_EMAIL = process.env.SUPPORT_CONTACT_EMAIL ?? "support@example.com";
+
+/**
+ * The support mailbox used as the email Reply-To and footer contact (COM-04).
+ * Unlike the public-page constant above, this has no fallback: an
+ * unconfigured deployment must fail loudly rather than send with a made-up
+ * Reply-To. The message names the variable, never a value.
+ */
+export function requireSupportContactEmail(): string {
+  const value = (process.env.SUPPORT_CONTACT_EMAIL ?? "").trim();
+  if (!value) {
+    throw new Error("SUPPORT_CONTACT_EMAIL is not configured.");
+  }
+  return value;
+}

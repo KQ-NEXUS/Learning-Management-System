@@ -84,62 +84,8 @@ import {
 } from "@/server/services/seat-accounting";
 import { calculatePlatformFeeMinor } from "@/server/payments/pricing";
 import { isManualPaymentConfirmationBlocked, isSettledOrderStatus } from "@/server/payments/order-status";
-// D-18 — Phase 3's minimal send-wrapper, reused verbatim (no second mail
-// client, no template engine, no dedup layer). `dispatchBestEffort` is
-// imported by name here so the opt-out from `dispatch`'s throw is visible at
-// this call site, exactly as `profile-service.ts` does it.
-import {
-  dispatchBestEffort,
-  emailDispatchService,
-  type DispatchParams,
-} from "@/server/services/email-dispatch-service";
 
 export const SYSTEM_ACTOR_TYPE = "SYSTEM";
-
-const DEFAULT_BASE_URL = () =>
-  process.env.APP_BASE_URL ?? "http://localhost:3000";
-
-function formatMinorAmount(amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(amountMinor / 100);
-}
-
-/**
- * The plain-text confirmation body — following `profile-service.ts`'s
- * `buildEmailChangeText` pattern (a small local builder, no HTML, no
- * template file). States the order reference, the cohort title, the
- * formatted amount and a link to the receipt at its reference URL.
- */
-function buildOrderConfirmationText(args: {
-  reference: string;
-  cohortTitle: string;
-  amountMinor: number;
-  currency: string;
-  receiptUrl: string;
-}): string {
-  const amount = formatMinorAmount(args.amountMinor, args.currency);
-  return `Your order ${args.reference} for ${args.cohortTitle} (${amount}) is confirmed and your seat is active. View your receipt: ${args.receiptUrl}`;
-}
-
-/**
- * The Pitfall-4 exception wording — the payment genuinely succeeded (the
- * PaymentAttempt reached SUCCEEDED) but the seat hold had already expired
- * before this webhook ran, so the enrolment could not activate. States that
- * plainly and says no action is needed — never claims the learner is
- * enrolled (this plan's own transparency prohibition, in email form).
- */
-function buildOrderExceptionText(args: {
-  reference: string;
-  cohortTitle: string;
-  amountMinor: number;
-  currency: string;
-  receiptUrl: string;
-}): string {
-  const amount = formatMinorAmount(args.amountMinor, args.currency);
-  return `Your payment for order ${args.reference} (${args.cohortTitle}, ${amount}) was received. We need a moment to confirm your seat — no action is needed from you, and we'll email you again once it's done. View your order: ${args.receiptUrl}`;
-}
 
 /**
  * True for a Prisma `PrismaClientKnownRequestError` with code `P2002`
@@ -394,20 +340,6 @@ type PaymentAttemptRow = {
 };
 
 /**
- * The non-transactional order-reference/cohort-title/recipient-email read
- * the post-commit confirmation email needs (D-18). Deliberately NOT part of
- * `SettlementTxClient` — the send happens strictly after the settlement
- * transaction has committed (see `activateOrderAsSystem`'s own comment), so
- * this read has no business being inside that transaction's tx client.
- */
-export type OrderEmailFacts = {
-  reference: string;
-  cohortTitle: string;
-  userId: string;
-  email: string | null;
-};
-
-/**
  * The transaction surface every settlement entry point below needs — a
  * superset of `EnrolmentActivationTxClient` (so `applyEnrolmentActivation`
  * is callable directly, no cast) plus `order.findUnique`/`update`,
@@ -473,17 +405,8 @@ export type SettlementDeps = {
     outcome: string;
     reason?: string | null;
   }) => Promise<void>;
-  /** The `OrderEmailFacts` read the post-commit confirmation email needs. */
-  orderEmailFacts: {
-    findUnique(args: {
-      where: { id: string };
-    }): Promise<OrderEmailFacts | null>;
-  };
-  /** `emailDispatchService.dispatch`, imported by name at the call site (D-18). */
-  dispatchEmail: (params: DispatchParams) => Promise<unknown>;
   syncOrderReconciliationEvidence?: typeof syncOrderReconciliationEvidenceAsSystem;
   correlateReconciliationEvidence?: typeof correlateReconciliationEvidenceAsSystem;
-  baseUrl?: () => string;
   now?: () => Date;
 };
 
@@ -582,7 +505,6 @@ export type ActivateOrderAsSystemResult =
 
 export function createActivateOrderAsSystem(deps: SettlementDeps) {
   const now = deps.now ?? (() => new Date());
-  const baseUrl = deps.baseUrl ?? DEFAULT_BASE_URL;
 
   /**
    * Moves a paid Order/Enrolment through their settlement transition. Four
@@ -1076,68 +998,16 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
       });
     }
 
-    // D-18 — the confirmation email, strictly AFTER the settlement
-    // transaction has committed and both audit writes above have run (the
-    // same post-commit ordering `hold-release-system-service.ts` uses for
-    // its own audit — a side effect enqueued inside a transaction that later
-    // rolls back would be a message about something that did not happen).
-    //
-    // Scoped to exactly the two outcomes this plan's transparency
-    // prohibition can describe truthfully: `activated` (the seat is
-    // genuinely ACTIVE) and `illegal_enrolment_transition` (the Pitfall-4
-    // race — the money genuinely moved to SUCCEEDED but the seat hold had
-    // already expired). The other EXCEPTION reasons (`no_order`,
-    // `amount_mismatch`, `attempt_not_found`, `illegal_payment_transition`)
-    // either never move the PaymentAttempt to SUCCEEDED (so "your payment
-    // succeeded" would be false) or are an echo of an event this function
-    // already settled once under a different event id (so a second send
-    // would be a second copy for the same settlement) — none of those four
-    // dispatch anything.
-    //
-    // No second idempotency guard needed here: plan 06-06's
-    // recordWebhookEventOrSkip already returns before this transaction ever
-    // runs for a redelivered event, so a duplicate send from a replay is
-    // unreachable from this call site — see that function's own comment.
-    if (
-      result.reason === "activated" ||
-      result.reason === "illegal_enrolment_transition"
-    ) {
-      const facts = await deps.orderEmailFacts.findUnique({
-        where: { id: input.orderId },
-      });
-      if (facts?.email) {
-        const receiptUrl = `${baseUrl()}/orders/${facts.reference}`;
-        if (result.reason === "activated") {
-          await dispatchBestEffort(deps.dispatchEmail, {
-            template: "order-confirmation",
-            toEmail: facts.email,
-            userId: facts.userId,
-            subject: "Your enrolment is confirmed",
-            textContent: buildOrderConfirmationText({
-              reference: facts.reference,
-              cohortTitle: facts.cohortTitle,
-              amountMinor: input.amountMinor,
-              currency: input.currency,
-              receiptUrl,
-            }),
-          });
-        } else {
-          await dispatchBestEffort(deps.dispatchEmail, {
-            template: "order-payment-exception",
-            toEmail: facts.email,
-            userId: facts.userId,
-            subject: "Payment received — finishing up",
-            textContent: buildOrderExceptionText({
-              reference: facts.reference,
-              cohortTitle: facts.cohortTitle,
-              amountMinor: input.amountMinor,
-              currency: input.currency,
-              receiptUrl,
-            }),
-          });
-        }
-      }
-    }
+    // D-07/D-02 (Plan 08) — this module writes ONLY the outbox event
+    // (`order.paid`/`order.exception`, above, inside the settlement
+    // transaction itself). It never sends email directly any more: the
+    // Phase 13 drain's enrolment-payment mapper group
+    // (`src/server/services/event-mappers/enrolment-payment.ts`) is the
+    // single sender for both the `activated` combined confirmation and the
+    // `illegal_enrolment_transition` "payment received, finishing up"
+    // notice, keyed off the SAME `enrolment.activated`/`order.exception`
+    // events this transaction already wrote — so there is never a moment
+    // where a direct send here could race or duplicate the drained one.
 
     return { outcome: result.outcome };
   };
@@ -1213,12 +1083,12 @@ export function createRecordPaymentFailureAsSystem(deps: SettlementDeps) {
               orderId: order.id,
               providerIntentId: input.providerIntentId,
             },
-            select: { id: true, status: true },
+            select: { id: true, status: true, provider: true },
           })
         : await tx.paymentAttempt.findFirst({
             where: { orderId: order.id },
             orderBy: { initiatedAt: "desc" },
-            select: { id: true, status: true },
+            select: { id: true, status: true, provider: true },
           });
 
       if (!attempt) {
@@ -1264,6 +1134,20 @@ export function createRecordPaymentFailureAsSystem(deps: SettlementDeps) {
             providerIntentId: input.providerIntentId ?? null,
             status: "failed",
           },
+        },
+      });
+
+      // D-09 — the payment.failed outbox event, in the SAME transaction as
+      // the FAILED update above (never on an exception path, above). Only
+      // ids and the provider — never `input.failureReason`, which is
+      // provider-facing text, not a persisted email/notification param
+      // (T-13-03).
+      await writeDomainEvent(tx, {
+        type: "payment.failed",
+        payload: {
+          orderId: order.id,
+          paymentAttemptId: attempt.id,
+          provider: attempt.provider ?? "STRIPE",
         },
       });
 
@@ -1433,27 +1317,6 @@ const settlementDeps: SettlementDeps = {
       ),
   },
   audit: (event) => recordAudit(event),
-  orderEmailFacts: {
-    findUnique: async ({ where }) => {
-      const row = await (prisma as AnyPrisma).order.findUnique({
-        where,
-        select: {
-          reference: true,
-          userId: true,
-          cohort: { select: { title: true } },
-          user: { select: { email: true } },
-        },
-      });
-      if (!row) return null;
-      return {
-        reference: row.reference as string,
-        cohortTitle: row.cohort.title as string,
-        userId: row.userId as string,
-        email: (row.user?.email as string | undefined) ?? null,
-      };
-    },
-  },
-  dispatchEmail: emailDispatchService.dispatch,
   syncOrderReconciliationEvidence: syncOrderReconciliationEvidenceAsSystem,
   correlateReconciliationEvidence: correlateReconciliationEvidenceAsSystem,
 };

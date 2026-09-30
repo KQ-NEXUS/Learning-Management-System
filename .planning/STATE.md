@@ -2,15 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 8 closed (human UAT 2/2 passed) — Phase 13 is with the co-worker; Phase 15 next for Track B
-last_updated: 2026-09-30T12:30:00.000Z
+current_phase: 13
+current_phase_name: Transactional Communications & Notifications
+status: verifying
+stopped_at: Phase 13 merged into Khaliddev (all 14 plans executed on Transactional-Communications) — phase verification/UAT still pending; Phase 8 closed 2026-09-30
+last_updated: 2026-09-30T15:00:00.000Z
 last_activity: 2026-09-30
 progress:
   total_phases: 16
   completed_phases: 12
-  total_plans: 191
-  completed_plans: 191
+  total_plans: 205
+  completed_plans: 205
   percent: 75
 ---
 
@@ -21,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 13 — transactional communications & notifications
+**Current focus:** Phase 13 — Transactional Communications & Notifications
 
 ## Current Position
 
-Phase: 13 (owned by co-worker); Track B next: Phase 15
-Plan: Not started
-Status: Phase 8 closed 2026-09-30 — export lifecycle UAT passed (failure, retry, expiry, denial, rerun)
-Last activity: 2026-09-30
+Phase: 13 (Transactional Communications & Notifications) — executed by co-worker, merged 2026-09-30; awaiting verification
+Plan: 14 of 14 executed
+Status: Ready for verification. Phase 8 closed 2026-09-30 (export lifecycle UAT passed). Track B next: Phase 15
+Last activity: 2026-09-30 — merged origin/Transactional-Communications into Khaliddev
 
 Progress: [██████████] 99%
 
@@ -99,6 +101,19 @@ Progress: [██████████] 99%
 | Phase 12 P02 | 1h 20min | 3 tasks | 9 files |
 | Phase 12 P03 | 25min | 3 tasks | 9 files |
 | Phase 12 P07 | 2h | 3 tasks | 22 files |
+| Phase 13 P01 | 20 min | 3 tasks | 6 files |
+| Phase 13 P02 | 25 min | 3 tasks | 17 files |
+| Phase 13 P03 | 45min | 3 tasks | 12 files |
+| Phase 13 P04 | 55min | 3 tasks | 13 files |
+| Phase 13 P05 | ~90min | 3 tasks | 12 files |
+| Phase 13 P06 | ~70min | 3 tasks | 13 files |
+| Phase 13 P07 | 95min | 3 tasks | 12 files |
+| Phase 13 P08 | 30min | 3 tasks | 14 files |
+| Phase 13 P12 | 50min | 2 tasks | 11 files |
+| Phase 13 P09 | 70min | 3 tasks | 4 files |
+| Phase 13 P10 | 50min | 3 tasks | 7 files |
+| Phase 13 P11 | 75min | 3 tasks | 11 files |
+| Phase 13 P13 | 2h30m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -204,6 +219,28 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11-30]: CR-01b/WR-01: two-phase issuance. issueCertificateForEnrolment is database-only (row with storageKey null, COMPLETED, audit, event) and registers the certificate id against the tx object; certificate-file-service.ts renders from the row snapshot and stores after commit (compare-and-set on storageKey null and status ACTIVE), never throws, settle bounded at 6 s, ensureCertificateFile produces the file on demand. Layout parsing moved to the post-commit step; IssueCertificateDeps is now {generateRef, audit, writeEvent}. Until plan 11-31 wires runTransactionThenSettleCertificateFiles at the lesson-progress/attendance roots and the download route, new certificates have no file (degraded but consistent). The roots must pass the SAME tx object to issuance (registry keys on identity).
 - [Phase 12]: 12-03: attachment auth via service (owner+PUBLIC or staff perms), single NotFound for all denials; cleanup bounded per kind
 - [Phase 12]: 12-07: QUEUE_CHANGED event added so queue moves are attributed chronology; claimTicket requires reassignment reason when taking another owner's ticket; eligible owners are active staff with a GLOBAL tickets.manage role
+- [Phase 13]: 13-01: DOMAIN_EVENT_TYPE_LIST derived from Record<DomainEventType,true> for compile-time exhaustiveness; EmailDispatch status kept String with SQL CHECK
+- [Phase 13]: Email identity (sender, brand, Reply-To, base URL, transport) resolved only in src/server/email/config.ts; no defaults, fail loud — COM-04/D-14: unconfigured deployment must not send as an unapproved identity
+- [Phase 13]: TEMPLATE_REGISTRY is a total Record over TEMPLATE_IDS across auth, learner and staff modules — A missing template is a compile error; params are allow-listed so payload spreads cannot leak
+- [Phase 13]: 13-03: notification-service.ts unreadCount/list/markRead/markAllRead all scope every query and update by recipientId=actor.userId; markRead separates an ownership read from a conditional readAt:null write so an owned-but-already-read row still returns true; renderNotificationText is a total Record<NotificationType, ...> over all 27 types (Claude's Discretion); email-preference-service validates the requested category set before opening the transaction so an always-sent/unknown category writes nothing
+- [Phase 13]: Kept DispatchParams.template as a plain string and correlationId/htmlContent optional until Plan 08 removes the legacy checkout-webhook caller
+- [Phase 13]: sendAuthEmail is the sole place path/token/ttl become an absolute url and correlation key; no auth service reads process.env directly
+- [Phase 13]: resend permission enforcement stays out of email-dispatch-service; it belongs to Plan 12's delivery-log service
+- [Phase 13]: 13-05: LEARNER_TICKET resolver queries prisma.ticket directly (mirroring findOwnByReference) rather than calling getOwnTicketByReference, which self-resolves its actor from the session; STAFF_TICKET/STAFF_PAYMENT/STAFF_SUBMISSION resolvers instead reuse the live withPermission-wrapped page functions directly (getStaffTicketWorkspace/getPaymentDetailForStaff/getGradingDetail), letting a thrown denial propagate since resolveOpen's own catch treats any resolver rejection as denied
+- [Phase 13]: 13-05: archiveReadOlderThan selects a bounded id subset then updates only that subset in one statement (no long-lock unbounded UPDATE); the STAFF_PAYMENT integration test builds a testDb.prisma-bound getPaymentDetailForStaff via createPaymentReadService+createCohortScopeResolvers+createTestWithPermission rather than createPrismaBackedPaymentReadService, whose orderScope is hardcoded to the app's own live prisma import
+- [Phase 13]: 13-06: NotificationDrawer owns the back-arrow+title header swap itself (not an EmailPreferencesPanel onBack prop); item activation decrements the bell count on both ok-href and unavailable outcomes (not just ok-href); mark-all-read failure copy authored in UI-SPEC tone
+- [Phase 13]: 13-06: fixed a real react-hooks/set-state-in-effect + react-hooks/purity lint break (async-function-in-effect, inline Date.now() in render) using the .then/.catch-in-effect and requestAnimationFrame-deferred-state patterns already established by UploadPanel.tsx and StaffShell.tsx
+- [Phase 13]: 13-07: outbox drain claims one DomainEvent per own transaction with FOR UPDATE SKIP LOCKED, fans out EmailDispatch/Notification via createMany skipDuplicates, gates via decideEmailDisposition, and poison-bookkeeps failed attempts in a separate transaction after the event's own rolls back
+- [Phase 13]: 13-08: One shared enrolment-payment mapper group emits enrolment-confirmed (activated/approved), order-payment-exception (illegal_transition only), payment-failed and payment-refunded; checkout webhook and refund-service no longer send email directly, and DispatchParams now requires correlationId/htmlContent with template narrowed to TemplateId (no random-key fallback).
+- [Phase 13]: 13-12: permission-gated email delivery log (audit.view list / users.manage resend) never exposes templateParams; a too-short reason and an ineligible row both throw the same ResendNotAllowedError; plans 09-11 remain unexecuted so state.advance-plan was deliberately skipped (would falsely advance past unexecuted plan 9).
+- [Phase 13]: 13-09: enrolment.withdrawn/enrolment.cancelled share one mapper (enrolmentStatusChangeMail) extended in-place with a bidirectional cohort-cancellation precedence check (60s window on cohortId/actorId/reason, queried both directions via parameterised Prisma.sql over the DomainEvent JSONB payload) so either the per-enrolment or the cohort.cancelled event can be drained first with the same outcome; session.updated coalescing is framed as 'does a newer still-unprocessed event exist' rather than a separate latest-event pointer, composing correctly with the drain's own oldest-first claim order.
+- [Phase 13]: 13-10: shared gradeResultMail mapper for grade.released/grade.overridden (loads Enrolment.userId and Assessment.title only, never score/maxScore/passed/previousScore/newScore/passedChanged); certificate.issued/revoked/reissued each resolve the holder from the Certificate row's own userId (never a payload field, T-13-42), certificate.reissued from the NEW certificate row; support.ts extended with ticket.created/resolved/closed (requester from payload) and ticket.reopened (requester+reference from the Ticket row since payload ownerId/assignee may be null, A-04).
+- [Phase 13]: 13-11: resolveStaffHolders — one parameterised SQL query over User/Assignment/Role reproducing grantMatches/isGrantActive/hasPermission exactly (optional COHORT/PROGRAMME/COURSE scope branches omitted, not wildcarded, when the caller's ResourceScope field is undefined); parity-tested against the real authorization core across the full grant matrix on real Postgres.
+- [Phase 13]: 13-11: order.exception is now mapped by both the enrolment-payment group (learner mail, illegal_transition only) and the new staff group (every reason, cohort-scoped payments.view holders) — fanning out to both mappers is intentional; the coded reason is rendered through a fixed allow-list (ORDER_EXCEPTION_REASON_LABELS), never the raw code, to a generic 'Payment needs review' fallback for anything unmapped.
+- [Phase 13]: 13-11: email-failure-alert-service.ts never writes EmailDispatch and never throws (own try/catch, belt-and-suspenders with the drain's existing onEmailFailed try/catch) — resolves global audit.view holders and creates one staff.email_failed notification per holder (params limited to template + 8-char dispatchRef) via createMany skipDuplicates.
+- [Phase 13]: 13-13: permission catalogue invariant asserts 37 (not the plan's literal 36) — Phase 11's certificates.manage already made 37 the correct, live count per tests/permissions.test.ts
+- [Phase 13]: 13-13: two stale mapper-registration assertions (event-intent-mappers.test.ts payment.failed, event-mappers-support.test.ts ticket.created) are pre-existing Plan 08/10 debt, confirmed isolated from 13-13's new files, logged to deferred-items.md and WINDOWS.md rather than fixed (out of file scope)
+- [Phase 13]: 13-13: acceptance test criterion 1 uses the real sendTransactionalEmail with only the Brevo SDK client mocked (real payload construction); criteria 2/3 use a plain injected send stub, matching tests/domain-event-drain.integration.test.ts's existing convention
 
 ### Pending Todos
 
@@ -233,13 +270,15 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 11 P15, informational] tests/boundary.test.ts's importersOf-based closure/importer-scan tests (checkout-webhook-system-service.ts closure, pdf-lib single-importer check) intermittently exceed the default 5000ms Vitest timeout in this sandbox when run alongside the full suite or in isolation -- a different sub-test times out each run, consistent with a slow full-src-tree scan under this sandbox's I/O, not a regression from plan 11-15's changes (unrelated files). Not fixed here (out of this plan's scope); worth a longer per-test timeout if it recurs.
 - [Tooling, Phase 11 P15] Same gap as the Phase 11 P05 entry above recurred: after state.advance-plan (15->16 of 16), the frontmatter's percent field was still stuck at 56 even though state.update-progress reported percent:99 (151/152) -- hand-corrected in STATE.md's frontmatter this session, same as before.
 
-- [Phase 11/11-16 walkthrough, OPEN]: Browser walkthrough (2026-09-19) found 6 gaps, none fixed. BLOCKER CRD-03: learner dashboard lists only ACTIVE enrolments (learner-access.ts listOwnActiveEnrolments) but issuance sets COMPLETED, so the certificate download slot vanishes when a certificate is ACTIVE. MAJOR CRD-03: certificate-pdf-renderer.ts passes top-origin y straight to pdf-lib (bottom-origin), so PDFs are vertically mirrored vs the editor, and images stretch. MAJOR: no Course edit page (CourseForm is create-only) so issuance mode/template cannot be changed on existing courses. Also: native image drag glitch on the editor canvas, bare /verify is the email-verification page, stale dashboard copy. Reopen CRD-03; CRD-02 has no browser evidence. Do not mark Phase 11 Complete until closed.
+- [Phase 11/11-16 walkthrough, OPEN]: Browser walkthrough (2026-09-19) found 6 gaps, fixed. BLOCKER CRD-03: learner dashboard lists only ACTIVE enrolments (learner-access.ts listOwnActiveEnrolments) but issuance sets COMPLETED, so the certificate download slot vanishes when a certificate is ACTIVE. MAJOR CRD-03: certificate-pdf-renderer.ts passes top-origin y straight to pdf-lib (bottom-origin), so PDFs are vertically mirrored vs the editor, and images stretch. MAJOR: no Course edit page (CourseForm is create-only) so issuance mode/template cannot be changed on existing courses. Also: native image drag glitch on the editor canvas, bare /verify is the email-verification page, stale dashboard copy. Reopen CRD-03; CRD-02 has no browser evidence. Do not mark Phase 11 Complete until closed.
 
 - [Phase 11 gap closure done, verification OPEN]: Plans 11-17..11-24 executed and 8 UAT gaps re-verified in a browser (see 11-UAT.md). Full suite 3000/3001 pass; the 1 failure (Phase 10 submission-service.integration) is a 5s timeout under load and passes alone. NOT complete: (1) code review 11-REVIEW.md has 6 critical + 10 warning findings, CR-01 empirically confirmed (PDF renderer throws for non-WinAnsi names such as Yoruba ọ/ṣ/ẹ, inside the lesson-progress/attendance transaction, so the learner write rolls back); (2) new gap: deriveCertificateColumn hides the certificate slot when completion is superseded but a flagged certificate exists. gsd-verifier was NOT run. Certificates issued before 11-19 keep mirrored PDFs. Next: second gap-closure pass from 11-REVIEW.md, then verify.
 
 - [Phase 11/11-32]: Real-infrastructure proof executed (Testcontainers Postgres + live MinIO at localhost:9002): tests/certificate-unicode-file.integration.test.ts (12/12) and tests/certificate-lifecycle-guards.integration.test.ts (12/12), plus enrolment-live-index (10), certificate-concurrency (2) and certificate-download (5), all green; no source change. A temporary neutralisation of reissue's supersede-all-REVOKED step failed only the legacy two-REVOKED test, then was restored. Evidence PDFs for the 11-33 visual check (untracked, synthetic names): .planning/phases/11-certificates-completion-lifecycle/11-32-evidence/{yoruba,polish,cjk}-certificate.pdf. Phase 11 stays In Progress until 11-33.
 
 - [Phase 11 second gap pass, plan 11-33 visual check]: The human visual check caught a real defect the automated tests missed: the 11-29 renderer embedded a SUBSET of the certificate font, and fontkit's subsetter dropped glyph outlines, so most letters drew blank in Chrome and pdf.js while ToUnicode text extraction still passed. Fixed by embedding the whole font (about 316 KB per certificate) with outline-asserting tests (commit after 44a87d2, see 11-29-SUMMARY.md). Regenerated Yoruba/Polish/CJK evidence PDFs look correct. Follow-up: trim the font to Latin-only to shrink the files. Still open: plan 11-33 (human sign-off on the PDFs, and applying or deferring the CR-06 migration on Neon).
+- 13-11's own files (7 commits) were committed per the standard GSD executor workflow per explicit instruction for this run, overriding Plans 07-10/12's commit_policy_override convention (no commits, project owner must explicitly ask). ~90 other pre-existing uncommitted files from Plans 01-10/12 remain exactly as found -- the project owner should review that working-tree diff and explicitly request commits for those plans separately.
+- [Phase 13, 13-13]: Phase 13 code/tests are complete (13/13 plans, all requirements COM-01..04 checked off) but full npm test has 7 failed files / 24 failed tests, all pre-existing and unrelated to 13-13 (2 stale mapper-count assertions from Plans 08/10, 11 MinIO-not-running failures, 2 apparent resource-contention timeouts) — see deferred-items.md. D-24 live Brevo check still needs a human with real credentials. Not yet run: gsd-verify-work / phase sign-off.
 
 ### Quick Tasks Completed
 
@@ -257,6 +296,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-25T13:04:05.705Z
-Stopped at: Phase 12 UI-SPEC approved
+Last session: 2026-09-28T21:18:39.891Z
+Stopped at: Completed 13-13-PLAN.md (final plan in Phase 13) -- all 13 plans executed, requirements COM-01..04 marked complete; phase sign-off/verify-work still pending
 Resume file: None

@@ -1,12 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashToken } from "@/server/auth/token-hash";
 import { guardFindUnique } from "./support/prisma-contract";
-import { TOKEN_PURPOSE } from "@/lib/identity";
+import { TOKEN_PURPOSE, VERIFICATION_TOKEN_TTL_MS } from "@/lib/identity";
 import {
   createVerificationService,
   type VerificationStore,
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
+import { buildAuthCorrelationId, type DispatchParams } from "@/server/services/email-dispatch-service";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function stubEmailEnv() {
+  vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+  vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+  vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+  vi.stubEnv("APP_BASE_URL", "https://lms.acme.test");
+}
 
 type UserRow = { id: string; email: string; status: string; passwordHash?: string | null };
 
@@ -20,12 +32,18 @@ class SimulatedProviderOutage extends Error {
 }
 
 function harness(
-  options: { tokens?: VerificationTokenRow[]; users?: UserRow[]; rejectDispatch?: boolean } = {},
+  options: {
+    tokens?: VerificationTokenRow[];
+    users?: UserRow[];
+    rejectDispatch?: boolean;
+    skipEmailEnv?: boolean;
+  } = {},
 ) {
+  if (!options.skipEmailEnv) stubEmailEnv();
   const tokens: VerificationTokenRow[] = options.tokens ?? [];
   const users: UserRow[] = options.users ?? [];
   const rejectDispatch = options.rejectDispatch ?? false;
-  const dispatched: unknown[] = [];
+  const dispatched: DispatchParams[] = [];
   const audits: unknown[] = [];
 
   const store: VerificationStore = {
@@ -340,6 +358,62 @@ describe("resendVerification", () => {
     const result = await service.resendVerification("learner@example.com");
     expect(result).toEqual({ ok: true });
     expect(dispatched).toHaveLength(1);
+  });
+
+  it("dispatches under template email-verification with a correlationId starting with auth: that equals buildAuthCorrelationId(token), and never the raw token in correlationId or as a bare field", async () => {
+    harness_now.value = new Date("2026-09-02T12:00:00Z");
+    const { service, dispatched, tokens } = harness({
+      users: [{ id: "u1", email: "learner@example.com", status: "PENDING_VERIFICATION" }],
+    });
+
+    await service.resendVerification("learner@example.com");
+
+    expect(dispatched).toHaveLength(1);
+    const params = dispatched[0];
+    expect(params.template).toBe("email-verification");
+    // The store keeps only the token's hash (bearer tokens are hashed at rest),
+    // so the raw token exists only in the emailed link.
+    const token = /token=([^\s&"<]+)/.exec(params.textContent)?.[1];
+    expect(token).toBeDefined();
+    const stored = tokens.find((t) => t.identifier === "learner@example.com")?.token;
+    expect(stored).toBe(hashToken(decodeURIComponent(token as string)));
+    expect(params.correlationId).toBe(buildAuthCorrelationId(decodeURIComponent(token as string)));
+    expect(params.correlationId?.startsWith("auth:")).toBe(true);
+    expect(params.correlationId).not.toContain(token as string);
+    expect(Object.keys(params)).not.toContain("token");
+  });
+
+  it("still returns the frozen ok value and dispatches nothing when the base URL is unconfigured in production", async () => {
+    harness_now.value = new Date("2026-09-02T12:00:00Z");
+    const { service, dispatched } = harness({
+      users: [{ id: "u1", email: "learner@example.com", status: "PENDING_VERIFICATION" }],
+      skipEmailEnv: true,
+    });
+    vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+    vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+    vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_BASE_URL", ""); // unconfigured, and production disallows the localhost fallback
+
+    const result = await service.resendVerification("learner@example.com");
+    expect(result).toEqual({ ok: true });
+    expect(dispatched).toHaveLength(0);
+  });
+
+  it("sends once for the first issued token and again for a fresh token issued after the cooldown", async () => {
+    harness_now.value = new Date("2026-09-02T12:00:00Z");
+    const { service, dispatched } = harness({
+      users: [{ id: "u1", email: "learner@example.com", status: "PENDING_VERIFICATION" }],
+    });
+
+    await service.resendVerification("learner@example.com");
+    expect(dispatched).toHaveLength(1);
+    const firstCorrelationId = dispatched[0].correlationId;
+
+    harness_now.value = new Date("2026-09-02T12:01:01Z"); // past the 60s cooldown
+    await service.resendVerification("learner@example.com");
+    expect(dispatched).toHaveLength(2);
+    expect(dispatched[1].correlationId).not.toBe(firstCorrelationId);
   });
 
   it("returns the same single result for a non-existent email, doing nothing internally", async () => {

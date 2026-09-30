@@ -119,10 +119,10 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Communications and Notifications (COM)
 
-- [ ] **COM-01**: Transactional emails are sent for verification, password reset, order/payment outcome, enrolment, session change, result release, certificate issuance/revocation, and ticket activity — approved template, correct recipient, delivery record, no sensitive secrets.
-- [ ] **COM-02**: Duplicate transactional messages during retries/idempotent processing are prevented; repeated events within the same correlation produce at most one intended notification.
-- [ ] **COM-03**: Important in-product notifications/dashboard alerts are shown for learner and staff actions; users see unread/current state and open the relevant authorized record; stale links fail safely.
-- [ ] **COM-04**: One approved client sender identity and brand, configured at deployment, is used consistently; no tenant-level editor is required.
+- [x] **COM-01**: Transactional emails are sent for verification, password reset, order/payment outcome, enrolment, session change, result release, certificate issuance/revocation, and ticket activity — approved template, correct recipient, delivery record, no sensitive secrets.
+- [x] **COM-02**: Duplicate transactional messages during retries/idempotent processing are prevented; repeated events within the same correlation produce at most one intended notification.
+- [x] **COM-03**: Important in-product notifications/dashboard alerts are shown for learner and staff actions; users see unread/current state and open the relevant authorized record; stale links fail safely.
+- [x] **COM-04**: One approved client sender identity and brand, configured at deployment, is used consistently; no tenant-level editor is required.
 
 ### Support Tickets (SUP)
 
@@ -278,10 +278,10 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | SUP-04 | Phase 12 | Complete |
 | SUP-05 | Phase 12 | Complete |
 | SUP-06 | Phase 12 | Complete |
-| COM-01 | Phase 13 | Pending |
-| COM-02 | Phase 13 | Pending |
-| COM-03 | Phase 13 | Pending |
-| COM-04 | Phase 13 | Pending |
+| COM-01 | Phase 13 | Complete |
+| COM-02 | Phase 13 | Complete |
+| COM-03 | Phase 13 | Complete |
+| COM-04 | Phase 13 | Complete |
 | LIC-01 | Phase 14 | Pending |
 | LIC-02 | Phase 14 | Pending |
 | LIC-03 | Phase 14 | Pending |

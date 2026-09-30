@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { guardFindUnique } from "./support/prisma-contract";
 import { POLICY_TYPE, POLICY_VERSIONS, MIN_PASSWORD_LENGTH } from "@/lib/identity";
 import {
@@ -17,6 +17,18 @@ import {
   type VerificationStore,
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
+import { buildAuthCorrelationId, type DispatchParams } from "@/server/services/email-dispatch-service";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function stubEmailEnv() {
+  vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+  vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+  vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+  vi.stubEnv("APP_BASE_URL", "https://lms.acme.test");
+}
 
 type PolicyAcceptanceRow = {
   userId: string;
@@ -39,12 +51,13 @@ class SimulatedProviderOutage extends Error {
 
 /** One fake store backing both registration-service and verification-service, so an
  * end-to-end test can drive registerLearner and then verifyEmail against the same data. */
-function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
+function sharedHarness(options: { rejectDispatch?: boolean; skipEmailEnv?: boolean } = {}) {
   const rejectDispatch = options.rejectDispatch ?? false;
+  if (!options.skipEmailEnv) stubEmailEnv();
   const users: RegisteredUserRow[] = [];
   const policyAcceptances: PolicyAcceptanceRow[] = [];
   const tokens: VerificationTokenRow[] = [];
-  const dispatched: { toEmail: string; textContent: string; subject: string }[] = [];
+  const dispatched: DispatchParams[] = [];
   let userIdCounter = 0;
   let hashCallCount = 0;
 
@@ -148,11 +161,7 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
     store: store as unknown as VerificationStore,
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({
-        toEmail: params.toEmail,
-        subject: params.subject,
-        textContent: params.textContent,
-      });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -167,11 +176,7 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
     resendVerification: (email) => verificationService.resendVerification(email),
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({
-        toEmail: params.toEmail,
-        subject: params.subject,
-        textContent: params.textContent,
-      });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -260,6 +265,22 @@ describe("registerLearner — brand-new email", () => {
     expect(dispatched[0].toEmail).toBe("learner@example.com");
   });
 
+  it("dispatches under template email-verification with a correlationId starting with auth: that equals buildAuthCorrelationId(token), htmlContent containing the verify url, and never the raw token in correlationId", async () => {
+    const { registrationService, dispatched } = sharedHarness();
+    await registrationService.registerLearner(BASE_INPUT);
+
+    expect(dispatched).toHaveLength(1);
+    const params = dispatched[0];
+    expect(params.template).toBe("email-verification");
+    expect(params.correlationId).toBeDefined();
+    expect(params.correlationId!.startsWith("auth:")).toBe(true);
+
+    const token = extractToken(params.textContent);
+    expect(params.correlationId).toBe(buildAuthCorrelationId(token));
+    expect(params.correlationId).not.toContain(token);
+    expect(params.htmlContent).toContain("https://lms.acme.test/verify?token=");
+  });
+
   it("leaves zero User rows when the PolicyAcceptance write throws, proving both writes share one transaction", async () => {
     const { registrationService, store, users } = sharedHarness();
     store.policyAcceptance.create = vi.fn(async () => {
@@ -293,6 +314,30 @@ describe("registerLearner — rejecting transport (G-03-3 regression)", () => {
 
     expect(result).toBe(REGISTRATION_ACCEPTED);
     expect(dispatched).toHaveLength(0); // the transport really did reject
+    expect(users).toHaveLength(1); // the account was still committed
+
+    const created = audits.filter((a) => (a as { action: string }).action === "user.created");
+    expect(created).toHaveLength(1);
+  });
+});
+
+// D-08/IAM-06: an unconfigured base URL in production must not surface any
+// differently than a rejecting transport — sendAuthEmail's own try/catch
+// swallows the EmailConfigError from buildAbsoluteUrl exactly like a send
+// failure, so the frozen result and the committed account are unaffected.
+describe("registerLearner — unconfigured base URL in production mode", () => {
+  it("still returns the frozen accepted value and still commits the account when APP_BASE_URL is unset in production", async () => {
+    const { registrationService, audits, users, dispatched } = sharedHarness({ skipEmailEnv: true });
+    vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+    vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+    vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_BASE_URL", "");
+
+    const result = await registrationService.registerLearner({ ...BASE_INPUT, email: "unconfigured@example.com" });
+
+    expect(result).toBe(REGISTRATION_ACCEPTED);
+    expect(dispatched).toHaveLength(0); // buildAbsoluteUrl threw before any dispatch call
     expect(users).toHaveLength(1); // the account was still committed
 
     const created = audits.filter((a) => (a as { action: string }).action === "user.created");
