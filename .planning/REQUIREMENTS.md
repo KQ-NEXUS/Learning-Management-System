@@ -67,13 +67,13 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 - [x] **PAY-03**: Authorized staff with `payments.confirm` can confirm an approved offline/manual payment; amount, currency, date, channel, reference, evidence/note, and reason are required; one audit event and one enrolment effect result.
 - [x] **PAY-04**: Duplicate or conflicting online/manual confirmation is prevented; a second success attempt is rejected or safely reconciled, showing staff the existing transaction and a corrective path.
 - [x] **PAY-05**: Authorized staff with `refunds.manage` can record/initiate approved refunds; amount, reason, approver/reference, resulting access decision, actor, and time are preserved; amount cannot exceed eligible paid value.
-- [ ] **PAY-06**: Payment and refund reconciliation views and CSV exports are available; totals reconcile to transaction rows for the same filters; manual and gateway records are distinguishable; exports are permission-protected.
+- [x] **PAY-06**: Payment and refund reconciliation views and CSV exports are available; totals reconcile to transaction rows for the same filters; manual and gateway records are distinguishable; exports are permission-protected.
 - [x] **PAY-07**: Delayed, duplicated, or out-of-order gateway notifications are handled safely; webhook replay/ordering does not duplicate enrolment, receipt, or financial effect; ambiguous cases enter a visible exception state.
 - [x] **PAY-08**: Before order creation a learner selects an available administrator-entered currency price: NGN routes only to Paystack, USD routes only to Stripe, and approved manual payment is shown only when configured. Currency and gateway cannot be paired differently by the client, and no FX conversion occurs. *(Supersedes PAY-01's single-gateway assumption and Phase 6 D-07's future use.)*
 - [x] **PAY-09**: Provider-specific Paystack and Stripe integrations sit behind one product-owned payment interface and shared state machine; provider differences do not change the learner's enrolment/receipt/audit/support model.
 - [x] **PAY-10**: Paystack and Stripe results are verified server-side using approved correlation/signature controls before payment success is recorded; redirect manipulation and invalid webhooks cannot mark an order paid.
 - [x] **PAY-11**: Payment initiation, confirmation, failure, cancellation, refund, and reconciliation are idempotent across methods; repeated/reordered events and method switching produce at most one successful payment effect and active enrolment.
-- [ ] **PAY-12**: Provider, currency, base price, platform fee, estimated/actual gateway fee, learner total, school settlement, KQ NEXUS gross/net, transaction/reference, payment state, and safe exception context are exposed to authorized Finance/Operations users with provider-filtered reconciliation/export views.
+- [x] **PAY-12**: Provider, currency, base price, platform fee, estimated/actual gateway fee, learner total, school settlement, KQ NEXUS gross/net, transaction/reference, payment state, and safe exception context are exposed to authorized Finance/Operations users with provider-filtered reconciliation/export views.
 - [x] **PAY-13**: An authorized refund routes to the original provider where supported, or records a controlled manual refund outcome; amount cannot exceed eligible paid value; reason/approver/outcome/actor/time are auditable.
 - [x] **PAY-14**: Gateway credentials and webhook secrets stay in deployment-managed secret storage — never in the browser, exports, audit detail, staff UI, or source control; staff may see enabled provider status but not secrets.
 
@@ -135,11 +135,11 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 ### Dashboards, Reports, Exports, and Audit (RPT)
 
-- [ ] **RPT-01**: Fixed operational dashboards exist for registrations, payments, enrolments, attendance, progress, submissions, grades, completion, certificates, and support; each states metric definition, filter context, last-refreshed time, and empty/error behavior.
-- [ ] **RPT-02**: The requesting user's permissions and scope apply to every dashboard, aggregate, drill-down, and export; out-of-scope data cannot be inferred through totals, filters, identifiers, downloads, or direct requests.
-- [ ] **RPT-03**: CSV export is provided for the defined operational datasets, with stable column definitions, applied filters, generation time, and a row-level reconciliation path.
-- [ ] **RPT-04**: Large exports process asynchronously with queued, processing, succeeded, failed, expired, and retry states; users can leave the screen, see job state later, retry safely, and download only via time-limited authorized access.
-- [ ] **RPT-05**: An authorized, filterable audit view and export exists for security and sensitive business actions; audit records are append-only, include correlation data, and redact secrets while preserving investigative value.
+- [x] **RPT-01**: Fixed operational dashboards exist for registrations, payments, enrolments, attendance, progress, submissions, grades, completion, certificates, and support; each states metric definition, filter context, last-refreshed time, and empty/error behavior.
+- [x] **RPT-02**: The requesting user's permissions and scope apply to every dashboard, aggregate, drill-down, and export; out-of-scope data cannot be inferred through totals, filters, identifiers, downloads, or direct requests.
+- [x] **RPT-03**: CSV export is provided for the defined operational datasets, with stable column definitions, applied filters, generation time, and a row-level reconciliation path.
+- [x] **RPT-04**: Large exports process asynchronously with queued, processing, succeeded, failed, expired, and retry states; users can leave the screen, see job state later, retry safely, and download only via time-limited authorized access.
+- [x] **RPT-05**: An authorized, filterable audit view and export exists for security and sensitive business actions; audit records are append-only, include correlation data, and redact secrets while preserving investigative value.
 
 ### Non-Functional, Security, Accessibility, and Operational Requirements (NFR)
 
@@ -245,13 +245,13 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | PAY-15 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
 | PAY-16 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
 | PAY-17 | Phase 7 | Complete (verified 2026-09-29, 07-VERIFICATION.md) |
-| PAY-06 | Phase 8 | Built — verification pending |
-| PAY-12 | Phase 8 | Built — verification pending |
-| RPT-01 | Phase 8 | Built — verification pending |
-| RPT-02 | Phase 8 | Built — verification pending |
-| RPT-03 | Phase 8 | Built — verification pending |
-| RPT-04 | Phase 8 | Built — verification pending |
-| RPT-05 | Phase 8 | Built — verification pending |
+| PAY-06 | Phase 8 | Complete |
+| PAY-12 | Phase 8 | Complete |
+| RPT-01 | Phase 8 | Complete |
+| RPT-02 | Phase 8 | Complete |
+| RPT-03 | Phase 8 | Complete |
+| RPT-04 | Phase 8 | Complete |
+| RPT-05 | Phase 8 | Complete |
 | LRN-01 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
 | LRN-02 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |
 | LRN-03 | Phase 9 | Complete (verified 2026-09-29, 09-VERIFICATION.md) |

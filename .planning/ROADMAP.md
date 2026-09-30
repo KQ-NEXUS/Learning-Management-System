@@ -26,7 +26,7 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 5: Cohorts, Scheduling, Enrolment Operations & Attendance** *(Track B, parallel-eligible with Phases 2–3)* - Staff stand up Cohorts, schedule sessions, manage enrolment lifecycle and capacity, mark and correct attendance. (completed 2026-09-07)
 - [x] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement. (completed 2026-09-12)
 - [x] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
-- [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
+- [x] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available. (completed 2026-09-30)
 - [x] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion. (completed 2026-09-15)
 - [x] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides. (completed 2026-09-16)
 - [x] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly. (completed 2026-09-19)
@@ -756,7 +756,7 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 5. Cohorts, Scheduling, Enrolment Operations & Attendance | 16/16 | Complete | 2026-09-07 |
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
-| 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
+| 8. Finance Reconciliation, Dashboards & Reporting Exports | 12/12 | Complete | 2026-09-30 |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
