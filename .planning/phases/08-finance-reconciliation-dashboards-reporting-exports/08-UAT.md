@@ -1,31 +1,38 @@
 ---
-status: testing
+status: complete
 phase: 08-finance-reconciliation-dashboards-reporting-exports
 source: [08-VERIFICATION.md]
 started: 2026-09-17T03:19:52Z
-updated: 2026-09-21T01:35:00+01:00
+updated: 2026-09-30T12:10:00+01:00
 ---
 
 ## Current Test
 
-number: 1
-name: Deployed asynchronous export lifecycle
-expected: |
-  A large authorized export progresses in the deployed Netlify/S3 environment, remains visible after leaving the page, downloads only through a short-lived owner-authorized link, and expires safely.
-awaiting: the created job's expiry window and an available failed job for retry verification
+[testing complete]
 
 ## Tests
 
 ### 1. Deployed asynchronous export lifecycle
 
 expected: Configure the dispatch secret and private storage in a deployed test environment; queue a large export, leave and return, verify status/download/retry/expiry and denial behavior as described in 08-VERIFICATION.md.
-result: pending
+result: pass
 observed: |
   Chrome tested the deployed site at `https://kqnexuslms.netlify.app` on 2026-09-21. Ada Admin queued a Registrations export containing 28 rows, left the report, and opened Export History. The job had progressed to `Succeeded`, retained its frozen request/as-of details, and showed availability until 2026-09-22 01:32 Africa/Lagos.
 
   The owner-authorized download endpoint issued a 60-second signed Cloudflare R2 URL, and Chrome's download API successfully retrieved the CSV. After switching to the separate `finance@kqnexus.test` account, opening the administrator-owned job's download endpoint returned the safe `Download unavailable` response without exposing whether expiry or authorization caused the denial. The administrator session was restored after the check.
 
   No failed or expired jobs exist for this owner in the deployed environment. Failure retry and post-expiry denial/rerun therefore remain pending; manufacturing either state would require deliberately breaking deployment configuration or waiting for the 24-hour retention window.
+
+  Failure retry, expiry, post-expiry denial, and rerun were verified on 2026-09-30 against the self-hosted Docker stack (Postgres + MinIO, freshly built app image), running the real scheduled worker code; no database row was edited by hand:
+
+  - Failure: Ada Admin queued a 5-row Registrations export (`cmunzbcl…`). MinIO was stopped and the real process task ran: `processed 0 exports; 1 failed`. The job became `FAILED` with `EXPORT_GENERATION_FAILED`, no storage key, and only the safe message "Export generation failed. Retry this export.", which Export History displayed with a `Retry export` action.
+  - Retry: with MinIO restarted, `Retry export` queued a new job (`cmunzdp4…`) linked by `retryOfId`, keeping the original frozen as-of time (10:45:18) and row count. The process task marked it `SUCCEEDED`; the download endpoint returned a 302 to a signed MinIO URL and the CSV (format header + 5 rows) downloaded.
+  - Expiry: the real `expireBatch` ran with its injected clock 25 hours ahead (the 24-hour window elapsing without editing rows). It deleted the object from MinIO (the object path no longer exists on disk) and moved the job to `EXPIRED` with its storage key cleared.
+  - Post-expiry denial: the owner's download request returned 404 `Download unavailable — The file may have expired or your access may have changed`, with no redirect, the same neutral wording as the cross-account denial above.
+  - Rerun: Export History showed the job as Expired with "Rerunning captures current data with a new as of time." `Rerun export` created a new job (`cmuo039x…`) with a new as-of time (11:07:01), which processed to `SUCCEEDED`.
+  - Audit trail recorded, in order: `export.requested`, `export.failed` (SYSTEM), `export.retried`, `export.succeeded` (SYSTEM), `export.download_authorized`, `export.expired` (SYSTEM), `export.requested`, `export.succeeded`.
+
+  The deployed Netlify/R2 run covered queueing, background progress, signed download, and cross-account denial; the Docker run covered the failure/expiry states on the same worker code with S3-compatible storage. The rerun action is audited as `export.requested` and does not link back to the expired job; this matches the rerun's intent (a fresh request with current data) and is noted, not raised as a gap.
 
 ### 2. Responsive and 200% zoom visual check
 
@@ -36,9 +43,9 @@ observed: Chrome verified Reconciliation, the Reports hub, Export History, and t
 ## Summary
 
 total: 2
-passed: 1
+passed: 2
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
