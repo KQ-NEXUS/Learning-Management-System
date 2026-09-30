@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { guardFindUnique } from "./support/prisma-contract";
 import { POLICY_TYPE, POLICY_VERSIONS } from "@/lib/identity";
 import {
@@ -13,6 +13,18 @@ import {
   type VerificationStore,
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
+import { buildAuthCorrelationId, type DispatchParams } from "@/server/services/email-dispatch-service";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function stubEmailEnv() {
+  vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+  vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+  vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+  vi.stubEnv("APP_BASE_URL", "https://lms.acme.test");
+}
 
 type PolicyAcceptanceRow = {
   id: string;
@@ -34,12 +46,13 @@ class SimulatedProviderOutage extends Error {
   }
 }
 
-function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
+function sharedHarness(options: { rejectDispatch?: boolean; skipEmailEnv?: boolean } = {}) {
+  if (!options.skipEmailEnv) stubEmailEnv();
   const rejectDispatch = options.rejectDispatch ?? false;
   const users: ProfileUserRow[] = [];
   const policyAcceptances: PolicyAcceptanceRow[] = [];
   const tokens: VerificationTokenRow[] = [];
-  const dispatched: { toEmail: string; textContent: string; subject: string }[] = [];
+  const dispatched: DispatchParams[] = [];
   const audits: unknown[] = [];
   let policyIdCounter = 0;
 
@@ -139,7 +152,7 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
     store: store as unknown as VerificationStore,
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -155,7 +168,7 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
     consumeToken: (params, apply) => verificationService.consumeToken(params, apply),
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({ toEmail: params.toEmail, subject: params.subject, textContent: params.textContent });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -309,6 +322,61 @@ describe("requestEmailChange — happy path, collision, and same-address", () =>
     );
     expect(result).toBe(EMAIL_CHANGE_ACCEPTED);
     expect(tokens).toHaveLength(0);
+  });
+
+  it("dispatches under template email-change-confirmation with a correlationId starting with auth: that equals buildAuthCorrelationId(token), and never the raw token in correlationId or as a bare field", async () => {
+    const { profileService, users, dispatched } = sharedHarness();
+    users.push(makeUser());
+
+    await profileService.requestEmailChange(
+      { userId: "u1" },
+      { currentPassword: "correct", newEmail: "new@example.com" },
+    );
+
+    expect(dispatched).toHaveLength(1);
+    const params = dispatched[0];
+    expect(params.template).toBe("email-change-confirmation");
+    const token = extractToken(params.textContent);
+    expect(params.correlationId).toBe(buildAuthCorrelationId(token));
+    expect(params.correlationId?.startsWith("auth:")).toBe(true);
+    expect(params.correlationId).not.toContain(token);
+    expect(Object.keys(params)).not.toContain("token");
+  });
+
+  it("still returns the accepted value and dispatches nothing when the base URL is unconfigured in production", async () => {
+    const { profileService, users, dispatched } = sharedHarness({ skipEmailEnv: true });
+    users.push(makeUser());
+    vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+    vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+    vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_BASE_URL", ""); // unconfigured, and production disallows the localhost fallback
+
+    const result = await profileService.requestEmailChange(
+      { userId: "u1" },
+      { currentPassword: "correct", newEmail: "new@example.com" },
+    );
+    expect(result).toBe(EMAIL_CHANGE_ACCEPTED);
+    expect(dispatched).toHaveLength(0);
+  });
+
+  it("sends once for the first issued token and again for a fresh token issued for a different new address", async () => {
+    const { profileService, users, dispatched } = sharedHarness();
+    users.push(makeUser());
+
+    await profileService.requestEmailChange(
+      { userId: "u1" },
+      { currentPassword: "correct", newEmail: "first@example.com" },
+    );
+    expect(dispatched).toHaveLength(1);
+    const firstCorrelationId = dispatched[0].correlationId;
+
+    await profileService.requestEmailChange(
+      { userId: "u1" },
+      { currentPassword: "correct", newEmail: "second@example.com" },
+    );
+    expect(dispatched).toHaveLength(2);
+    expect(dispatched[1].correlationId).not.toBe(firstCorrelationId);
   });
 
   it("the collision, same-address, and happy-path outcomes share one object identity", async () => {

@@ -69,6 +69,8 @@ type StaffShellProps = {
   nav: StaffNavItem[];
   identity: StaffIdentity;
   signOut: ReactNode;
+  /** The notification bell (D-18). Optional so existing callers/tests need no change. */
+  bell?: ReactNode;
   children: ReactNode;
 };
 
@@ -117,7 +119,7 @@ function subscribeToViewport(onChange: () => void) {
 const getDesktopSnapshot = () => window.matchMedia(DESKTOP_QUERY).matches;
 const getServerDesktopSnapshot = () => false;
 
-export function StaffShell({ nav, identity, signOut, children }: StaffShellProps) {
+export function StaffShell({ nav, identity, signOut, bell, children }: StaffShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const desktop = useSyncExternalStore(subscribeToViewport, getDesktopSnapshot, getServerDesktopSnapshot);
@@ -318,6 +320,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
           </div>
 
           <div className="flex shrink-0 items-center gap-5">
+            {bell}
             <span className="hidden font-mono text-[12px] text-sidebar-soft sm:inline">
               Africa/Lagos
             </span>

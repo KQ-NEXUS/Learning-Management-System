@@ -19,7 +19,8 @@ import {
   VERIFICATION_TOKEN_TTL_MS,
 } from "@/lib/identity";
 import { verificationService } from "@/server/services/verification-service";
-import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { sendAuthEmail } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -64,10 +65,6 @@ export type RegistrationStore = {
   };
   $transaction<T>(fn: (tx: RegistrationStore) => Promise<T>): Promise<T>;
 };
-
-function buildVerificationEmailText(verifyUrl: string): string {
-  return `Click to verify: ${verifyUrl}`;
-}
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (
@@ -216,18 +213,18 @@ export function createRegistrationService(deps: {
     });
 
     if (issued.ok) {
-      const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-      const verifyUrl = `${baseUrl}/verify?token=${issued.token}`;
-      // G-03-3 — routed through the best-effort wrapper: a provider outage
-      // must degrade delivery, never leave a committed, audited account
-      // behind a framework error page. The result is discarded — no
-      // caller-visible value may depend on whether the send happened.
-      await dispatchBestEffort(dispatch, {
+      // G-03-3 — routed through the best-effort wrapper (inside
+      // sendAuthEmail): a provider outage must degrade delivery, never leave
+      // a committed, audited account behind a framework error page. The
+      // result is discarded — no caller-visible value may depend on whether
+      // the send happened.
+      await sendAuthEmail(dispatch, {
         template: "email-verification",
         toEmail: email,
         userId: user.id,
-        subject: "Verify your account",
-        textContent: buildVerificationEmailText(verifyUrl),
+        path: "/verify",
+        token: issued.token,
+        ttlMs: VERIFICATION_TOKEN_TTL_MS,
       });
     }
 

@@ -66,7 +66,7 @@
     {
       "number": "13",
       "name": "Transactional Communications & Notifications",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "14",
@@ -81,8 +81,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 13 of 16 · executing"
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 13 of 16 · ready to verify"
   },
-  "updated_at": "2026-09-27T01:31:43.569Z"
+  "updated_at": "2026-09-28T21:14:10.447Z"
 }

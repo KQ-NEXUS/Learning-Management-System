@@ -43,10 +43,19 @@ import { calculateCheckoutBreakdown, type GatewayFeeScheduleValues } from "@/ser
 
 type CheckoutServiceModule = typeof import("@/server/services/checkout-service");
 type RouteModule = typeof import("@/app/api/webhooks/stripe/route");
+// D-07/D-02 (Plan 08) — the webhook no longer sends email itself; the drain
+// is the only sender. `./support/drain-harness` statically imports
+// `email-dispatch-service.ts`, which touches the `@/server/db` singleton at
+// module-load time — so, like `checkout-service`/the route module above,
+// this MUST be a dynamic import inside `beforeAll`, AFTER
+// `process.env.DATABASE_URL` is pointed at the Testcontainers instance (see
+// file header) — never a static top-level import.
+type DrainHarnessModule = typeof import("./support/drain-harness");
 
 let testDb: TestDatabase;
 let checkoutService: ReturnType<CheckoutServiceModule["createCheckoutService"]>;
 let POST: RouteModule["POST"];
+let startDrainHarness: DrainHarnessModule["startDrainHarness"];
 
 /**
  * 07-06 — `initiateStripePayment` now refuses a non-USD Order (D-07) since
@@ -227,6 +236,8 @@ beforeAll(async () => {
   const checkoutServiceModule = await import("@/server/services/checkout-service");
   const routeModule = await import("@/app/api/webhooks/stripe/route");
   POST = routeModule.POST;
+  const drainHarnessModule = await import("./support/drain-harness");
+  startDrainHarness = drainHarnessModule.startDrainHarness;
 
   checkoutService = checkoutServiceModule.createCheckoutService({
     db: {
@@ -839,7 +850,7 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
     expect(order.status).toBe("PAID"); // the already-correct settlement is not disturbed
   });
 
-  it("a successful settlement dispatches exactly one confirmation EmailDispatch row to the order's owner", async () => {
+  it("a successful settlement writes zero EmailDispatch rows itself; draining then yields exactly one enrolment-confirmed row to the order's owner (D-07, D-02)", async () => {
     const { cohortId } = await seedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
@@ -865,13 +876,25 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
     const response = await POST(signedWebhookRequest(body));
     expect(response.status).toBe(200);
 
+    // The webhook's own settlement transaction never writes an EmailDispatch
+    // row any more — only the outbox event it always wrote (proven above).
+    expect(await testDb.prisma.emailDispatch.count({ where: { userId } })).toBe(0);
+
+    // This file has no per-test cleanup (by design — see the other
+    // describes' shared-testDb comments), so earlier tests' own unprocessed
+    // DomainEvent rows accumulate in the same container. A generous limit
+    // drains the WHOLE backlog, not just this test's own event, in one call
+    // — assertions below are scoped by `userId` so that is harmless.
+    const harness = startDrainHarness(testDb.prisma);
+    await harness.drainService.drain({ events: 200, sends: 200 });
+
     const dispatches = await testDb.prisma.emailDispatch.findMany({ where: { userId } });
     expect(dispatches).toHaveLength(1);
     expect(dispatches[0].toEmail).toBe(learner.email);
-    expect(dispatches[0].template).toBe("order-confirmation");
+    expect(dispatches[0].template).toBe("enrolment-confirmed");
   });
 
-  it("a replayed webhook event sends no second confirmation email", async () => {
+  it("a replayed webhook event drains to no second confirmation email", async () => {
     const { cohortId } = await seedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
@@ -897,53 +920,19 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
     const second = await POST(signedWebhookRequest(body));
     expect(second.status).toBe(200);
 
+    expect(await testDb.prisma.emailDispatch.count({ where: { userId } })).toBe(0);
+
+    // See the previous test's comment — this file's shared testDb has no
+    // per-test event cleanup, so a generous limit is needed to reach past
+    // earlier tests' own accumulated backlog.
+    const harness = startDrainHarness(testDb.prisma);
+    await harness.drainService.drain({ events: 200, sends: 200 });
+
     const dispatches = await testDb.prisma.emailDispatch.findMany({ where: { userId } });
     expect(dispatches).toHaveLength(1);
   });
 
-  it("a mail-provider outage still leaves the response at 200 and the Order PAID — the FAILED EmailDispatch row is the only trace", async () => {
-    const { cohortId } = await seedCohortFixture(testDb.prisma, {
-      capacity: 2,
-      seatsTaken: 0,
-      priceMinor: 45_000_000,
-      currency: "USD",
-    });
-    const { userId } = await seedLearnerFixture(testDb.prisma, { emailVerified: new Date() });
-    const { orderId } = await checkoutService.startCheckout({ userId }, cohortId, "USD");
-    await checkoutService.initiateStripePayment({ userId }, orderId, FULL_CONSENT);
-    const attempt = await testDb.prisma.paymentAttempt.findFirstOrThrow({ where: { orderId } });
-
-    const eventId = `evt_email_provider_outage_${orderId}`;
-    const body = buildCheckoutCompletedEventBody({
-      eventId,
-      sessionId: attempt.providerIntentId!,
-      orderId,
-      amountTotal: EXPECTED_TOTAL_MINOR,
-      currency: "USD",
-    });
-
-    // Force the send to fail deterministically regardless of this
-    // environment's own Brevo configuration — dispatchBestEffort must still
-    // resolve the webhook's own response at 200 and leave the Order PAID.
-    const savedKey = process.env.BREVO_API_KEY;
-    delete process.env.BREVO_API_KEY;
-    let response: Response;
-    try {
-      response = await POST(signedWebhookRequest(body));
-    } finally {
-      if (savedKey !== undefined) process.env.BREVO_API_KEY = savedKey;
-    }
-    expect(response.status).toBe(200);
-
-    const order = await testDb.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    expect(order.status).toBe("PAID");
-
-    const dispatches = await testDb.prisma.emailDispatch.findMany({ where: { userId } });
-    expect(dispatches).toHaveLength(1);
-    expect(dispatches[0].status).toBe("FAILED");
-  });
-
-  it("the Pitfall-4 exception branch dispatches one EmailDispatch row distinct from the success template", async () => {
+  it("the Pitfall-4 exception branch writes zero EmailDispatch rows itself; draining then yields exactly one order-payment-exception row (A-06)", async () => {
     const { cohortId } = await seedCohortFixture(testDb.prisma, {
       capacity: 2,
       seatsTaken: 0,
@@ -975,6 +964,13 @@ describe("Stripe webhook settlement — real Postgres (PAY-10, REG-03, REG-05)",
 
     const response = await POST(signedWebhookRequest(body));
     expect(response.status).toBe(200);
+
+    expect(await testDb.prisma.emailDispatch.count({ where: { userId } })).toBe(0);
+
+    // See the earlier tests' comment — a generous limit reaches past the
+    // shared testDb's accumulated backlog from earlier tests in this file.
+    const harness = startDrainHarness(testDb.prisma);
+    await harness.drainService.drain({ events: 200, sends: 200 });
 
     const dispatches = await testDb.prisma.emailDispatch.findMany({ where: { userId } });
     expect(dispatches).toHaveLength(1);

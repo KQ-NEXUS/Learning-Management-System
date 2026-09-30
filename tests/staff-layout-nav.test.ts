@@ -23,14 +23,32 @@ vi.mock("@/app/(auth)/signin/actions", () => ({ signOutAction: vi.fn() }));
 vi.mock("@/server/services/profile-service", () => ({
   profileService: { getOwnProfile: async () => ({ name: "Ada Admin", email: "ada@example.test" }) },
 }));
+// The layout now also fetches the header's unread count (D-18/D-22); a fixed
+// value here keeps this file's navigation assertions unaffected by Plan 06.
+vi.mock("@/server/services/notification-service", () => ({
+  notificationService: { unreadCount: async () => 3 },
+}));
+// NotificationBell's own import chain reaches NotificationDrawer -> the
+// notifications server actions -> notification-access-service.ts, which
+// reuses live staff destination-page services (tickets/payments/submissions)
+// that need a much wider set of mocks than this nav-focused test cares
+// about. Mocking the bell itself (same treatment as StaffShell below) keeps
+// this file's scope to what it actually asserts: which nav items render.
+vi.mock("@/components/notifications/NotificationBell", () => ({ NotificationBell: () => null }));
 vi.mock("@/app/staff/StaffShell", () => ({ StaffShell: () => null }));
 
 import StaffLayout from "@/app/staff/layout";
 
 type NavItem = { label: string; href: string; group?: string };
 
+async function layoutElement() {
+  return (await StaffLayout({ children: null })) as {
+    props: { nav: NavItem[]; bell: unknown };
+  };
+}
+
 async function visibleNav(): Promise<NavItem[]> {
-  const element = (await StaffLayout({ children: null })) as { props: { nav: NavItem[] } };
+  const element = await layoutElement();
   return element.props.nav;
 }
 
@@ -81,5 +99,29 @@ describe("staff layout navigation", () => {
   it("sends a signed-in learner to their landing path instead of rendering the shell", async () => {
     mocks.getCurrentActor.mockResolvedValue({ userId: "learner-1", isStaff: false, roles: [] });
     await expect(StaffLayout({ children: null })).rejects.toThrow("NEXT_REDIRECT:/dashboard");
+  });
+
+  it("passes a bell prop to StaffShell", async () => {
+    grantAllExcept();
+    const element = await layoutElement();
+    expect(element.props.bell).toBeTruthy();
+  });
+
+  it("shows Email log under Administration, after Audit, to staff holding audit.view", async () => {
+    grantAllExcept();
+    const nav = await visibleNav();
+
+    const auditIndex = nav.findIndex((item) => item.href === "/staff/audit");
+    const emailLogIndex = nav.findIndex((item) => item.href === "/staff/email-log");
+    expect(nav[emailLogIndex]).toMatchObject({ label: "Email log", group: "Administration" });
+    expect(emailLogIndex).toBeGreaterThan(auditIndex);
+  });
+
+  it("hides Email log from someone without audit.view", async () => {
+    grantAllExcept("audit.view");
+    const hrefs = (await visibleNav()).map((item) => item.href);
+
+    expect(hrefs).not.toContain("/staff/email-log");
+    expect(hrefs).not.toContain("/staff/audit");
   });
 });

@@ -22,7 +22,8 @@ import {
 } from "@/lib/identity";
 import { type VerificationStore, type VerificationTokenRow } from "@/server/services/verification-service";
 import { verificationService } from "@/server/services/verification-service";
-import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { sendAuthEmail } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -78,10 +79,6 @@ export type ProfileStore = {
   };
   $transaction<T>(fn: (tx: ProfileStore) => Promise<T>): Promise<T>;
 };
-
-function buildEmailChangeText(confirmUrl: string): string {
-  return `Click to confirm your new email address: ${confirmUrl}`;
-}
 
 async function readMarketingOptIn(
   store: Pick<ProfileStore, "policyAcceptance">,
@@ -215,16 +212,15 @@ export function createProfileService(deps: {
     });
 
     if (issued.ok) {
-      const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-      const confirmUrl = `${baseUrl}/confirm-email-change?token=${issued.token}`;
-      // G-03-3 — best-effort: a provider outage must not crash an
-      // already-authenticated learner's email-change request.
-      await dispatchBestEffort(dispatch, {
+      // G-03-3 — best-effort (inside sendAuthEmail): a provider outage must
+      // not crash an already-authenticated learner's email-change request.
+      await sendAuthEmail(dispatch, {
         template: "email-change-confirmation",
         toEmail: newEmail,
         userId: actor.userId,
-        subject: "Confirm your new email address",
-        textContent: buildEmailChangeText(confirmUrl),
+        path: "/confirm-email-change",
+        token: issued.token,
+        ttlMs: EMAIL_CHANGE_TOKEN_TTL_MS,
       });
       await audit({
         actorId: actor.userId,

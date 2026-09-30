@@ -122,6 +122,23 @@ describe("buildDomainEventRow", () => {
   );
 
   it.each([
+    "payment.failed",
+    "payment.refunded",
+  ] satisfies DomainEventType[])(
+    "type-checks and redacts the payload for the Phase 13 payment outcome event %s (D-09)",
+    (type) => {
+      const row = buildDomainEventRow({
+        type,
+        payload: { orderId: "o1", provider: "STRIPE", amount: 5000, token: "super-secret" },
+      });
+      expect(row.type).toBe(type);
+      const payload = row.payload as { orderId: string; token: string };
+      expect(payload.orderId).toBe("o1");
+      expect(payload.token).toBe("[redacted]");
+    },
+  );
+
+  it.each([
     "ticket.created",
     "ticket.public_reply_added",
     "ticket.assigned",

@@ -11,7 +11,8 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "@/server/db";
 import { isInCooldown } from "@/server/auth/request-cooldown";
 import { TOKEN_PURPOSE, VERIFICATION_TOKEN_TTL_MS, type TokenPurpose } from "@/lib/identity";
-import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { sendAuthEmail } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -53,10 +54,6 @@ export type VerificationStore = {
   };
   $transaction<T>(fn: (tx: VerificationStore) => Promise<T>): Promise<T>;
 };
-
-function buildVerificationEmailText(verifyUrl: string): string {
-  return `Click to verify: ${verifyUrl}`;
-}
 
 export function createVerificationService(deps: {
   store: VerificationStore;
@@ -181,15 +178,15 @@ export function createVerificationService(deps: {
         ttlMs: VERIFICATION_TOKEN_TTL_MS,
       });
       if (issued.ok) {
-        const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-        const verifyUrl = `${baseUrl}/verify?token=${issued.token}`;
-        // G-03-3 — best-effort: a provider outage must not crash a resend.
-        await dispatchBestEffort(dispatch, {
+        // G-03-3 — best-effort (inside sendAuthEmail): a provider outage must
+        // not crash a resend.
+        await sendAuthEmail(dispatch, {
           template: "email-verification",
           toEmail: identifier,
           userId: user.id,
-          subject: "Verify your account",
-          textContent: buildVerificationEmailText(verifyUrl),
+          path: "/verify",
+          token: issued.token,
+          ttlMs: VERIFICATION_TOKEN_TTL_MS,
         });
       }
     }

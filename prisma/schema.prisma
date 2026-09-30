@@ -353,6 +353,10 @@ model User {
   // ATT-03 — attribution for a post-window attendance correction.
   attendanceCorrections AttendanceRecord[] @relation("AttendanceCorrectedBy")
 
+  // Phase 13 — in-app notifications and per-category email preferences.
+  notifications    Notification[]
+  emailPreferences EmailPreference[]
+
   @@index([status])
   @@index([isStaff])
 }
@@ -1082,6 +1086,11 @@ model DomainEvent {
   payload     Json
   occurredAt  DateTime  @default(now())
   processedAt DateTime?
+
+  // D-04 — drain retry bookkeeping. A row whose processedAt and lastError are
+  // both set is a poison-marked event (processed-with-error), no second table.
+  attempts  Int     @default(0)
+  lastError String?
 
   @@index([processedAt, occurredAt])
   @@index([type])
@@ -1823,6 +1832,54 @@ model EmailDispatch {
   error             String?
   createdAt         DateTime  @default(now())
 
+  // D-03/D-05/D-06 — retry state lives on the one row so a replay can never
+  // insert a second. `status` stays a String (CHECK-constrained in SQL to
+  // QUEUED, SENDING, SENT, FAILED, SKIPPED).
+  attempts       Int       @default(0)
+  lastAttemptAt  DateTime?
+  nextAttemptAt  DateTime?
+  skipReason     String?
+  // Allow-listed non-secret render context. Stays null for token-bearing auth
+  // mails (D-10): a raw token must never reach any column.
+  templateParams Json?
+  resentCount    Int       @default(0)
+
   @@unique([template, correlationId])
   @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
+}
+
+// D-17/D-23 — in-app notification. Archive-only: no service ever deletes a
+// row; read notifications leave the drawer by archivedAt. params holds ids,
+// references and titles only, never reasons, message bodies or filenames.
+model Notification {
+  id            String    @id @default(cuid())
+  recipientId   String
+  type          String
+  targetType    String
+  targetId      String
+  params        Json
+  sourceEventId String
+  readAt        DateTime?
+  archivedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  recipient User @relation(fields: [recipientId], references: [id])
+
+  @@unique([recipientId, type, sourceEventId])
+  @@index([recipientId, archivedAt, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([recipientId, archivedAt, readAt])
+}
+
+// D-16 — one row per (user, category). Rows are upserted and never deleted; a
+// missing row means the category is not muted.
+model EmailPreference {
+  userId    String
+  category  String
+  muted     Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, category])
 }

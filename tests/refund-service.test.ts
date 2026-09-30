@@ -60,11 +60,14 @@ function harness(opts?: {
   stripeOutcome?: { id: string; status: string; amount: number; currency: string };
   paystackThrows?: Error;
   stripeThrows?: Error;
+  /** Plan 08 (D-09) — forces the completion transaction's `domainEvent.create` to throw, simulating an event-write failure so the rollback-atomicity test can prove the Refund/Order writes never commit either. */
+  domainEventShouldThrow?: boolean;
 }) {
   const orders = new Map<string, RefundOrderRow>((opts?.orders ?? [order()]).map((o) => [o.id, { ...o }]));
   const attempts = opts?.attempts ?? [attempt()];
   const refunds: Array<Record<string, unknown>> = [];
   const orderUpdates: Array<{ id: string; data: Record<string, unknown> }> = [];
+  const domainEvents: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
   const paystackCalls: Array<Record<string, unknown>> = [];
   const stripeCalls: Array<Record<string, unknown>> = [];
@@ -83,35 +86,58 @@ function harness(opts?: {
 
   const deps: RefundServiceDeps = {
     db: {
-      $transaction: async (fn) =>
-        fn({
-          lockOrder: async ({ orderId }) => orders.get(orderId) ?? null,
-          paymentAttempt: {
-            findFirst: async () => attempts[0] ?? null,
-          },
-          refund: {
-            aggregateRefundedMinor: async () => aggregateRefundedMinor(),
-            create: async ({ data }) => {
-              const id = `refund-${refunds.length + 1}`;
-              refunds.push({ id, ...data });
-              return { id };
+      // Plan 08 — `$transaction` is called TWICE per `recordRefund` now (the
+      // eligible-value reservation, then the completion writes), and this
+      // fake models the SAME atomicity a real Postgres transaction gives
+      // each call: a snapshot taken at entry, restored on any throw, so a
+      // forced failure inside `fn` can never leave a partial write behind.
+      $transaction: async (fn) => {
+        const refundsSnapshot = refunds.map((r) => ({ ...r }));
+        const orderEntries = [...orders.entries()].map(([id, row]) => [id, { ...row }] as const);
+        try {
+          return await fn({
+            lockOrder: async ({ orderId }) => orders.get(orderId) ?? null,
+            paymentAttempt: {
+              findFirst: async () => attempts[0] ?? null,
             },
-          },
-        }),
-    },
-    refund: {
-      update: async ({ where, data }) => {
-        const existing = refunds.find((r) => r.id === where.id);
-        if (existing) Object.assign(existing, data);
-        return null;
-      },
-    },
-    order: {
-      update: async ({ where, data }) => {
-        orderUpdates.push({ id: where.id, data });
-        const existing = orders.get(where.id);
-        if (existing) Object.assign(existing, data);
-        return null;
+            refund: {
+              aggregateRefundedMinor: async () => aggregateRefundedMinor(),
+              create: async ({ data }) => {
+                const id = `refund-${refunds.length + 1}`;
+                refunds.push({ id, ...data });
+                return { id };
+              },
+              update: async ({ where, data }) => {
+                const existing = refunds.find((r) => r.id === where.id);
+                if (existing) Object.assign(existing, data);
+                return null;
+              },
+            },
+            order: {
+              update: async ({ where, data }) => {
+                orderUpdates.push({ id: where.id, data });
+                const existing = orders.get(where.id);
+                if (existing) Object.assign(existing, data);
+                return null;
+              },
+            },
+            domainEvent: {
+              create: async ({ data }) => {
+                if (opts?.domainEventShouldThrow) {
+                  throw new Error("simulated event write failure");
+                }
+                domainEvents.push(data);
+                return { id: `de-${domainEvents.length}` };
+              },
+            },
+          });
+        } catch (err) {
+          refunds.length = 0;
+          refunds.push(...refundsSnapshot);
+          orders.clear();
+          for (const [id, row] of orderEntries) orders.set(id, row);
+          throw err;
+        }
       },
     },
     paystackRefund: async (body) => {
@@ -132,7 +158,7 @@ function harness(opts?: {
     now: () => NOW,
   };
 
-  return { deps, orders, refunds, orderUpdates, audits, paystackCalls, stripeCalls };
+  return { deps, orders, refunds, orderUpdates, domainEvents, audits, paystackCalls, stripeCalls };
 }
 
 const FULL_INPUT: RefundRawInput = {
@@ -378,6 +404,59 @@ describe("recordRefund — provider failure is honest, never a fabricated succes
     expect(h.refunds[0]).toMatchObject({ status: "FAILED", providerOutcome: "Paystack: transaction not found" });
     // A FAILED refund never moves Order.status to REFUNDED/PARTIALLY_REFUNDED.
     expect(h.orderUpdates).toHaveLength(0);
+    // D-09 — nor does it ever write a payment.refunded outbox event.
+    expect(h.domainEvents).toHaveLength(0);
+  });
+});
+
+describe("recordRefund — payment.refunded outbox event, same transaction as the completion writes (D-09)", () => {
+  it("writes exactly one payment.refunded event for a COMPLETED refund, with orderId/refundId/amountMinor/currency/status only", async () => {
+    const h = harness();
+    const service = createRefundService(h.deps);
+
+    const result = await service.recordRefund(FULL_INPUT);
+
+    expect(result.status).toBe("COMPLETED");
+    expect(h.domainEvents).toHaveLength(1);
+    expect(h.domainEvents[0]).toMatchObject({
+      type: "payment.refunded",
+      payload: {
+        orderId: "order-1",
+        refundId: result.id,
+        amountMinor: 45_875_000,
+        currency: "NGN",
+        status: "COMPLETED",
+      },
+    });
+    // Never a refund reason, staff note or provider outcome text (T-13-03).
+    expect(JSON.stringify(h.domainEvents[0])).not.toContain(FULL_INPUT.reason);
+  });
+
+  it("a RECORDED_MANUALLY refund also writes a payment.refunded event", async () => {
+    const h = harness({ attempts: [attempt({ provider: "MANUAL", providerIntentId: "manual-ref-1" })] });
+    const service = createRefundService(h.deps);
+
+    const result = await service.recordRefund(FULL_INPUT);
+
+    expect(result.status).toBe("RECORDED_MANUALLY");
+    expect(h.domainEvents).toHaveLength(1);
+    expect(h.domainEvents[0]).toMatchObject({ type: "payment.refunded" });
+  });
+
+  it("a forced event-write failure rolls back the Refund and Order completion writes (atomicity)", async () => {
+    const h = harness({ domainEventShouldThrow: true });
+    const service = createRefundService(h.deps);
+
+    await expect(service.recordRefund(FULL_INPUT)).rejects.toThrow("simulated event write failure");
+
+    // The reservation's PROCESSING row exists (committed by the FIRST,
+    // separate transaction before the provider call), but the completion
+    // transaction's own writes — the status advance and the Order update —
+    // never commit alongside the failed event write.
+    expect(h.refunds).toHaveLength(1);
+    expect(h.refunds[0]).toMatchObject({ status: "PROCESSING" });
+    expect(h.orders.get("order-1")).not.toHaveProperty("status");
+    expect(h.domainEvents).toHaveLength(0);
   });
 });
 

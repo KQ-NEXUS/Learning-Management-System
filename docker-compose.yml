@@ -51,8 +51,8 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio-data:/data
     ports:
@@ -80,8 +80,8 @@ services:
       echo 'bucket ready'
       "
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
 
   # D-36: browsers upload lesson resources straight to private object storage
   # with short-lived presigned PUT URLs and download through short-lived
@@ -104,14 +104,18 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-lms}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-lms}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       <<: *storage-environment
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
-      EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-Professional Training LMS}
-      EMAIL_SENDER_ADDRESS: ${EMAIL_SENDER_ADDRESS:-no-reply@example.com}
+      # COM-04 / D-14: the sender identity is deployment configuration with no
+      # injected default. Unset passes through empty and the app refuses to send.
+      EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-}
+      EMAIL_SENDER_ADDRESS: ${EMAIL_SENDER_ADDRESS:-}
+      SUPPORT_CONTACT_EMAIL: ${SUPPORT_CONTACT_EMAIL:-}
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
 
 volumes:

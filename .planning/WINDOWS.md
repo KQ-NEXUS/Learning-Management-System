@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 13
+open_count: 17
 waived_count: 0
 fixed_count: 2
-total_count: 15
-last_updated: 2026-09-12T21:38:46.116Z
+total_count: 19
+last_updated: 2026-09-28T21:03:33.229Z
 ---
 
 # Broken Windows Ledger
@@ -30,6 +30,10 @@ last_updated: 2026-09-12T21:38:46.116Z
 | 13 | 06 | unrun-verify | tests/checkout-webhook.integration.test.ts |  | 6-case real-Postgres webhook settlement suite could not run in this execution sandbox -- Docker unavailable; needs a Docker-enabled environment before REG-03/REG-05/PAY-10's real-Postgres proof is complete | open |  | 2026-09-10T05:18:42.581Z |  |
 | 14 | 06 | unrun-verify | 06-03-SUMMARY.md |  | Task 3's human-check browser walkthrough (enroll, pay with a real Stripe test card via stripe listen, confirm receipt page and cross-learner 404) not yet performed | open |  | 2026-09-10T05:18:51.181Z |  |
 | 15 | 07 | deviation | tests/cohort-lifecycle-security.integration.test.ts |  | Pre-existing (not caused by 07-05): 'cannot overwrite CANCELLED/COMPLETED after a stale readiness read' asserts StaleOrderError but publishCohort's unconditional assertCohortOpen on the fresh in-tx row throws CohortClosedError first, unchanged by this plan; see deferred-items.md | open |  | 2026-09-12T21:38:46.116Z |  |
+| 16 | 13 | lint-warning | tests/email-dispatch-service.test.ts | 102 | Pre-existing unused 'now' param in the requeueForResend mock (13-08 found, not introduced by this plan's Task 2 edit; out of scope per scope-boundary rule) | open |  | 2026-09-27T23:36:33.762Z |  |
+| 17 | 13 | lint-warning | tests/refund-service.test.ts | 258 | Pre-existing unused '_reason' from a destructure-to-omit pattern in an unrelated field-validation test (13-08 found, not introduced by this plan's Task 3 edit; out of scope per scope-boundary rule) | open |  | 2026-09-27T23:36:54.003Z |  |
+| 18 | 13 | deviation | tests/event-mappers-support.test.ts |  | Pre-existing stale ticket.created mapper-count assertion (expects 1, actual/correct is 2 since Plan 11 added the staff alert mapper) — from Plan 10, never fixed; out of 13-13's file scope. See deferred-items.md item 1. | open |  | 2026-09-28T21:03:32.010Z |  |
+| 19 | 13 | deviation | tests/event-intent-mappers.test.ts |  | Pre-existing stale payment.failed empty-mapper assertion (Plan 08 registered a real mapper for it) — from before Plan 08, never fixed; out of 13-13's file scope. See deferred-items.md item 1. | open |  | 2026-09-28T21:03:33.229Z |  |
 
 ````json
 [
@@ -211,6 +215,54 @@ last_updated: 2026-09-12T21:38:46.116Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-12T21:38:46.116Z",
+    "resolved_at": null
+  },
+  {
+    "id": 16,
+    "kind": "lint-warning",
+    "phase": "13",
+    "file": "tests/email-dispatch-service.test.ts",
+    "line": 102,
+    "description": "Pre-existing unused 'now' param in the requeueForResend mock (13-08 found, not introduced by this plan's Task 2 edit; out of scope per scope-boundary rule)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-27T23:36:33.762Z",
+    "resolved_at": null
+  },
+  {
+    "id": 17,
+    "kind": "lint-warning",
+    "phase": "13",
+    "file": "tests/refund-service.test.ts",
+    "line": 258,
+    "description": "Pre-existing unused '_reason' from a destructure-to-omit pattern in an unrelated field-validation test (13-08 found, not introduced by this plan's Task 3 edit; out of scope per scope-boundary rule)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-27T23:36:54.003Z",
+    "resolved_at": null
+  },
+  {
+    "id": 18,
+    "kind": "deviation",
+    "phase": "13",
+    "file": "tests/event-mappers-support.test.ts",
+    "line": null,
+    "description": "Pre-existing stale ticket.created mapper-count assertion (expects 1, actual/correct is 2 since Plan 11 added the staff alert mapper) — from Plan 10, never fixed; out of 13-13's file scope. See deferred-items.md item 1.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-28T21:03:32.010Z",
+    "resolved_at": null
+  },
+  {
+    "id": 19,
+    "kind": "deviation",
+    "phase": "13",
+    "file": "tests/event-intent-mappers.test.ts",
+    "line": null,
+    "description": "Pre-existing stale payment.failed empty-mapper assertion (Plan 08 registered a real mapper for it) — from before Plan 08, never fixed; out of 13-13's file scope. See deferred-items.md item 1.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-28T21:03:33.229Z",
     "resolved_at": null
   }
 ]

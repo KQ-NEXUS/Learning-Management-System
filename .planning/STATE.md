@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 current_phase: 13
 current_phase_name: Transactional Communications & Notifications
-status: executing
-stopped_at: Completed 13-11-PLAN.md (only 13-13 remains unexecuted in this phase)
-last_updated: "2026-09-28T19:25:51.915Z"
+status: verifying
+stopped_at: Completed 13-13-PLAN.md (final plan in Phase 13) -- all 13 plans executed, requirements COM-01..04 marked complete; phase sign-off/verify-work still pending
+last_updated: "2026-09-28T21:18:45.756Z"
 last_activity: 2026-09-28
 last_activity_desc: Phase 13 execution started
-state_head: 190be5e559e52c25604310040c7ac0c65a60f70c
+state_head: 096970d59b5f10fe3bd2da2b8c573623df4ef6f5
 progress:
   total_phases: 16
   completed_phases: 5
   total_plans: 204
-  completed_plans: 203
+  completed_plans: 204
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 
 Phase: 13 (Transactional Communications & Notifications) — EXECUTING
 Plan: 13 of 13 (only 13-13 remains unexecuted; 13-11 just completed, 13-12 already had a SUMMARY before this session — hand-corrected: state.advance-plan increments a stale counter rather than counting SUMMARY.md files on disk, a known pre-existing gap this STATE.md's own Blockers/Concerns section already documents)
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-28 — Completed 13-11-PLAN.md
 
 Progress: [██████████] 99%
@@ -114,6 +114,7 @@ Progress: [██████████] 99%
 | Phase 13 P09 | 70min | 3 tasks | 4 files |
 | Phase 13 P10 | 50min | 3 tasks | 7 files |
 | Phase 13 P11 | 75min | 3 tasks | 11 files |
+| Phase 13 P13 | 2h30m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -238,6 +239,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 13]: 13-11: resolveStaffHolders — one parameterised SQL query over User/Assignment/Role reproducing grantMatches/isGrantActive/hasPermission exactly (optional COHORT/PROGRAMME/COURSE scope branches omitted, not wildcarded, when the caller's ResourceScope field is undefined); parity-tested against the real authorization core across the full grant matrix on real Postgres.
 - [Phase 13]: 13-11: order.exception is now mapped by both the enrolment-payment group (learner mail, illegal_transition only) and the new staff group (every reason, cohort-scoped payments.view holders) — fanning out to both mappers is intentional; the coded reason is rendered through a fixed allow-list (ORDER_EXCEPTION_REASON_LABELS), never the raw code, to a generic 'Payment needs review' fallback for anything unmapped.
 - [Phase 13]: 13-11: email-failure-alert-service.ts never writes EmailDispatch and never throws (own try/catch, belt-and-suspenders with the drain's existing onEmailFailed try/catch) — resolves global audit.view holders and creates one staff.email_failed notification per holder (params limited to template + 8-char dispatchRef) via createMany skipDuplicates.
+- [Phase 13]: 13-13: permission catalogue invariant asserts 37 (not the plan's literal 36) — Phase 11's certificates.manage already made 37 the correct, live count per tests/permissions.test.ts
+- [Phase 13]: 13-13: two stale mapper-registration assertions (event-intent-mappers.test.ts payment.failed, event-mappers-support.test.ts ticket.created) are pre-existing Plan 08/10 debt, confirmed isolated from 13-13's new files, logged to deferred-items.md and WINDOWS.md rather than fixed (out of file scope)
+- [Phase 13]: 13-13: acceptance test criterion 1 uses the real sendTransactionalEmail with only the Brevo SDK client mocked (real payload construction); criteria 2/3 use a plain injected send stub, matching tests/domain-event-drain.integration.test.ts's existing convention
 
 ### Pending Todos
 
@@ -275,6 +279,7 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 
 - [Phase 11 second gap pass, plan 11-33 visual check]: The human visual check caught a real defect the automated tests missed: the 11-29 renderer embedded a SUBSET of the certificate font, and fontkit's subsetter dropped glyph outlines, so most letters drew blank in Chrome and pdf.js while ToUnicode text extraction still passed. Fixed by embedding the whole font (about 316 KB per certificate) with outline-asserting tests (commit after 44a87d2, see 11-29-SUMMARY.md). Regenerated Yoruba/Polish/CJK evidence PDFs look correct. Follow-up: trim the font to Latin-only to shrink the files. Still open: plan 11-33 (human sign-off on the PDFs, and applying or deferring the CR-06 migration on Neon).
 - 13-11's own files (7 commits) were committed per the standard GSD executor workflow per explicit instruction for this run, overriding Plans 07-10/12's commit_policy_override convention (no commits, project owner must explicitly ask). ~90 other pre-existing uncommitted files from Plans 01-10/12 remain exactly as found -- the project owner should review that working-tree diff and explicitly request commits for those plans separately.
+- [Phase 13, 13-13]: Phase 13 code/tests are complete (13/13 plans, all requirements COM-01..04 checked off) but full npm test has 7 failed files / 24 failed tests, all pre-existing and unrelated to 13-13 (2 stale mapper-count assertions from Plans 08/10, 11 MinIO-not-running failures, 2 apparent resource-contention timeouts) — see deferred-items.md. D-24 live Brevo check still needs a human with real credentials. Not yet run: gsd-verify-work / phase sign-off.
 
 ### Quick Tasks Completed
 
@@ -292,6 +297,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-28T19:25:22.956Z
-Stopped at: Completed 13-11-PLAN.md (only 13-13 remains unexecuted in this phase)
+Last session: 2026-09-28T21:18:39.891Z
+Stopped at: Completed 13-13-PLAN.md (final plan in Phase 13) -- all 13 plans executed, requirements COM-01..04 marked complete; phase sign-off/verify-work still pending
 Resume file: None

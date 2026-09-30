@@ -1141,15 +1141,6 @@ describe("end-to-end NGN/Paystack settlement (fake-backed)", () => {
     const settlementDeps = {
       db: { $transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(settlementTx) },
       audit: async () => {},
-      orderEmailFacts: {
-        findUnique: async () => ({
-          reference: orders.get(orderId)!.reference,
-          cohortTitle: "Cohort Fixture",
-          userId: "user-1",
-          email: null,
-        }),
-      },
-      dispatchEmail: async () => ({ id: "e-e2e", status: "SENT" }),
       now: () => NOW,
     };
 
@@ -1279,15 +1270,6 @@ describe("end-to-end USD/Stripe destination-charge settlement (fake-backed)", ()
     const settlementDeps = {
       db: { $transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(settlementTx) },
       audit: async () => {},
-      orderEmailFacts: {
-        findUnique: async () => ({
-          reference: orders.get(orderId)!.reference,
-          cohortTitle: "Cohort Fixture",
-          userId: "user-1",
-          email: null,
-        }),
-      },
-      dispatchEmail: async () => ({ id: "e-e2e-stripe", status: "SENT" }),
       now: () => NOW,
     };
 

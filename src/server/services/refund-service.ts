@@ -42,6 +42,7 @@ import {
   syncReconciliationEvidenceAsSystem,
 } from "@/server/services/reconciliation-case-service";
 import { orderCohortScope } from "@/server/services/cohort-scope";
+import { writeDomainEvent } from "@/server/services/domain-event-service";
 // Value imports only (PAY-09) — mirrors checkout-service.ts's own
 // `initiatePaystackTransaction`/`buildCheckoutSessionParams` precedent. No
 // TYPE is imported from either provider directory; every deps-facing shape
@@ -285,17 +286,19 @@ export type RefundTxClient = {
     /** Sum of `amountMinor` across every non-FAILED `Refund` row for this Order (D-22's "already-recorded" total) — a `PROCESSING` reservation counts, so a second locker sees the first's in-flight refund. */
     aggregateRefundedMinor(orderId: string): Promise<number>;
     create(args: { data: Record<string, unknown> }): Promise<{ id: string }>;
+    /** The completion write (status/providerRef/providerOutcome/completedAt) — Plan 08 moves this into the same transaction as `order.update` and the `payment.refunded` event write below. */
+    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
+  order: {
+    /** The REFUNDED/PARTIALLY_REFUNDED status write — same transaction as the Refund completion and (when not FAILED) the `payment.refunded` outbox event. */
+    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
+  };
+  /** Structurally satisfies `DomainEventTxClient` (Plan 08, D-09) — `writeDomainEvent` is called against this SAME `tx`, inside the SAME transaction as the Refund/Order completion writes, so the event can never be committed for a rolled-back refund. */
+  domainEvent: { create(args: { data: Record<string, unknown> }): Promise<unknown> };
 };
 
 export type RefundServiceDeps = {
   db: { $transaction: <R>(fn: (tx: RefundTxClient) => Promise<R>) => Promise<R> };
-  refund: {
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
-  };
-  order: {
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
-  };
   /** Structural — never `ReturnType<typeof refundPaystackTransaction>` (PAY-09 discretion, see file header). */
   paystackRefund: (body: {
     transaction: string;
@@ -447,23 +450,43 @@ export function createRefundService(deps: RefundServiceDeps) {
       providerOutcome = err instanceof Error ? err.message : "Unknown provider refund error.";
     }
 
-    await deps.refund.update({
-      where: { id: refundId },
-      data: {
-        status,
-        providerRef,
-        providerOutcome,
-        completedAt: status === "FAILED" ? null : now(),
-      },
-    });
-
-    if (status !== "FAILED") {
-      const newTotalRefundedMinor = reserved.alreadyRefundedMinor + input.amountMinor;
-      await deps.order.update({
-        where: { id: input.orderId },
-        data: { status: newTotalRefundedMinor >= order.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED" },
+    // D-09 — the Refund update, the conditional Order status update and the
+    // `payment.refunded` outbox event (never for a FAILED provider outcome)
+    // all commit in ONE transaction: the event can never be lost for a
+    // committed refund, and can never be emitted for a rolled-back one. The
+    // provider call above already happened outside any lock-holding
+    // transaction (its own comment); this is a SEPARATE, short transaction
+    // for the completion writes only.
+    await deps.db.$transaction(async (tx) => {
+      await tx.refund.update({
+        where: { id: refundId },
+        data: {
+          status,
+          providerRef,
+          providerOutcome,
+          completedAt: status === "FAILED" ? null : now(),
+        },
       });
-    }
+
+      if (status !== "FAILED") {
+        const newTotalRefundedMinor = reserved.alreadyRefundedMinor + input.amountMinor;
+        await tx.order.update({
+          where: { id: input.orderId },
+          data: { status: newTotalRefundedMinor >= order.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED" },
+        });
+
+        await writeDomainEvent(tx, {
+          type: "payment.refunded",
+          payload: {
+            orderId: input.orderId,
+            refundId,
+            amountMinor: input.amountMinor,
+            currency: order.currency,
+            status,
+          },
+        });
+      }
+    });
 
     await deps.audit({
       actorId: ctx.actor.userId,
@@ -558,15 +581,16 @@ export function createPrismaBackedRefundService(
                 return rows.reduce((sum: number, row: { amountMinor: number }) => sum + row.amountMinor, 0);
               },
               create: (args) => tx.refund.create({ data: args.data, select: { id: true } }),
+              update: (args) => tx.refund.update({ where: args.where, data: args.data }),
+            },
+            order: {
+              update: (args) => tx.order.update({ where: args.where, data: args.data }),
+            },
+            domainEvent: {
+              create: (args) => tx.domainEvent.create({ data: args.data }),
             },
           } satisfies RefundTxClient),
         ),
-    },
-    refund: {
-      update: (args) => client.refund.update({ where: args.where, data: args.data }),
-    },
-    order: {
-      update: (args) => client.order.update({ where: args.where, data: args.data }),
     },
     paystackRefund: (body) => refundPaystackTransaction(body),
     // Cast via `Parameters<typeof refundStripeCharge>[0]` rather than naming

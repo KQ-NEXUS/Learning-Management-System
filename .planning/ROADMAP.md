@@ -704,7 +704,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
   2. Retried or replayed events never produce duplicate messages within the same correlation. (COM-02)
   3. Important in-product notifications surface unread/current state to the right user and fail safely on stale or inaccessible links. (COM-03)
 
-**Plans**: 12/13 plans executed
+**Plans**: 13/13 plans executed
 
 **Wave 1**
 
@@ -744,7 +744,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 13-13-PLAN.md — opt-in live Brevo smoke test, phase invariants, and a real-Postgres acceptance run of the success criteria.
+- [x] 13-13-PLAN.md — opt-in live Brevo smoke test, phase invariants, and a real-Postgres acceptance run of the success criteria.
 
 **UI hint**: yes
 
@@ -803,6 +803,6 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
 | 12. Support Tickets | 9/9 | Complete    | 2026-09-25 |
-| 13. Transactional Communications & Notifications | 12/13 | In Progress|  |
+| 13. Transactional Communications & Notifications | 13/13 | In Progress|  |
 | 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |

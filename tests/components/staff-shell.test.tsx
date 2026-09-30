@@ -103,6 +103,22 @@ describe("StaffShell responsive navigation", () => {
   });
 });
 
+describe("StaffShell bell slot", () => {
+  it("renders no bell when the prop is omitted", () => {
+    render(<Shell />);
+    expect(screen.queryByRole("button", { name: /Notifications/ })).toBeNull();
+  });
+
+  it("renders the supplied bell in the header band", () => {
+    render(
+      <StaffShell nav={nav} identity={null} signOut={<button>Sign out</button>} bell={<button aria-label="Notifications">Bell</button>}>
+        <button>Page action</button>
+      </StaffShell>,
+    );
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeTruthy();
+  });
+});
+
 describe("StaffShell sticky sidebar layout", () => {
   // jsdom has no layout or scroll engine, so this locks the class contract that
   // keeps the desktop sidebar pinned. `overflow-x: hidden` forces `overflow-y`
