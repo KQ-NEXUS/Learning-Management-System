@@ -18,19 +18,7 @@ export type RouteErrorPanelProps = {
  */
 export function RouteErrorPanel({ error, retry, home }: RouteErrorPanelProps) {
   useEffect(() => {
-    console.$containerEnv = docker inspect learning-management-system-postgres-1 --format '{{range .Config.Env}}{{println .}}{{end}}'
-
-$pgUser = (($containerEnv | Where-Object { $_ -like 'POSTGRES_USER=*' } | Select-Object -First 1) -split '=', 2)[1]
-$pgPassword = (($containerEnv | Where-Object { $_ -like 'POSTGRES_PASSWORD=*' } | Select-Object -First 1) -split '=', 2)[1]
-$pgDatabase = (($containerEnv | Where-Object { $_ -like 'POSTGRES_DB=*' } | Select-Object -First 1) -split '=', 2)[1]
-
-$encodedUser = [Uri]::EscapeDataString($pgUser)
-$encodedPassword = [Uri]::EscapeDataString($pgPassword)
-$encodedDatabase = [Uri]::EscapeDataString($pgDatabase)
-
-$env:DATABASE_URL = "postgresql://${encodedUser}:${encodedPassword}@localhost:5434/${encodedDatabase}?schema=public"
-
-npm.cmd run deverror(error);
+    console.error(error);
   }, [error]);
 
   return (
