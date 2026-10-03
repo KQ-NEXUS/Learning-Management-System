@@ -335,6 +335,10 @@ export function createDomainEventDrainService(deps: CreateDomainEventDrainServic
                   targetId: intent.notification.targetId,
                   params: intent.notification.params as Prisma.InputJsonValue,
                   sourceEventId: event.id,
+                  // When it happened, not when the drain got to it: after a
+                  // delayed or backlog drain every item otherwise reads
+                  // "just now" (audit U-14).
+                  createdAt: event.occurredAt,
                 });
               }
             }
