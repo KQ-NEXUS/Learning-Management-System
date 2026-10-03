@@ -58,12 +58,11 @@ describe("createSupportMappers registration", () => {
     expect(Object.keys(supportMappers).sort()).toEqual(
       ["ticket.closed", "ticket.created", "ticket.public_reply_added", "ticket.reopened", "ticket.resolved"].sort(),
     );
-    for (const type of ["ticket.public_reply_added", "ticket.resolved", "ticket.reopened", "ticket.closed"] as const) {
-      expect(mapperTable[type]).toEqual([supportMappers[type]]);
+    // Another group may map the same event for its own audience (the staff group alerts on
+    // ticket.created and ticket.reopened), so this asserts presence, never a count.
+    for (const type of Object.keys(supportMappers) as Array<keyof typeof supportMappers>) {
+      expect(mapperTable[type]).toContain(supportMappers[type]);
     }
-    // The staff group also maps ticket.created (its own staff alert), so this type fans out to two.
-    expect(mapperTable["ticket.created"]).toHaveLength(2);
-    expect(mapperTable["ticket.created"]).toContain(supportMappers["ticket.created"]);
   });
 });
 

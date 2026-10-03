@@ -167,6 +167,10 @@ const NOTIFICATION_TEXT_BUILDERS: Record<NotificationType, TextBuilder> = {
       : "A ticket was escalated to you",
     meta: null,
   }),
+  "staff.ticket_reopened": (p) => ({
+    title: p.reference ? `Ticket ${p.reference} was reopened` : "A ticket was reopened",
+    meta: null,
+  }),
   "staff.submission_new": (p) => ({
     title: p.cohortTitle ? `New submission in ${p.cohortTitle}` : "New submission to grade",
     meta: null,

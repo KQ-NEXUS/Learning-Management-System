@@ -46,7 +46,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | A-12 | Reconciliation / Overview / Reports disagree on exceptions | todo |
 | R3-08 | 5 of 10 report dashboards "Not available yet" | todo |
 | A-11 | Sessions cannot be edited, so "session updated" mail never sends | todo |
-| A-15 | Reopened ticket alerts no staff | todo |
+| A-15 | Reopened ticket alerts no staff | done (in-product alert to the ticket's current owner, or to every ticket manager when it has none) |
 
 ## Batch 6 — polish
 | Id | Finding | Status |

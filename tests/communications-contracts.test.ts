@@ -80,14 +80,15 @@ describe("TEMPLATE_IDS", () => {
 });
 
 describe("notification vocabulary", () => {
-  it("lists exactly 28 unique types, each mapped to a known target type", () => {
-    expect(NOTIFICATION_TYPES).toHaveLength(28);
-    expect(new Set(NOTIFICATION_TYPES).size).toBe(28);
+  // 29 since A-15 added `staff.ticket_reopened`.
+  it("lists exactly 29 unique types, each mapped to a known target type", () => {
+    expect(NOTIFICATION_TYPES).toHaveLength(29);
+    expect(new Set(NOTIFICATION_TYPES).size).toBe(29);
     const targets = new Set<string>(NOTIFICATION_TARGET_TYPES);
     for (const t of NOTIFICATION_TYPES) {
       expect(targets.has(NOTIFICATION_TYPE_TARGET[t])).toBe(true);
     }
-    expect(Object.keys(NOTIFICATION_TYPE_TARGET)).toHaveLength(28);
+    expect(Object.keys(NOTIFICATION_TYPE_TARGET)).toHaveLength(29);
   });
 
   it("lists the eleven target types", () => {
