@@ -40,7 +40,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | Id | Finding | Status |
 |---|---|---|
 | R3-05 | Staff forms lose typed values when a save fails validation | todo |
-| R3-06 | Cohort cannot be published without a USD price | todo |
+| R3-06 | Cohort cannot be published without a USD price | done (one priced rail is enough; the unpriced rail is a warning naming the currency learners cannot pay in; zero/negative prices and no price at all still block) |
 | R3-07 | A started cohort cannot be bought online; enrol link bounces silently | todo |
 | A-08 | Flagged certificate has no "confirm" action | todo |
 | A-12 | Reconciliation / Overview / Reports disagree on exceptions | todo |
