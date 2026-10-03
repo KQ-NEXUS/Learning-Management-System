@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { EmailLogTable, type EmailLogFilters } from "@/app/staff/email-log/EmailLogTable";
+import { EmailLogTable, emailOutcomeText, emailStatusLabel, templateLabel, type EmailLogFilters } from "@/app/staff/email-log/EmailLogTable";
 import type { EmailDeliveryLogRow } from "@/server/services/email-delivery-log-service";
 
 const mocks = vi.hoisted(() => ({
@@ -59,8 +59,22 @@ describe("EmailLogTable — filters", () => {
   it("the template select lists every TEMPLATE_IDS option", () => {
     render(<EmailLogTable rows={[makeRow()]} filters={NO_FILTERS} canManageUsers />);
     const select = screen.getByRole("combobox", { name: /template/i }) as HTMLSelectElement;
-    expect(within(select).getByRole("option", { name: "ticket-created" })).toBeTruthy();
-    expect(within(select).getByRole("option", { name: "email-verification" })).toBeTruthy();
+    // U-01: options read as words; the template id stays the value the filter sends.
+    const created = within(select).getByRole("option", { name: "Ticket created" }) as HTMLOptionElement;
+    expect(created.value).toBe("ticket-created");
+    expect((within(select).getByRole("option", { name: "Email verification" }) as HTMLOptionElement).value).toBe(
+      "email-verification",
+    );
+  });
+
+  it("shows words, not codes: template name, status and the reason a message was skipped (U-01)", () => {
+    expect(templateLabel("staff-ticket-assigned")).toBe("Staff ticket assigned");
+    expect(emailStatusLabel("SENT")).toBe("Sent");
+    expect(emailStatusLabel("SOMETHING_NEW")).toBe("Something new");
+    expect(emailOutcomeText({ error: null, skipReason: "muted_by_recipient" })).toBe("Recipient turned these emails off");
+    expect(emailOutcomeText({ error: null, skipReason: "email_unverified" })).toBe("Recipient's email address is not verified");
+    expect(emailOutcomeText({ error: "550 mailbox unavailable", skipReason: "muted_by_recipient" })).toBe("550 mailbox unavailable");
+    expect(emailOutcomeText({ error: null, skipReason: null })).toBe("—");
   });
 
   it("changing the status filter pushes an updated query string", () => {
@@ -151,7 +165,7 @@ describe("EmailLogTable — long recipient containment (G-13-2)", () => {
     expect(cell?.className).toContain("font-mono");
 
     // Later columns and the action still render for the same row.
-    expect(table.getByText("FAILED")).toBeTruthy();
+    expect(table.getByText("Failed")).toBeTruthy();
     expect(table.getByText("2 of 5")).toBeTruthy();
     expect(table.getByRole("button", { name: "Resend" })).toBeTruthy();
     // Last error truncation is unchanged.

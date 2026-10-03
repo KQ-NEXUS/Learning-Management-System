@@ -34,9 +34,42 @@ const STATUS_OPTIONS = [
   { value: "SKIPPED", label: "Skipped" },
 ];
 
+/** "staff-ticket-assigned" -> "Staff ticket assigned". The id itself stays the filter value. */
+export function templateLabel(id: string): string {
+  const words = id.replace(/[-_.]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "—";
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  SENT: "Sent",
+  QUEUED: "Queued",
+  SENDING: "Sending",
+  FAILED: "Failed",
+  SKIPPED: "Skipped",
+};
+
+/** "SENT" -> "Sent"; an unknown status is shown in sentence case rather than as a code. */
+export function emailStatusLabel(status: string): string {
+  return STATUS_LABEL[status] ?? templateLabel(status.toLowerCase());
+}
+
+// Why a message was deliberately not sent. Anything else in the column is a
+// delivery error from the mail provider, shown as it was recorded.
+const SKIP_REASON_LABEL: Record<string, string> = {
+  muted_by_recipient: "Recipient turned these emails off",
+  email_unverified: "Recipient's email address is not verified",
+  recipient_deactivated: "Recipient's account is deactivated",
+};
+
+export function emailOutcomeText(row: { error: string | null; skipReason: string | null }): string {
+  if (row.error) return row.error;
+  if (row.skipReason) return SKIP_REASON_LABEL[row.skipReason] ?? templateLabel(row.skipReason);
+  return "—";
+}
+
 const TEMPLATE_OPTIONS = [
   { value: "", label: "Any" },
-  ...TEMPLATE_IDS.map((id) => ({ value: id, label: id })),
+  ...TEMPLATE_IDS.map((id) => ({ value: id, label: templateLabel(id) })),
 ];
 
 function statusTone(status: string): "success" | "accent" | "danger" | "neutral" {
@@ -106,7 +139,11 @@ export function EmailLogTable({
   const activeFilterCount = [filters.status, filters.template].filter(Boolean).length;
 
   const columns: Column<EmailDeliveryLogRow>[] = [
-    { key: "template", header: "Template", render: (row) => row.template },
+    {
+      key: "template",
+      header: "Template",
+      render: (row) => <span title={row.template}>{templateLabel(row.template)}</span>,
+    },
     {
       key: "recipient",
       header: "Recipient",
@@ -122,7 +159,7 @@ export function EmailLogTable({
       header: "Status",
       render: (row) => (
         <span className="flex items-center gap-2">
-          <StatusPill label={row.status} tone={statusTone(row.status)} />
+          <StatusPill label={emailStatusLabel(row.status)} tone={statusTone(row.status)} />
           {row.isStub && (
             <span className="font-mono text-xs text-muted-foreground">stub</span>
           )}
@@ -142,9 +179,9 @@ export function EmailLogTable({
     },
     {
       key: "error",
-      header: "Last error",
+      header: "Error or reason",
       render: (row) => {
-        const text = row.error ?? row.skipReason ?? "—";
+        const text = emailOutcomeText(row);
         return (
           <span className="block max-w-[220px] truncate" title={text !== "—" ? text : undefined}>
             {text}
@@ -226,7 +263,7 @@ export function EmailLogTable({
               : { status: "empty", activeFilterCount }
         }
         getRowKey={(row) => row.id}
-        getRowLabel={(row) => `${row.template} to ${row.toEmail}`}
+        getRowLabel={(row) => `${templateLabel(row.template)} to ${row.toEmail}`}
         emptyHeading="No emails sent yet"
         emptyBody="Transactional emails appear here once lifecycle events are processed."
         filters={filterDefs}

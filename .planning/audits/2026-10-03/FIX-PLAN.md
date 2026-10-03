@@ -51,7 +51,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 ## Batch 6 — polish
 | Id | Finding | Status |
 |---|---|---|
-| U-01 | Email log and audit show raw codes | todo |
+| U-01 | Email log and audit show raw codes | done for the email log (template names, statuses and skip reasons read as words; a provider's own error text is shown as recorded). The audit log's action codes are unchanged |
 | R3-09 | Attempt wording off by one in the submit dialog | done |
 | R3-10 | Dashboard results panel "No results yet" after a pass | done (a completed course's card now loads its released results) |
 | R3-11 | Certificate design upload accepts PNG/JPEG only (no PDF) | todo |
