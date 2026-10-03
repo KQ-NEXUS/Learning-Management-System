@@ -28,7 +28,7 @@ export type ProgressLessonRow = {
   moduleTitle: string;
   required: boolean;
   completed: boolean;
-  /** `"MANUAL" | "AUTO_VIDEO" | "STAFF_OVERRIDE"`, or `null` when never completed. */
+  /** `"MANUAL" | "AUTO_VIDEO" | "AUTO_ASSESSMENT" | "STAFF_OVERRIDE"`, or `null` when never completed. */
   completedSource: string | null;
   /** ISO instant, or `null` when never completed. */
   completedAt: string | null;
@@ -50,6 +50,7 @@ export type ProgressOverridePanelProps = {
 const SOURCE_LABEL: Record<string, string> = {
   MANUAL: "Marked by learner",
   AUTO_VIDEO: "Auto-completed (video)",
+  AUTO_ASSESSMENT: "Auto-completed (quiz passed or assignment submitted)",
   STAFF_OVERRIDE: "Staff override",
 };
 

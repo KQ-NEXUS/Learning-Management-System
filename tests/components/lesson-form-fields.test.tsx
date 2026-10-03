@@ -59,7 +59,20 @@ describe("LessonFormFields", () => {
 
     expect(screen.getByLabelText(/^title/i)).toBeTruthy();
     expect(screen.getByLabelText(/^required/i)).toBeTruthy();
-    expect(screen.getByLabelText(/^allow manual complete/i)).toBeTruthy();
+    // A-01: a quiz or assignment lesson is completed by its assessment, so it offers no manual control.
+    if (lessonType === "QUIZ" || lessonType === "ASSIGNMENT") {
+      expect(screen.queryByLabelText(/^allow manual complete/i)).toBeNull();
+      expect(document.querySelector('input[name="allowManualComplete"]')).toBeNull();
+      expect(
+        screen.getByText(
+          lessonType === "QUIZ"
+            ? /marked complete automatically when the learner passes the quiz/i
+            : /marked complete automatically when the learner submits the assignment/i,
+        ),
+      ).toBeTruthy();
+    } else {
+      expect(screen.getByLabelText(/^allow manual complete/i)).toBeTruthy();
+    }
   });
 
   it("binds TEXT lessons to the constrained rich text editor", () => {

@@ -272,6 +272,7 @@ export default async function LessonReadingPage({
         completed={openResult.lesson.completed}
         completedSource={openResult.lesson.completedSource}
         allowManualComplete={openResult.lesson.allowManualComplete}
+        lessonType={content.type}
         relockCount={relockCount}
       />
 

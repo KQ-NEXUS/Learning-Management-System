@@ -1057,6 +1057,59 @@ describe("getOwnWatchProgress", () => {
 });
 
 // ---------------------------------------------------------------------------
+// A-01 — quiz and assignment lessons are completed only by their assessment
+// ---------------------------------------------------------------------------
+
+describe("quiz and assignment lessons (A-01)", () => {
+  it.each(["QUIZ", "ASSIGNMENT"])(
+    "markLessonComplete refuses a %s lesson even when allowManualComplete is true, and writes nothing",
+    async (type) => {
+      const path = makePath({ lessons: [makeLesson({ id: "les-1", type, allowManualComplete: true })] });
+      const { deps, h, auditCalls } = buildDeps({ path });
+      const service = createLessonProgressService(deps);
+
+      await expect(
+        service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
+      ).rejects.toBeInstanceOf(ManualCompletionNotPermittedError);
+      expect(h.lessonProgressRows).toHaveLength(0);
+      expect(auditCalls).toEqual([]);
+    },
+  );
+
+  it.each(["QUIZ", "ASSIGNMENT"])(
+    "undoLessonComplete refuses a %s lesson and keeps the completion its assessment earned",
+    async (type) => {
+      const path = makePath({ lessons: [makeLesson({ id: "les-1", type, completed: true })] });
+      const { deps, h, auditCalls } = buildDeps({ path });
+      h.lessonProgressRows.push({
+        enrolmentId: "enr-1",
+        lessonId: "les-1",
+        source: "AUTO_ASSESSMENT",
+        completedAt: NOW,
+      } as (typeof h.lessonProgressRows)[number]);
+      const service = createLessonProgressService(deps);
+
+      await expect(
+        service.undoLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
+      ).rejects.toBeInstanceOf(ManualCompletionNotPermittedError);
+      expect(h.lessonProgressRows).toHaveLength(1);
+      expect(auditCalls).toEqual([]);
+    },
+  );
+
+  it("a TEXT lesson keeps both manual paths", async () => {
+    const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "TEXT", allowManualComplete: true })] });
+    const { deps, h } = buildDeps({ path });
+    const service = createLessonProgressService(deps);
+
+    await service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" });
+    expect(h.lessonProgressRows).toHaveLength(1);
+    await service.undoLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" });
+    expect(h.lessonProgressRows).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Task 3 — overrideLessonProgress
 // ---------------------------------------------------------------------------
 

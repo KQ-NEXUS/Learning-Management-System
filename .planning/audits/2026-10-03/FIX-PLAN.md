@@ -33,7 +33,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 ## Batch 4 — learning rules
 | Id | Finding | Status |
 |---|---|---|
-| A-01 | Quiz/assignment lessons: skip-able or stuck after passing | todo |
+| A-01 | Quiz/assignment lessons: skip-able or stuck after passing | done (quiz lesson completes on pass, assignment lesson on submit, in the same transaction; no manual mark or undo on these lessons. Learners who passed BEFORE this fix are not back-filled: use the staff override for any who are stuck) |
 | A-07 | A published quiz can be saved with a pass mark above its total | todo |
 
 ## Batch 5 — staff workflow

@@ -297,6 +297,12 @@ export const LICENCE_SERVICE_REGISTRY: readonly RegistryEntry[] = [
     reason: "Learner submissions are coursework that continues in restricted mode (D-06).",
   },
   {
+    file: `${S}assessment-lesson-completion.ts`,
+    kind: "continuity",
+    reason:
+      "Completing a quiz or assignment lesson follows the learner's own attempt or submission, inside that transaction, and continues in restricted mode (D-06).",
+  },
+  {
     file: `${S}completion-service.ts`,
     kind: "continuity",
     reason: "Completion tracking follows learner progress and continues in restricted mode (D-06).",

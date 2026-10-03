@@ -66,6 +66,7 @@ import {
   type CompletionRecalculationResult,
 } from "@/server/services/completion-service";
 import { recalculateCompletionAndIssue as recalculateCompletion } from "@/server/services/certificate-issuance-service";
+import { isAssessmentCompletedLessonType } from "@/server/services/assessment-lesson-completion";
 import { runTransactionThenSettleCertificateFiles } from "@/server/services/certificate-file-service";
 import {
   loadLearnerPath as liveLoadLearnerPath,
@@ -120,7 +121,12 @@ export class LessonNotOpenableError extends Error {
   }
 }
 
-/** `markLessonComplete` refused because `lesson.allowManualComplete !== true` (DD-16). */
+/**
+ * `markLessonComplete` refused because `lesson.allowManualComplete !== true`
+ * (DD-16), or because the lesson is a QUIZ/ASSIGNMENT, which only its
+ * assessment completes (A-01). `undoLessonComplete` throws it for the same
+ * lesson types: a pass or a submission cannot be taken back by the learner.
+ */
 export class ManualCompletionNotPermittedError extends Error {
   readonly lessonId: string;
 
@@ -375,7 +381,12 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
     if (!openResult.ok) {
       throw new LessonNotOpenableError(args.enrolmentId, args.lessonId, openResult.reason);
     }
-    if (openResult.lesson.allowManualComplete !== true) {
+    // A-01: a quiz or assignment lesson is completed by passing or submitting
+    // its assessment, never by hand, whatever `allowManualComplete` says.
+    if (
+      openResult.lesson.allowManualComplete !== true ||
+      isAssessmentCompletedLessonType(openResult.lesson.type)
+    ) {
       throw new ManualCompletionNotPermittedError(args.lessonId);
     }
 
@@ -449,6 +460,13 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
     const openResult = assertLessonOpenable(path, args.lessonId);
     if (!openResult.ok && openResult.reason !== "locked") {
       throw new LessonNotOpenableError(args.enrolmentId, args.lessonId, openResult.reason);
+    }
+    // A-01: the learner cannot undo a completion their assessment earned
+    // (they would have no way to earn it again by hand). Staff still can,
+    // through `overrideLessonProgress`.
+    const undoLesson = findLessonInPath(path, args.lessonId);
+    if (undoLesson && isAssessmentCompletedLessonType(undoLesson.type)) {
+      throw new ManualCompletionNotPermittedError(args.lessonId);
     }
 
     const nowValue = now();
