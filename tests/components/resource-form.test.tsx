@@ -291,4 +291,39 @@ describe("ResourceForm", () => {
     expect(screen.queryByText(/success/i)).toBeNull();
     expect(screen.queryByText(/saved successfully/i)).toBeNull();
   });
+
+  it("keeps what was typed when the save action reports a validation failure (R3-05)", async () => {
+    const ResourceForm = await loadResourceForm();
+    const { FormField } = await import("@/components/primitives");
+    const { useActionState } = await import("react");
+    const save = vi.fn(async (_prev: FieldError[], formData: FormData): Promise<FieldError[]> => {
+      void formData;
+      return [{ name: "price", message: "Enter a price greater than zero." }];
+    });
+
+    function Harness() {
+      const [errors, formAction, pending] = useActionState(save, [] as FieldError[]);
+      return (
+        <ResourceForm title="Edit cohort" errors={errors} pending={pending} onSubmit={formAction}>
+          <FormField name="price" label="Price">
+            {(fieldProps) => <input {...fieldProps} defaultValue="" />}
+          </FormField>
+          <FormField name="title" label="Title">
+            {(fieldProps) => <input {...fieldProps} defaultValue="Stored title" />}
+          </FormField>
+        </ResourceForm>
+      );
+    }
+    render(<Harness />);
+
+    fireEvent.change(screen.getByLabelText("Price"), { target: { value: "12500000" } });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Typed title" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByText("Enter a price greater than zero.", { selector: "a, span" });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]![1].get("price")).toBe("12500000");
+    expect((screen.getByLabelText("Price") as HTMLInputElement).value).toBe("12500000");
+    expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Typed title");
+  });
 });

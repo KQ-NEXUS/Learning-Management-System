@@ -6,6 +6,8 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useTransition,
+  type FormEvent,
   type ReactNode,
 } from "react";
 import { useLicenceRestriction } from "@/components/licence/LicenceRestrictionProvider";
@@ -117,6 +119,23 @@ export function ResourceForm({
   const summaryErrors = errors.filter((error) => !isLicenceRefusalMessage(error.message));
   const summaryRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const [, startSubmit] = useTransition();
+
+  // The save runs from a submit handler, NOT from the form's `action` prop.
+  // React resets every uncontrolled field of a <form action={fn}> once the
+  // action settles, success or failure, so a save refused by validation wiped
+  // whatever had been typed and a second click then saved the old values
+  // (audit R3-05). Dispatching inside a transition keeps `useActionState`'s
+  // pending flag working for the callers that pass its dispatcher here.
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!onSubmit) return;
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const formData = new FormData(event.currentTarget, submitter);
+    startSubmit(async () => {
+      await onSubmit(formData);
+    });
+  }
 
   // Which error names resolve to a real `field-<name>` control *inside this
   // form*. Recomputed after every render because the offending fields are
@@ -222,7 +241,7 @@ export function ResourceForm({
     <form
       id={formId}
       ref={formRef}
-      action={onSubmit}
+      onSubmit={handleSubmit}
       noValidate
       className={`flex w-full flex-col ${sectioned ? "max-w-[1100px]" : "max-w-[720px]"}`}
     >
