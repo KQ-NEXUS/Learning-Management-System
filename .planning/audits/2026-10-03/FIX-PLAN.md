@@ -43,7 +43,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | R3-06 | Cohort cannot be published without a USD price | done (one priced rail is enough; the unpriced rail is a warning naming the currency learners cannot pay in; zero/negative prices and no price at all still block) |
 | R3-07 | A started cohort cannot be bought online; enrol link bounces silently | done (catalogue lists what checkout accepts: published, not finished, enrolment window not closed; a started cohort shows "Started ... still enrolling") |
 | A-08 | Flagged certificate has no "confirm" action | done ("Keep certificate active" beside Revoke: clears the flag, same permission and mandatory reason as revoke, audited as `certificate.review_confirmed`) |
-| A-12 | Reconciliation / Overview / Reports disagree on exceptions | todo |
+| A-12 | Reconciliation / Overview / Reports disagree on exceptions | done for the overview (the item is now "Orders needing review" and opens the payments list filtered to Exception). Order exceptions and reconciliation cases remain two separate queues by design; whether an order exception should also open a reconciliation case is an open product question |
 | R3-08 | 5 of 10 report dashboards "Not available yet" | todo |
 | A-11 | Sessions cannot be edited, so "session updated" mail never sends | todo |
 | A-15 | Reopened ticket alerts no staff | done (in-product alert to the ticket's current owner, or to every ticket manager when it has none) |

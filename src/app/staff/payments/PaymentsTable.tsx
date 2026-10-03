@@ -147,15 +147,25 @@ const PROVIDER_OPTIONS = [
   { value: "MANUAL", label: "Manual" },
 ];
 
+/**
+ * The status tab the list opens on, from the page's `?status=` (the overview's "orders needing
+ * review" link lands on Exception, audit A-12). Anything that is not a known tab opens on All.
+ */
+export function initialPaymentStatus(value: string | undefined): string {
+  return value && STATUS_TABS.some((tab) => tab.value === value) ? value : "";
+}
+
 export function PaymentsTable({
   rows,
   denied,
+  initialStatus = "",
 }: {
   rows?: PaymentRow[];
   denied?: { permission: string };
+  initialStatus?: string;
 }) {
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus);
   const [provider, setProvider] = useState("");
   const [sort, setSort] = useState<SortState>({ key: "order", direction: "asc" });
 
