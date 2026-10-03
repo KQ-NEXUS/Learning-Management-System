@@ -34,6 +34,7 @@ export type ProfileUserRow = {
   phone: string | null;
   pendingEmail: string | null;
   passwordHash: string | null;
+  passwordIsTemporary?: boolean;
   emailVerified?: Date | null;
 };
 
@@ -121,6 +122,16 @@ export function createProfileService(deps: {
       pendingEmail: user.pendingEmail,
       marketingOptIn,
     };
+  }
+
+  /**
+   * Whether the caller is still using a password an administrator set for
+   * them (R3-12). Drives a suggestion to change it, never a gate. False for
+   * an unknown user.
+   */
+  async function isUsingTemporaryPassword(actor: Actor): Promise<boolean> {
+    const user = await store.user.findUnique({ where: { id: actor.userId } });
+    return user?.passwordIsTemporary === true;
   }
 
   async function updateOwnProfile(
@@ -345,6 +356,7 @@ export function createProfileService(deps: {
 
   return {
     getOwnProfile,
+    isUsingTemporaryPassword,
     updateOwnProfile,
     requestEmailChange,
     confirmEmailChange,

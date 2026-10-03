@@ -299,6 +299,11 @@ model User {
   email         String     @unique
   emailVerified DateTime?
   passwordHash  String?
+  // True while the account still uses a password an administrator set for it
+  // (staff account creation, R3-12). Cleared when the person chooses their own
+  // through the password reset flow. It only drives a suggestion to change it;
+  // nothing is blocked while it is true.
+  passwordIsTemporary Boolean @default(false)
   name          String
   phone         String?
   status        UserStatus @default(PENDING_VERIFICATION)

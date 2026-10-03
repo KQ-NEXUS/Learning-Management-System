@@ -340,6 +340,18 @@ describe("resetPassword — happy path and session revocation", () => {
     expect(signOutCalls).toEqual(["u1"]);
   });
 
+  it("clears the temporary-password mark: the person has now chosen their own (R3-12)", async () => {
+    NOW.value = new Date("2026-09-02T12:00:00Z");
+    const { passwordResetService, users, dispatched } = sharedHarness();
+    const staff = { id: "u1", email: "staff@example.com", status: "ACTIVE", passwordHash: "temp-hash", passwordIsTemporary: true };
+    users.push(staff as never);
+
+    await passwordResetService.requestReset("staff@example.com");
+    await passwordResetService.resetPassword({ token: extractToken(dispatched[0].textContent), newPassword: "correcthorsebattery" });
+
+    expect((users[0] as unknown as { passwordIsTemporary: boolean }).passwordIsTemporary).toBe(false);
+  });
+
   it("does not call signOutAll a second time on a replayed token, and leaves the hash unchanged", async () => {
     NOW.value = new Date("2026-09-02T12:00:00Z");
     const { passwordResetService, users, dispatched, signOutCalls } = sharedHarness();

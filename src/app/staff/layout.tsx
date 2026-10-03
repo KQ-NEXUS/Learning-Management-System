@@ -1,3 +1,4 @@
+import { TemporaryPasswordNotice } from "@/components/shell/TemporaryPasswordNotice";
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { can, canAnywhere } from "@/server/permissions";
@@ -146,7 +147,24 @@ export default async function StaffLayout({
     licenceRestriction = undefined;
   }
   // JSX is built outside the try block: a failed render is not catchable there, only the read is.
-  const banner = bannerCopyValue ? <LicenceBanner {...bannerCopyValue} href="/staff/licence" /> : null;
+  const licenceBanner = bannerCopyValue ? <LicenceBanner {...bannerCopyValue} href="/staff/licence" /> : null;
+
+  // R3-12 — a suggestion only. Same chrome discipline as the bell: a failed read shows nothing.
+  let suggestPasswordChange = false;
+  try {
+    suggestPasswordChange = await profileService.isUsingTemporaryPassword(actor);
+  } catch {
+    suggestPasswordChange = false;
+  }
+  // The licence banner is passed through untouched unless the notice is shown with it.
+  const banner = suggestPasswordChange ? (
+    <>
+      {licenceBanner}
+      <TemporaryPasswordNotice />
+    </>
+  ) : (
+    licenceBanner
+  );
 
   // Hide sections this person cannot open, instead of offering a link that lands on a denial.
   // Overview is every staff member's home; each section is checked against its own view permission.
