@@ -14,8 +14,8 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 |---|---|---|
 | A-14 | First production drain emails every historic DomainEvent | done (migration `20261003120000`, real-Postgres test) |
 | R3-02 | Docker image has no `assets/`: certificate PDFs fail (font missing) | done (Dockerfile + guard test; container check at end of batch) |
-| R3-01 | Fresh seed cannot sell: no `priceNgnMinor`/`priceUsdMinor` on the bookable cohorts; FCM seeded with end = start | todo |
-| A-03 | Seed never repairs pre-20-Sep assessments (pass mark 70 of 2; `application/pdf` file type) | todo |
+| R3-01 | Fresh seed cannot sell: no `priceNgnMinor`/`priceUsdMinor` on the bookable cohorts; FCM seeded with end = start | done (seed sets rail prices and a valid end; repairs older databases without overwriting staff edits) |
+| A-03 | Seed never repairs pre-20-Sep assessments (pass mark 70 of 2; `application/pdf` file type) | done (seed repairs the exact stale values; re-run the seed on Neon if it was seeded before 20 Sep) |
 
 ## Batch 2 — crashes and dead ends
 | Id | Finding | Status |
