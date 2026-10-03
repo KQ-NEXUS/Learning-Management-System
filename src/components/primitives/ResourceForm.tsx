@@ -61,7 +61,11 @@ export type ResourceFormProps = {
   state?: ResourceFormState;
   submitLabel?: string;
   pending?: boolean;
-  onSubmit: (formData: FormData) => void | Promise<void>;
+  /**
+   * Required whenever the form itself renders. A Server Component showing only the
+   * denied/loading/error state must omit it: a function cannot cross into a Client Component.
+   */
+  onSubmit?: (formData: FormData) => void | Promise<void>;
   onCancel?: () => void;
   onRetry?: () => void;
   /**

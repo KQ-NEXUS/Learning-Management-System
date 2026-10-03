@@ -102,14 +102,10 @@ describe("ResourceForm", () => {
     expect((submit as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("denied: renders the permission heading and body copy", async () => {
+  it("denied: renders the permission heading and body copy, with no onSubmit (a Server Component cannot pass one, A-04)", async () => {
     const ResourceForm = await loadResourceForm();
     render(
-      <ResourceForm
-        title="Edit course"
-        state={{ status: "denied", permission: "courses.manage" }}
-        onSubmit={() => {}}
-      >
+      <ResourceForm title="Edit course" state={{ status: "denied", permission: "courses.manage" }}>
         <p>unused</p>
       </ResourceForm>,
     );

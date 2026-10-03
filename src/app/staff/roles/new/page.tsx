@@ -30,11 +30,7 @@ export default async function NewRolePage() {
     }
     if (error instanceof AuthorizationError) {
       return (
-        <ResourceForm
-          title="New role"
-          state={{ status: "denied", permission: "roles.manage" }}
-          onSubmit={() => {}}
-        >
+        <ResourceForm title="New role" state={{ status: "denied", permission: "roles.manage" }}>
           {null}
         </ResourceForm>
       );

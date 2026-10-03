@@ -20,7 +20,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 ## Batch 2 — crashes and dead ends
 | Id | Finding | Status |
 |---|---|---|
-| A-04 | `/staff/users/new` and `/staff/roles/new` crash for roles without the permission | todo |
+| A-04 | `/staff/users/new` and `/staff/roles/new` crash for roles without the permission | done (denied branch passes no function; static guard over every Server Component in `src/app`) |
 | R3-04 | Passing the final quiz lands on a 404; "Open" on a completed course 404s | todo |
 | A-13 | 4 stale event-mapper tests | todo |
 
