@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QuizAttemptPanel } from "@/components/learner/QuizAttemptPanel";
+import { QuizAttemptPanel, submitConfirmationText } from "@/components/learner/QuizAttemptPanel";
 import type { LearnerQuizView, SafeQuizAttempt } from "@/server/services/learner-quiz-service";
 vi.mock("@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions", () => ({ startAttemptAction: vi.fn(), submitAttemptAction: vi.fn(), saveAttemptAnswersAction: vi.fn() }));
 afterEach(cleanup);
@@ -15,6 +15,15 @@ function setup(overrides: Partial<LearnerQuizView> = {}) {
   const view = render(<QuizAttemptPanel {...base} {...overrides} enrolmentId="e" lessonId="l" onStart={onStart} onSubmit={onSubmit} />);
   return { ...view, onStart, onSubmit };
 }
+describe("submitConfirmationText (R3-09)", () => {
+  it("says 'last attempt' only when none are left after this one", () => {
+    expect(submitConfirmationText(0)).toMatch(/This is your last attempt\.$/);
+    expect(submitConfirmationText(1)).toMatch(/You'll have 1 more attempt after this one\.$/);
+    expect(submitConfirmationText(2)).toMatch(/You'll have 2 more attempts after this one\.$/);
+    expect(submitConfirmationText(null)).toMatch(/You can start another attempt afterwards\.$/);
+  });
+});
+
 describe("QuizAttemptPanel", () => {
   it("shows an abandoned attempt immediately from the start-new action reply", async () => {
     const abandoned = {
@@ -64,7 +73,9 @@ describe("QuizAttemptPanel", () => {
     // UX batch A: submitting asks first, because it uses up an attempt.
     const dialog = await screen.findByRole("dialog");
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(within(dialog).getByText(/This is your last attempt/)).toBeTruthy();
+    // Attempt 1 of 2: one more is left afterwards, so this is NOT the last attempt (R3-09).
+    expect(within(dialog).getByText(/You'll have 1 more attempt after this one/)).toBeTruthy();
+    expect(within(dialog).queryByText(/This is your last attempt/)).toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit quiz" })); await screen.findByText("2 / 2 (100%)");
     expect(onSubmit).toHaveBeenCalledTimes(1); expect(onSubmit.mock.calls[0]).toEqual([{ enrolmentId: "e", lessonId: "l", attemptId: "a", responses: [{ questionId: "q1", selectedOptionIds: ["x"] }, { questionId: "q2", selectedOptionIds: ["z"] }] }]);
   });

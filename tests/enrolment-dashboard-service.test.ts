@@ -586,7 +586,7 @@ describe("loadLearnerDashboard", () => {
     expect(activeCard.nextAction.kind).toBe("session");
   });
 
-  it("G-01 - learnerResults reads are never called for a COMPLETED card, but are for an ACTIVE one", async () => {
+  it("G-01 / R3-10 - a COMPLETED card reads its released results but never assessment obligations; an ACTIVE one reads both", async () => {
     const getOwnAssessmentObligations = vi.fn(async () => [] as AssessmentObligation[]);
     const getOwnResults = vi.fn(async () => [] as LearnerResultCard[]);
     const svc = makeService(
@@ -600,8 +600,14 @@ describe("loadLearnerDashboard", () => {
     expect(cards).toHaveLength(2);
     expect(getOwnAssessmentObligations).toHaveBeenCalledTimes(1);
     expect(getOwnAssessmentObligations).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" });
-    expect(getOwnResults).toHaveBeenCalledTimes(1);
+    expect(getOwnResults).toHaveBeenCalledTimes(2);
     expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" });
+    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-done" });
+
+    const done = cards.find((card) => card.enrolmentId === "enrolment-done")!;
+    // Tracked (possibly empty), never the deferred "No results yet." placeholder.
+    expect(done.results).toEqual({ kind: "tracked", recent: [] });
+    expect(done.assessmentObligations.kind).toBe("deferred");
   });
 
   it("orders ACTIVE cards before COMPLETED cards, and never lists another learner's COMPLETED enrolment (T-11-73)", async () => {

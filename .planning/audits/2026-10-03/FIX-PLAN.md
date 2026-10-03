@@ -52,8 +52,8 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | Id | Finding | Status |
 |---|---|---|
 | U-01 | Email log and audit show raw codes | todo |
-| R3-09 | Attempt wording off by one in the submit dialog | todo |
-| R3-10 | Dashboard results panel "No results yet" after a pass | todo |
+| R3-09 | Attempt wording off by one in the submit dialog | done |
+| R3-10 | Dashboard results panel "No results yet" after a pass | done (a completed course's card now loads its released results) |
 | R3-11 | Certificate design upload accepts PNG/JPEG only (no PDF) | todo |
 | R3-12 | Temporary staff password is not forced to change | todo |
 | U-14 | Notification time is drain time, not event time | todo |
