@@ -17,8 +17,20 @@ describe("buildMapperTable (COM-01)", () => {
     }
   });
 
+  // Built from no groups rather than by naming a "still unmapped" type: the
+  // registry grows every phase, and a named example goes stale (A-13).
   it("maps a type with no registered mapper to an empty array", () => {
-    expect(table["payment.failed"]).toEqual([]);
+    const empty = buildMapperTable([]);
+    for (const type of DOMAIN_EVENT_TYPE_LIST) {
+      expect(empty[type]).toEqual([]);
+    }
+  });
+
+  it("fans one event type out to every group that registers it", () => {
+    const first = async () => [];
+    const second = async () => [];
+    const fanned = buildMapperTable([{ "ticket.created": first }, { "ticket.created": second }]);
+    expect(fanned["ticket.created"]).toEqual([first, second]);
   });
 
   it("registers exactly one mapper for ticket.public_reply_added", () => {

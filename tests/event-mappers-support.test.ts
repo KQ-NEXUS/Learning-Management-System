@@ -5,11 +5,13 @@
  * persisting these intents (and the TICKET_UPDATES mute effect / always-sent
  * ticket-created behaviour) lives in `tests/support-drain.integration.test.ts`.
  *
- * Mappers are looked up through `buildMapperTable(EVENT_MAPPER_GROUPS)` —
- * the same path production code and `tests/support/drain-harness.ts` use —
- * rather than importing `support.ts` directly (see
- * `tests/event-mappers-enrolment-payment.test.ts` for the module-cycle
- * rationale).
+ * The mapper under test is taken from this group's own registration
+ * (`createSupportMappers()`), not from the combined table: another group may
+ * register the same event type for its own audience (the staff group also
+ * maps `ticket.created`), so "the only mapper in the table" is not a stable
+ * way to name this one. `event-intent-mappers` is imported first, as in
+ * `tests/event-mappers-staff.test.ts`, which keeps the module cycle described
+ * in `tests/event-mappers-enrolment-payment.test.ts` resolved.
  */
 
 import { describe, expect, it } from "vitest";
@@ -21,14 +23,17 @@ import {
   type EventMapper,
   type MapperContext,
 } from "@/server/services/event-intent-mappers";
+import { createSupportMappers } from "@/server/services/event-mappers/support";
 
 const NOW = new Date("2026-01-01T00:00:00.000Z");
 const mapperTable = buildMapperTable(EVENT_MAPPER_GROUPS);
+const supportMappers = createSupportMappers();
 
 function requireOneMapper(type: DrainEvent["type"]): EventMapper {
-  const mappers = mapperTable[type];
-  expect(mappers).toHaveLength(1);
-  return mappers[0]!;
+  const mapper = supportMappers[type];
+  if (!mapper) throw new Error(`no support mapper registered for ${type}`);
+  expect(mapperTable[type]).toContain(mapper);
+  return mapper;
 }
 
 function makeCtx(ticketFindUnique?: (args: unknown) => Promise<unknown>): MapperContext {
@@ -49,16 +54,16 @@ function makeEvent(
 }
 
 describe("createSupportMappers registration", () => {
-  it("registers exactly one mapper for every event type in this group", () => {
-    for (const type of [
-      "ticket.public_reply_added",
-      "ticket.created",
-      "ticket.resolved",
-      "ticket.reopened",
-      "ticket.closed",
-    ] as const) {
-      expect(mapperTable[type]).toHaveLength(1);
+  it("registers one mapper per event type in this group, each reachable through the production table", () => {
+    expect(Object.keys(supportMappers).sort()).toEqual(
+      ["ticket.closed", "ticket.created", "ticket.public_reply_added", "ticket.reopened", "ticket.resolved"].sort(),
+    );
+    for (const type of ["ticket.public_reply_added", "ticket.resolved", "ticket.reopened", "ticket.closed"] as const) {
+      expect(mapperTable[type]).toEqual([supportMappers[type]]);
     }
+    // The staff group also maps ticket.created (its own staff alert), so this type fans out to two.
+    expect(mapperTable["ticket.created"]).toHaveLength(2);
+    expect(mapperTable["ticket.created"]).toContain(supportMappers["ticket.created"]);
   });
 });
 

@@ -13,7 +13,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | Id | Finding | Status |
 |---|---|---|
 | A-14 | First production drain emails every historic DomainEvent | done (migration `20261003120000`, real-Postgres test) |
-| R3-02 | Docker image has no `assets/`: certificate PDFs fail (font missing) | done (Dockerfile + guard test; container check at end of batch) |
+| R3-02 | Docker image has no `assets/`: certificate PDFs fail (font missing) | done (Dockerfile + guard test; verified in the rebuilt container: two certificates with no file rendered and downloaded) |
 | R3-01 | Fresh seed cannot sell: no `priceNgnMinor`/`priceUsdMinor` on the bookable cohorts; FCM seeded with end = start | done (seed sets rail prices and a valid end; repairs older databases without overwriting staff edits) |
 | A-03 | Seed never repairs pre-20-Sep assessments (pass mark 70 of 2; `application/pdf` file type) | done (seed repairs the exact stale values; re-run the seed on Neon if it was seeded before 20 Sep) |
 
@@ -22,7 +22,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 |---|---|---|
 | A-04 | `/staff/users/new` and `/staff/roles/new` crash for roles without the permission | done (denied branch passes no function; static guard over every Server Component in `src/app`) |
 | R3-04 | Passing the final quiz lands on a 404; "Open" on a completed course 404s | done (completed course opens as a read-only record; lesson page shows a completed panel; lesson content stays closed per G-01) |
-| A-13 | 4 stale event-mapper tests | todo |
+| A-13 | 4 stale event-mapper tests | done (tests select the group's own mapper; no named "unmapped" example to go stale) |
 
 ## Batch 3 — access control
 | Id | Finding | Status |
