@@ -698,19 +698,24 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
   //
   // The ONLY `withPermission`-wrapped export in this file (DD-15). Mirrors
   // Phase 5's attendance-correction pattern: mandatory reason, actor and
-  // timestamp recorded, visible in audit history. `"enrolments.manage"` is
-  // used because the closed 36-identifier catalogue has no progress-specific
-  // permission and this phase does not extend it.
+  // timestamp recorded, visible in audit history. The closed catalogue has no
+  // progress-specific permission, so TWO existing ones are required together:
+  // `enrolments.manage` (the record being corrected is an enrolment's) and
+  // `attendance.manage` (the delivery-record correction it mirrors). Either
+  // alone is not enough: Finance/Operations holds `enrolments.manage` for
+  // payment-side enrolment work and must not be able to change what feeds
+  // completion and certificate eligibility (audit A-05). The checks are two
+  // nested `withPermission` wrappers so a refusal on either is audited.
 
-  const overrideLessonProgress = withPermission<{
-    enrolmentId: string;
-    lessonId: string;
-    complete: boolean;
-    reason: string;
-  }>("enrolments.manage", (input) => deps.enrolmentScope(input.enrolmentId), {
+  type OverrideInput = { enrolmentId: string; lessonId: string; complete: boolean; reason: string };
+  const overrideOptions = {
     licence: "continuity",
     reason: "Progress recording for existing enrolments continues (D-06, A9)",
-  })(
+  } as const;
+  const overrideScope = (input: OverrideInput) => deps.enrolmentScope(input.enrolmentId);
+
+  // No licence option here: `attendance.manage` is a continuity permission by default.
+  const overrideWithAttendanceGrant = withPermission<OverrideInput>("attendance.manage", overrideScope)(
     async (input, ctx) => {
       const reason = trimReason(input.reason);
       if (!reason) throw new OverrideReasonRequiredError(input.enrolmentId, input.lessonId);
@@ -782,6 +787,12 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
       return { enrolmentId: input.enrolmentId, lessonId: input.lessonId, completed: input.complete };
     },
   );
+
+  const overrideLessonProgress = withPermission<OverrideInput>(
+    "enrolments.manage",
+    overrideScope,
+    overrideOptions,
+  )((input) => overrideWithAttendanceGrant(input));
 
   return {
     markLessonComplete,

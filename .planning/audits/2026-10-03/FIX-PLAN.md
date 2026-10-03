@@ -28,7 +28,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | Id | Finding | Status |
 |---|---|---|
 | A-02 | Payments report and export need only `reports.view` | done (`payments.view` also required on the dashboard, export request and download; the hub's aggregate totals are unchanged) |
-| A-05 | Finance can override lesson completion (`enrolments.manage`) | todo |
+| A-05 | Finance can override lesson completion (`enrolments.manage`) | done (override now needs `enrolments.manage` AND `attendance.manage`; no new permission, nobody gains access. A dedicated `progress.override` would be a catalogue change for the owner to approve) |
 
 ## Batch 4 — learning rules
 | Id | Finding | Status |

@@ -165,7 +165,11 @@ export default async function LearnerProgressPage({
   const path = await loadLearnerPath({ userId: rosterRow.learnerId }, enrolmentId, { includeCompleted: true });
   if (!path) notFound(); // defensive — the roster row above already confirmed the enrolment is in this cohort
 
-  const canOverride = await can("enrolments.manage", await enrolmentCohortScope(enrolmentId));
+  // Both grants, as `overrideLessonProgress` requires (A-05): `enrolments.manage` alone is the
+  // Finance/Operations role, which must not change what feeds completion.
+  const overrideScope = await enrolmentCohortScope(enrolmentId);
+  const canOverride =
+    (await can("enrolments.manage", overrideScope)) && (await can("attendance.manage", overrideScope));
 
   // COH-07 — null when the viewer lacks submissions.view here (not an error).
   let results: LearnerResultCard[] | null;
