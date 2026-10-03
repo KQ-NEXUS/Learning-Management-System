@@ -65,6 +65,11 @@ export async function canAccessExportJob(
   const exporting = collectionScopeFromGrants(grants, job.dataset === "audit" ? "audit.export" : "reports.export", now);
   if (!domain || !exporting || !(await covers(deps, original, domain)) || !(await covers(deps, original, exporting))) return false;
   if (definition.scopePolicy === "GLOBAL" && (original.kind !== "GLOBAL" || domain.kind !== "GLOBAL" || exporting.kind !== "GLOBAL")) return false;
+  if (definition.dataPermission) {
+    // A-02: losing the records' own module grant withdraws the file too.
+    const data = collectionScopeFromGrants(grants, definition.dataPermission, now);
+    if (!data || !(await covers(deps, original, data))) return false;
+  }
   const columns = Array.isArray(job.columnSnapshot) ? job.columnSnapshot : [];
   const sensitive = columns.some((column) => column && typeof column === "object" && !Array.isArray(column) && (column as { permission?: unknown }).permission === "users.view");
   if (sensitive) {

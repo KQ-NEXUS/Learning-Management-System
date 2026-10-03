@@ -27,7 +27,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 ## Batch 3 — access control
 | Id | Finding | Status |
 |---|---|---|
-| A-02 | Payments report and export need only `reports.view` | todo |
+| A-02 | Payments report and export need only `reports.view` | done (`payments.view` also required on the dashboard, export request and download; the hub's aggregate totals are unchanged) |
 | A-05 | Finance can override lesson completion (`enrolments.manage`) | todo |
 
 ## Batch 4 — learning rules
