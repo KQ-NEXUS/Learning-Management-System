@@ -17,6 +17,7 @@ function expectedStart(startsAt: Date): string {
 function cohort(overrides: Partial<PublicCohort> & { id: string }): PublicCohort {
   return {
     startsAt: new Date("2026-10-01T12:00:00Z"),
+    hasStarted: false,
     endsAt: new Date("2026-10-05T12:00:00Z"),
     enrolmentOpensAt: new Date("2026-09-01T00:00:00Z"),
     enrolmentClosesAt: new Date("2026-09-30T00:00:00Z"),
@@ -218,5 +219,15 @@ describe("CohortCards", () => {
       const anchors = Array.from(document.querySelectorAll("a"));
       expect(anchors.every((a) => !(a.getAttribute("href") ?? "").includes("/enrol/"))).toBe(true);
     });
+  });
+
+  it("a cohort that has already started but is still enrolling reads 'Started ... still enrolling', with its pay control (R3-07)", () => {
+    render(<CohortCards cohorts={[cohort({ id: "started", hasStarted: true })]} />);
+
+    const started = expectedStart(new Date("2026-10-01T12:00:00Z")).replace("Starts", "Started");
+    expect(screen.getByText(new RegExp(started))).toBeTruthy();
+    expect(screen.getByText(/still enrolling/)).toBeTruthy();
+    expect(screen.queryByText(/^Starts /)).toBeNull();
+    expect(document.querySelector('input[name="cohortId"][value="started"]')).toBeTruthy();
   });
 });

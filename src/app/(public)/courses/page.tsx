@@ -74,7 +74,11 @@ export default async function PublicCoursesPage({
                   <div>
                     {format && <div className="text-[13px] text-muted-foreground">{format}</div>}
                     <div className={`mt-1 font-semibold ${course.nextCohort ? "" : "text-muted-foreground"}`}>
-                      {course.nextCohort ? `Next start ${shortDate(course.nextCohort.startsAt)}` : "No dates scheduled"}
+                      {course.nextCohort
+                        ? course.nextCohort.hasStarted
+                          ? "Enrolling now"
+                          : `Next start ${shortDate(course.nextCohort.startsAt)}`
+                        : "No dates scheduled"}
                     </div>
                   </div>
                   <div className="font-mono text-[16px] font-medium tabular-nums md:text-right">

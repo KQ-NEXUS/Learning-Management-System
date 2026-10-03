@@ -162,6 +162,7 @@ describe("public-catalogue-service", () => {
       [
         {
           startsAt: new Date("2026-09-01T00:00:00Z"),
+          endsAt: new Date("2026-09-30T00:00:00Z"),
           enrolmentOpensAt: new Date("2026-05-01T00:00:00Z"),
           enrolmentClosesAt: new Date("2026-08-01T00:00:00Z"),
           status: "PUBLISHED",
@@ -183,6 +184,68 @@ describe("public-catalogue-service", () => {
     seatsTaken: 3,
     status: "PUBLISHED",
     ...over,
+  });
+
+  describe("R3-07: bookable means the enrolment window is open, whether or not the cohort has started", () => {
+    // The service clock is 2026-06-01.
+    const startedStillEnrolling = cohortRow({
+      id: "started",
+      startsAt: new Date("2026-05-20T00:00:00Z"),
+      endsAt: new Date("2026-12-31T00:00:00Z"),
+      enrolmentClosesAt: new Date("2026-07-01T00:00:00Z"),
+      deliveryMode: "SELF_PACED",
+    });
+    const cohortsOf = async (rows: unknown[]) => {
+      const svc = build([course({ slug: "r307" })], [], rows);
+      return ((await svc.getPublicCourseBySlug("r307")) as { upcomingCohorts: PublicCohort[] }).upcomingCohorts;
+    };
+
+    it("lists a cohort that has started while its enrolment window is still open, flagged hasStarted", async () => {
+      const cohorts = await cohortsOf([startedStillEnrolling]);
+      expect(cohorts.map((c) => [c.id, c.hasStarted])).toEqual([["started", true]]);
+    });
+
+    it("a cohort still to start is flagged hasStarted: false and listed before one already under way", async () => {
+      const cohorts = await cohortsOf([startedStillEnrolling, cohortRow({ id: "future" })]);
+      expect(cohorts.map((c) => [c.id, c.hasStarted])).toEqual([
+        ["future", false],
+        ["started", true],
+      ]);
+    });
+
+    it("omits a started cohort whose enrolment window has closed, and any cohort that has finished", async () => {
+      const cohorts = await cohortsOf([
+        cohortRow({ id: "window-closed", startsAt: new Date("2026-05-20T00:00:00Z"), enrolmentClosesAt: new Date("2026-05-31T00:00:00Z") }),
+        cohortRow({
+          id: "finished",
+          startsAt: new Date("2026-04-01T00:00:00Z"),
+          endsAt: new Date("2026-05-01T00:00:00Z"),
+          enrolmentClosesAt: new Date("2026-07-01T00:00:00Z"),
+        }),
+      ]);
+      expect(cohorts).toEqual([]);
+    });
+
+    it("asks the database for PUBLISHED cohorts that have not ended and whose window has not closed", async () => {
+      const findMany = vi.fn(async (args: { where?: unknown }) => {
+        void args;
+        return [] as never[];
+      });
+      const svc = createPublicCatalogueService({
+        courseDelegate: makeDelegate([course({ slug: "r307" })]),
+        programmeDelegate: makeDelegate([]),
+        cohortDelegate: { findMany },
+        now: () => new Date("2026-06-01T00:00:00Z"),
+      });
+      await svc.getPublicCourseBySlug("r307");
+      expect(findMany.mock.calls[0]![0]).toMatchObject({
+        where: {
+          status: "PUBLISHED",
+          endsAt: { gt: new Date("2026-06-01T00:00:00Z") },
+          enrolmentClosesAt: { gte: new Date("2026-06-01T00:00:00Z") },
+        },
+      });
+    });
   });
 
   it("derives seatsAvailable as capacity - seatsTaken", async () => {
@@ -270,6 +333,8 @@ describe("public-catalogue-service", () => {
         "endsAt",
         "enrolmentClosesAt",
         "enrolmentOpensAt",
+        // R3-07 — a started cohort that is still enrolling reads "Started", not "Starts".
+        "hasStarted",
         "id",
         // 07-04/07-11 — the dual-currency rails (D-06); the legacy priceMinor/currency pair is gone.
         "priceNgnMinor",

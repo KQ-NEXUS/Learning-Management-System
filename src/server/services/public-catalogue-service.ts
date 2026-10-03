@@ -53,6 +53,12 @@ const PROGRAMME_PUBLIC_SELECT = {
 export type PublicCohort = {
   id: string;
   startsAt: Date;
+  /**
+   * The cohort has already begun but is still taking enrolments (R3-07), so a
+   * card says "Started" rather than "Starts". Decided here with the service's
+   * own clock, never in a component.
+   */
+  hasStarted: boolean;
   endsAt: Date;
   enrolmentOpensAt: Date;
   enrolmentClosesAt: Date;
@@ -139,7 +145,10 @@ export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
     const at = now();
     const rails = enabledRails();
     const rows = (await deps.cohortDelegate.findMany({
-      where: { ...link, status: "PUBLISHED", startsAt: { gt: at } },
+      // Bookable means what checkout itself accepts (`startCheckout`): PUBLISHED
+      // with an enrolment window that has not closed. A cohort that has started
+      // but is still enrolling is bookable (R3-07); one that has finished is not.
+      where: { ...link, status: "PUBLISHED", endsAt: { gt: at }, enrolmentClosesAt: { gte: at } },
       select: {
         id: true,
         startsAt: true,
@@ -162,15 +171,21 @@ export function createPublicCatalogueService(deps: PublicCatalogueDeps) {
     >;
 
     // A booking window is "open or future" — it has not already closed.
+    // Cohorts still to start come first, soonest first; ones already under way
+    // follow, most recently started first, so "next" never names a past date
+    // while a future one exists.
+    const started = (row: { startsAt: Date | string }) => new Date(row.startsAt) <= at;
     return rows
-      .filter(
-        (row) =>
-          new Date(row.startsAt) > at &&
-          new Date(row.enrolmentClosesAt) >= at,
-      )
+      .filter((row) => new Date(row.endsAt) > at && new Date(row.enrolmentClosesAt) >= at)
+      .sort((a, b) => {
+        if (started(a) !== started(b)) return started(a) ? 1 : -1;
+        const delta = new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+        return started(a) ? -delta : delta;
+      })
       .map((row) => ({
         id: row.id,
         startsAt: new Date(row.startsAt),
+        hasStarted: started(row),
         endsAt: new Date(row.endsAt),
         enrolmentOpensAt: new Date(row.enrolmentOpensAt),
         enrolmentClosesAt: new Date(row.enrolmentClosesAt),
