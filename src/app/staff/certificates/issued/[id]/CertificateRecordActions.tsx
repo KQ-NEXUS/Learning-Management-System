@@ -4,8 +4,11 @@
  * The certificate detail page's action zone (CRD-05) — `11-UI-SPEC.md` §0.4, §7.4.
  *
  * Four states, driven entirely by `certificateDisplayStatus`'s single value:
- *   - Active, unflagged / Active, flagged → "Revoke certificate" only (the flagged banner on the
- *     page itself carries the framing — no separate action for it, UI-SPEC §7.4).
+ *   - Active, unflagged → "Revoke certificate" only.
+ *   - Active, flagged → "Keep certificate active" and "Revoke certificate": the banner asks staff to
+ *     confirm it or revoke it, so both outcomes of the review are offered (audit A-08, which
+ *     supersedes UI-SPEC §7.4's "no separate action").
+ *     Both need `certificates.revoke`.
  *   - Revoked → "Reissue certificate" only.
  *   - Superseded → nothing — a read-only historical record.
  *
@@ -22,10 +25,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, RefreshCw } from "lucide-react";
+import { Ban, CheckCircle2, RefreshCw } from "lucide-react";
 import { ConfirmModal } from "@/components/primitives";
 import type { CertificateDisplayStatus } from "@/lib/certificate-display-status";
-import { revokeCertificateAction, reissueCertificateAction } from "./certificate-record-actions";
+import {
+  confirmFlaggedCertificateAction,
+  revokeCertificateAction,
+  reissueCertificateAction,
+} from "./certificate-record-actions";
 
 export type CertificateRecordActionsProps = {
   certificateId: string;
@@ -36,6 +43,7 @@ export type CertificateRecordActionsProps = {
   canReissue?: boolean;
   revoke?: typeof revokeCertificateAction;
   reissue?: typeof reissueCertificateAction;
+  confirmFlagged?: typeof confirmFlaggedCertificateAction;
 };
 
 const BTN_DANGER =
@@ -50,15 +58,28 @@ export function CertificateRecordActions({
   canReissue = true,
   revoke = revokeCertificateAction,
   reissue = reissueCertificateAction,
+  confirmFlagged = confirmFlaggedCertificateAction,
 }: CertificateRecordActionsProps) {
   const router = useRouter();
-  const [open, setOpen] = useState<"revoke" | "reissue" | null>(null);
+  const [open, setOpen] = useState<"revoke" | "reissue" | "keep" | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function confirmRevoke(reason: string) {
     startTransition(async () => {
       const result = await revoke({ certificateId, reason });
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setOpen(null);
+      router.refresh();
+    });
+  }
+
+  function confirmKeep(reason: string) {
+    startTransition(async () => {
+      const result = await confirmFlagged({ certificateId, reason });
       if (!result.ok) {
         setError(result.message);
         return;
@@ -86,10 +107,24 @@ export function CertificateRecordActions({
   // Each action shows only for staff who hold the permission its server action enforces.
   const showReissue = displayStatus === "revoked" && canReissue;
   const showRevoke = displayStatus !== "revoked" && canRevoke;
+  const showKeep = displayStatus === "flagged" && canRevoke;
   if (!showReissue && !showRevoke) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {showKeep && (
+        <button
+          type="button"
+          className={BTN_ACCENT}
+          onClick={() => {
+            setError(null);
+            setOpen("keep");
+          }}
+        >
+          <CheckCircle2 aria-hidden size={16} />
+          Keep certificate active
+        </button>
+      )}
       {showReissue ? (
         <button
           type="button"
@@ -127,6 +162,21 @@ export function CertificateRecordActions({
         error={error}
         description="This certificate's public verification status will immediately show as revoked. This action requires a reason and is recorded in the audit history."
         onConfirm={confirmRevoke}
+        onCancel={() => {
+          if (!pending) setOpen(null);
+        }}
+      />
+      <ConfirmModal
+        open={open === "keep"}
+        licenceEffect="continuity"
+        tone="default"
+        title="Keep certificate active"
+        confirmLabel="Keep certificate active"
+        minReasonLength={10}
+        pending={pending}
+        error={error}
+        description="This clears the review flag and leaves the certificate valid. Say why it should stand; the reason is recorded in the audit history."
+        onConfirm={confirmKeep}
         onCancel={() => {
           if (!pending) setOpen(null);
         }}

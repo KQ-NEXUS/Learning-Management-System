@@ -42,7 +42,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | R3-05 | Staff forms lose typed values when a save fails validation | done (fixed once in the shared ResourceForm, covering every staff create/edit form; registration also keeps name and email. Sign-in, password reset and the account email form still clear on a refusal) |
 | R3-06 | Cohort cannot be published without a USD price | done (one priced rail is enough; the unpriced rail is a warning naming the currency learners cannot pay in; zero/negative prices and no price at all still block) |
 | R3-07 | A started cohort cannot be bought online; enrol link bounces silently | done (catalogue lists what checkout accepts: published, not finished, enrolment window not closed; a started cohort shows "Started ... still enrolling") |
-| A-08 | Flagged certificate has no "confirm" action | todo |
+| A-08 | Flagged certificate has no "confirm" action | done ("Keep certificate active" beside Revoke: clears the flag, same permission and mandatory reason as revoke, audited as `certificate.review_confirmed`) |
 | A-12 | Reconciliation / Overview / Reports disagree on exceptions | todo |
 | R3-08 | 5 of 10 report dashboards "Not available yet" | todo |
 | A-11 | Sessions cannot be edited, so "session updated" mail never sends | todo |
