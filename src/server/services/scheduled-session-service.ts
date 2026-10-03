@@ -96,6 +96,17 @@ export class InvalidTimeZoneError extends Error {
   }
 }
 
+/** `updateSession` was called on a session that has been cancelled (audit A-11). */
+export class SessionCancelledError extends Error {
+  readonly sessionId: string;
+
+  constructor(sessionId: string) {
+    super("A cancelled session cannot be changed. Add a new session instead.");
+    this.name = "SessionCancelledError";
+    this.sessionId = sessionId;
+  }
+}
+
 /** `endTime` was not strictly after `startTime`. */
 export class SessionTimeRangeError extends Error {
   constructor(message = "A session's end time must be after its start time.") {
@@ -319,6 +330,8 @@ type SessionFieldsInput = {
   courseId?: string;
 };
 
+type UpdateSessionInput = Omit<SessionFieldsInput, "cohortId"> & { sessionId: string };
+
 // ---------------------------------------------------------------------------
 // The service
 // ---------------------------------------------------------------------------
@@ -523,6 +536,92 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
   );
 
   // -------------------------------------------------------------------------
+  // updateSession (audit A-11)
+  // -------------------------------------------------------------------------
+  //
+  // Sessions could be created and cancelled but never changed, so a moved
+  // time or venue meant cancel-and-recreate, and `session.updated` (its
+  // template, mapper and the SESSION_CHANGES preference, all built in phase
+  // 13) had no writer. This is that writer.
+  //
+  // Date and times are wall-clock values in the cohort's own timezone, exactly
+  // as on create. `location`, `facilitatorId` and `courseId` are set from the
+  // input (absent means "none"), as on create. `meetingUrl` and
+  // `linkVisibleFromMinutes` change only when supplied: the staff list never
+  // carries the meeting link (D-25), so the edit form cannot show the current
+  // one, and a blank field must mean "leave it as it is", not "remove it".
+  //
+  // `session.updated` is written only when something a learner is told about
+  // changes (title, start, end, location, meeting link). Changing the
+  // facilitator or the attendance flag alone mails nobody.
+
+  const updateSession = withPermission<UpdateSessionInput>(
+    "cohorts.manage",
+    (input) => deps.sessionScope(input.sessionId),
+  )(async (input, ctx) => {
+    const before = await delegate.findUnique({ where: { id: input.sessionId } });
+    if (!before) throw new SessionNotFoundError(input.sessionId);
+    if (before.cancelledAt != null) throw new SessionCancelledError(input.sessionId);
+
+    const cohort = await loadCohortInfo(before.cohortId);
+    assertCourseTaggable(cohort, input.courseId);
+
+    const range = toUtcRange(
+      parseWallDate(input.date),
+      parseTimeOfDay(input.startTime),
+      parseTimeOfDay(input.endTime),
+      cohort.timezone,
+    );
+
+    const data: Record<string, unknown> = {
+      title: input.title,
+      startsAt: range.startsAt,
+      endsAt: range.endsAt,
+      location: input.location ?? null,
+      facilitatorId: input.facilitatorId ?? null,
+      courseId: input.courseId ?? null,
+      ...(input.meetingUrl != null ? { meetingUrl: input.meetingUrl } : {}),
+      ...(input.linkVisibleFromMinutes != null ? { linkVisibleFromMinutes: input.linkVisibleFromMinutes } : {}),
+      ...(input.attendanceExpected != null ? { attendanceExpected: input.attendanceExpected } : {}),
+    };
+
+    const learnerVisibleChange =
+      before.title !== input.title ||
+      new Date(before.startsAt).getTime() !== range.startsAt.getTime() ||
+      new Date(before.endsAt).getTime() !== range.endsAt.getTime() ||
+      (before.location ?? null) !== (input.location ?? null) ||
+      (input.meetingUrl != null && (before.meetingUrl ?? null) !== input.meetingUrl);
+
+    const after = await db.$transaction(async (tx) => {
+      // F-04 — moving a session can change the cohort's readiness (its
+      // "sessions fall within the cohort dates" check); serialize with
+      // publishCohort on the same cohort row lock, as cancelSession does.
+      await lockCohort(tx, before.cohortId);
+      const updated = await tx.scheduledSession.update({ where: { id: input.sessionId }, data });
+      if (learnerVisibleChange) {
+        await writeDomainEvent(tx, {
+          type: "session.updated",
+          payload: { sessionId: input.sessionId, cohortId: before.cohortId, actorId: ctx.actor.userId },
+        });
+      }
+      return updated;
+    });
+
+    await deps.audit({
+      action: "session.updated",
+      targetType: "ScheduledSession",
+      targetId: input.sessionId,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason: null,
+      before,
+      after,
+    });
+
+    return after;
+  });
+
+  // -------------------------------------------------------------------------
   // cancelSession (D-26)
   // -------------------------------------------------------------------------
 
@@ -650,6 +749,7 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
     createSessionFromWallTime,
     repeatWeeklySessions,
     cancelSession,
+    updateSession,
     listSessionsForCohort,
     readSessionForViewer,
   };
@@ -694,5 +794,6 @@ export const scheduledSessionService = built.scheduledSessionService;
 export const createSessionFromWallTime = built.createSessionFromWallTime;
 export const repeatWeeklySessions = built.repeatWeeklySessions;
 export const cancelSession = built.cancelSession;
+export const updateSession = built.updateSession;
 export const listSessionsForCohort = built.listSessionsForCohort;
 export const readSessionForViewer = built.readSessionForViewer;

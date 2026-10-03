@@ -68,8 +68,51 @@ export function toSessionActionFields(cohortId: string, fields: SessionFieldsVal
   };
 }
 
+/** "2026-10-05" and "09:00" for an instant, as read on a clock in `timeZone`. */
+function wallParts(iso: string, timeZone: string): { date: string; time: string } {
+  const at = new Date(iso);
+  // en-CA formats a date as YYYY-MM-DD, which is what a date input holds.
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+  return { date, time };
+}
+
+/**
+ * The form's starting values when editing an existing session (audit A-11): its date and times as
+ * read in the cohort's timezone, the way they were entered. The meeting link and its visibility
+ * window start blank on purpose. The staff list never carries the link (D-25), and a blank field
+ * on save means "leave it unchanged".
+ */
+export function sessionFieldsFromRow(row: {
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  location: string | null;
+  facilitatorId: string | null;
+  attendanceExpected: boolean;
+  courseId: string | null;
+}): SessionFieldsValue {
+  const zone = row.timezone || "UTC";
+  const start = wallParts(row.startsAt, zone);
+  const end = wallParts(row.endsAt, zone);
+  return {
+    ...EMPTY_SESSION_FIELDS,
+    title: row.title,
+    date: start.date,
+    startTime: start.time,
+    endTime: end.time,
+    location: row.location ?? "",
+    facilitatorId: row.facilitatorId ?? "",
+    attendanceExpected: row.attendanceExpected,
+    courseId: row.courseId ?? "",
+  };
+}
+
 export type SessionFormFieldsProps = {
   variant: "single" | "repeat";
+  /** Editing an existing session: the meeting link field says a blank value keeps the current link. */
+  editing?: boolean;
   value: SessionFieldsValue;
   onChange: (next: SessionFieldsValue) => void;
   cohortTimezone: string;
@@ -92,6 +135,7 @@ function ZonedLabel({ label, timezone }: { label: string; timezone: string }) {
 
 export function SessionFormFields({
   variant,
+  editing = false,
   value,
   onChange,
   cohortTimezone,
@@ -204,7 +248,11 @@ export function SessionFormFields({
         name="meetingUrl"
         label="Meeting URL"
         error={errors.meetingUrl}
-        hint="The meeting link appears {n} minutes before the session starts — never shown in the sessions list."
+        hint={
+          editing
+            ? "Leave blank to keep the current meeting link. Enter a new one to replace it."
+            : "The meeting link appears {n} minutes before the session starts — never shown in the sessions list."
+        }
       >
         {(field) => (
           <TextInput

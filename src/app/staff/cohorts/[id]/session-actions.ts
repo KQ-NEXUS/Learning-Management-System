@@ -32,6 +32,8 @@ import {
   createSessionFromWallTime,
   repeatWeeklySessions,
   cancelSession,
+  updateSession,
+  SessionCancelledError,
   InvalidTimeZoneError,
   SessionCourseNotInCohortError,
   SessionTimeRangeError,
@@ -67,6 +69,9 @@ function toFailure(error: unknown): Extract<SessionActionResult, { ok: false }> 
   }
   if (error instanceof ReasonRequiredError) {
     return { ok: false, message: "A reason is required to cancel a session." };
+  }
+  if (error instanceof SessionCancelledError) {
+    return { ok: false, message: error.message };
   }
   if (error instanceof SessionNotFoundError) {
     return { ok: false, message: "This session could not be found." };
@@ -125,6 +130,12 @@ const repeatWeeklySchema = sessionFieldsSchema
   })
   .strict();
 
+// The same fields as a new session, addressed by the session rather than the cohort (audit A-11).
+const updateSessionSchema = sessionFieldsSchema
+  .omit({ cohortId: true })
+  .extend({ sessionId: z.string().min(1) })
+  .strict();
+
 const cancelSchema = z
   .object({
     sessionId: z.string().min(1),
@@ -163,6 +174,22 @@ export async function repeatWeeklyAction(
     const created = await repeatWeeklySessions(parsed.data);
     revalidateCohort(parsed.data.cohortId);
     return { ok: true, sessionIds: created.map((row) => row.id) };
+  } catch (error) {
+    return toFailure(error);
+  }
+}
+
+export async function updateSessionAction(
+  input: z.input<typeof updateSessionSchema>,
+): Promise<SessionActionResult> {
+  const parsed = updateSessionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "The session details were invalid." };
+  }
+  try {
+    const updated = await updateSession(parsed.data);
+    revalidateCohort(updated.cohortId);
+    return { ok: true, sessionId: updated.id };
   } catch (error) {
     return toFailure(error);
   }

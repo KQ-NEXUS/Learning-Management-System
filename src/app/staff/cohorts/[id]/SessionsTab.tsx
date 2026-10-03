@@ -23,10 +23,11 @@ import { ResourceTable, StatusPill, ConfirmModal, type Column, type ResourceTabl
 import {
   SessionFormFields,
   EMPTY_SESSION_FIELDS,
+  sessionFieldsFromRow,
   toSessionActionFields,
   type SessionFieldsValue,
 } from "./SessionFormFields";
-import { createSessionAction, repeatWeeklyAction, cancelSessionAction } from "./session-actions";
+import { createSessionAction, repeatWeeklyAction, cancelSessionAction, updateSessionAction } from "./session-actions";
 
 export type SessionRow = {
   id: string;
@@ -116,7 +117,8 @@ export function SessionsTab({
 }: SessionsTabProps) {
   const router = useRouter();
 
-  const [panel, setPanel] = useState<"none" | "add" | "repeat">("none");
+  const [panel, setPanel] = useState<"none" | "add" | "repeat" | "edit">("none");
+  const [editTarget, setEditTarget] = useState<SessionRow | null>(null);
   const [fields, setFields] = useState<SessionFieldsValue>(EMPTY_SESSION_FIELDS);
   const [panelPending, setPanelPending] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
@@ -127,12 +129,21 @@ export function SessionsTab({
 
   function openPanel(next: "add" | "repeat") {
     setPanel(next);
+    setEditTarget(null);
     setFields(EMPTY_SESSION_FIELDS);
+    setPanelError(null);
+  }
+
+  function openEdit(session: SessionRow) {
+    setPanel("edit");
+    setEditTarget(session);
+    setFields(sessionFieldsFromRow(session));
     setPanelError(null);
   }
 
   function closePanel() {
     setPanel("none");
+    setEditTarget(null);
     setPanelError(null);
   }
 
@@ -140,13 +151,19 @@ export function SessionsTab({
     setPanelPending(true);
     setPanelError(null);
     const base = toSessionActionFields(cohortId, fields);
-    const result =
-      panel === "add"
-        ? await createSessionAction(base)
-        : await repeatWeeklyAction({
-            ...base,
-            occurrences: Number.parseInt(fields.occurrences, 10) || 0,
-          });
+    let result;
+    if (panel === "edit" && editTarget) {
+      const { cohortId: _cohortId, ...sessionFields } = base;
+      void _cohortId;
+      result = await updateSessionAction({ ...sessionFields, sessionId: editTarget.id });
+    } else if (panel === "add") {
+      result = await createSessionAction(base);
+    } else {
+      result = await repeatWeeklyAction({
+        ...base,
+        occurrences: Number.parseInt(fields.occurrences, 10) || 0,
+      });
+    }
     setPanelPending(false);
     if (result.ok) {
       closePanel();
@@ -234,6 +251,15 @@ export function SessionsTab({
             {canManage && (
               <button
                 type="button"
+                onClick={() => openEdit(s)}
+                className="text-sm font-semibold text-accent hover:underline"
+              >
+                Edit
+              </button>
+            )}
+            {canManage && (
+              <button
+                type="button"
                 onClick={() => {
                   setCancelTarget(s);
                   setCancelError(null);
@@ -287,7 +313,7 @@ export function SessionsTab({
         <div className="flex flex-col gap-4 border-t border-foreground pt-5">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold tracking-tight text-foreground">
-              {panel === "add" ? "Add session" : "Repeat weekly"}
+              {panel === "edit" ? `Edit ${editTarget?.title ?? "session"}` : panel === "add" ? "Add session" : "Repeat weekly"}
             </h3>
             <button
               type="button"
@@ -304,8 +330,15 @@ export function SessionsTab({
             </p>
           )}
 
+          {panel === "edit" && (
+            <p className="text-sm text-muted-foreground">
+              Enrolled learners are told when the title, time, location or meeting link changes.
+            </p>
+          )}
+
           <SessionFormFields
-            variant={panel === "add" ? "single" : "repeat"}
+            variant={panel === "repeat" ? "repeat" : "single"}
+            editing={panel === "edit"}
             value={fields}
             onChange={setFields}
             cohortTimezone={cohortTimezone}
@@ -317,9 +350,9 @@ export function SessionsTab({
               type="button"
               onClick={handleSubmitPanel}
               disabled={panelPending || !fields.title.trim() || !fields.date || !fields.startTime || !fields.endTime}
-              className={panel === "add" ? BTN_PRIMARY : BTN}
+              className={panel === "repeat" ? BTN : BTN_PRIMARY}
             >
-              {panelPending ? "Saving…" : panel === "add" ? "Add session" : "Repeat weekly"}
+              {panelPending ? "Saving…" : panel === "edit" ? "Save changes" : panel === "add" ? "Add session" : "Repeat weekly"}
             </button>
           </div>
         </div>
