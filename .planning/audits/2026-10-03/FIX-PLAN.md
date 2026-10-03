@@ -12,7 +12,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 ## Batch 1 — blockers for going live
 | Id | Finding | Status |
 |---|---|---|
-| A-14 | First production drain emails every historic DomainEvent | todo |
+| A-14 | First production drain emails every historic DomainEvent | done (migration `20261003120000`, real-Postgres test) |
 | R3-02 | Docker image has no `assets/`: certificate PDFs fail (font missing) | todo |
 | R3-01 | Fresh seed cannot sell: no `priceNgnMinor`/`priceUsdMinor` on the bookable cohorts; FCM seeded with end = start | todo |
 | A-03 | Seed never repairs pre-20-Sep assessments (pass mark 70 of 2; `application/pdf` file type) | todo |
