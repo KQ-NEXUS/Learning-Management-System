@@ -246,6 +246,8 @@ describe("ticket.reopened drain (D-07, A-04)", () => {
     expect(dispatches[0]!.userId).toBe(requesterId);
     expect(dispatches[0]!.templateParams).toEqual({ reference, ticketPath: `/support/${reference}` });
 
+    // The learner's own notification. With no owner and no ticket manager in this
+    // fixture, the staff alert (A-15) has nobody to tell.
     const notifications = await testDb.prisma.notification.findMany({});
     expect(notifications).toHaveLength(1);
     expect(notifications[0]!.type).toBe("ticket.reopened");
@@ -274,6 +276,13 @@ describe("ticket.reopened drain (D-07, A-04)", () => {
     expect(dispatch.userId).toBe(requesterId);
     expect(dispatch.userId).not.toBe(assignee.id);
     expect(reference).toBeTruthy();
+
+    // A-15: the owner is told in-product that the ticket came back, and is never mailed.
+    const staffAlerts = await testDb.prisma.notification.findMany({ where: { type: "staff.ticket_reopened" } });
+    expect(staffAlerts.map((n) => [n.recipientId, n.targetType, n.targetId])).toEqual([
+      [assignee.id, "STAFF_TICKET", reference],
+    ]);
+    expect(await testDb.prisma.emailDispatch.count({ where: { userId: assignee.id } })).toBe(0);
   });
 
   it("returns no rows when the ticket no longer exists (edge)", async () => {

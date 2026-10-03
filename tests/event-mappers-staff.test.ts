@@ -113,11 +113,15 @@ describe("createStaffMappers registration", () => {
 
 describe("ticket.reopened staff alert (A-15)", () => {
   const reopened = (id = "evt-reopen-1") =>
-    makeEvent("ticket.reopened", { ticketId: "t-9", reference: "KQT-9", ownerId: "stale-owner" }, id);
+    // No `reference` on the payload: the mapper must take it from the ticket row.
+    makeEvent("ticket.reopened", { ticketId: "t-9", ownerId: "stale-owner" }, id);
 
   it("tells the ticket's current owner, read from the ticket row rather than the payload, in-product only", async () => {
     const mapper = requireMapper("ticket.reopened");
-    const ctx = makeCtx({ ticket: async () => ({ assigneeId: "owner-now", userId: "learner-1" }), holderIds: ["holder-a"] });
+    const ctx = makeCtx({
+      ticket: async () => ({ assigneeId: "owner-now", userId: "learner-1", reference: "KQT-9" }),
+      holderIds: ["holder-a"],
+    });
 
     const intents = await mapper(reopened(), ctx);
 
@@ -137,7 +141,7 @@ describe("ticket.reopened staff alert (A-15)", () => {
   it("with no owner, tells every ticket manager except the learner who reopened it", async () => {
     const mapper = requireMapper("ticket.reopened");
     const ctx = makeCtx({
-      ticket: async () => ({ assigneeId: null, userId: "learner-1" }),
+      ticket: async () => ({ assigneeId: null, userId: "learner-1", reference: "KQT-9" }),
       holderIds: ["holder-a", "holder-b", "learner-1"],
     });
 

@@ -193,13 +193,17 @@ const ticketEscalatedStaffAlert: EventMapper = async (event, ctx) => {
  */
 const ticketReopenedStaffAlert: EventMapper = async (event, ctx) => {
   const ticketId = requireString(event.payload, "ticketId");
-  const reference = requireString(event.payload, "reference");
 
+  // The reference comes from the ticket row too, as in the support group's own
+  // `ticket.reopened` mapper: requiring it on the payload would make this
+  // mapper throw for an event that mapper accepts, and one throwing mapper
+  // fails the whole event, taking the learner's mail down with it.
   const ticket = await ctx.tx.ticket.findUnique({
     where: { id: ticketId },
-    select: { assigneeId: true, userId: true },
+    select: { assigneeId: true, userId: true, reference: true },
   });
   if (!ticket) return [];
+  const reference = ticket.reference;
 
   const recipients = ticket.assigneeId
     ? [ticket.assigneeId]
