@@ -50,7 +50,11 @@ export default async function LessonListPage({
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
-  const path = await loadLearnerPath(actor, enrolmentId);
+  // G-01: a COMPLETED enrolment is visible but not operable. It is loaded here
+  // so the learner can still see what they finished (and "My learning" has
+  // somewhere to link to); the rows below carry no lesson links, and the
+  // lesson page's `assertLessonOpenable` refuses its content regardless.
+  const path = await loadLearnerPath(actor, enrolmentId, { includeCompleted: true });
 
   if (!path) {
     // DD-22 — `loadLearnerPath` returns the identical `null` for
@@ -83,7 +87,8 @@ export default async function LessonListPage({
   const completedCount = requiredLessonIds.filter((id) => completedLessonIds.has(id)).length;
   const totalRequired = requiredLessonIds.length;
   const completionPct = totalRequired > 0 ? Math.round((completedCount / totalRequired) * 100) : 0;
-  const currentLessonId = findCurrentLessonId(path);
+  const courseCompleted = path.enrolment.status === "COMPLETED";
+  const currentLessonId = courseCompleted ? null : findCurrentLessonId(path);
 
   const heading =
     path.courses.length === 1 ? path.courses[0].courseTitle : path.enrolment.cohort.title;
@@ -145,6 +150,7 @@ export default async function LessonListPage({
                           number={`${mi + 1}.${li + 1}`}
                           href={`/learn/${enrolmentId}/lessons/${lesson.id}`}
                           isCurrent={lesson.id === currentLessonId}
+                          readOnly={courseCompleted}
                         />
                       ))}
                     </div>
@@ -156,6 +162,25 @@ export default async function LessonListPage({
         </div>
 
         <aside className="flex flex-col gap-10 lg:border-l lg:border-border lg:pl-10">
+          {courseCompleted && (
+            <section aria-label="Course completed">
+              <p className="text-[18px] font-semibold tracking-[-0.01em] text-foreground">
+                You&apos;ve completed this course
+              </p>
+              <p className="mt-1 mb-4 text-sm text-muted-foreground">
+                Lessons are closed now that the course is complete. Your progress, results and certificate stay on
+                record.
+              </p>
+              <Link
+                href="/dashboard"
+                className="inline-flex min-h-[46px] items-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              >
+                View your certificate
+                <ArrowRight aria-hidden className="size-4" />
+              </Link>
+            </section>
+          )}
+
           {current && (
             <section>
               <p className="text-sm text-muted-foreground">Next up</p>
@@ -173,16 +198,19 @@ export default async function LessonListPage({
             </section>
           )}
 
-          <section aria-label="Sessions">
-            <div className="pb-4">
-              <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">Sessions</h2>
-            </div>
-            <div className="border-t border-foreground pt-4">
-              <Link href={`/learn/${enrolmentId}/sessions`} className="font-semibold text-accent hover:underline">
-                View all sessions
-              </Link>
-            </div>
-          </section>
+          {/* The sessions page serves ACTIVE enrolments only (G-01), so a completed course offers no link to it. */}
+          {!courseCompleted && (
+            <section aria-label="Sessions">
+              <div className="pb-4">
+                <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">Sessions</h2>
+              </div>
+              <div className="border-t border-foreground pt-4">
+                <Link href={`/learn/${enrolmentId}/sessions`} className="font-semibold text-accent hover:underline">
+                  View all sessions
+                </Link>
+              </div>
+            </section>
+          )}
 
           <section aria-label="Results">
             <div className="pb-4">

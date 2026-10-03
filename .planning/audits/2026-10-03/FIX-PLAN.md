@@ -21,7 +21,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | Id | Finding | Status |
 |---|---|---|
 | A-04 | `/staff/users/new` and `/staff/roles/new` crash for roles without the permission | done (denied branch passes no function; static guard over every Server Component in `src/app`) |
-| R3-04 | Passing the final quiz lands on a 404; "Open" on a completed course 404s | todo |
+| R3-04 | Passing the final quiz lands on a 404; "Open" on a completed course 404s | done (completed course opens as a read-only record; lesson page shows a completed panel; lesson content stays closed per G-01) |
 | A-13 | 4 stale event-mapper tests | todo |
 
 ## Batch 3 — access control
