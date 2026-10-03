@@ -14,6 +14,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
+import { RESTRICTED_CONTROL_REASON_STAFF } from "@/server/licence/policy";
 
 const routerPush = vi.fn();
 const routerRefresh = vi.fn();
@@ -117,5 +119,27 @@ describe("LessonEditorClient withdraw modal — no stale error on reopen", () =>
 
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("LessonEditorClient header save in restricted continuity mode (14-19, D-09)", () => {
+  it("disables the external lesson-form submit with a visible, associated reason", () => {
+    render(
+      <LicenceRestrictionProvider value={{ restricted: true, canViewLicence: false, stateLabel: null }}>
+        <LessonEditorClient mode="edit" lessonId="lesson-1" courseId="course-1" initialType="TEXT" />
+      </LicenceRestrictionProvider>,
+    );
+    const save = screen.getByRole("button", { name: "Save lesson" }) as HTMLButtonElement;
+    expect(save.getAttribute("form")).toBe("lesson-form");
+    expect(save.disabled).toBe(true);
+    const reason = document.getElementById(save.getAttribute("aria-describedby")!)!;
+    expect(reason.textContent).toBe(RESTRICTED_CONTROL_REASON_STAFF);
+  });
+
+  it("leaves the header save enabled when the deployment is not restricted", () => {
+    render(<LessonEditorClient mode="edit" lessonId="lesson-1" courseId="course-1" initialType="TEXT" />);
+    const save = screen.getByRole("button", { name: "Save lesson" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    expect(save.hasAttribute("aria-describedby")).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
 import { CertificateQueueTable } from "@/app/staff/certificates/CertificateQueueTable";
 import type { PendingIssuanceRow } from "@/server/services/certificate-service";
 
@@ -128,5 +129,22 @@ describe("certificate pending-issuance queue", () => {
       ).toBeTruthy(),
     );
     expect(screen.getAllByText("Intro to Testing").length).toBeGreaterThan(0);
+  });
+});
+
+describe("certificate issue dialog in restricted continuity mode (14-19, D-07)", () => {
+  it("stays enabled and shows no restriction reason, because issuing is continuity work", () => {
+    render(
+      <LicenceRestrictionProvider value={{ restricted: true, canViewLicence: true, stateLabel: "Restricted continuity mode" }}>
+        <CertificateQueueTable rows={rows} onIssue={vi.fn(async () => ({ ok: true as const }))} />
+      </LicenceRestrictionProvider>,
+    );
+    fireEvent.click(screen.getAllByText("Issue certificate")[0]);
+    const dialog = screen.getByRole("dialog");
+    const confirm = within(dialog).getByRole("button", { name: "Issue certificate" }) as HTMLButtonElement;
+
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.hasAttribute("aria-describedby")).toBe(false);
+    expect(within(dialog).queryByText(/Unavailable in restricted continuity mode/)).toBeNull();
   });
 });

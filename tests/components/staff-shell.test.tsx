@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { StaffShell } from "@/app/staff/StaffShell";
+import { useLicenceRestriction } from "@/components/licence/LicenceRestrictionProvider";
 
 const route = vi.hoisted(() => ({ pathname: "/staff/courses" }));
 vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
@@ -116,6 +117,59 @@ describe("StaffShell bell slot", () => {
       </StaffShell>,
     );
     expect(screen.getByRole("button", { name: "Notifications" })).toBeTruthy();
+  });
+});
+
+describe("StaffShell licence banner slot and restriction context (14-19, D-15, D-09)", () => {
+  it("renders the banner between the header and main, in that DOM order", () => {
+    const { container } = render(
+      <StaffShell nav={nav} identity={null} signOut={<button>Sign out</button>} banner={<div role="status" id="licence-restriction-notice">Banner</div>}>
+        <button>Page action</button>
+      </StaffShell>,
+    );
+    const column = screen.getByRole("main").parentElement!;
+    const tags = Array.from(column.children).map((child) => child.tagName.toLowerCase());
+    expect(tags).toEqual(["header", "div", "main"]);
+    expect(column.children[1]).toBe(container.querySelector("#licence-restriction-notice"));
+  });
+
+  it("renders nothing extra between the header and main when no banner is supplied", () => {
+    render(<Shell />);
+    const column = screen.getByRole("main").parentElement!;
+    expect(Array.from(column.children).map((child) => child.tagName.toLowerCase())).toEqual(["header", "main"]);
+  });
+
+  it("provides the supplied restriction value to its children, and the unrestricted default otherwise", () => {
+    function Probe() {
+      return <output data-testid="restriction">{JSON.stringify(useLicenceRestriction())}</output>;
+    }
+    const { unmount } = render(
+      <StaffShell
+        nav={nav}
+        identity={null}
+        signOut={<button>Sign out</button>}
+        licenceRestriction={{ restricted: true, canViewLicence: true, stateLabel: "Restricted continuity mode" }}
+      >
+        <Probe />
+      </StaffShell>,
+    );
+    expect(JSON.parse(screen.getByTestId("restriction").textContent!)).toEqual({
+      restricted: true,
+      canViewLicence: true,
+      stateLabel: "Restricted continuity mode",
+    });
+    unmount();
+
+    render(
+      <StaffShell nav={nav} identity={null} signOut={<button>Sign out</button>}>
+        <Probe />
+      </StaffShell>,
+    );
+    expect(JSON.parse(screen.getByTestId("restriction").textContent!)).toEqual({
+      restricted: false,
+      canViewLicence: false,
+      stateLabel: null,
+    });
   });
 });
 

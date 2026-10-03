@@ -242,6 +242,13 @@ export function createStaffEmailLogResolver(can: PermissionCheck): NotificationA
   return async () => can("audit.view", {});
 }
 
+/** STAFF_LICENCE: `can("licence.view", {})`, the Global-scope check the licence
+ * screen itself performs (D-15, T-14-08-03). A denial is the same unavailable
+ * outcome as a missing or foreign notification. */
+export function createStaffLicenceResolver(can: PermissionCheck): NotificationAccessResolver {
+  return async () => can("licence.view", {});
+}
+
 export const notificationAccessService = createNotificationAccessService({
   db: prisma as unknown as NotificationAccessStore,
   notificationService: liveNotificationService,
@@ -256,5 +263,6 @@ export const notificationAccessService = createNotificationAccessService({
     STAFF_PAYMENT: createStaffPaymentResolver(getPaymentDetailForStaff),
     STAFF_SUBMISSION: createStaffSubmissionResolver(getGradingDetail),
     STAFF_EMAIL_LOG: createStaffEmailLogResolver(liveCan),
+    STAFF_LICENCE: createStaffLicenceResolver(liveCan),
   },
 });

@@ -114,7 +114,13 @@ export type DomainEventType =
   // drain. Payloads carry ids, provider and amounts only: never a provider
   // failure reason or a staff refund reason.
   | "payment.failed"
-  | "payment.refunded";
+  | "payment.refunded"
+  // Phase 14 (LIC-07, D-15) — a licence notice for Global licence.view
+  // holders. The payload carries only the licence ID, the notice key, the
+  // state and preformatted display labels, never signing, key or contract
+  // detail. Its id is deterministic (written through writeDomainEventOnce) so
+  // a repeat of the same notice is a no-op rather than a second event.
+  | "licence.notice";
 
 /**
  * Structural — exactly the one call this module makes. A Prisma transaction
@@ -161,4 +167,34 @@ export async function writeDomainEvent(
   event: DomainEventInput,
 ): Promise<void> {
   await tx.domainEvent.create({ data: buildDomainEventRow(event) });
+}
+
+/**
+ * Structural — the one call `writeDomainEventOnce` makes. `skipDuplicates`
+ * turns a duplicate id into `ON CONFLICT DO NOTHING`, so it never raises a
+ * unique violation that would abort the surrounding Postgres transaction.
+ */
+export type DomainEventCreateManyClient = {
+  domainEvent: {
+    createMany(args: {
+      data: Array<Record<string, unknown>>;
+      skipDuplicates: true;
+    }): Promise<{ count: number }>;
+  };
+};
+
+/**
+ * Appends one outbox row under a caller-supplied deterministic id, at most
+ * once (LIC-07 dedupe). Returns true when a row was created and false when the
+ * id already existed. Redaction is identical to `writeDomainEvent`.
+ */
+export async function writeDomainEventOnce(
+  client: DomainEventCreateManyClient,
+  event: DomainEventInput & { id: string },
+): Promise<boolean> {
+  const result = await client.domainEvent.createMany({
+    data: [{ id: event.id, ...buildDomainEventRow(event) }],
+    skipDuplicates: true,
+  });
+  return result.count > 0;
 }

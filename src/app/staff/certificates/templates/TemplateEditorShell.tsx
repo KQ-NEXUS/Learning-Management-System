@@ -438,6 +438,7 @@ export function TemplateEditorShell({
 
       <ConfirmModal
         open={pendingHref !== null}
+        licenceEffect="continuity"
         tone="default"
         title="Leave without saving?"
         description="You have unsaved changes to this template. Leave without saving?"

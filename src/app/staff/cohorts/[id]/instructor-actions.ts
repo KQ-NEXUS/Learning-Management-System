@@ -18,7 +18,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import {
   assignCohortInstructor,
   removeCohortInstructor,
@@ -39,7 +39,7 @@ function toFailure(error: unknown): Extract<InstructorActionResult, { ok: false 
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
       ok: false,
-      message: "Your role does not permit managing instructors for this cohort.",
+      message: refusalMessage(error, "Your role does not permit managing instructors for this cohort."),
     };
   }
   throw error;

@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import * as permissions from "@/server/permissions";
+import { LICENCE_REFUSAL_MESSAGE } from "@/server/licence/policy";
 import { removeLessonResource } from "@/server/services/lesson-resource-service";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -20,6 +21,11 @@ export async function DELETE(_request: Request, context: RouteContext): Promise<
     await removeLessonResource(id);
     return new NextResponse(null, { status: 204 });
   } catch (err) {
+    // Licence refusal (LIC-05): the caller already passed authorization, so this
+    // reveals state only to them. Every genuine denial keeps the identical 404.
+    if (permissions.isLicenceRestricted(err)) {
+      return NextResponse.json({ error: LICENCE_REFUSAL_MESSAGE }, { status: 403 });
+    }
     if (
       err instanceof permissions.AuthenticationError ||
       err instanceof permissions.AuthorizationError

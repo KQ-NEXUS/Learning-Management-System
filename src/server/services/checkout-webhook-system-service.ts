@@ -84,6 +84,11 @@ import {
 } from "@/server/services/seat-accounting";
 import { calculatePlatformFeeMinor } from "@/server/payments/pricing";
 import { isManualPaymentConfirmationBlocked, isSettledOrderStatus } from "@/server/payments/order-status";
+// D-08 (Phase 14): the only licence imports this module may take. Both are on
+// the actorless runtime closure rule: `licence-service` reaches no `next/*`,
+// permission layer or request actor, and `constants` is pure.
+import { SKEW_TOLERANCE_MS } from "@/server/licence/constants";
+import { licenceService } from "./licence-service";
 
 export const SYSTEM_ACTOR_TYPE = "SYSTEM";
 
@@ -327,12 +332,16 @@ type OrderRow = {
   amountMinor: number;
   currency: string;
   baseAmountMinor?: number | null;
+  /** D-08 anchor for a manual confirmation (optional so older fakes type-check). */
+  createdAt?: Date | null;
   enrolments: EnrolmentRow[];
 };
 
 type PaymentAttemptRow = {
   id: string;
   status: string;
+  /** D-08 anchor for a webhook settlement (optional so older fakes type-check). */
+  initiatedAt?: Date | null;
   provider?: string;
   confirmedAt?: Date | null;
   providerRef?: string | null;
@@ -408,7 +417,31 @@ export type SettlementDeps = {
   syncOrderReconciliationEvidence?: typeof syncOrderReconciliationEvidenceAsSystem;
   correlateReconciliationEvidence?: typeof correlateReconciliationEvidenceAsSystem;
   now?: () => Date;
+  /**
+   * D-08 (Phase 14): reads the restriction cutoff for the initiated-before
+   * rule in `activateOrderAsSystem` ONLY. Optional; absent means the rule is
+   * not applied. `licenceService` satisfies it and fails open on a read error.
+   * Never consulted by the failure, session-expiry or webhook-event paths.
+   */
+  licence?: {
+    getRestrictionCutoff(): Promise<{
+      restricted: boolean;
+      restrictedAt: Date | null;
+    }>;
+  };
 };
+
+/**
+ * D-08: thrown inside the activation try block when a payment was initiated
+ * after the restriction cutoff plus the skew tolerance. Module-private: it is
+ * always caught by the money-recording branch of `activateOrderAsSystem`.
+ */
+class PaymentAfterRestrictionError extends Error {
+  constructor() {
+    super("Payment was initiated after the restriction cutoff.");
+    this.name = "PaymentAfterRestrictionError";
+  }
+}
 
 /** @deprecated kept as an alias — `activateOrderAsSystem`'s original exported deps type name. */
 export type ActivateOrderAsSystemDeps = SettlementDeps;
@@ -531,6 +564,14 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
    *     event id) and cannot legally move to SUCCEEDED again. The attempt is
    *     left exactly as it is; only a note and an outbox row record that the
    *     echo arrived.
+   *   - `EXCEPTION` (payment after restriction, Phase 14 D-08) — the deployment
+   *     is in restricted continuity mode and the payment was initiated after
+   *     the restriction instant plus the 10-minute skew tolerance (the attempt's
+   *     `initiatedAt`; for a manual confirmation, the Order's `createdAt`). The
+   *     money is recorded exactly as in the illegal-transition branch (attempt
+   *     SUCCEEDED, Order EXCEPTION, no enrolment or seat change) with the coded
+   *     reason `payment_after_restriction` and a CAPTURED_MONEY reconciliation
+   *     case; refunds stay allowed so staff can resolve it.
    * Every branch returns normally (never throws) so the webhook route always
    * has something to acknowledge with 200 — retrying will not change any of
    * these outcomes.
@@ -539,6 +580,26 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
     input: ActivateOrderAsSystemInput,
   ): Promise<ActivateOrderAsSystemResult> {
     const at = now();
+
+    // D-08: read the restriction cutoff once, before the transaction opens, so
+    // no licence query runs while the Order row is locked. A failed read is
+    // treated as "not restricted" (a transient licence read failure must never
+    // turn a paid order into an exception).
+    let cutoff: { restricted: boolean; restrictedAt: Date | null } = {
+      restricted: false,
+      restrictedAt: null,
+    };
+    if (deps.licence) {
+      try {
+        cutoff = await deps.licence.getRestrictionCutoff();
+      } catch (error) {
+        console.error(
+          "[checkout-webhook] restriction cutoff read failed; treating as not restricted",
+          error instanceof Error ? error.name : "unknown",
+        );
+        cutoff = { restricted: false, restrictedAt: null };
+      }
+    }
 
     const result = await deps.db.$transaction(
       async (tx) => {
@@ -556,6 +617,7 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
             amountMinor: true,
             currency: true,
             baseAmountMinor: true,
+            createdAt: true,
             enrolments: true,
           },
         });
@@ -728,7 +790,7 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
             orderId: order.id,
             providerIntentId: input.providerIntentId,
           },
-          select: { id: true, status: true },
+          select: { id: true, status: true, initiatedAt: true },
         });
 
         if (!attempt) {
@@ -800,6 +862,25 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
           if (!enrolment)
             throw new IllegalTransitionError("NONE", "ACTIVE", null);
 
+          // D-08 (Phase 14): a payment initiated before the restriction instant
+          // (plus the skew tolerance, so a guard check at T-e whose attempt row
+          // lands at T+e is not mis-flagged) completes and is delivered; a
+          // later one records the money and becomes a visible exception. A
+          // manual confirmation creates its PaymentAttempt inside this very
+          // transaction, so its anchor is the Order's creation instant (OQ4/A13).
+          if (cutoff.restricted && cutoff.restrictedAt) {
+            const anchor = input.manualConfirmation
+              ? order.createdAt
+              : attempt.initiatedAt;
+            if (
+              anchor &&
+              anchor.getTime() >
+                cutoff.restrictedAt.getTime() + SKEW_TOLERANCE_MS
+            ) {
+              throw new PaymentAfterRestrictionError();
+            }
+          }
+
           await lockOpenCohort(tx, enrolment.cohortId);
           const activeConflict = await tx.enrolment.findFirst({
             where: {
@@ -867,6 +948,42 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
             reason: "activated" as const,
           };
         } catch (err) {
+          if (err instanceof PaymentAfterRestrictionError) {
+            // D-08 safety net: the money is real, so the attempt is recorded
+            // SUCCEEDED (never lost); the Order is flagged EXCEPTION unless
+            // already settled (F-16); the Enrolment and every seat count are
+            // left untouched; refunds stay allowed so staff can resolve it.
+            const alreadySettled = isSettledOrderStatus(order.status);
+            await tx.paymentAttempt.update({
+              where: { id: attempt.id },
+              data: {
+                status: "SUCCEEDED",
+                confirmedAt: at,
+                providerRef: input.providerRef ?? input.providerIntentId,
+                evidence,
+                exceptionNote: `${input.provider} payment confirmed after enrolment activation was unavailable; money captured, needs reconciliation.`,
+              },
+            });
+            if (!alreadySettled) {
+              await tx.order.update({
+                where: { id: order.id },
+                data: { status: "EXCEPTION" },
+              });
+            }
+            await writeDomainEvent(tx, {
+              type: "order.exception",
+              payload: {
+                orderId: order.id,
+                providerIntentId: input.providerIntentId,
+                reason: "payment_after_restriction",
+              },
+            });
+            return {
+              outcome: "EXCEPTION" as const,
+              enrolmentId: enrolment?.id ?? null,
+              reason: "payment_after_restriction" as const,
+            };
+          }
           if (
             err instanceof IllegalTransitionError ||
             err instanceof AlreadyEnrolledError
@@ -982,7 +1099,9 @@ export function createActivateOrderAsSystem(deps: SettlementDeps) {
       await deps.syncOrderReconciliationEvidence({
         orderId: input.orderId,
         risk:
-          result.reason === "duplicate_active_enrolment" || result.reason === "illegal_enrolment_transition"
+          result.reason === "duplicate_active_enrolment" ||
+          result.reason === "illegal_enrolment_transition" ||
+          result.reason === "payment_after_restriction"
             ? "CAPTURED_MONEY"
             : result.reason === "amount_mismatch"
               ? "SETTLEMENT_VARIANCE"
@@ -1319,6 +1438,7 @@ const settlementDeps: SettlementDeps = {
   audit: (event) => recordAudit(event),
   syncOrderReconciliationEvidence: syncOrderReconciliationEvidenceAsSystem,
   correlateReconciliationEvidence: correlateReconciliationEvidenceAsSystem,
+  licence: licenceService,
 };
 
 const built = {

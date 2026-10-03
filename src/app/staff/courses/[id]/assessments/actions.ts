@@ -27,7 +27,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { FieldError } from "@/components/primitives";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import {
   assessmentService,
@@ -243,8 +243,10 @@ function toFailure(error: unknown): SaveAssessmentState {
     return {
       ok: false,
       errors: [],
-      message:
+      message: refusalMessage(
+        error,
         "This assessment could not be saved. It may have moved, or your role no longer permits editing it.",
+      ),
     };
   }
   throw error;
@@ -369,7 +371,7 @@ export async function archiveAssessmentAction(
     await assessmentService.archive(parsed.data.assessmentId, parsed.data.reason);
   } catch (error) {
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-      return { ok: false, message: "This assessment could not be archived." };
+      return { ok: false, message: refusalMessage(error, "This assessment could not be archived.") };
     }
     throw error;
   }
@@ -408,7 +410,7 @@ export async function publishAssessmentAction(
       return { ok: false, items: error.failures, message: error.message };
     }
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-      return { ok: false, items: [], message: "This assessment could not be published." };
+      return { ok: false, items: [], message: refusalMessage(error, "This assessment could not be published.") };
     }
     throw error;
   }

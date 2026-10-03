@@ -22,7 +22,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { RunningCohortError, type BlockingCohort } from "@/server/services/catalogue-guards";
 import type { ReadinessItem } from "@/server/services/readiness-service";
@@ -101,7 +101,7 @@ function toFailure(error: unknown): CommonFailure {
     return {
       ok: false,
       reason: "DENIED",
-      message: "Your role does not permit this action on this course.",
+      message: refusalMessage(error, "Your role does not permit this action on this course."),
     };
   }
   throw error;

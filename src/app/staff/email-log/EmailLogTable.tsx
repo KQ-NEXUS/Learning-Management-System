@@ -240,6 +240,7 @@ export function EmailLogTable({
       )}
       <ConfirmModal
         open={target !== null}
+        licenceEffect="continuity"
         eyebrow="Audited action"
         tone="default"
         title="Resend this email?"

@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import * as permissions from "@/server/permissions";
+import { LICENCE_REFUSAL_MESSAGE } from "@/server/licence/policy";
 import { listLessonResources } from "@/server/services/lesson-resource-service";
 import { toLessonResourceView } from "@/server/presenters/lesson-resource-view";
 
@@ -21,6 +22,11 @@ export async function GET(request: Request): Promise<Response> {
       { headers: { "cache-control": "private, no-store" } },
     );
   } catch (error) {
+    // Licence refusal (LIC-05): the caller already passed authorization, so this
+    // reveals state only to them. Every genuine denial keeps the identical 404.
+    if (permissions.isLicenceRestricted(error)) {
+      return NextResponse.json({ error: LICENCE_REFUSAL_MESSAGE }, { status: 403 });
+    }
     if (
       error instanceof permissions.AuthenticationError ||
       error instanceof permissions.AuthorizationError

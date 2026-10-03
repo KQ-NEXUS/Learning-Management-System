@@ -162,14 +162,14 @@ Requirements for the complete PRD/PXR scope through launch readiness. Each maps 
 
 <!-- v1 scope per PRD §18.3 (all MUST), but implementation is contingent on commercial-terms approval per docs/TRACK-A-TASKS.md ("gated on commercial terms nobody has approved, §18.6"). See ROADMAP.md Phase 14 note and PROJECT.md Key Decisions. -->
 
-- [ ] **LIC-01**: The LMS verifies a provider-signed licence with a public verification key and rejects altered, expired, wrong-client, wrong-deployment, or otherwise invalid licences.
-- [ ] **LIC-02**: An Administration > Licence & System Status screen is provided for users with `licence.view`, showing state, licence ID, registered client, relevant dates, validation result, renewal/support route — no signing secrets exposed.
-- [ ] **LIC-03**: Only a tightly restricted `licence.activate` permission may activate a provider-issued licence; the UI never offers licence creation, date extension, plan editing, signature replacement, or self-authorized reactivation.
-- [ ] **LIC-04**: Licence checks run at startup, on an approved scheduled cadence, and before high-impact mutations; temporary validation unavailability uses a bounded, approved offline-validation policy and warns Administrators.
-- [ ] **LIC-05**: When the approved expiry/grace threshold is reached, the LMS enforces the configured restricted/read-only state server-side and in the UI; direct requests cannot bypass restrictions.
-- [ ] **LIC-06**: Licence activation, validation outcome, state transition, restriction enforcement, and authorized data export are audited with actor/system actor, time, target licence, outcome, correlation, safe context.
-- [ ] **LIC-07**: Authorized Administrators are notified of renewal-warning, grace, expiry, invalid, and validation-attention states through the transactional/in-product notification model; messages are deduplicated.
-- [ ] **LIC-08**: Read-only restrictions preserve records and the permitted export/data-access route; expiry never deletes client data or silently makes it unavailable beyond agreed restrictions.
+- [x] **LIC-01**: The LMS verifies a provider-signed licence with a public verification key and rejects altered, expired, wrong-client, wrong-deployment, or otherwise invalid licences.
+- [x] **LIC-02**: An Administration > Licence & System Status screen is provided for users with `licence.view`, showing state, licence ID, registered client, relevant dates, validation result, renewal/support route — no signing secrets exposed.
+- [x] **LIC-03**: Only a tightly restricted `licence.activate` permission may activate a provider-issued licence; the UI never offers licence creation, date extension, plan editing, signature replacement, or self-authorized reactivation.
+- [x] **LIC-04**: Licence checks run at startup, on an approved scheduled cadence, and before high-impact mutations; temporary validation unavailability uses a bounded, approved offline-validation policy and warns Administrators.
+- [x] **LIC-05**: When the approved expiry/grace threshold is reached, the LMS enforces restricted continuity mode server-side and in the UI; direct requests cannot bypass restrictions.
+- [x] **LIC-06**: Licence activation, validation outcome, state transition, restriction enforcement, and authorized data export are audited with actor/system actor, time, target licence, outcome, correlation, safe context.
+- [x] **LIC-07**: Authorized Administrators are notified of renewal-warning, grace, expiry, invalid, and validation-attention states through the transactional/in-product notification model; messages are deduplicated.
+- [x] **LIC-08**: Restricted continuity mode preserves records and the permitted export/data-access route; expiry never deletes client data or silently makes it unavailable beyond agreed restrictions.
 
 ## v2 Requirements
 
@@ -282,14 +282,14 @@ None yet. This milestone's roadmap spans the complete PRD Revision 3 / PXR Revis
 | COM-02 | Phase 13 | Complete |
 | COM-03 | Phase 13 | Complete |
 | COM-04 | Phase 13 | Complete |
-| LIC-01 | Phase 14 | Pending |
-| LIC-02 | Phase 14 | Pending |
-| LIC-03 | Phase 14 | Pending |
-| LIC-04 | Phase 14 | Pending |
-| LIC-05 | Phase 14 | Pending |
-| LIC-06 | Phase 14 | Pending |
-| LIC-07 | Phase 14 | Pending |
-| LIC-08 | Phase 14 | Pending |
+| LIC-01 | Phase 14 | Complete |
+| LIC-02 | Phase 14 | Complete |
+| LIC-03 | Phase 14 | Complete |
+| LIC-04 | Phase 14 | Complete |
+| LIC-05 | Phase 14 | Complete |
+| LIC-06 | Phase 14 | Complete |
+| LIC-07 | Phase 14 | Complete |
+| LIC-08 | Phase 14 | Complete |
 | NFR-01 | Phase 15 | Pending |
 | NFR-02 | Phase 15 | Pending |
 | NFR-03 | Phase 15 | Pending |

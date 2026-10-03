@@ -33,7 +33,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { cohortService, updateCohort, OfferLockedError } from "@/server/services/cohort-service";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { isValidTimeZone } from "@/lib/timezone";
@@ -227,7 +227,7 @@ function toFailure(error: unknown): Extract<CohortActionResult, { ok: false }> {
     return {
       ok: false,
       errors: [],
-      message: "Your role does not permit creating or editing cohorts.",
+      message: refusalMessage(error, "Your role does not permit creating or editing cohorts."),
     };
   }
   throw error;

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 17
+open_count: 26
 waived_count: 0
 fixed_count: 2
-total_count: 19
-last_updated: 2026-09-28T21:03:33.229Z
+total_count: 28
+last_updated: 2026-10-02T03:15:25.826Z
 ---
 
 # Broken Windows Ledger
@@ -34,6 +34,15 @@ last_updated: 2026-09-28T21:03:33.229Z
 | 17 | 13 | lint-warning | tests/refund-service.test.ts | 258 | Pre-existing unused '_reason' from a destructure-to-omit pattern in an unrelated field-validation test (13-08 found, not introduced by this plan's Task 3 edit; out of scope per scope-boundary rule) | open |  | 2026-09-27T23:36:54.003Z |  |
 | 18 | 13 | deviation | tests/event-mappers-support.test.ts |  | Pre-existing stale ticket.created mapper-count assertion (expects 1, actual/correct is 2 since Plan 11 added the staff alert mapper) — from Plan 10, never fixed; out of 13-13's file scope. See deferred-items.md item 1. | open |  | 2026-09-28T21:03:32.010Z |  |
 | 19 | 13 | deviation | tests/event-intent-mappers.test.ts |  | Pre-existing stale payment.failed empty-mapper assertion (Plan 08 registered a real mapper for it) — from before Plan 08, never fixed; out of 13-13's file scope. See deferred-items.md item 1. | open |  | 2026-09-28T21:03:33.229Z |  |
+| 20 | 14 | unrun-verify | .planning/phases/14-software-licence-deployment-control/14-03-PLAN.md |  | 14-03 Task 2 not run: migrate deploy, db push, migrate status against the development/shared database (remote Neon; owner decision). Run by a human; Testcontainers proof and empty migrate diff stand in. | open |  | 2026-10-01T21:03:23.541Z |  |
+| 21 | 14 | unrun-verify | src/app/staff/licence/LicenceStatusView.tsx |  | 14-10 Task 3 human check not run (no browser): 200-char client name and 120-char renewal email wrap at 1280px/320px/200% zoom, rail stacks below 1024px, focus order and ring, state not by colour alone, denied panel and no Licence nav item for a non-holder | open |  | 2026-10-01T22:39:56.727Z |  |
+| 22 | 14 | unrun-verify | src/app/staff/licence/ActivateLicenceForm.tsx |  | 14-15 Task 2 human check not run (no browser): preview appears with no echoed file text; edited-character file shows BAD_SIGNATURE with Nothing was changed.; activation updates banner, pill and lists without reload; 120-character file name truncates with an ellipsis and does not widen the 400px rail; keyboard-only flow, focus enters dialog and returns to Activate licence on cancel | open |  | 2026-10-01T23:46:27.360Z |  |
+| 23 | 14 | unrun-verify | src/components/licence/LicenceBanner.tsx |  | 14-19 Task 1 human check not run (no browser): banner strip sits between navy header and white sheet with state label and icon in tone colour; wraps at 320px and 200% zoom with link on its own line; no banner for staff without licence.view; focus ring visible on the banner link | open |  | 2026-10-02T01:34:15.133Z |  |
+| 24 | 14 | unrun-verify | src/components/primitives/ConfirmModal.tsx |  | 14-19 Task 3 human check not run (no browser, no restricted deployment): cohort Cancel, Add enrolment and publish disabled with Lock reason line; refund, manual payment, grade entry, attendance and both unsaved-changes guards still work; deactivate works and reactivate disabled with reason; non-licence.view staff see the ask-an-administrator reason | open |  | 2026-10-02T01:34:16.914Z |  |
+| 25 | 14 | deviation | src/app/staff/licence/ActivateLicenceForm.tsx |  | 14-19: plan classified 11 continuity files but omitted the licence activation ConfirmModal (default write would disable the recovery action in restricted state); marked licenceEffect continuity and added to CONTINUITY_MODAL_FILES. ManualPaymentDialog and RefundDialog are bespoke dialogs without ConfirmModal so cannot carry the attribute and are never disabled | open |  | 2026-10-02T01:34:19.175Z |  |
+| 26 | 14 | unrun-verify | docs/reference/Professional-Training-LMS-PRD-Revision-3-Multi-Gateway-Payments.docx |  | 14-20: owner must regenerate the .docx twins of the PRD and PXR from the amended .md files (OQ7) and align the commercial contract wording with restricted continuity mode; the PRD and PXR .md edits are local-only (docs/reference is gitignored), see 14-PRD-AMENDMENT.md | open |  | 2026-10-02T02:29:40.534Z |  |
+| 27 | 14 | deviation | tests/licence-wording.test.ts |  | 14-20: banned-wording pattern requires a hyphen or space separator and word boundaries (plan's optional separator matches the TypeScript readonly keyword); three prior-plan wording defects fixed (types.ts comment, four test files, 13 registry reason literals reworded so policy.ts is the only phrase literal) | open |  | 2026-10-02T02:29:47.103Z |  |
+| 28 | 14 | deviation | tests/licence-restricted.integration.test.ts |  | 14-21: no-deletion scan exempts a delete call on a same-file new Map/Set receiver (licence-service.ts:647 enforcementAudited.delete is the in-memory coalescing map); the plan's literal zero-count could not hold on correct code | open |  | 2026-10-02T03:15:25.826Z |  |
 
 ````json
 [
@@ -263,6 +272,114 @@ last_updated: 2026-09-28T21:03:33.229Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-28T21:03:33.229Z",
+    "resolved_at": null
+  },
+  {
+    "id": 20,
+    "kind": "unrun-verify",
+    "phase": "14",
+    "file": ".planning/phases/14-software-licence-deployment-control/14-03-PLAN.md",
+    "line": null,
+    "description": "14-03 Task 2 not run: migrate deploy, db push, migrate status against the development/shared database (remote Neon; owner decision). Run by a human; Testcontainers proof and empty migrate diff stand in.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-01T21:03:23.541Z",
+    "resolved_at": null
+  },
+  {
+    "id": 21,
+    "kind": "unrun-verify",
+    "phase": "14",
+    "file": "src/app/staff/licence/LicenceStatusView.tsx",
+    "line": null,
+    "description": "14-10 Task 3 human check not run (no browser): 200-char client name and 120-char renewal email wrap at 1280px/320px/200% zoom, rail stacks below 1024px, focus order and ring, state not by colour alone, denied panel and no Licence nav item for a non-holder",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-01T22:39:56.727Z",
+    "resolved_at": null
+  },
+  {
+    "id": 22,
+    "kind": "unrun-verify",
+    "phase": "14",
+    "file": "src/app/staff/licence/ActivateLicenceForm.tsx",
+    "line": null,
+    "description": "14-15 Task 2 human check not run (no browser): preview appears with no echoed file text; edited-character file shows BAD_SIGNATURE with Nothing was changed.; activation updates banner, pill and lists without reload; 120-character file name truncates with an ellipsis and does not widen the 400px rail; keyboard-only flow, focus enters dialog and returns to Activate licence on cancel",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-01T23:46:27.360Z",
+    "resolved_at": null
+  },
+  {
+    "id": 23,
+    "kind": "unrun-verify",
+    "phase": "14",
+    "file": "src/components/licence/LicenceBanner.tsx",
+    "line": null,
+    "description": "14-19 Task 1 human check not run (no browser): banner strip sits between navy header and white sheet with state label and icon in tone colour; wraps at 320px and 200% zoom with link on its own line; no banner for staff without licence.view; focus ring visible on the banner link",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-02T01:34:15.133Z",
+    "resolved_at": null
+  },
+  {
+    "id": 24,
+    "kind": "unrun-verify",
+    "phase": "14",
+    "file": "src/components/primitives/ConfirmModal.tsx",
+    "line": null,
+    "description": "14-19 Task 3 human check not run (no browser, no restricted deployment): cohort Cancel, Add enrolment and publish disabled with Lock reason line; refund, manual payment, grade entry, attendance and both unsaved-changes guards still work; deactivate works and reactivate disabled with reason; non-licence.view staff see the ask-an-administrator reason",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-02T01:34:16.914Z",
+    "resolved_at": null
+  },
+  {
+    "id": 25,
+    "kind": "deviation",
+    "phase": "14",
+    "file": "src/app/staff/licence/ActivateLicenceForm.tsx",
+    "line": null,
+    "description": "14-19: plan classified 11 continuity files but omitted the licence activation ConfirmModal (default write would disable the recovery action in restricted state); marked licenceEffect continuity and added to CONTINUITY_MODAL_FILES. ManualPaymentDialog and RefundDialog are bespoke dialogs without ConfirmModal so cannot carry the attribute and are never disabled",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-02T01:34:19.175Z",
+    "resolved_at": null
+  },
+  {
+    "id": 26,
+    "kind": "unrun-verify",
+    "phase": "14",
+    "file": "docs/reference/Professional-Training-LMS-PRD-Revision-3-Multi-Gateway-Payments.docx",
+    "line": null,
+    "description": "14-20: owner must regenerate the .docx twins of the PRD and PXR from the amended .md files (OQ7) and align the commercial contract wording with restricted continuity mode; the PRD and PXR .md edits are local-only (docs/reference is gitignored), see 14-PRD-AMENDMENT.md",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-02T02:29:40.534Z",
+    "resolved_at": null
+  },
+  {
+    "id": 27,
+    "kind": "deviation",
+    "phase": "14",
+    "file": "tests/licence-wording.test.ts",
+    "line": null,
+    "description": "14-20: banned-wording pattern requires a hyphen or space separator and word boundaries (plan's optional separator matches the TypeScript readonly keyword); three prior-plan wording defects fixed (types.ts comment, four test files, 13 registry reason literals reworded so policy.ts is the only phrase literal)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-02T02:29:47.103Z",
+    "resolved_at": null
+  },
+  {
+    "id": 28,
+    "kind": "deviation",
+    "phase": "14",
+    "file": "tests/licence-restricted.integration.test.ts",
+    "line": null,
+    "description": "14-21: no-deletion scan exempts a delete call on a same-file new Map/Set receiver (licence-service.ts:647 enforcementAudited.delete is the in-memory coalescing map); the plan's literal zero-count could not hold on correct code",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-02T03:15:25.826Z",
     "resolved_at": null
   }
 ]

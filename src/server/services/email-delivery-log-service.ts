@@ -148,6 +148,7 @@ export function createEmailDeliveryLogService(deps: {
   const resendInternal = authorize<{ dispatchId: string; reason: string }>(
     "users.manage",
     () => ({}),
+    { licence: "continuity", reason: "Transactional email resend stays available (D-07)" },
   )(async ({ dispatchId, reason }, ctx) => {
     const trimmed = reason.trim();
     // A reason shorter than the minimum is refused with the exact same

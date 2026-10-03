@@ -79,8 +79,9 @@ export const PERMISSIONS = Object.freeze([
   "audit.view",
   "audit.export",
 
-  // Licence — PRD §18.4. The licence module is deferred, but PXR §11.5
-  // lists these as catalogue additions and an unused identifier is free.
+  // Licence (Phase 14): licence.view shows the Licence and System Status
+  // screen and licence.activate activates a provider-issued licence; both are
+  // Global only (PRD 18.4).
   "licence.view",
   "licence.activate",
 ] as const);

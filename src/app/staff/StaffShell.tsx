@@ -8,6 +8,7 @@ import {
   BookOpen,
   ChevronRight,
   CreditCard,
+  KeyRound,
   Layers,
   LayoutGrid,
   ListChecks,
@@ -20,6 +21,11 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/shell/BrandMark";
 import { MAIN_CONTENT_ID, SkipLink } from "@/components/shell/SkipLink";
+import {
+  LicenceRestrictionProvider,
+  UNRESTRICTED_LICENCE_RESTRICTION,
+  type LicenceRestrictionValue,
+} from "@/components/licence/LicenceRestrictionProvider";
 
 /**
  * StaffShell — the client half of the staff workspace shell (D-19, D-20).
@@ -49,6 +55,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/staff/users": User,
   "/staff/roles": ShieldCheck,
   "/staff/audit": ListChecks,
+  "/staff/licence": KeyRound,
 };
 
 /** Groups consecutive items that share a group label, preserving nav order. */
@@ -72,6 +79,13 @@ type StaffShellProps = {
   signOut: ReactNode;
   /** The notification bell (D-18). Optional so existing callers/tests need no change. */
   bell?: ReactNode;
+  /**
+   * The persistent licence banner (D-15), rendered between the header and `<main>`.
+   * Built by the layout for holders of licence.view only; absent for everyone else.
+   */
+  banner?: ReactNode;
+  /** The licence restriction mirror (D-09). Optional: absent means unrestricted. */
+  licenceRestriction?: LicenceRestrictionValue;
   children: ReactNode;
 };
 
@@ -120,7 +134,7 @@ function subscribeToViewport(onChange: () => void) {
 const getDesktopSnapshot = () => window.matchMedia(DESKTOP_QUERY).matches;
 const getServerDesktopSnapshot = () => false;
 
-export function StaffShell({ nav, identity, signOut, bell, children }: StaffShellProps) {
+export function StaffShell({ nav, identity, signOut, bell, banner, licenceRestriction, children }: StaffShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const desktop = useSyncExternalStore(subscribeToViewport, getDesktopSnapshot, getServerDesktopSnapshot);
@@ -198,11 +212,13 @@ export function StaffShell({ nav, identity, signOut, bell, children }: StaffShel
   const groups = groupNav(nav);
 
   return (
-    // No `overflow-x` clip on this row wrapper: `overflow-x: hidden` forces
+    // The provider (D-09) wraps the whole shell so the page content can read the licence restriction.
+    // No `overflow-x` clip on the row wrapper below: `overflow-x: hidden` forces
     // `overflow-y` to compute to `auto`, turning it into a scroll container, and
     // the sidebar's `lg:sticky` would then anchor to this non-scrolling box
     // instead of the viewport — so it scrolled away with the page on tall
     // routes. Horizontal bleed is clipped on the content column instead.
+    <LicenceRestrictionProvider value={licenceRestriction ?? UNRESTRICTED_LICENCE_RESTRICTION}>
     <div className="flex min-h-screen bg-sidebar-bg">
       <SkipLink />
       {mobileOpen && (
@@ -330,10 +346,13 @@ export function StaffShell({ nav, identity, signOut, bell, children }: StaffShel
           </div>
         </header>
 
+        {banner}
+
         <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 rounded-t-[28px] bg-surface px-6 pt-9 pb-14 focus:outline-none lg:px-10">
           {children}
         </main>
       </div>
     </div>
+    </LicenceRestrictionProvider>
   );
 }

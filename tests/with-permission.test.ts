@@ -3,9 +3,13 @@ import {
   createWithPermission,
   AuthenticationError,
   AuthorizationError,
+  LicenceRestrictedError,
+  type LicenceGuardDep,
   type RawGrant,
   type AuditEntry,
 } from "@/server/permissions/with-permission";
+import { LICENCE_REFUSAL_MESSAGE } from "@/server/licence/policy";
+import type { Permission } from "@/server/permissions/catalogue";
 
 const NOW = new Date("2026-09-01T12:00:00Z");
 
@@ -26,9 +30,10 @@ const activeGrant = (
 type Harness = {
   grants: RawGrant[];
   actor?: { userId: string } | null;
+  licence?: LicenceGuardDep;
 };
 
-function harness({ grants, actor = { userId: "user-1" } }: Harness) {
+function harness({ grants, actor = { userId: "user-1" }, licence }: Harness) {
   const audits: AuditEntry[] = [];
   const withPermission = createWithPermission({
     getActor: async () => actor,
@@ -37,6 +42,7 @@ function harness({ grants, actor = { userId: "user-1" } }: Harness) {
       audits.push(entry);
     },
     now: () => NOW,
+    licence,
   });
   return { withPermission, audits };
 }
@@ -176,5 +182,114 @@ describe("withPermission", () => {
 
     await expect(action({})).rejects.toThrow("cohort not found");
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe("withPermission licence guard (D-09)", () => {
+  const blocked = () => ({ check: vi.fn(async () => ({ allowed: false as const })) });
+  const allowed = () => ({ check: vi.fn(async () => ({ allowed: true as const })) });
+
+  it("refuses a write-effect call in a restricted state without running the handler", async () => {
+    const licence = blocked();
+    const { withPermission } = harness({ grants: [activeGrant("courses.edit")], licence });
+    const handler = vi.fn(async () => "done");
+
+    const action = withPermission("courses.edit", () => ({ courseIds: ["c1"] }))(handler);
+    const error = await action({}).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(LicenceRestrictedError);
+    expect(error).toBeInstanceOf(AuthorizationError);
+    expect((error as Error).name).toBe("LicenceRestrictedError");
+    expect((error as Error).message).toBe(LICENCE_REFUSAL_MESSAGE);
+    expect(handler).not.toHaveBeenCalled();
+    expect(licence.check).toHaveBeenCalledTimes(1);
+    expect(licence.check).toHaveBeenCalledWith({ permission: "courses.edit", actorId: "user-1" });
+  });
+
+  it("a LicenceRestrictedError is an AuthorizationError with the fixed non-sensitive message", () => {
+    const error = new LicenceRestrictedError("courses.edit");
+    expect(error instanceof AuthorizationError).toBe(true);
+    expect(error.message).toBe(LICENCE_REFUSAL_MESSAGE);
+    expect(error.message).not.toContain("courses.edit");
+    expect(error.permission).toBe("courses.edit");
+  });
+
+  it("runs the handler for a write-effect call when the guard allows", async () => {
+    const licence = allowed();
+    const { withPermission } = harness({ grants: [activeGrant("courses.edit")], licence });
+    const handler = vi.fn(async () => "done");
+
+    await expect(withPermission("courses.edit", () => ({}))(handler)({})).resolves.toBe("done");
+    expect(handler).toHaveBeenCalledOnce();
+    expect(licence.check).toHaveBeenCalledTimes(1);
+  });
+
+  it("never calls the guard for continuity and read permissions", async () => {
+    const licence = blocked();
+    const { withPermission } = harness({
+      grants: [activeGrant("grades.manage"), activeGrant("courses.view")],
+      licence,
+    });
+    const grades = vi.fn(async () => "grades");
+    const view = vi.fn(async () => "view");
+
+    await expect(withPermission("grades.manage", () => ({}))(grades)({})).resolves.toBe("grades");
+    await expect(withPermission("courses.view", () => ({}))(view)({})).resolves.toBe("view");
+    expect(licence.check).not.toHaveBeenCalled();
+  });
+
+  it("honours a per-call-site override in both directions", async () => {
+    const licence = blocked();
+    const { withPermission } = harness({
+      grants: [activeGrant("enrolments.manage"), activeGrant("courses.view")],
+      licence,
+    });
+    const progress = vi.fn(async () => "progress");
+    const forced = vi.fn(async () => "forced");
+
+    await expect(
+      withPermission("enrolments.manage", () => ({}), {
+        licence: "continuity",
+        reason: "progress recording",
+      })(progress)({}),
+    ).resolves.toBe("progress");
+    expect(licence.check).not.toHaveBeenCalled();
+
+    await expect(
+      withPermission("courses.view", () => ({}), { licence: "write" })(forced)({}),
+    ).rejects.toBeInstanceOf(LicenceRestrictedError);
+    expect(licence.check).toHaveBeenCalledTimes(1);
+    expect(forced).not.toHaveBeenCalled();
+  });
+
+  it("is unchanged when no licence dependency is configured", async () => {
+    const { withPermission } = harness({ grants: [activeGrant("courses.edit")] });
+    const handler = vi.fn(async () => "done");
+
+    await expect(withPermission("courses.edit", () => ({}))(handler)({})).resolves.toBe("done");
+  });
+
+  it("treats an unclassified permission string as write (default-blocked)", async () => {
+    const licence = blocked();
+    const novel = "widgets.manage" as Permission;
+    const { withPermission } = harness({ grants: [activeGrant(novel)], licence });
+    const handler = vi.fn(async () => "done");
+
+    await expect(withPermission(novel, () => ({}))(handler)({})).rejects.toBeInstanceOf(
+      LicenceRestrictedError,
+    );
+    expect(licence.check).toHaveBeenCalledTimes(1);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("writes no authorization.denied audit entry for a licence refusal", async () => {
+    const licence = blocked();
+    const { withPermission, audits } = harness({ grants: [activeGrant("courses.edit")], licence });
+
+    await expect(
+      withPermission("courses.edit", () => ({}))(vi.fn(async () => "done"))({}),
+    ).rejects.toBeInstanceOf(LicenceRestrictedError);
+
+    expect(audits).toHaveLength(0);
   });
 });

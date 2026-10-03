@@ -156,3 +156,101 @@ describe("toNotificationDto", () => {
     expect(earlier.group).toBe("earlier");
   });
 });
+
+describe("renderNotificationText — staff.licence_notice (LIC-07, T-14-08-01)", () => {
+  const expiry = "30 Nov 2026, 23:59 WAT";
+  const graceEnd = "14 Dec 2026, 23:59 WAT";
+  const base = { days: "30", expiry, graceEnd };
+
+  it("expiring-30 renders the days title and expiry meta", () => {
+    expect(renderNotificationText("staff.licence_notice", { ...base, noticeKey: "expiring-30" })).toEqual({
+      title: "Licence expires in 30 days",
+      meta: `Expires ${expiry}`,
+    });
+  });
+
+  it("expiring-1 renders the tomorrow title", () => {
+    expect(renderNotificationText("staff.licence_notice", { ...base, noticeKey: "expiring-1" })).toEqual({
+      title: "Licence expires tomorrow",
+      meta: `Expires ${expiry}`,
+    });
+  });
+
+  it("expired renders the grace-started title with the grace end", () => {
+    expect(renderNotificationText("staff.licence_notice", { ...base, noticeKey: "expired" })).toEqual({
+      title: "Licence expired: grace period has started",
+      meta: `Normal operation continues until ${graceEnd}`,
+    });
+  });
+
+  it("grace-ending renders the grace countdown", () => {
+    expect(
+      renderNotificationText("staff.licence_notice", { noticeKey: "grace-ending", days: "3", graceEnd }),
+    ).toEqual({
+      title: "Grace period ends in 3 days",
+      meta: `Restricted continuity mode begins ${graceEnd}`,
+    });
+  });
+
+  it("restricted renders the restricted title and fixed meta", () => {
+    expect(renderNotificationText("staff.licence_notice", { noticeKey: "restricted" })).toEqual({
+      title: "Restricted continuity mode is now active",
+      meta: "New enrolments and checkout are blocked",
+    });
+  });
+
+  it("invalid-BAD_SIGNATURE renders the fixed rejection sentence, not the code", () => {
+    const out = renderNotificationText("staff.licence_notice", { noticeKey: "invalid-BAD_SIGNATURE" });
+    expect(out.title).toBe("Licence could not be verified");
+    expect(out.meta).toContain("signature");
+    expect(JSON.stringify(out)).not.toContain("BAD_SIGNATURE");
+  });
+
+  it("validation-attention renders the check-pending title", () => {
+    expect(
+      renderNotificationText("staff.licence_notice", { noticeKey: "validation-attention-20261130" }),
+    ).toEqual({
+      title: "Licence check could not complete",
+      meta: "Last known state kept for up to 24 hours",
+    });
+  });
+
+  it("clock-rollback renders the clock title", () => {
+    expect(
+      renderNotificationText("staff.licence_notice", { noticeKey: "clock-rollback-2026-11-30T10" }),
+    ).toEqual({
+      title: "Server clock moved backwards",
+      meta: "Check the server time settings",
+    });
+  });
+
+  it("never echoes a reason, the raw key or a non-allow-listed param", () => {
+    const keys = [
+      "expiring-30",
+      "expiring-1",
+      "expired",
+      "grace-ending",
+      "restricted",
+      "invalid-BAD_SIGNATURE",
+      "validation-attention-20261130",
+      "clock-rollback-2026-11-30T10",
+      "unknown-key-xyz",
+    ];
+    for (const noticeKey of keys) {
+      const out = renderNotificationText("staff.licence_notice", {
+        ...base,
+        noticeKey,
+        reason: "SECRET-REASON",
+        deploymentId: "SECRET-DEPLOYMENT",
+      });
+      const text = `${out.title} ${out.meta ?? ""}`;
+      expect(text, noticeKey).not.toMatch(/reason/i);
+      expect(text, noticeKey).not.toContain("SECRET");
+      // Plain words such as "expired" legitimately occur in a title; the raw
+      // machine key (hyphenated or suffixed identifier) must never appear.
+      if (/[-_0-9]/.test(noticeKey) && noticeKey !== "expiring-1") {
+        expect(text, noticeKey).not.toContain(noticeKey);
+      }
+    }
+  });
+});

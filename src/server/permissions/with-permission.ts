@@ -18,8 +18,20 @@
  * route handlers, server actions, and middleware. Securing three of four is
  * indistinguishable from securing none, so nothing reaches data without
  * passing through here.
+ *
+ * Order of the steps (Phase 14, D-09): authenticate, resolve scope, load
+ * grants, check the permission, THEN the licence guard, then the handler. The
+ * guard runs strictly after authorization passes so an unauthorized or
+ * anonymous caller receives the identical error in every licence state and the
+ * guard is never even called for them (no state oracle). Only write-effect
+ * operations are checked; the effect defaults from LICENCE_PERMISSION_EFFECT
+ * (an unclassified permission is "write", so new resources inherit
+ * enforcement) and a call site may override it with `{ licence, reason }`.
+ * With no `licence` dependency configured the behaviour is unchanged.
  */
 
+import { effectForPermission, type LicenceEffect } from "@/server/licence/effects";
+import { LICENCE_REFUSAL_MESSAGE } from "@/server/licence/policy";
 import type { Permission } from "./catalogue";
 import {
   hasPermission,
@@ -29,6 +41,8 @@ import {
   type ResourceScope,
   type ScopeType,
 } from "./scope";
+
+export type { LicenceEffect };
 
 export class AuthenticationError extends Error {
   constructor(message = "Sign in to continue.") {
@@ -46,6 +60,22 @@ export class AuthorizationError extends Error {
     super("You do not have access to perform this action.");
     this.name = "AuthorizationError";
     this.permission = permission;
+  }
+}
+
+/**
+ * Refusal for a write-effect operation blocked by the licence state (D-09).
+ *
+ * Extends AuthorizationError so every existing `instanceof AuthorizationError`
+ * catch site keeps returning a result instead of throwing into an error
+ * boundary. The message is the fixed non-sensitive sentence: neither the
+ * permission nor the licence state is ever part of it.
+ */
+export class LicenceRestrictedError extends AuthorizationError {
+  constructor(permission: Permission) {
+    super(permission);
+    this.name = "LicenceRestrictedError";
+    this.message = LICENCE_REFUSAL_MESSAGE;
   }
 }
 
@@ -69,6 +99,29 @@ export type AuditEntry = {
   reason: string;
 };
 
+export type LicenceGuardInput = { permission: Permission; actorId: string };
+
+export type LicenceGuardDecision = { allowed: true } | { allowed: false };
+
+/**
+ * The licence guard injected into the choke point. `check` decides whether a
+ * write-effect operation may run and records its own enforcement audit row; the
+ * choke point never audits a licence refusal itself.
+ */
+export type LicenceGuardDep = {
+  check(input: LicenceGuardInput): Promise<LicenceGuardDecision>;
+};
+
+/**
+ * Per-call-site options. `licence` overrides the permission-level default
+ * effect where one permission spans both kinds of operation; `reason` records
+ * why (documentation, locked by a registry test in plan 14-17).
+ */
+export type WithPermissionOptions = {
+  licence?: LicenceEffect;
+  reason?: string;
+};
+
 export type WithPermissionDeps = {
   /** Resolves the signed-in user, or null when anonymous. */
   getActor: () => Promise<Actor | null>;
@@ -77,6 +130,8 @@ export type WithPermissionDeps = {
   /** Writes an audit event. Called on denial. */
   audit: (entry: AuditEntry) => Promise<void>;
   now?: () => Date;
+  /** Restricted-state guard (D-09). Absent: behaviour is unchanged. */
+  licence?: LicenceGuardDep;
 };
 
 export type AuthorizedContext = {
@@ -106,6 +161,7 @@ export function createWithPermission(deps: WithPermissionDeps) {
   return function withPermission<TInput>(
     permission: Permission,
     resolveScope: ScopeResolver<TInput>,
+    options?: WithPermissionOptions,
   ) {
     return function wrap<TOutput>(handler: Handler<TInput, TOutput>) {
       return async function authorized(input: TInput): Promise<TOutput> {
@@ -147,6 +203,17 @@ export function createWithPermission(deps: WithPermissionDeps) {
             reason: "No active grant matched the requested resource.",
           });
           throw new AuthorizationError(permission);
+        }
+
+        // Licence guard (D-09): strictly AFTER authorization, so a caller who
+        // is not authorized never learns the licence state and the guard is
+        // not called for them. Only write-effect operations are checked.
+        if (deps.licence) {
+          const effect = options?.licence ?? effectForPermission(permission);
+          if (effect === "write") {
+            const decision = await deps.licence.check({ permission, actorId: actor.userId });
+            if (!decision.allowed) throw new LicenceRestrictedError(permission);
+          }
         }
 
         // Successful authorization is not itself audited — the service layer

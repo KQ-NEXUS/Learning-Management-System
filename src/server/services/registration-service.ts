@@ -23,6 +23,8 @@ import { emailDispatchService, type DispatchParams } from "@/server/services/ema
 import { sendAuthEmail } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
+import { licenceService } from "@/server/services/licence-service";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
 
 export type RegistrationInput = {
   email: string;
@@ -42,7 +44,10 @@ export type RegisteredUserRow = {
   passwordHash: string | null;
 };
 
-export type RegistrationResult = { ok: true } | { ok: false; reason: "INVALID_INPUT" };
+export type RegistrationResult =
+  | { ok: true }
+  | { ok: false; reason: "INVALID_INPUT" }
+  | { ok: false; reason: "UNAVAILABLE" };
 
 // Built once as module-level constants — three hand-written near-identical
 // objects is precisely how the response shape drifts apart (Pitfall 5). All
@@ -52,6 +57,15 @@ export const REGISTRATION_ACCEPTED: RegistrationResult = Object.freeze({ ok: tru
 export const REGISTRATION_INVALID_INPUT: RegistrationResult = Object.freeze({
   ok: false,
   reason: "INVALID_INPUT",
+});
+/**
+ * Phase 14 (D-06, A12) — new registration is refused in restricted continuity
+ * mode. One frozen value for every email, so the refusal is never an
+ * enumeration oracle (IAM-06): it is returned before any store call.
+ */
+export const REGISTRATION_UNAVAILABLE: RegistrationResult = Object.freeze({
+  ok: false,
+  reason: "UNAVAILABLE",
 });
 
 /** The narrow slice of the Prisma client this service actually uses. */
@@ -88,6 +102,13 @@ export function createRegistrationService(deps: {
   audit: (event: BusinessAuditEvent) => Promise<void>;
   hash?: (plaintext: string) => Promise<string>;
   now?: () => Date;
+  /**
+   * D-09 — explicit restricted-state guard (this service does not run through
+   * `withPermission`). Optional: absent means registration behaves as before.
+   */
+  licence?: {
+    assertWriteAllowed(input: { operation: string; actorId?: string | null }): Promise<void>;
+  };
 }) {
   const { store, issueToken, resendVerification, dispatch, audit } = deps;
   const hash = deps.hash ?? hashPassword;
@@ -138,6 +159,19 @@ export function createRegistrationService(deps: {
       !input.acceptedPrivacy
     ) {
       return REGISTRATION_INVALID_INPUT;
+    }
+
+    // D-06 / A12 / D-09 — restricted continuity mode refuses every new
+    // registration, after validation and before any store call, so the result
+    // does not depend on whether the email exists (IAM-06). Only the neutral
+    // licence refusal is mapped; any other failure propagates unchanged.
+    if (deps.licence) {
+      try {
+        await deps.licence.assertWriteAllowed({ operation: "registration", actorId: null });
+      } catch (error) {
+        if (error instanceof LicenceWriteBlockedError) return REGISTRATION_UNAVAILABLE;
+        throw error;
+      }
     }
 
     // Cost symmetry: hash before the branch decision so every post-validation
@@ -253,4 +287,5 @@ export const registrationService = createRegistrationService({
   resendVerification: (email) => verificationService.resendVerification(email),
   dispatch: (params) => emailDispatchService.dispatch(params),
   audit: recordAudit,
+  licence: licenceService,
 });

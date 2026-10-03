@@ -26,7 +26,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import {
   createSessionFromWallTime,
@@ -80,7 +80,7 @@ function toFailure(error: unknown): Extract<SessionActionResult, { ok: false }> 
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
       ok: false,
-      message: "Your role does not permit scheduling sessions for this cohort.",
+      message: refusalMessage(error, "Your role does not permit scheduling sessions for this cohort."),
     };
   }
   throw error;

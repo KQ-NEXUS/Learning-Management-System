@@ -43,6 +43,9 @@ const ORDER_EXCEPTION_REASON_LABELS: Record<string, string> = {
   duplicate_active_enrolment: "Learner already enrolled",
   no_order: "Order not found",
   attempt_not_found: "Payment attempt not found",
+  // D-08 (Phase 14): a fixed neutral sentence. It must never name the licence,
+  // restriction or expiry (T-13-03 allow-list pattern, T-14-13-05).
+  payment_after_restriction: "Payment received while new enrolments were unavailable",
 };
 const DEFAULT_ORDER_EXCEPTION_REASON_LABEL = "Payment needs review";
 

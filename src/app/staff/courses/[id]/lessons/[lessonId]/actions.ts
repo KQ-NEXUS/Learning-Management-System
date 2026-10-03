@@ -24,7 +24,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { FieldError } from "@/components/primitives";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
 import { AssessmentLinkError, createLesson, lessonService, updateLesson } from "@/server/services/lesson-service";
 
@@ -101,8 +101,10 @@ function toFailure(error: unknown): SaveLessonState {
     return {
       ok: false,
       errors: [],
-      message:
+      message: refusalMessage(
+        error,
         "This lesson could not be saved. It may have moved, or your role no longer permits editing it.",
+      ),
     };
   }
   throw error;
@@ -204,7 +206,7 @@ export async function withdrawLessonAction(
     await lessonService.archive(parsed.data.lessonId, parsed.data.reason);
   } catch (error) {
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-      return { ok: false, message: "This lesson could not be withdrawn." };
+      return { ok: false, message: refusalMessage(error, "This lesson could not be withdrawn.") };
     }
     throw error;
   }

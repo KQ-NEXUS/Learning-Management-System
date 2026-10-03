@@ -35,6 +35,7 @@ import type { Prisma } from "@prisma/client";
 import { buildMapperTable, EVENT_MAPPER_GROUPS } from "@/server/services/event-intent-mappers";
 import type { DrainEvent, EventMapper, MapperContext } from "@/server/services/event-intent-mappers";
 import { createStaffMappers } from "@/server/services/event-mappers/staff";
+import { createEnrolmentPaymentMappers } from "@/server/services/event-mappers/enrolment-payment";
 
 const NOW = new Date("2026-01-01T00:00:00.000Z");
 const mapperTable = buildMapperTable(EVENT_MAPPER_GROUPS);
@@ -290,6 +291,47 @@ describe("order.exception staff mail (D-08, T-13-03)", () => {
 
     expect(intents[0]!.email!.params).toMatchObject({ reasonLabel: "Payment needs review" });
     expect(JSON.stringify(intents)).not.toContain("SECRET-UNMAPPED-REASON");
+  });
+
+  it("payment_after_restriction renders the fixed neutral label, never naming licence, restriction or expiry (D-08, T-14-13-05)", async () => {
+    const mapper = requireMapper("order.exception");
+    const ctx = makeCtx({
+      order: async () => ({ reference: "KQO-9", cohortId: "cohort-9" }),
+      cohort: async () => ({ id: "cohort-9", programmeId: null, courseId: "course-9", cohortCourses: [] }),
+      holderIds: ["payments-holder-9"],
+    });
+
+    const intents = await mapper(
+      makeEvent("order.exception", { orderId: "order-9", reason: "payment_after_restriction" }, "evt-oe-9"),
+      ctx,
+    );
+
+    expect(intents).toHaveLength(1);
+    const label = (intents[0]!.email!.params as { reasonLabel: string }).reasonLabel;
+    expect(label).toBe("Payment received while new enrolments were unavailable");
+    expect(label).not.toMatch(/licen[cs]e|restricted|expir/i);
+    // The raw coded reason never reaches the rendered intent either.
+    expect(JSON.stringify(intents)).not.toContain("payment_after_restriction");
+    // The generic fallback is unchanged for a genuinely unknown reason.
+    const unknown = await mapper(
+      makeEvent("order.exception", { orderId: "order-9", reason: "payment_after_restrictionX" }),
+      ctx,
+    );
+    expect(unknown[0]!.email!.params).toMatchObject({ reasonLabel: "Payment needs review" });
+  });
+
+  it("the learner order-exception mapper stays silent for payment_after_restriction (no learner email, only illegal_transition mails)", async () => {
+    const learnerMapper = createEnrolmentPaymentMappers()["order.exception"];
+    if (!learnerMapper) throw new Error("enrolment-payment group has no order.exception mapper");
+    const ctx = makeCtx({
+      order: async () => ({ reference: "KQO-9", userId: "user-9", cohort: { title: "July cohort" } }),
+    });
+
+    const intents = await learnerMapper(
+      makeEvent("order.exception", { orderId: "order-9", reason: "payment_after_restriction" }),
+      ctx,
+    );
+    expect(intents).toEqual([]);
   });
 
   it("returns no intents when the order no longer exists (edge)", async () => {

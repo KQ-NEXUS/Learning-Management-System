@@ -249,6 +249,9 @@ export function AccountStatusControl({
 
       <ConfirmModal
         open={open}
+        // Deactivation is security administration and stays available in restricted continuity
+        // mode (A10); reactivation is a staff-account write and is blocked (14-19, D-07).
+        licenceEffect={isActive ? "continuity" : "write"}
         tone={isActive ? "danger" : "default"}
         title={isActive ? `Deactivate ${userName}'s account?` : `Reactivate ${userName}?`}
         description={

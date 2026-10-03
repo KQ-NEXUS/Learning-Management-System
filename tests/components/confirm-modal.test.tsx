@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState, type ComponentType } from "react";
 import type { ConfirmModalProps } from "@/components/primitives";
@@ -7,6 +7,12 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+
+// Warm the primitives barrel once with a generous ceiling: the first dynamic import inside a test can pass
+// the default 5 s under a loaded parallel run (14-19 added the licence copy module to this import graph).
+beforeAll(async () => {
+  await import("@/components/primitives");
+}, 60_000);
 
 async function loadConfirmModal(): Promise<ComponentType<ConfirmModalProps>> {
   const primitives = await import("@/components/primitives");
@@ -312,5 +318,26 @@ describe("ConfirmModal", () => {
     );
 
     expect(screen.getByText("Integrity action")).toBeTruthy();
+  });
+});
+
+describe("ConfirmModal licenceEffect (14-19, additive)", () => {
+  it("is a no-op without a restriction provider: the default write effect leaves confirm enabled and undescribed", async () => {
+    const ConfirmModal = await loadConfirmModal();
+    render(
+      <ConfirmModal
+        open
+        title="Refund order"
+        description="This cannot be undone."
+        confirmLabel="Refund"
+        licenceEffect="write"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    const confirm = screen.getByRole("button", { name: "Refund" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.hasAttribute("aria-describedby")).toBe(false);
   });
 });

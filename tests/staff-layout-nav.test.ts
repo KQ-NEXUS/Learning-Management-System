@@ -14,6 +14,7 @@ const { mocks } = vi.hoisted(() => ({
     redirect: vi.fn((url: string) => {
       throw new Error(`NEXT_REDIRECT:${url}`);
     }),
+    getStatusSnapshot: vi.fn(),
   },
 }));
 
@@ -37,14 +38,41 @@ vi.mock("@/server/services/notification-service", () => ({
 // this file's scope to what it actually asserts: which nav items render.
 vi.mock("@/components/notifications/NotificationBell", () => ({ NotificationBell: () => null }));
 vi.mock("@/app/staff/StaffShell", () => ({ StaffShell: () => null }));
+// The layout reads the licence status for the banner and the restriction mirror (14-19).
+vi.mock("@/server/services/licence-service", () => ({
+  licenceService: { getStatusSnapshot: mocks.getStatusSnapshot },
+}));
 
 import StaffLayout from "@/app/staff/layout";
 
 type NavItem = { label: string; href: string; group?: string };
 
+type LicenceRestrictionProp = { restricted: boolean; canViewLicence: boolean; stateLabel: string | null };
+type BannerElement = { props: { tone: string; stateLabel: string; message: string; linkLabel: string; href: string } };
+
 async function layoutElement() {
   return (await StaffLayout({ children: null })) as {
-    props: { nav: NavItem[]; bell: unknown };
+    props: {
+      nav: NavItem[];
+      bell: unknown;
+      banner: BannerElement | null;
+      licenceRestriction: LicenceRestrictionProp | undefined;
+    };
+  };
+}
+
+/** A minimal status snapshot; only the fields the layout reads need real values. */
+function snapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    state: "ACTIVE",
+    reasonCode: null,
+    isRestricted: false,
+    daysRemaining: 200,
+    expiresAt: new Date("2027-04-01T22:59:59Z"),
+    graceEndsAt: new Date("2027-04-15T22:59:59Z"),
+    timeZone: "Africa/Lagos",
+    support: { renewalEmail: "renewals@provider.test", supportEmail: "support@provider.test", phone: null, hours: null },
+    ...overrides,
   };
 }
 
@@ -65,6 +93,7 @@ describe("staff layout navigation", () => {
     mocks.can.mockReset();
     mocks.canAnywhere.mockReset().mockResolvedValue(false);
     mocks.redirect.mockClear();
+    mocks.getStatusSnapshot.mockReset().mockResolvedValue(snapshot());
   });
 
   it("integration warning #1 — a cohort-scoped instructor sees Cohorts, Enrolments and Payments, not global-only sections", async () => {
@@ -140,5 +169,132 @@ describe("staff layout navigation", () => {
 
     expect(hrefs).not.toContain("/staff/email-log");
     expect(hrefs).not.toContain("/staff/audit");
+  });
+
+  it("shows Licence under Administration, after Email log, to staff holding licence.view (14-10)", async () => {
+    grantAllExcept();
+    const nav = await visibleNav();
+
+    const emailLogIndex = nav.findIndex((item) => item.href === "/staff/email-log");
+    const licenceIndex = nav.findIndex((item) => item.href === "/staff/licence");
+    expect(nav[licenceIndex]).toMatchObject({ label: "Licence", href: "/staff/licence", group: "Administration" });
+    expect(licenceIndex).toBeGreaterThan(emailLogIndex);
+  });
+
+  it("hides Licence from someone without licence.view and keeps the other Administration items (14-10)", async () => {
+    grantAllExcept("licence.view");
+    const hrefs = (await visibleNav()).map((item) => item.href);
+
+    expect(hrefs).not.toContain("/staff/licence");
+    expect(hrefs).toEqual(expect.arrayContaining(["/staff/users", "/staff/audit", "/staff/email-log"]));
+  });
+
+  it("checks Licence with the global can check, never the scope-aware canAnywhere (licence.view is Global only)", async () => {
+    // Held at a narrower scope only: `can(p, {})` (Global) is false, `canAnywhere(p)` is true.
+    mocks.can.mockResolvedValue(false);
+    mocks.canAnywhere.mockImplementation(async (permission: string) => permission === "licence.view");
+    const hrefs = (await visibleNav()).map((item) => item.href);
+
+    expect(hrefs).not.toContain("/staff/licence");
+    expect(mocks.can).toHaveBeenCalledWith("licence.view", {});
+    expect(mocks.canAnywhere).not.toHaveBeenCalledWith("licence.view");
+  });
+});
+
+describe("staff layout licence banner and restriction mirror (14-19, D-15, D-09)", () => {
+  beforeEach(() => {
+    mocks.getCurrentActor.mockReset().mockResolvedValue({ userId: "staff-1", isStaff: true, roles: [] });
+    mocks.can.mockReset();
+    mocks.canAnywhere.mockReset().mockResolvedValue(false);
+    mocks.getStatusSnapshot.mockReset();
+  });
+
+  it("passes a danger banner and the restriction context to an administrator in restricted continuity mode", async () => {
+    grantAllExcept();
+    mocks.getStatusSnapshot.mockResolvedValue(snapshot({ state: "RESTRICTED_CONTINUITY", isRestricted: true, daysRemaining: null }));
+    const element = await layoutElement();
+
+    expect(element.props.banner).toBeTruthy();
+    expect(element.props.banner!.props).toMatchObject({
+      tone: "danger",
+      stateLabel: "Restricted continuity mode",
+      href: "/staff/licence",
+    });
+    expect(element.props.licenceRestriction).toEqual({
+      restricted: true,
+      canViewLicence: true,
+      stateLabel: "Restricted continuity mode",
+    });
+  });
+
+  it("passes no banner and no licence detail to staff without licence.view, but still mirrors the restriction", async () => {
+    grantAllExcept("licence.view");
+    mocks.getStatusSnapshot.mockResolvedValue(snapshot({ state: "RESTRICTED_CONTINUITY", isRestricted: true, daysRemaining: null }));
+    const element = await layoutElement();
+
+    expect(element.props.banner).toBeNull();
+    expect(element.props.licenceRestriction).toEqual({ restricted: true, canViewLicence: false, stateLabel: null });
+  });
+
+  it("renders no banner and an unrestricted context for an active licence", async () => {
+    grantAllExcept();
+    mocks.getStatusSnapshot.mockResolvedValue(snapshot());
+    const element = await layoutElement();
+
+    expect(element.props.banner).toBeNull();
+    expect(element.props.licenceRestriction).toMatchObject({ restricted: false, canViewLicence: true });
+  });
+
+  it("renders no banner when the licence is not activated (OQ1 option-a)", async () => {
+    grantAllExcept();
+    mocks.getStatusSnapshot.mockResolvedValue(
+      snapshot({ state: "UNLICENSED", daysRemaining: null, expiresAt: null, graceEndsAt: null, timeZone: null, support: null }),
+    );
+    const element = await layoutElement();
+
+    expect(element.props.banner).toBeNull();
+    expect(element.props.licenceRestriction).toMatchObject({ restricted: false });
+  });
+
+  it.each([
+    ["EXPIRING_SOON", { daysRemaining: 12 }, "warning"],
+    ["GRACE", { daysRemaining: null }, "warning"],
+    ["INVALID", { isRestricted: true, reasonCode: "BAD_SIGNATURE", daysRemaining: null }, "danger"],
+    ["VALIDATION_ATTENTION", { daysRemaining: null }, "warning"],
+  ])("renders the %s banner for an administrator", async (state, extra, tone) => {
+    grantAllExcept();
+    mocks.getStatusSnapshot.mockResolvedValue(snapshot({ state, ...extra }));
+    const element = await layoutElement();
+
+    expect(element.props.banner?.props.tone).toBe(tone);
+  });
+
+  it("renders no banner for expiring soon beyond 30 days", async () => {
+    grantAllExcept();
+    mocks.getStatusSnapshot.mockResolvedValue(snapshot({ state: "EXPIRING_SOON", daysRemaining: 45 }));
+    const element = await layoutElement();
+
+    expect(element.props.banner).toBeNull();
+  });
+
+  it("labels the banner link 'Activate a licence' only when the viewer holds licence.activate", async () => {
+    mocks.getStatusSnapshot.mockResolvedValue(snapshot({ state: "RESTRICTED_CONTINUITY", isRestricted: true, daysRemaining: null }));
+
+    grantAllExcept();
+    expect((await layoutElement()).props.banner?.props.linkLabel).toBe("Activate a licence");
+
+    grantAllExcept("licence.activate");
+    expect((await layoutElement()).props.banner?.props.linkLabel).toBe("View licence");
+  });
+
+  it("keeps the shell, with no banner and an unrestricted context, when the licence status read fails", async () => {
+    grantAllExcept();
+    mocks.getStatusSnapshot.mockRejectedValue(new Error("database unavailable"));
+    const element = await layoutElement();
+
+    expect(element.props.banner).toBeNull();
+    expect(element.props.licenceRestriction).toBeUndefined();
+    expect(element.props.nav.map((item) => item.href)).toContain("/staff");
+    expect(element.props.bell).toBeTruthy();
   });
 });

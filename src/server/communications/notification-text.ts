@@ -20,6 +20,7 @@
  */
 
 import { utcToWallParts } from "@/lib/timezone";
+import { noticeCopy } from "@/server/licence/policy";
 import type { NotificationType } from "./contracts";
 
 /**
@@ -39,6 +40,12 @@ const ALLOWED_PARAM_KEYS = [
   "template",
   "dispatchRef",
   "queueLabel",
+  // Phase 14 (T-14-08-01): string-only licence notice params. Display text for
+  // these always comes from the closed noticeCopy set, never from the values.
+  "noticeKey",
+  "days",
+  "expiry",
+  "graceEnd",
 ] as const;
 type AllowedParamKey = (typeof ALLOWED_PARAM_KEYS)[number];
 type SafeParams = Partial<Record<AllowedParamKey, string>>;
@@ -179,6 +186,16 @@ const NOTIFICATION_TEXT_BUILDERS: Record<NotificationType, TextBuilder> = {
       : "An email could not be delivered.",
     meta: p.template ?? null,
   }),
+  // Phase 14 (LIC-07, D-15): closed copy set; an unknown key renders the
+  // generic title and is never echoed (T-14-08-01).
+  "staff.licence_notice": (p) => {
+    const copy = noticeCopy(p.noticeKey ?? "", {
+      days: p.days,
+      expiry: p.expiry,
+      graceEnd: p.graceEnd,
+    });
+    return { title: copy.title, meta: copy.meta };
+  },
 };
 
 function isNotificationType(type: string): type is NotificationType {

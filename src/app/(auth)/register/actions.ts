@@ -2,6 +2,7 @@
 
 import { registrationService } from "@/server/services/registration-service";
 import { MIN_PASSWORD_LENGTH } from "@/lib/identity";
+import { LEARNER_REFUSAL_MESSAGE } from "@/server/licence/policy";
 
 export type RegisterState = { error: string | null; sent: boolean; email?: string };
 
@@ -46,6 +47,11 @@ export async function registerAction(
     });
   } catch {
     return { error: "Something went wrong. Nothing was saved — try again.", sent: false };
+  }
+
+  // OQ8 / A12 — the one neutral learner sentence; no licence wording.
+  if (!result.ok && result.reason === "UNAVAILABLE") {
+    return { error: LEARNER_REFUSAL_MESSAGE, sent: false };
   }
 
   if (!result.ok) {

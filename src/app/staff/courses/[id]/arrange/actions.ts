@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import { createModule, moduleService } from "@/server/services/module-service";
 import { lessonService } from "@/server/services/lesson-service";
@@ -64,7 +64,7 @@ function toOrderFailure(error: unknown): Extract<OrderActionResult, { ok: false 
     return {
       ok: false,
       reason: "DENIED",
-      message: "Your role does not permit changing this course's structure.",
+      message: refusalMessage(error, "Your role does not permit changing this course's structure."),
     };
   }
   throw error;
@@ -72,7 +72,7 @@ function toOrderFailure(error: unknown): Extract<OrderActionResult, { ok: false 
 
 function toModuleFailure(error: unknown): Extract<ModuleActionResult, { ok: false }> {
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-    return { ok: false, message: "Your role does not permit editing this course." };
+    return { ok: false, message: refusalMessage(error, "Your role does not permit editing this course.") };
   }
   if (error instanceof z.ZodError) {
     return { ok: false, message: error.issues[0]?.message ?? "That is not valid." };

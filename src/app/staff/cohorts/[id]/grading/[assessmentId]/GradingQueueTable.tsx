@@ -45,7 +45,7 @@ export function GradingQueueTable({ cohortId, assessmentId, rows, onRelease = re
       selection={{ selectedIds: selected, onChange: ids => { if (!pending) setSelected(ids); }, actions: [{ label: "Release selected", disabled, description: disabled ? "Select one or more draft submissions to release them together." : undefined, onClick: () => { setError(null); setOpen(true); } }] }}
       emptyHeading="Nothing to grade yet" emptyBody="Submissions will appear here once learners in this Cohort submit their work." />
     {notice && <p role="status" className="mt-2 text-sm text-muted-foreground">{notice}</p>}
-    <ConfirmModal open={open} tone="default" title={`Release ${gradeIds.length} grades`} confirmLabel="Release grades"
+    <ConfirmModal open={open} licenceEffect="continuity" tone="default" title={`Release ${gradeIds.length} grades`} confirmLabel="Release grades"
       description={`These grades will become visible to ${gradeIds.length === 1 ? "the learner" : `the ${gradeIds.length} learners`} immediately. This can't be undone from this screen — a released grade can only be corrected with an audited override.`}
       pending={pending} error={error} onConfirm={release} onCancel={() => setOpen(false)} />
   </>;

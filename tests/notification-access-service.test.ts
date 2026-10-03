@@ -15,6 +15,7 @@ import {
   createStaffPaymentResolver,
   createStaffSubmissionResolver,
   createStaffEmailLogResolver,
+  createStaffLicenceResolver,
   type NotificationAccessRow,
   type NotificationAccessResolver,
 } from "@/server/services/notification-access-service";
@@ -279,6 +280,21 @@ describe("createStaffEmailLogResolver — STAFF_EMAIL_LOG", () => {
   });
 });
 
+describe("createStaffLicenceResolver — STAFF_LICENCE", () => {
+  it("allows when can(\"licence.view\", {}) is true", async () => {
+    const can = vi.fn().mockResolvedValue(true);
+    const resolver = createStaffLicenceResolver(can);
+    expect(await resolver(actor, "anything", {})).toBe(true);
+    expect(can).toHaveBeenCalledWith("licence.view", {});
+  });
+
+  it("denies when can(\"licence.view\", {}) is false", async () => {
+    const can = vi.fn().mockResolvedValue(false);
+    const resolver = createStaffLicenceResolver(can);
+    expect(await resolver(actor, "anything", {})).toBe(false);
+  });
+});
+
 describe("cross-role denial parity through resolveOpen", () => {
   it("a staff member opening another learner's order denies identically to a learner opening a staff target", async () => {
     const orderService = createNotificationAccessService({
@@ -312,7 +328,7 @@ describe("cross-role denial parity through resolveOpen", () => {
   });
 });
 
-describe("all ten NOTIFICATION_TARGET_TYPES — at least one allowed and one denied case through resolveOpen", () => {
+describe("all eleven NOTIFICATION_TARGET_TYPES — at least one allowed and one denied case through resolveOpen", () => {
   function serviceFor(
     targetType: NotificationTargetType,
     targetId: string,
@@ -498,6 +514,22 @@ describe("all ten NOTIFICATION_TARGET_TYPES — at least one allowed and one den
       "STAFF_EMAIL_LOG",
       "anything",
       createStaffEmailLogResolver(vi.fn().mockResolvedValue(false)),
+    ).resolveOpen(actor, "notif-1");
+    expect(denied).toEqual({ status: "unavailable" });
+  });
+
+  it("STAFF_LICENCE: allowed when can(\"licence.view\", {}) is true, identical unavailable outcome when false (T-14-08-03)", async () => {
+    const allowed = await serviceFor(
+      "STAFF_LICENCE",
+      "anything",
+      createStaffLicenceResolver(vi.fn().mockResolvedValue(true)),
+    ).resolveOpen(actor, "notif-1");
+    expect(allowed).toEqual({ status: "ok", href: "/staff/licence" });
+
+    const denied = await serviceFor(
+      "STAFF_LICENCE",
+      "anything",
+      createStaffLicenceResolver(vi.fn().mockResolvedValue(false)),
     ).resolveOpen(actor, "notif-1");
     expect(denied).toEqual({ status: "unavailable" });
   });

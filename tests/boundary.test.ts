@@ -330,3 +330,55 @@ describe("service-layer boundary", () => {
     expect(findRequestOnlyOffenders(drainClosure)).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plan 14-16 — the licence check's always-off-request entry points (D-16).
+// Each test carries an explicit 30000 ms timeout: the full-tree scans in this
+// file are slow under load (STATE.md records intermittent default-timeout
+// failures).
+// ---------------------------------------------------------------------------
+
+describe("licence check closures (plan 14-16)", () => {
+  const normalise = (closure: string[]) => closure.map((f) => f.replace(/\\/g, "/"));
+
+  it("rejects a Prisma import from the check-licence Netlify scheduled function (14-16)", async () => {
+    expect(await lintAs("netlify/functions/check-licence.ts")).toHaveLength(1);
+  }, 30_000);
+
+  it("keeps the check-licence closure request-API-free and non-vacuous (14-16)", () => {
+    const closure = runtimeClosureFrom([
+      path.resolve(process.cwd(), "netlify/functions/check-licence.ts"),
+    ]);
+    expect(findRequestOnlyOffenders(closure)).toEqual([]);
+
+    const norm = normalise(closure);
+    expect(norm.some((f) => f.endsWith("src/server/services/licence-service.ts"))).toBe(true);
+    expect(norm.some((f) => f.endsWith("src/server/services/licence-notice-service.ts"))).toBe(true);
+  }, 30_000);
+
+  it.each(["format", "verify", "state"])(
+    "rejects a Prisma import from the pure licence module src/server/licence/%s.ts (14-16)",
+    async (name) => {
+      expect(await lintAs(`src/server/licence/${name}.ts`)).toHaveLength(1);
+    },
+    30_000,
+  );
+
+  it("keeps both webhook route closures request-API-free while now reaching licence-service.ts through the settlement service (14-16)", () => {
+    for (const closure of [webhookRuntimeClosure(), paystackWebhookRuntimeClosure()]) {
+      expect(findRequestOnlyOffenders(closure)).toEqual([]);
+      expect(
+        normalise(closure).some((f) => f.endsWith("src/server/services/licence-service.ts")),
+      ).toBe(true);
+    }
+  }, 30_000);
+
+  it("keeps the licence-service.ts and licence-activation-service.ts closures request-API-free (14-16)", () => {
+    for (const entry of ["licence-service.ts", "licence-activation-service.ts"]) {
+      const closure = runtimeClosureFrom([
+        path.resolve(process.cwd(), "src", "server", "services", entry),
+      ]);
+      expect(findRequestOnlyOffenders(closure)).toEqual([]);
+    }
+  }, 30_000);
+});

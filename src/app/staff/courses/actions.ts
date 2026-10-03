@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import { assertSlugMutable, SlugFrozenError } from "@/server/services/catalogue-guards";
 import { createCourseSchema, updateCourseSchema, completionRuleFields, requiresPassingAssessments } from "./course-schema";
@@ -78,7 +78,7 @@ function toFailure(
     return {
       ok: false,
       errors: [],
-      message: `Your role does not permit ${verb} courses.`,
+      message: refusalMessage(error, `Your role does not permit ${verb} courses.`),
     };
   }
   throw error;

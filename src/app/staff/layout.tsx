@@ -6,6 +6,11 @@ import { LEARNER_LANDING_PATH } from "@/server/auth/landing";
 import { profileService } from "@/server/services/profile-service";
 import { notificationService } from "@/server/services/notification-service";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { licenceService } from "@/server/services/licence-service";
+import { LicenceBanner } from "@/components/licence/LicenceBanner";
+import type { LicenceRestrictionValue } from "@/components/licence/LicenceRestrictionProvider";
+import { formatLicenceInstant } from "@/server/licence/display";
+import { LICENCE_STATE_LABELS, bannerCopy, rejectionSentence } from "@/server/licence/policy";
 import { StaffShell, type StaffIdentity, type StaffNavItem } from "./StaffShell";
 
 /**
@@ -35,6 +40,7 @@ const NAV: StaffNavItem[] = [
   { label: "Roles", href: "/staff/roles", group: "Administration" },
   { label: "Audit", href: "/staff/audit", group: "Administration" },
   { label: "Email log", href: "/staff/email-log", group: "Administration" },
+  { label: "Licence", href: "/staff/licence", group: "Administration" },
 ];
 
 /** The view permission each section needs; a section is shown only to staff who hold it. */
@@ -52,6 +58,8 @@ const NAV_PERMISSION: Record<string, Parameters<typeof can>[0]> = {
   "/staff/roles": "roles.view",
   "/staff/audit": "audit.view",
   "/staff/email-log": "audit.view",
+  // licence.view is Global only, so it is deliberately absent from SCOPE_AWARE_SECTIONS.
+  "/staff/licence": "licence.view",
 };
 
 /** Sections whose list pages filter to the caller's scope (integration warning #1). */
@@ -105,6 +113,41 @@ export default async function StaffLayout({
   }
   const bell = <NotificationBell initialUnread={unread} variant="staff" />;
 
+  // Licence banner and restriction mirror (14-19, D-15, D-09). Same chrome-persistence
+  // discipline as the bell: a failed licence read leaves no banner and an unrestricted
+  // context, never a failed shell. The banner is for holders of licence.view only; other
+  // staff learn that an action is unavailable, not the licence detail (T-14-19-01).
+  let bannerCopyValue: ReturnType<typeof bannerCopy> = null;
+  let licenceRestriction: LicenceRestrictionValue | undefined;
+  try {
+    const snapshot = await licenceService.getStatusSnapshot();
+    const canViewLicence = await can("licence.view", {});
+    licenceRestriction = {
+      restricted: snapshot.isRestricted,
+      canViewLicence,
+      stateLabel: canViewLicence ? LICENCE_STATE_LABELS[snapshot.state] : null,
+    };
+    if (canViewLicence) {
+      const canActivate = await can("licence.activate", {});
+      const zone = snapshot.timeZone;
+      bannerCopyValue = bannerCopy({
+        state: snapshot.state,
+        daysRemaining: snapshot.daysRemaining,
+        expiry: snapshot.expiresAt ? formatLicenceInstant(snapshot.expiresAt, zone) : null,
+        graceEnd: snapshot.graceEndsAt ? formatLicenceInstant(snapshot.graceEndsAt, zone) : null,
+        renewalEmail: snapshot.support?.renewalEmail ?? null,
+        canActivate,
+        reasonSentence:
+          snapshot.state === "INVALID" && snapshot.reasonCode ? rejectionSentence(snapshot.reasonCode) : null,
+      });
+    }
+  } catch {
+    bannerCopyValue = null;
+    licenceRestriction = undefined;
+  }
+  // JSX is built outside the try block: a failed render is not catchable there, only the read is.
+  const banner = bannerCopyValue ? <LicenceBanner {...bannerCopyValue} href="/staff/licence" /> : null;
+
   // Hide sections this person cannot open, instead of offering a link that lands on a denial.
   // Overview is every staff member's home; each section is checked against its own view permission.
   // Integration warning #1 — the delivery lists follow the caller's scope, so
@@ -120,7 +163,14 @@ export default async function StaffLayout({
   const visibleNav = NAV.filter((_, i) => allowed[i]);
 
   return (
-    <StaffShell nav={visibleNav} identity={identity} signOut={signOut} bell={bell}>
+    <StaffShell
+      nav={visibleNav}
+      identity={identity}
+      signOut={signOut}
+      bell={bell}
+      banner={banner}
+      licenceRestriction={licenceRestriction}
+    >
       {children}
     </StaffShell>
   );

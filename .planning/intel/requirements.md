@@ -597,7 +597,7 @@ Priority key: MUST = pilot-critical, SHOULD = valuable/expected unless deferred,
 
 ## REQ-LIC-05
 - source: docs/reference/Professional-Training-LMS-PRD-Revision-3-Multi-Gateway-Payments.md §18.3
-- description: When the approved expiry/grace threshold is reached, the LMS MUST enforce the configured restricted/read-only state server-side and in the UI.
+- description: When the approved expiry/grace threshold is reached, the LMS MUST enforce the configured restricted continuity mode server-side and in the UI.
 - acceptance: Direct requests cannot bypass restrictions; prohibited actions receive a clear, non-sensitive licence restriction response.
 - scope: Software licence and deployment control
 
@@ -615,7 +615,7 @@ Priority key: MUST = pilot-critical, SHOULD = valuable/expected unless deferred,
 
 ## REQ-LIC-08
 - source: docs/reference/Professional-Training-LMS-PRD-Revision-3-Multi-Gateway-Payments.md §18.3
-- description: Read-only restrictions MUST preserve the records and permitted export/data-access route defined by approved policy; the product MUST NOT delete client data as an expiry action.
+- description: Restricted continuity mode MUST preserve the records and permitted export/data-access route defined by approved policy; the product MUST NOT delete client data as an expiry action.
 - acceptance: Expiry does not delete data or silently make it unavailable beyond the agreed restrictions.
 - scope: Software licence and deployment control
 

@@ -13,6 +13,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
 import { GradeEntryClient, type GradeEntryClientProps } from "@/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/GradeEntryClient";
 
 afterEach(cleanup);
@@ -202,5 +203,24 @@ describe("GradeEntryClient — RELEASED", () => {
     expect(rows[0].textContent).toContain("Overridden from 12 to 15 by Amina Bello");
     expect(rows[0].textContent).toContain("“First correction”");
     expect(rows[1].textContent).toContain("Overridden from 15 to 18 by Chidi Okoro");
+  });
+});
+
+describe("GradeEntryClient override dialog in restricted continuity mode (14-19, D-07)", () => {
+  it("stays enabled once the reason is valid and shows no restriction reason, because grading is continuity work", () => {
+    const { rerender, props } = setup({ status: "RELEASED", gradeId: "g1", score: 18, feedback: "Excellent submission" });
+    rerender(
+      <LicenceRestrictionProvider value={{ restricted: true, canViewLicence: false, stateLabel: null }}>
+        <GradeEntryClient {...props} />
+      </LicenceRestrictionProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Override grade" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/reason/i), { target: { value: "Recount confirmed a marking error" } });
+
+    const confirm = within(dialog).getByRole("button", { name: "Override grade" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.hasAttribute("aria-describedby")).toBe(false);
+    expect(within(dialog).queryByText(/Unavailable in restricted continuity mode/)).toBeNull();
   });
 });

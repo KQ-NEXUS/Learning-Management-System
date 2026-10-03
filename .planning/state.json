@@ -41,7 +41,7 @@
     {
       "number": "8",
       "name": "Finance Reconciliation, Dashboards & Reporting Exports",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "9",
@@ -71,7 +71,7 @@
     {
       "number": "14",
       "name": "Software Licence & Deployment Control",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "15",
@@ -82,7 +82,7 @@
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step (verify)",
-    "reason": "Phase 13 of 16 · ready to verify"
+    "reason": "Phase 14 of 16 · ready to verify"
   },
-  "updated_at": "2026-09-28T21:14:10.447Z"
+  "updated_at": "2026-10-02T03:16:07.661Z"
 }

@@ -56,9 +56,9 @@ describe("email categories", () => {
 });
 
 describe("TEMPLATE_IDS", () => {
-  it("lists exactly 28 unique ids", () => {
-    expect(TEMPLATE_IDS).toHaveLength(28);
-    expect(new Set(TEMPLATE_IDS).size).toBe(28);
+  it("lists exactly 29 unique ids", () => {
+    expect(TEMPLATE_IDS).toHaveLength(29);
+    expect(new Set(TEMPLATE_IDS).size).toBe(29);
   });
 
   it("gives every id a known category and excludes the legacy order-confirmation id", () => {
@@ -67,35 +67,37 @@ describe("TEMPLATE_IDS", () => {
       expect(categories.has(TEMPLATE_CATEGORY[id])).toBe(true);
     }
     expect((TEMPLATE_IDS as readonly string[]).includes("order-confirmation")).toBe(false);
-    expect(Object.keys(TEMPLATE_CATEGORY)).toHaveLength(28);
+    expect(Object.keys(TEMPLATE_CATEGORY)).toHaveLength(29);
   });
 
   it("categorises auth mail as AUTH and the ticket-reply mail as TICKET_UPDATES", () => {
     expect(TEMPLATE_CATEGORY["password-reset"]).toBe("AUTH");
     expect(TEMPLATE_CATEGORY["ticket-reply"]).toBe("TICKET_UPDATES");
     expect(TEMPLATE_CATEGORY["staff-order-exception"]).toBe("STAFF");
+    expect(TEMPLATE_CATEGORY["staff-licence-notice"]).toBe("STAFF");
     expect(TEMPLATE_CATEGORY["payment-failed"]).toBe("ALWAYS");
   });
 });
 
 describe("notification vocabulary", () => {
-  it("lists exactly 27 unique types, each mapped to a known target type", () => {
-    expect(NOTIFICATION_TYPES).toHaveLength(27);
-    expect(new Set(NOTIFICATION_TYPES).size).toBe(27);
+  it("lists exactly 28 unique types, each mapped to a known target type", () => {
+    expect(NOTIFICATION_TYPES).toHaveLength(28);
+    expect(new Set(NOTIFICATION_TYPES).size).toBe(28);
     const targets = new Set<string>(NOTIFICATION_TARGET_TYPES);
     for (const t of NOTIFICATION_TYPES) {
       expect(targets.has(NOTIFICATION_TYPE_TARGET[t])).toBe(true);
     }
-    expect(Object.keys(NOTIFICATION_TYPE_TARGET)).toHaveLength(27);
+    expect(Object.keys(NOTIFICATION_TYPE_TARGET)).toHaveLength(28);
   });
 
-  it("lists the ten target types", () => {
-    expect(NOTIFICATION_TARGET_TYPES).toHaveLength(10);
+  it("lists the eleven target types", () => {
+    expect(NOTIFICATION_TARGET_TYPES).toHaveLength(11);
   });
 
   it("routes representative types to the documented targets", () => {
     expect(NOTIFICATION_TYPE_TARGET["payment.failed"]).toBe("LEARNER_ORDER");
     expect(NOTIFICATION_TYPE_TARGET["staff.email_failed"]).toBe("STAFF_EMAIL_LOG");
+    expect(NOTIFICATION_TYPE_TARGET["staff.licence_notice"]).toBe("STAFF_LICENCE");
     expect(NOTIFICATION_TYPE_TARGET["ticket.reply"]).toBe("LEARNER_TICKET");
   });
 });
@@ -131,6 +133,7 @@ describe("DOMAIN_EVENT_TYPE_LIST", () => {
     expect(new Set(DOMAIN_EVENT_TYPE_LIST).size).toBe(DOMAIN_EVENT_TYPE_LIST.length);
     expect(DOMAIN_EVENT_TYPE_LIST).toContain("payment.failed");
     expect(DOMAIN_EVENT_TYPE_LIST).toContain("payment.refunded");
+    expect(DOMAIN_EVENT_TYPE_LIST).toContain("licence.notice");
   });
 });
 

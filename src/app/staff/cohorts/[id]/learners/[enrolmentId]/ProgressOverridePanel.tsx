@@ -144,6 +144,7 @@ export function ProgressOverridePanel({
 
       <ConfirmModal
         open={target !== null}
+        licenceEffect="continuity"
         title={
           target
             ? `${target.currentlyComplete ? "Mark incomplete" : "Mark complete"}: ${target.lessonTitle}?`

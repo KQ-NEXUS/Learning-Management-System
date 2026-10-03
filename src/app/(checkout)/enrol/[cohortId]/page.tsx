@@ -9,6 +9,7 @@ import {
   CurrencyUnavailableError,
 } from "@/server/services/checkout-service";
 import { isSupportedCurrency } from "@/server/payments/routing";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
 import {
   AlreadyEnrolledError,
   CapacityExceededError,
@@ -119,6 +120,7 @@ export default async function EnrolResumptionPage({
       : err instanceof CapacityExceededError ? "full"
       : err instanceof CohortClosedError ? "closed"
       : err instanceof CurrencyUnavailableError ? "currency"
+      : err instanceof LicenceWriteBlockedError ? "unavailable"
       : null;
     if (notice) redirect(`${await getCohortOfferPath(cohortId)}?notice=${notice}`);
     throw err;

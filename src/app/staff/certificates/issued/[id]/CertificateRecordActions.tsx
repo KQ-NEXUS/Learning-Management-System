@@ -118,6 +118,7 @@ export function CertificateRecordActions({
 
       <ConfirmModal
         open={open === "revoke"}
+        licenceEffect="continuity"
         tone="danger"
         title="Revoke certificate"
         confirmLabel="Revoke certificate"
@@ -132,6 +133,7 @@ export function CertificateRecordActions({
       />
       <ConfirmModal
         open={open === "reissue"}
+        licenceEffect="continuity"
         tone="default"
         title="Reissue certificate"
         confirmLabel="Reissue certificate"

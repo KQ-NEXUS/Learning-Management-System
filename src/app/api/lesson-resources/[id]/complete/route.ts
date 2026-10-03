@@ -15,6 +15,7 @@
 
 import { NextResponse } from "next/server";
 import * as permissions from "@/server/permissions";
+import { LICENCE_REFUSAL_MESSAGE } from "@/server/licence/policy";
 import {
   completeLessonResourceUpload,
   ResourceUploadValidationError,
@@ -38,6 +39,11 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
         { error: err.message, resource: toLessonResourceView(err.resource) },
         { status: 422, headers: { "cache-control": "private, no-store" } },
       );
+    }
+    // Licence refusal (LIC-05): the caller already passed authorization, so this
+    // reveals state only to them. Every genuine denial keeps the identical 404.
+    if (permissions.isLicenceRestricted(err)) {
+      return NextResponse.json({ error: LICENCE_REFUSAL_MESSAGE }, { status: 403 });
     }
     if (
       err instanceof permissions.AuthenticationError ||

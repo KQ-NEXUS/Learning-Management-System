@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TEMPLATE_CATEGORY, TEMPLATE_IDS, type TemplateId } from "@/server/communications/contracts";
+import {
+  MUTABLE_EMAIL_CATEGORIES,
+  TEMPLATE_CATEGORY,
+  TEMPLATE_IDS,
+  type TemplateId,
+} from "@/server/communications/contracts";
 import {
   renderEmail,
   TEMPLATE_REGISTRY,
@@ -187,11 +192,12 @@ const STAFF_IDS: TemplateId[] = [
   "staff-ticket-escalated",
   "staff-order-exception",
   "staff-reconciliation-exception",
+  "staff-licence-notice",
 ];
 
 describe("registry exhaustiveness", () => {
-  it("has a registry entry and a sample for every one of the 28 ids", () => {
-    expect(TEMPLATE_IDS).toHaveLength(28);
+  it("has a registry entry and a sample for every one of the 29 ids", () => {
+    expect(TEMPLATE_IDS).toHaveLength(29);
     for (const id of TEMPLATE_IDS) {
       expect(TEMPLATE_REGISTRY[id as keyof TemplateParamsMap], id).toBeTypeOf("function");
       expect(sampleOf(id), id).toBeDefined();
@@ -256,6 +262,16 @@ describe("staff templates", () => {
     const out = renderAny(id, sampleOf(id));
     expect(out.html).toContain("https://lms.acme.test/");
     expect(out.subject.length).toBeGreaterThan(0);
+  });
+
+  it("staff-licence-notice uses the headline as subject, links absolutely and is never mutable", () => {
+    const params = sampleOf("staff-licence-notice");
+    const out = renderAny("staff-licence-notice", params);
+    expect(out.subject).toBe(params.headline);
+    expect(out.html).toContain('href="https://lms.acme.test/staff/licence"');
+    expect(out.text.split("\n")).toContain("https://lms.acme.test/staff/licence");
+    expect(TEMPLATE_CATEGORY["staff-licence-notice"]).toBe("STAFF");
+    expect((MUTABLE_EMAIL_CATEGORIES as readonly string[]).includes(TEMPLATE_CATEGORY["staff-licence-notice"])).toBe(false);
   });
 
   it("staff-order-exception shows the plain-language label, never coded detail", () => {

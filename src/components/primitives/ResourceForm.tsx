@@ -8,6 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useLicenceRestriction } from "@/components/licence/LicenceRestrictionProvider";
+import { LicenceRefusalNote, RestrictedControlReason } from "@/components/licence/LicenceRefusalNote";
+import { isLicenceRefusalMessage } from "@/server/licence/policy";
 
 // The link/plain-text decision reads child DOM that only exists after commit,
 // so it must run synchronously before paint to avoid a flash of the wrong
@@ -70,6 +73,12 @@ export type ResourceFormProps = {
   formId?: string;
   /** Omit the built-in Cancel/Save footer when the page provides its own submit control. */
   hideFooter?: boolean;
+  /**
+   * Licence UI mirror (14-19, D-09, courtesy only; the server is the gate). In restricted
+   * continuity mode a "write" form's built-in submit is disabled with a visible reason.
+   * Default "write"; no staff or catalogue form is a continuity action.
+   */
+  licenceEffect?: "write" | "continuity";
   children: ReactNode;
 };
 
@@ -92,9 +101,16 @@ export function ResourceForm({
   sectioned = false,
   formId,
   hideFooter = false,
+  licenceEffect = "write",
   children,
 }: ResourceFormProps) {
   const summaryId = useId();
+  const restrictedReasonId = useId();
+  const { restricted, canViewLicence } = useLicenceRestriction();
+  const blockedByLicence = restricted && licenceEffect !== "continuity";
+  // A server licence refusal is a calm warning, never an entry in the danger summary (T-14-19-05).
+  const refusalErrors = errors.filter((error) => isLicenceRefusalMessage(error.message));
+  const summaryErrors = errors.filter((error) => !isLicenceRefusalMessage(error.message));
   const summaryRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -162,9 +178,13 @@ export function ResourceForm({
     return (
       <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 border-t border-foreground py-12">
         <p className="text-sm font-semibold text-foreground">Could not load this record</p>
-        <p className="max-w-prose text-sm text-muted-foreground">
-          {state.message ?? "The request failed. Nothing has been changed."}
-        </p>
+        {state.message && isLicenceRefusalMessage(state.message) ? (
+          <LicenceRefusalNote message={state.message} />
+        ) : (
+          <p className="max-w-prose text-sm text-muted-foreground">
+            {state.message ?? "The request failed. Nothing has been changed."}
+          </p>
+        )}
         {onRetry && (
           <button type="button" onClick={onRetry} className={BTN}>
             Retry
@@ -214,7 +234,9 @@ export function ResourceForm({
           </div>
         )}
 
-        {errors.length > 0 && (
+        {refusalErrors.length > 0 && <LicenceRefusalNote message={refusalErrors[0].message} />}
+
+        {summaryErrors.length > 0 && (
           <div
             ref={summaryRef}
             role="alert"
@@ -223,11 +245,11 @@ export function ResourceForm({
             className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
           >
             <p id={summaryId} className="text-sm font-semibold text-danger">
-              {errors.length} {errors.length === 1 ? "issue needs" : "issues need"}{" "}
+              {summaryErrors.length} {summaryErrors.length === 1 ? "issue needs" : "issues need"}{" "}
               attention before this can be saved
             </p>
             <ul className="mt-2 flex flex-col gap-1">
-              {errors.map((error) => (
+              {summaryErrors.map((error) => (
                 <li key={error.name}>
                   {linkableNames.has(error.name) ? (
                     <a
@@ -260,11 +282,21 @@ export function ResourceForm({
               Cancel
             </button>
           )}
-          <button type="submit" disabled={pending} className={BTN_PRIMARY}>
+          <button
+            type="submit"
+            disabled={pending || blockedByLicence}
+            aria-describedby={blockedByLicence && !hideFooter ? restrictedReasonId : undefined}
+            className={BTN_PRIMARY}
+          >
             {pending ? "Saving…" : submitLabel}
           </button>
         </div>
       </div>
+      {blockedByLicence && !hideFooter && (
+        <div className="mt-3 flex justify-end">
+          <RestrictedControlReason id={restrictedReasonId} canViewLicence={canViewLicence} />
+        </div>
+      )}
     </form>
   );
 }

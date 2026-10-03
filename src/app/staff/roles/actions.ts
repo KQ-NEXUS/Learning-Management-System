@@ -9,7 +9,7 @@ import {
   RoleVersionConflictError,
 } from "@/server/services/role-service";
 import { ContinuityError } from "@/server/services/continuity-service";
-import { AuthorizationError } from "@/server/permissions";
+import { AuthorizationError, refusalMessage } from "@/server/permissions";
 import type { FieldError } from "@/components/primitives";
 
 export type CreateRoleState = { errors: FieldError[] };
@@ -54,7 +54,7 @@ export async function createRoleAction(
     }
     if (error instanceof AuthorizationError) {
       return {
-        errors: [{ name: "form", message: "You do not have access to create roles." }],
+        errors: [{ name: "form", message: refusalMessage(error, "You do not have access to create roles.") }],
       };
     }
     throw error;
@@ -104,7 +104,9 @@ export async function updateRoleAction(
       return { errors: [{ name: "name", message: "That role name is already taken." }] };
     }
     if (error instanceof AuthorizationError) {
-      return { errors: [{ name: "form", message: "You do not have access to edit roles." }] };
+      return {
+        errors: [{ name: "form", message: refusalMessage(error, "You do not have access to edit roles.") }],
+      };
     }
     throw error;
   }
@@ -131,7 +133,7 @@ export async function setRoleActiveAction(
       return { error: error.message };
     }
     if (error instanceof AuthorizationError) {
-      return { error: "You do not have access to change this role's status." };
+      return { error: refusalMessage(error, "You do not have access to change this role's status.") };
     }
     throw error;
   }

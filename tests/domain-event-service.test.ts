@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildDomainEventRow,
   writeDomainEvent,
+  writeDomainEventOnce,
+  type DomainEventCreateManyClient,
   type DomainEventType,
 } from "@/server/services/domain-event-service";
 import { AUDIT_REDACTED_KEYS } from "@/server/services/audit-service";
@@ -121,6 +123,17 @@ describe("buildDomainEventRow", () => {
     },
   );
 
+  it("type-checks and redacts the payload for the Phase 14 licence.notice event (LIC-07)", () => {
+    const row = buildDomainEventRow({
+      type: "licence.notice",
+      payload: { licenceId: "LIC-1", noticeKey: "expiring-30", token: "super-secret" },
+    });
+    expect(row.type).toBe("licence.notice");
+    const payload = row.payload as { licenceId: string; token: string };
+    expect(payload.licenceId).toBe("LIC-1");
+    expect(payload.token).toBe("[redacted]");
+  });
+
   it.each([
     "payment.failed",
     "payment.refunded",
@@ -199,3 +212,37 @@ describe("writeDomainEvent", () => {
 // @ts-expect-error "enrolment.frobnicated" is not a member of DomainEventType
 const _rejectsUnknownType: DomainEventType = "enrolment.frobnicated";
 void _rejectsUnknownType;
+
+describe("writeDomainEventOnce (LIC-07)", () => {
+  it("preserves the supplied id and passes skipDuplicates true to createMany", async () => {
+    const calls: Array<{ data: Array<Record<string, unknown>>; skipDuplicates: true }> = [];
+    const client: DomainEventCreateManyClient = {
+      domainEvent: {
+        createMany: async (args) => {
+          calls.push(args);
+          return { count: 1 };
+        },
+      },
+    };
+    const created = await writeDomainEventOnce(client, {
+      id: "licence-notice-1",
+      type: "licence.notice",
+      payload: { licenceId: "LIC-1", noticeKey: "expiring-30" },
+    });
+    expect(created).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].skipDuplicates).toBe(true);
+    expect(calls[0].data).toHaveLength(1);
+    expect(calls[0].data[0].id).toBe("licence-notice-1");
+    expect(calls[0].data[0].type).toBe("licence.notice");
+  });
+
+  it("returns false when createMany skipped the duplicate id", async () => {
+    const client: DomainEventCreateManyClient = {
+      domainEvent: { createMany: async () => ({ count: 0 }) },
+    };
+    expect(
+      await writeDomainEventOnce(client, { id: "dup", type: "licence.notice", payload: {} }),
+    ).toBe(false);
+  });
+});

@@ -707,7 +707,10 @@ export function createLessonProgressService(deps: LessonProgressServiceDeps) {
     lessonId: string;
     complete: boolean;
     reason: string;
-  }>("enrolments.manage", (input) => deps.enrolmentScope(input.enrolmentId))(
+  }>("enrolments.manage", (input) => deps.enrolmentScope(input.enrolmentId), {
+    licence: "continuity",
+    reason: "Progress recording for existing enrolments continues (D-06, A9)",
+  })(
     async (input, ctx) => {
       const reason = trimReason(input.reason);
       if (!reason) throw new OverrideReasonRequiredError(input.enrolmentId, input.lessonId);

@@ -23,7 +23,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { UserInputError } from "@/server/errors/user-input-error";
 import { CapacityExceededError, AlreadyEnrolledError, StaleEnrolmentError, CohortClosedError } from "@/server/services/seat-accounting";
 import {
@@ -97,7 +97,7 @@ function toFailure(error: unknown): Extract<EnrolmentActionResult, { ok: false }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
       ok: false,
-      message: "Your role does not permit this action on this enrolment.",
+      message: refusalMessage(error, "Your role does not permit this action on this enrolment."),
     };
   }
   throw error;

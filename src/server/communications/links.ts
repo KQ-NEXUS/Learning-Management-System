@@ -31,6 +31,7 @@ function assertSegment(value: unknown, field: string): string {
 
 export const DASHBOARD_PATH = "/dashboard";
 export const EMAIL_LOG_PATH = "/staff/email-log";
+export const LICENCE_PATH = "/staff/licence";
 
 export function orderPath(reference: string): string {
   return `/orders/${assertSegment(reference, "reference")}`;
@@ -112,6 +113,8 @@ export function notificationHref(
       );
     case "STAFF_EMAIL_LOG":
       return EMAIL_LOG_PATH;
+    case "STAFF_LICENCE":
+      return LICENCE_PATH;
     default: {
       const exhaustive: never = targetType;
       throw new Error(`Unhandled notification target type: ${String(exhaustive)}`);

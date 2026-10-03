@@ -357,6 +357,10 @@ model User {
   notifications    Notification[]
   emailPreferences EmailPreference[]
 
+  // Phase 14 — attribution for a licence activation (LIC-08: licence rows are
+  // never deleted by application code).
+  licenceActivations LicenceRecord[] @relation("LicenceActivatedBy")
+
   @@index([status])
   @@index([isStaff])
 }
@@ -1908,4 +1912,66 @@ model EmailPreference {
   user User @relation(fields: [userId], references: [id])
 
   @@id([userId, category])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Software licence and deployment control
+// ---------------------------------------------------------------------------
+
+// D-13 — the deployment identifier is a value seeded in the database by the
+// migration itself (singleton row, id "deployment", generated UUID), never
+// derived from hostname, MAC or container ID, so it survives restore, scaling
+// and migration. The singleton is enforced by a CHECK in the migration.
+model DeploymentIdentity {
+  id           String   @id @default("deployment")
+  deploymentId String   @unique @default(dbgenerated("(gen_random_uuid())::text"))
+  createdAt    DateTime @default(now())
+}
+
+// D-13 — append-only register of every successfully activated licence. `raw`
+// is the signed licence text: public signed data, never a secret (D-14). No
+// application code deletes these rows (LIC-08).
+model LicenceRecord {
+  id            String   @id @default(cuid())
+  licenceId     String   @unique
+  raw           String
+  keyId         String
+  schemaVersion Int
+  clientId      String
+  issuedAt      DateTime
+  expiresAt     DateTime
+  graceEndsAt   DateTime
+  activatedAt   DateTime @default(now())
+  activatedById String?
+
+  activatedBy User?          @relation("LicenceActivatedBy", fields: [activatedById], references: [id])
+  activeFor   LicenceState[] @relation("ActiveLicenceRecord")
+
+  @@index([issuedAt])
+}
+
+// D-13 — singleton pointer plus derived and last-known-good state (id
+// "current"). Every function instance reads this one row; a write is one
+// atomic UPDATE guarded by `version`. D-01 — the validator-shaped columns
+// (lastVerificationOutcome, attentionSince, lastGoodAt) exist so an online
+// check can be added later without a rewrite; this phase writes no validator
+// state. No application code deletes this row (LIC-08).
+model LicenceState {
+  id                      String    @id @default("current")
+  activeRecordId          String?
+  registeredClientId      String?
+  everActivated           Boolean   @default(false)
+  state                   String    @default("UNLICENSED")
+  restrictedAt            DateTime?
+  reasonCode              String?
+  lastVerifiedAt          DateTime?
+  lastVerificationOutcome String?
+  lastGoodAt              DateTime?
+  attentionSince          DateTime?
+  highWaterAt             DateTime  @default(now())
+  clockAlertAt            DateTime?
+  version                 Int       @default(0)
+  updatedAt               DateTime  @updatedAt
+
+  activeRecord LicenceRecord? @relation("ActiveLicenceRecord", fields: [activeRecordId], references: [id])
 }

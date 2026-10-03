@@ -32,7 +32,7 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly. (completed 2026-09-19)
 - [x] **Phase 12: Support Tickets** *(Track B, depends on Phase 2)* - Learners raise tickets; staff (including a non-Administrator Support role) triage, reply, escalate, and report. (completed 2026-09-25)
 - [ ] **Phase 13: Transactional Communications & Notifications** *(Shared, depends on Phases 3, 5, 6, 7, 10, 11, 12)* - Every lifecycle event across the system sends exactly one deduplicated transactional email; in-product alerts surface important state.
-- [ ] **Phase 14: Software Licence & Deployment Control** *(Track A, depends on Phase 2; contingent — see note below)* - Provider-signed licence verification, status visibility, and expiry-driven read-only enforcement.
+- [ ] **Phase 14: Software Licence & Deployment Control** *(Track A, depends on Phase 2; contingent — see note below)* - Provider-signed licence verification, status visibility, and expiry-driven restricted continuity mode enforcement.
 - [ ] **Phase 15: Launch Readiness — NFR Verification & Operational Cutover** *(Shared, depends on all prior phases)* - Availability, performance, security, accessibility, backup/recovery, and the full unassisted learner+operator journey are verified against the PRD §14.3 launch gates.
 
 ## Phase Details
@@ -760,10 +760,33 @@ Wave 13 *(blocked on Wave 12; human-only)*
 
   1. The LMS verifies a provider-signed licence at startup, on a scheduled cadence, and before high-impact mutations, rejecting altered/expired/wrong-client/wrong-deployment licences. (LIC-01, LIC-04)
   2. Users with `licence.view` see current state, licence ID, client, dates, and validation result without exposed signing secrets; only the narrow `licence.activate` permission can activate a provider-issued licence — nothing can forge or self-extend one. (LIC-02, LIC-03)
-  3. On reaching the expiry/grace threshold, the system enforces a read-only state server-side and in the UI without deleting client data. (LIC-05, LIC-08)
+  3. On reaching the expiry/grace threshold, the system enforces restricted continuity mode server-side and in the UI without deleting client data. (LIC-05, LIC-08)
   4. Every licence event (activation, validation outcome, state transition, restriction enforcement) is audited and triggers the appropriate Administrator notification. (LIC-06, LIC-07)
 
 **Plans**: TBD
+
+- [x] 14-01-PLAN.md
+- [x] 14-02-PLAN.md
+- [x] 14-03-PLAN.md
+- [x] 14-04-PLAN.md
+- [x] 14-05-PLAN.md
+- [x] 14-06-PLAN.md
+- [x] 14-07-PLAN.md
+- [x] 14-08-PLAN.md
+- [x] 14-09-PLAN.md
+- [x] 14-10-PLAN.md
+- [x] 14-11-PLAN.md
+- [x] 14-12-PLAN.md
+- [x] 14-13-PLAN.md
+- [x] 14-14-PLAN.md
+- [x] 14-15-PLAN.md
+- [x] 14-16-PLAN.md
+- [x] 14-17-PLAN.md
+- [x] 14-18-PLAN.md
+- [x] 14-19-PLAN.md
+- [x] 14-20-PLAN.md
+- [x] 14-21-PLAN.md
+
 **UI hint**: yes
 
 ---
@@ -804,5 +827,5 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
 | 12. Support Tickets | 9/9 | Complete    | 2026-09-25 |
 | 13. Transactional Communications & Notifications | 13/13 | In Progress|  |
-| 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
+| 14. Software Licence & Deployment Control | 21/21 | In Progress|  |
 | 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |

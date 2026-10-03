@@ -286,6 +286,7 @@ export function createStaffAccountService(deps: {
   const deactivateInternal = authorize<{ userId: string; reason: string }>(
     "users.manage",
     () => userScope(),
+    { licence: "continuity", reason: "Deactivation is security administration and stays available (D-07, A10)" },
   )(async (input, ctx) => {
     const reason = input.reason.trim();
     if (reason.length < MIN_REASON_LENGTH) {

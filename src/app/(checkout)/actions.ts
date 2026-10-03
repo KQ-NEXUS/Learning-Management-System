@@ -11,6 +11,7 @@ import {
   CohortClosedError,
   CohortNotFoundError,
 } from "@/server/services/seat-accounting";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
 import { CHECKOUT_INTENT_COOKIE, CHECKOUT_INTENT_MAX_AGE_SECONDS } from "@/server/auth/landing";
 
 /**
@@ -54,6 +55,9 @@ export async function enrollAction(formData: FormData): Promise<void> {
   try {
     ({ orderId } = await startCheckout(actor, cohortId, currency));
   } catch (err) {
+    // D-08 / OQ8 — restricted continuity mode: back to the catalogue with the
+    // neutral notice (no licence wording reaches a learner).
+    if (err instanceof LicenceWriteBlockedError) redirect("/courses?notice=unavailable");
     if (
       err instanceof AlreadyEnrolledError ||
       err instanceof CapacityExceededError ||

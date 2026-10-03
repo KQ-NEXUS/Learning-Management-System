@@ -285,6 +285,7 @@ export function GradeEntryClient({
 
       <ConfirmModal
         open={overrideOpen}
+        licenceEffect="continuity"
         tone="default"
         title="Override grade"
         confirmLabel="Override grade"

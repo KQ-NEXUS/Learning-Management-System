@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import {
   certificateTemplateService,
   setDefaultTemplate,
@@ -47,7 +47,7 @@ function messageOf(caught: unknown): string {
 
 function toFailure(caught: unknown, fallback: string): { ok: false; message: string } {
   if (caught instanceof AuthenticationError || caught instanceof AuthorizationError) {
-    return { ok: false, message: DENIED_MESSAGE };
+    return { ok: false, message: refusalMessage(caught, DENIED_MESSAGE) };
   }
   if (caught instanceof DefaultTemplateRequiredError) {
     return { ok: false, message: messageOf(caught) };

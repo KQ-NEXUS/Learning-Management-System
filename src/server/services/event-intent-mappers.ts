@@ -35,6 +35,7 @@ import { createEnrolmentPaymentMappers } from "@/server/services/event-mappers/e
 import { createEnrolmentSessionMappers } from "@/server/services/event-mappers/enrolment-session";
 import { createLearningMappers } from "@/server/services/event-mappers/learning";
 import { createStaffMappers } from "@/server/services/event-mappers/staff";
+import { createLicenceMappers } from "@/server/services/event-mappers/licence";
 
 /** The minimal, already-loaded shape of a claimed `DomainEvent` row a mapper
  * needs. Never the raw Prisma row — payload is narrowed to a plain record. */
@@ -169,7 +170,9 @@ export function buildMapperTable(
  * `order.exception`, `payment.reconciliation_exception`,
  * `submission.created`) — `order.exception` is now mapped by BOTH the
  * enrolment-payment group (learner mail, `illegal_transition` only) and the
- * staff group (every reason), fanning out to both when both apply.
+ * staff group (every reason), fanning out to both when both apply. Phase 14
+ * (plan 14-14) adds the licence group (`licence.notice`, Global `licence.view`
+ * holders only).
  */
 export const EVENT_MAPPER_GROUPS: MapperGroup[] = [
   createSupportMappers(),
@@ -177,4 +180,5 @@ export const EVENT_MAPPER_GROUPS: MapperGroup[] = [
   createEnrolmentSessionMappers(),
   createLearningMappers(),
   createStaffMappers(),
+  createLicenceMappers(),
 ];

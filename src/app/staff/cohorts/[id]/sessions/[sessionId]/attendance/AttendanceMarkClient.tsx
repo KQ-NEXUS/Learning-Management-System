@@ -315,6 +315,7 @@ export function AttendanceMarkClient({
 
       <ConfirmModal
         open={pendingCorrection !== null}
+        licenceEffect="continuity"
         tone="danger"
         minReasonLength={10}
         title={`Change ${pendingCorrection?.learnerName ?? "this learner"}'s attendance for ${sessionTitle}?`}

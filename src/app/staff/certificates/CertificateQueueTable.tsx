@@ -97,6 +97,7 @@ export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertif
       )}
       <ConfirmModal
         open={target !== null}
+        licenceEffect="continuity"
         tone="default"
         title="Issue this certificate?"
         confirmLabel="Issue certificate"

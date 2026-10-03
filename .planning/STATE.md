@@ -1,19 +1,20 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-current_phase: 13
-current_phase_name: Transactional Communications & Notifications
+current_phase: 14
+current_phase_name: Software Licence & Deployment Control
 status: verifying
-stopped_at: Phase 13 merged into Khaliddev (all 14 plans executed on Transactional-Communications) — phase verification/UAT still pending; Phase 8 closed 2026-09-30
-last_updated: 2026-09-30T15:00:00.000Z
-last_activity: 2026-09-30
+stopped_at: Completed 14-21-PLAN.md
+last_updated: "2026-10-02T03:21:17.354Z"
+last_activity: 2026-10-01
+last_activity_desc: Phase 14 execution started
+state_head: ab749951d2867ad3ad5abdb4562fab8a41506a06
 progress:
   total_phases: 16
-  completed_phases: 12
-  total_plans: 205
-  completed_plans: 205
-  percent: 75
+  completed_phases: 9
+  total_plans: 226
+  completed_plans: 226
+milestone_name: milestone
 ---
 
 # Project State
@@ -23,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 13 — Transactional Communications & Notifications
+**Current focus:** Phase 14 — Software Licence & Deployment Control
 
 ## Current Position
 
-Phase: 13 (Transactional Communications & Notifications) — executed by co-worker, merged 2026-09-30; awaiting verification
-Plan: 14 of 14 executed
-Status: Ready for verification. Phase 8 closed 2026-09-30 (export lifecycle UAT passed). Track B next: Phase 15
-Last activity: 2026-09-30 — merged origin/Transactional-Communications into Khaliddev
+Phase: 14 (Software Licence & Deployment Control) — EXECUTING
+Plan: 21 of 21
+Status: Phase complete — ready for verification
+Last activity: 2026-10-01 — Phase 14 execution started
 
 Progress: [██████████] 99%
 
@@ -114,6 +115,27 @@ Progress: [██████████] 99%
 | Phase 13 P10 | 50min | 3 tasks | 7 files |
 | Phase 13 P11 | 75min | 3 tasks | 11 files |
 | Phase 13 P13 | 2h30m | 3 tasks | 5 files |
+| Phase 14 P01 | 20min | 3 tasks | 2 files |
+| Phase 14 P02 | 35min | 3 tasks | 21 files |
+| Phase 14 P03 | ~30min | 1 tasks | 4 files |
+| Phase 14 P04 | 15min | 2 tasks | 5 files |
+| Phase 14 P05 | 25min | 2 tasks | 6 files |
+| Phase 14 P06 | 25min | 3 tasks | 6 files |
+| Phase 14 P07 | 35min | 3 tasks | 4 files |
+| Phase 14 P08 | ~12min | 2 tasks | 13 files |
+| Phase 14 P09 | 40min | 3 tasks | 4 files |
+| Phase 14 P10 | 40min | 3 tasks | 13 files |
+| Phase 14 P11 | 25min | 2 tasks | 7 files |
+| Phase 14 P12 | 30min | 2 tasks | 11 files |
+| Phase 14 P13 | 45min | 3 tasks | 5 files |
+| Phase 14 P14 | 40min | 3 tasks | 6 files |
+| Phase 14 P15 | 45min | 3 tasks | 13 files |
+| Phase 14 P16 | 25min | 3 tasks | 9 files |
+| Phase 14 P17 | 45min | 2 tasks | 6 files |
+| Phase 14 P18 | 35min | 3 tasks | 24 files |
+| Phase 14 P19 | 30min | 3 tasks | 31 files |
+| Phase 14 P20 | 35min | 3 tasks | 14 files |
+| Phase 14 P21 | 95min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -241,6 +263,47 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 13]: 13-13: permission catalogue invariant asserts 37 (not the plan's literal 36) — Phase 11's certificates.manage already made 37 the correct, live count per tests/permissions.test.ts
 - [Phase 13]: 13-13: two stale mapper-registration assertions (event-intent-mappers.test.ts payment.failed, event-mappers-support.test.ts ticket.created) are pre-existing Plan 08/10 debt, confirmed isolated from 13-13's new files, logged to deferred-items.md and WINDOWS.md rather than fixed (out of file scope)
 - [Phase 13]: 13-13: acceptance test criterion 1 uses the real sendTransactionalEmail with only the Brevo SDK client mocked (real payload construction); criteria 2/3 use a plain injected send stub, matching tests/domain-event-drain.integration.test.ts's existing convention
+- [Phase 14]: Phase 14 D-02 contract approved as written (option-a): compact LMS-LIC1 Ed25519 envelope, schema v1
+- [Phase 14]: Phase 14 OQ1 (option-a): deployment fully operational until first activation, then permanent enforcement; policy constant NEVER_ACTIVATED_POLICY
+- [Phase 14]: [Phase 14 P02] encodeLicenceEnvelope accepts the signature as bytes or a function of the signed input (signature depends on the encoded parts); unrecognised integer payload schemaVersion is reported UNSUPPORTED_SCHEMA before the v1 shape is enforced; malformed shipped trust key throws LicenceUnavailableError
+- [Phase 14]: [Phase 14 P03] dbgenerated deployment UUID default is spelled (gen_random_uuid())::text in schema and migration to avoid permanent migrate-diff drift; licence singletons (DeploymentIdentity 'deployment', LicenceState 'current') are CHECK-pinned and seeded inside the migration
+- [Phase 14]: [Phase 14 P03] Task 2 (migrate deploy/db push/migrate status) left as an outstanding human step: project .env targets a remote shared Neon DB; Testcontainers proof plus empty migrate diff stand in
+- [Phase 14]: [Phase 14-04] OQ1 option-a implemented as NEVER_ACTIVATED_POLICY (unrestricted until first activation, then permanent enforcement via everActivated); never-activated deployments stay UNLICENSED even when the licence store is unreadable
+- [Phase 14]: [Phase 14-04] createClockMonitor compares each sample with the previous one so a single backward clock step is reported once
+- [Phase 14]: [Phase 14-05] Grace is computed by the issuer as expiresAt + graceDays x 24h UTC (default 14, whole days); the LMS never adds grace
+- [Phase 14]: [Phase 14-05] assertOutsideRepo resolves real paths so symlinks and Windows short names cannot place the signing key inside the repository; keygen and issue refuse to overwrite existing files
+- [Phase 14]: 14-06: display.ts pins month abbreviations and WAT/SAST/EAT zone abbreviations because ICU en-GB prints GMT+1 and Sept; other zones use Intl en-GB short names
+- [Phase 14]: 14-06: forbidden-words guard permits only the verbatim UI-SPEC UNKNOWN_KEY sentence containing 'signing key' (spec bans key values, not the phrase)
+- [Phase 14]: 14-06: notice closed set also accepts invalid-RECORD_MISSING and invalid-VALIDATION_WINDOW_EXHAUSTED (emitted by deriveState)
+- [Phase 14]: 14-07: CONCURRENT_CHANGE rolls back by throwing a sentinel out of the activation transaction (returning normally would commit the record insert without the state update)
+- [Phase 14]: 14-07: computeDerived rejects a stored record whose signed licenceId differs from its licenceId column as BAD_SIGNATURE (blocks SQL swap to another validly signed file)
+- [Phase 14]: 14-08: writeDomainEventOnce (createMany skipDuplicates, deterministic id) is the licence notice dedupe; no new table (D-15, LIC-07)
+- [Phase 14]: 14-08: staff-licence-notice sample omits the word deployment; real noticeCopy emailDetail prose (no deployment ID) unchanged
+- [Phase 14]: [Phase 14-09]: evaluateAndRecord returns due noticeKeys on every call (expiring buckets move without a state change; notice writer dedupes on deterministic event ids)
+- [Phase 14]: [Phase 14-09]: a lost version-guarded licence write retries up to 3 times and skips touch-only writes after a loss, so transitions are not lost and parallel callers still produce one audit row and one version bump
+- [Phase 14]: [Phase 14-09]: attentionSince is kept while verification is UNAVAILABLE in every derived state so INVALID(VALIDATION_WINDOW_EXHAUSTED) cannot flap into a fresh 24-hour window; cleared on verification success or rejection
+- [Phase 14]: [14-10] View model re-derives clock-based licence states from the injected now with deriveState; non-clock states (not activated, invalid, check pending) come from the snapshot
+- [Phase 14]: [14-10] What is blocked list follows the restriction flag (isRestricted), not the state name, so Check pending keeps the last-known restriction visible
+- [Phase 14]: [14-10] Deployment ID Copy button from the UI-SPEC added as client component CopyButton.tsx (not in the plan file list)
+- [Phase 14]: 14-11: licence guard runs strictly after authorization in withPermission; LicenceRestrictedError extends AuthorizationError with fixed LICENCE_REFUSAL_MESSAGE; guard skipped when no licence dependency configured
+- [Phase 14]: [Phase 14-12]: Registration licence guard runs after validation and before password hashing and any store call, returning one frozen REGISTRATION_UNAVAILABLE for every email (IAM-06); only LicenceWriteBlockedError is mapped
+- [Phase 14]: [Phase 14-13]: D-08 initiated-before rule is strictly greater-than: an anchor at restrictedAt plus 10 minutes settles normally, plus 1 ms becomes the payment_after_restriction exception (money recorded SUCCEEDED, Order EXCEPTION, no enrolment or seat change, CAPTURED_MONEY case); webhook anchor is PaymentAttempt.initiatedAt, manual anchor is Order.createdAt (OQ4/A13); cutoff read fails open
+- [Phase 14]: 14-14: licence notices reach only active staff with a Global licence.view grant; every notice notifies and every notice except expiring-60 also emails; unknown/missing noticeKey is poisoned (MalformedEventError), never notified; prismaCreateManyClient adapts Prisma to the structural once-only writer
+- [Phase 14]: 14-15: OQ3 adopted default stays visible: seeded Administrator role keeps licence.activate (prisma/seed.ts [...PERMISSIONS]), deviating from PRD 18.4; activation and inspection are declared continuity so recovery works in restricted mode
+- [Phase 14]: 14-15: diagnostic download fails closed (500) if the licence.diagnostic_downloaded audit write fails, per LIC-06 no download without evidence
+- [Phase 14]: 14-16: Scheduled licence check task rejects on evaluation failure (visible failed Netlify run); only the startup path swallows errors and is bounded to 3000 ms
+- [Phase 14]: 14-16: Startup and scheduled logs carry state code, counts and (startup error) error name only; hosting note documents that Docker Compose ships no scheduler (OQ5/A3), cadence hourly UTC (A4)
+- [Phase 14]: [Phase 14 P17] Exact-three snapshot counts effective continuity exceptions; two licence.activate restatements in licence-staff-service are a separately hard-coded reviewed pair
+- [Phase 14]: [Phase 14 P17] Boundary scan resolves options passed by same-file const and fails on unresolvable options; course-service and learner-quiz-service not registered (no own writes/permission calls; file absent)
+- [Phase 14]: [Phase 14-18]: licence-kind files src/app/staff/licence/actions.ts and src/app/api/staff/licence/diagnostic/route.ts classified CONTINUITY in the action-refusal gate (licence.activate is continuity); plan inventory of 12 predates them
+- [Phase 14]: [Phase 14-18]: blocked actions wrap only the message value with refusalMessage(error, existingText); lesson-resource routes answer LicenceRestrictedError with 403 { error: LICENCE_REFUSAL_MESSAGE } before the unchanged 404
+- [Phase 14]: 14-19: licence activation ConfirmModal marked continuity (plan list omitted it; default write would lock out the recovery action); CONTINUITY_MODAL_FILES has 10 files
+- [Phase 14]: 14-19: restriction context stateLabel is null for staff without licence.view (no licence detail in the browser payload); licence refusal field errors render as a warning note, never the danger summary
+- [Phase 14]: 14-19: ManualPaymentDialog and RefundDialog are bespoke dialogs (no ConfirmModal) so the UI mirror never disables them; ConfirmModal and ResourceForm import policy.ts which pulls zod into client bundles (flagged for owner review)
+- [Phase 14]: 14-20: wording check pattern requires a hyphen or space separator and word boundaries; PRD and PXR edits are local-only (docs/reference gitignored), recorded in 14-PRD-AMENDMENT.md; 13 registry reason literals reworded so policy.ts is the only phrase literal
+- [Phase 14]: [Phase 14 P21]: No production code changed; no end-to-end test exposed a defect in plans 14-01 to 14-20
+- [Phase 14]: [Phase 14 P21]: No-deletion scan exempts a delete call on a same-file new Map or Set receiver (licence-service.ts enforcementAudited.delete is the in-memory coalescing map); prisma delete, deleteMany, DELETE FROM and TRUNCATE still count
+- [Phase 14]: [Phase 14 P21]: OQ3 proof uses grants equal to the full PERMISSIONS spread and demonstrates licence.activate recovers a restricted deployment; PRD 18.4 deviation stays documented in 14-DECISIONS.md
 
 ### Pending Todos
 
@@ -296,6 +359,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-28T21:18:39.891Z
-Stopped at: Completed 13-13-PLAN.md (final plan in Phase 13) -- all 13 plans executed, requirements COM-01..04 marked complete; phase sign-off/verify-work still pending
+Last session: 2026-10-02T03:21:06.505Z
+Stopped at: Completed 14-21-PLAN.md
 Resume file: None

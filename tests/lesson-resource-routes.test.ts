@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
 
 class AuthenticationError extends Error {}
 class AuthorizationError extends Error {}
+class LicenceRestrictedError extends AuthorizationError {}
 class ResourceUploadValidationError extends Error {
   constructor(
     message: string,
@@ -42,6 +43,8 @@ class ResourceUploadUnavailableError extends Error {}
 vi.mock("@/server/permissions", () => ({
   AuthenticationError,
   AuthorizationError,
+  // Plan 14-18: the routes answer a licence refusal with 403 before the 404 denial branch.
+  isLicenceRestricted: (error: unknown) => error instanceof LicenceRestrictedError,
   withPermission:
     (_permission: string, resolveScope: (input: unknown) => unknown) =>
     (handler: (input: unknown, ctx: { actor: { userId: string } }) => unknown) =>

@@ -49,7 +49,7 @@ export const MUTABLE_EMAIL_CATEGORIES = [
 export type MutableEmailCategory = (typeof MUTABLE_EMAIL_CATEGORIES)[number];
 
 // ---------------------------------------------------------------------------
-// Template ids (27). The legacy `order-confirmation` id exists only on
+// Template ids (29). The legacy `order-confirmation` id exists only on
 // historical EmailDispatch rows and is deliberately absent.
 // ---------------------------------------------------------------------------
 
@@ -87,6 +87,8 @@ export const TEMPLATE_IDS = [
   "staff-ticket-escalated",
   "staff-order-exception",
   "staff-reconciliation-exception",
+  // Phase 14 (D-15) — licence notice to Global licence.view holders.
+  "staff-licence-notice",
 ] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
@@ -119,6 +121,7 @@ export const TEMPLATE_CATEGORY: Record<TemplateId, EmailCategory> = {
   "staff-ticket-escalated": "STAFF",
   "staff-order-exception": "STAFF",
   "staff-reconciliation-exception": "STAFF",
+  "staff-licence-notice": "STAFF",
 };
 
 // ---------------------------------------------------------------------------
@@ -136,6 +139,7 @@ export const NOTIFICATION_TARGET_TYPES = [
   "STAFF_PAYMENT",
   "STAFF_SUBMISSION",
   "STAFF_EMAIL_LOG",
+  "STAFF_LICENCE",
 ] as const;
 export type NotificationTargetType = (typeof NOTIFICATION_TARGET_TYPES)[number];
 
@@ -167,6 +171,7 @@ export const NOTIFICATION_TYPES = [
   "staff.order_exception",
   "staff.reconciliation_exception",
   "staff.email_failed",
+  "staff.licence_notice",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -201,6 +206,7 @@ export const NOTIFICATION_TYPE_TARGET: Record<
   "staff.order_exception": "STAFF_PAYMENT",
   "staff.reconciliation_exception": "STAFF_PAYMENT",
   "staff.email_failed": "STAFF_EMAIL_LOG",
+  "staff.licence_notice": "STAFF_LICENCE",
 };
 
 // ---------------------------------------------------------------------------
@@ -274,6 +280,7 @@ const DOMAIN_EVENT_TYPE_SET: Record<DomainEventType, true> = {
   "ticket.closed": true,
   "payment.failed": true,
   "payment.refunded": true,
+  "licence.notice": true,
 };
 
 /** Every DomainEventType member exactly once; a missing member is a type error. */

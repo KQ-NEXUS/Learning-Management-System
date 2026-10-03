@@ -23,6 +23,7 @@ vi.mock("@/server/services/checkout-service", async (importOriginal) => {
 
 import { payAction } from "@/app/(checkout)/checkout/[orderId]/actions";
 import { HoldExpiredError } from "@/server/services/checkout-service";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
 
 function form() {
   const fd = new FormData();
@@ -53,5 +54,31 @@ describe("payAction — a provider failure returns the learner to checkout, not 
   it("a successful start still goes to the provider", async () => {
     m.initiatePaystackPayment.mockResolvedValue({ url: "https://checkout.paystack.com/x" });
     await expect(payAction(form())).rejects.toThrow("NEXT_REDIRECT:https://checkout.paystack.com/x");
+  });
+});
+
+describe("payAction — Phase 14 licence refusal (D-08, OQ8)", () => {
+  it("a LicenceWriteBlockedError redirects to the catalogue notice, never the payment-unavailable banner, and logs nothing", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.initiatePaystackPayment.mockRejectedValue(new LicenceWriteBlockedError());
+
+    await expect(payAction(form())).rejects.toThrow("NEXT_REDIRECT:/courses?notice=unavailable");
+
+    expect(m.redirect).toHaveBeenCalledWith("/courses?notice=unavailable");
+    expect(m.redirect).not.toHaveBeenCalledWith("/checkout/order-1?payment=unavailable");
+    expect(errorLog).not.toHaveBeenCalled();
+    errorLog.mockRestore();
+  });
+
+  it("the same mapping applies on the Stripe rail", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.getOwnOrder.mockResolvedValue({ id: "order-1", reference: "ORD-1", selectedProvider: "STRIPE" });
+    m.initiateStripePayment.mockRejectedValue(new LicenceWriteBlockedError());
+
+    await expect(payAction(form())).rejects.toThrow("NEXT_REDIRECT:/courses?notice=unavailable");
+
+    expect(m.redirect).not.toHaveBeenCalledWith("/checkout/order-1?payment=unavailable");
+    expect(errorLog).not.toHaveBeenCalled();
+    errorLog.mockRestore();
   });
 });

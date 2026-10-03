@@ -12,6 +12,9 @@ export type StaffParamsMap = {
   "staff-ticket-escalated": { reference: string; queueLabel: string; ticketPath: string };
   "staff-order-exception": { orderReference: string; reasonLabel: string; paymentPath: string };
   "staff-reconciliation-exception": { orderReference: string; paymentPath: string };
+  // Phase 14 (D-15): headline and detail come from noticeCopy; no signing, key,
+  // contract or deployment detail is ever a parameter.
+  "staff-licence-notice": { headline: string; detail: string; licencePath: string };
 };
 
 type Definition<P> = (params: P) => EmailContent;
@@ -41,6 +44,12 @@ export const STAFF_TEMPLATES: { [K in keyof StaffParamsMap]: Definition<StaffPar
     paragraphs: [`Payment reconciliation for order ${p.orderReference} raised an exception.`],
     button: { label: "Review payment", href: buildAbsoluteUrl(p.paymentPath) },
   }),
+  "staff-licence-notice": (p) => ({
+    subject: p.headline,
+    heading: p.headline,
+    paragraphs: [p.detail],
+    button: { label: "Review licence", href: buildAbsoluteUrl(p.licencePath) },
+  }),
 };
 
 export const STAFF_SAMPLES: StaffParamsMap = {
@@ -58,5 +67,10 @@ export const STAFF_SAMPLES: StaffParamsMap = {
   "staff-reconciliation-exception": {
     orderReference: "KQO-1042",
     paymentPath: "/staff/payments/KQO-1042",
+  },
+  "staff-licence-notice": {
+    headline: "Licence expires in 30 days",
+    detail: "The licence expires soon. Open Licence to see the dates and renewal contact.",
+    licencePath: "/staff/licence",
   },
 };

@@ -17,7 +17,7 @@
  * check on an object literal assigned to a typed variable), which is this
  * file's own proof that the dependency is gone, not merely unused.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createActivateOrderAsSystem,
   createRecordSessionExpiredAsSystem,
@@ -132,6 +132,7 @@ type OrderRow = {
   gatewayFeeEstimateMinor?: number | null;
   selectedProvider?: string | null;
   schoolSettlementExpectedMinor?: number | null;
+  createdAt?: Date | null;
   enrolments: EnrolmentRow[];
 };
 
@@ -143,6 +144,7 @@ type PaymentAttemptRow = {
   providerRef?: string | null;
   provider?: string;
   confirmedAt?: Date | null;
+  initiatedAt?: Date | null;
   exceptionNote?: string | null;
 };
 
@@ -293,6 +295,7 @@ function buildHarness(args: {
     deps,
     auditEvents,
     domainEvents,
+    cohorts,
     orders,
     attempts,
     webhookEvents,
@@ -1154,5 +1157,392 @@ describe("recordPaymentFailureAsSystem — payment.failed outbox event (D-09)", 
         payload: expect.objectContaining({ reason: "illegal_payment_transition" }),
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 14 (D-08) - the initiated-before rule for restricted continuity mode
+// ---------------------------------------------------------------------------
+
+describe("activateOrderAsSystem - D-08 initiated-before rule (Phase 14)", () => {
+  // The restriction instant R (graceEndsAt for a time-derived restriction).
+  const R = new Date("2026-10-01T12:00:00.000Z");
+  const TOLERANCE_MS = 600_000;
+  const at = (offsetMs: number) => new Date(R.getTime() + offsetMs);
+
+  function restrictedLicence() {
+    return {
+      getRestrictionCutoff: vi.fn(async () => ({
+        restricted: true,
+        restrictedAt: R,
+      })),
+    };
+  }
+
+  function webhookSetup(attemptInitiatedAt: Date | undefined, orderStatus = "PENDING") {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment, { status: orderStatus });
+    const h = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+          ...(attemptInitiatedAt ? { initiatedAt: attemptInitiatedAt } : {}),
+        },
+      ],
+    });
+    return { ...h, enrolment };
+  }
+
+  const settleInput = {
+    orderId: BASE_ORDER_ID,
+    provider: "STRIPE" as const,
+    providerIntentId: SESSION_ID,
+    amountMinor: 45_000_000,
+    currency: "NGN",
+    eventId: "evt-1",
+  };
+
+  it("activates an attempt initiated one hour before the restriction instant", async () => {
+    const h = webhookSetup(at(-3_600_000));
+    const licence = restrictedLicence();
+    const result = await createActivateOrderAsSystem({ ...h.deps, licence })(settleInput);
+
+    expect(result.outcome).toBe("ACTIVATED");
+    expect(h.enrolment.status).toBe("ACTIVE");
+    expect(h.attempts.get("pa-1")?.status).toBe("SUCCEEDED");
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+    // Activation converts the held seat; the counter itself does not move.
+    expect(h.cohorts.get(COHORT_ID)?.seatsTaken).toBe(1);
+    expect(licence.getRestrictionCutoff).toHaveBeenCalledTimes(1);
+  });
+
+  it("tolerance boundary: initiatedAt at restrictedAt plus 10 minutes activates, plus 1 ms becomes the payment_after_restriction exception", async () => {
+    const onBoundary = webhookSetup(at(TOLERANCE_MS));
+    const ok = await createActivateOrderAsSystem({
+      ...onBoundary.deps,
+      licence: restrictedLicence(),
+    })(settleInput);
+    expect(ok.outcome).toBe("ACTIVATED");
+    expect(onBoundary.enrolment.status).toBe("ACTIVE");
+
+    const beyond = webhookSetup(at(TOLERANCE_MS + 1));
+    const syncs: Array<Record<string, unknown>> = [];
+    const result = await createActivateOrderAsSystem({
+      ...beyond.deps,
+      licence: restrictedLicence(),
+      syncOrderReconciliationEvidence: (async (args: Record<string, unknown>) => {
+        syncs.push(args);
+      }) as unknown as SettlementDeps["syncOrderReconciliationEvidence"],
+    })(settleInput);
+
+    expect(result.outcome).toBe("EXCEPTION");
+    // The money is recorded, never lost.
+    expect(beyond.attempts.get("pa-1")).toMatchObject({
+      status: "SUCCEEDED",
+      exceptionNote: expect.stringContaining("needs reconciliation"),
+    });
+    expect(beyond.attempts.get("pa-1")?.confirmedAt).toBeInstanceOf(Date);
+    expect(beyond.orders.get(BASE_ORDER_ID)?.status).toBe("EXCEPTION");
+    // No enrolment activation and no seat movement.
+    expect(beyond.enrolment.status).toBe("PENDING_PAYMENT");
+    expect(beyond.cohorts.get(COHORT_ID)?.seatsTaken).toBe(1);
+    expect(beyond.rawQueries.filter((q) => /FROM "Cohort"/.test(q))).toEqual([]);
+    expect(beyond.domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          reason: "payment_after_restriction",
+        }),
+      }),
+    );
+    expect(beyond.domainEvents.some((e) => e.type === "order.paid")).toBe(false);
+    expect(beyond.auditEvents).toContainEqual(
+      expect.objectContaining({ action: "order.exception", targetId: BASE_ORDER_ID }),
+    );
+    expect(syncs).toHaveLength(1);
+    expect(syncs[0]).toMatchObject({
+      orderId: BASE_ORDER_ID,
+      risk: "CAPTURED_MONEY",
+      evidence: expect.objectContaining({ reason: "payment_after_restriction" }),
+    });
+  });
+
+  it("an already-settled order is not downgraded by a payment after restriction", async () => {
+    const h = webhookSetup(at(TOLERANCE_MS + 1), "PAID");
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: restrictedLicence(),
+    })(settleInput);
+    expect(result.outcome).toBe("EXCEPTION");
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+    expect(h.attempts.get("pa-1")?.status).toBe("SUCCEEDED");
+  });
+
+  it("not restricted: behaves exactly as before for any date, with or without a licence dependency", async () => {
+    const farFuture = at(10 * 365 * 86_400_000);
+
+    const withLicence = webhookSetup(farFuture);
+    const notRestricted = {
+      getRestrictionCutoff: vi.fn(async () => ({
+        restricted: false,
+        restrictedAt: null,
+      })),
+    };
+    const a = await createActivateOrderAsSystem({
+      ...withLicence.deps,
+      licence: notRestricted,
+    })(settleInput);
+    expect(a.outcome).toBe("ACTIVATED");
+
+    const withoutLicence = webhookSetup(farFuture);
+    const b = await createActivateOrderAsSystem(withoutLicence.deps)(settleInput);
+    expect(b.outcome).toBe("ACTIVATED");
+    expect(withoutLicence.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+  });
+
+  it("a restricted cutoff without a restrictedAt instant applies no rule (fail open)", async () => {
+    const h = webhookSetup(at(86_400_000));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: {
+        getRestrictionCutoff: async () => ({ restricted: true, restrictedAt: null }),
+      },
+    })(settleInput);
+    expect(result.outcome).toBe("ACTIVATED");
+  });
+
+  it("T-14-13-03: a rejecting cutoff read is treated as not restricted and the order activates", async () => {
+    const h = webhookSetup(at(86_400_000));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const result = await createActivateOrderAsSystem({
+        ...h.deps,
+        licence: {
+          getRestrictionCutoff: async () => {
+            throw new Error("licence read unavailable");
+          },
+        },
+      })(settleInput);
+      expect(result.outcome).toBe("ACTIVATED");
+      expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+      // The failure is logged by name only, never the message.
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("licence read unavailable");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("an attempt row without initiatedAt (older fakes) is treated as before the cutoff", async () => {
+    const h = webhookSetup(undefined);
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: restrictedLicence(),
+    })(settleInput);
+    expect(result.outcome).toBe("ACTIVATED");
+  });
+
+  it("the cutoff is read once, before the transaction opens", async () => {
+    const h = webhookSetup(at(-60_000));
+    const order: string[] = [];
+    const licence = {
+      getRestrictionCutoff: vi.fn(async () => {
+        order.push("cutoff");
+        return { restricted: true, restrictedAt: R };
+      }),
+    };
+    const wrapped: SettlementDeps = {
+      ...h.deps,
+      licence,
+      db: {
+        $transaction: (fn, options) => {
+          order.push("transaction");
+          return h.deps.db.$transaction(fn, options);
+        },
+      },
+    };
+    await createActivateOrderAsSystem(wrapped)(settleInput);
+    expect(order).toEqual(["cutoff", "transaction"]);
+  });
+
+  it("recordPaymentFailureAsSystem and recordSessionExpiredAsSystem never consult the licence dependency", async () => {
+    const licence = restrictedLicence();
+
+    const failing = webhookSetup(at(86_400_000));
+    const failed = await createRecordPaymentFailureAsSystem({
+      ...failing.deps,
+      licence,
+    })({
+      orderId: BASE_ORDER_ID,
+      eventId: "evt-1",
+      providerIntentId: SESSION_ID,
+      failureReason: "card_declined",
+    });
+    expect(failed.outcome).toBe("FAILED");
+
+    const expiring = webhookSetup(at(86_400_000));
+    const expired = await createRecordSessionExpiredAsSystem({
+      ...expiring.deps,
+      licence,
+    })({
+      orderId: BASE_ORDER_ID,
+      providerIntentId: SESSION_ID,
+      eventId: "evt-1",
+    });
+    expect(expired.outcome).toBe("CANCELLED");
+
+    expect(licence.getRestrictionCutoff).not.toHaveBeenCalled();
+  });
+});
+
+describe("activateOrderAsSystem - D-08 manual confirmation anchor (OQ4, A13)", () => {
+  const R = new Date("2026-10-01T12:00:00.000Z");
+  const TOLERANCE_MS = 600_000;
+  const at = (offsetMs: number) => new Date(R.getTime() + offsetMs);
+
+  const licence = () => ({
+    getRestrictionCutoff: async () => ({ restricted: true, restrictedAt: R }),
+  });
+
+  function manualSetup(orderCreatedAt: Date) {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment, {
+      amountMinor: 45_875_000,
+      baseAmountMinor: 45_000_000,
+      platformFeeMinor: 675_000,
+      gatewayFeeEstimateMinor: 200_000,
+      selectedProvider: "PAYSTACK",
+      schoolSettlementExpectedMinor: 45_000_000,
+      createdAt: orderCreatedAt,
+    });
+    const h = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [],
+    });
+    return { ...h, enrolment };
+  }
+
+  const manualInput = {
+    orderId: BASE_ORDER_ID,
+    provider: "MANUAL" as const,
+    providerIntentId: "BANK-REF-1",
+    providerRef: "BANK-REF-1",
+    amountMinor: 45_675_000,
+    currency: "NGN",
+    eventId: "manual:order-1:BANK-REF-1",
+    manualConfirmation: {
+      confirmedById: "staff-1",
+      manualChannel: "bank_transfer",
+      manualReference: "BANK-REF-1",
+      manualPaidAt: new Date("2026-10-01T10:00:00Z"),
+      manualEvidenceKey: "evidence/order-1.pdf",
+      reason: "Matched against the school bank statement.",
+    },
+  };
+
+  it("an order created one day before the restriction is confirmed and activated", async () => {
+    const h = manualSetup(at(-86_400_000));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: licence(),
+    })(manualInput);
+    expect(result.outcome).toBe("ACTIVATED");
+    expect(h.enrolment.status).toBe("ACTIVE");
+    expect([...h.attempts.values()]).toHaveLength(1);
+  });
+
+  it("an order created at restrictedAt plus 10 minutes plus 1 ms becomes the exception, with the manual evidence intact", async () => {
+    const h = manualSetup(at(TOLERANCE_MS + 1));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: licence(),
+    })(manualInput);
+
+    expect(result.outcome).toBe("EXCEPTION");
+    const attempts = [...h.attempts.values()];
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      provider: "MANUAL",
+      status: "SUCCEEDED",
+      providerRef: "BANK-REF-1",
+      manualChannel: "bank_transfer",
+      manualReference: "BANK-REF-1",
+      manualEvidenceKey: "evidence/order-1.pdf",
+      confirmedById: "staff-1",
+      reason: "Matched against the school bank statement.",
+    });
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("EXCEPTION");
+    expect(h.enrolment.status).toBe("PENDING_PAYMENT");
+    expect(h.cohorts.get(COHORT_ID)?.seatsTaken).toBe(1);
+    expect(h.domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "payment_after_restriction" }),
+      }),
+    );
+    expect(h.auditEvents).toContainEqual(
+      expect.objectContaining({ action: "order.exception_manual" }),
+    );
+  });
+
+  it("an order created exactly at restrictedAt plus 10 minutes is still confirmed", async () => {
+    const h = manualSetup(at(TOLERANCE_MS));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: licence(),
+    })(manualInput);
+    expect(result.outcome).toBe("ACTIVATED");
+  });
+
+  it("the anchor differs by rail: an old order with a fresh manual attempt activates, a fresh webhook attempt on the same old order is judged by its own initiatedAt", async () => {
+    // Manual: the attempt is created inside the transaction (initiatedAt is
+    // "now", after R), but the Order is old, so it activates.
+    const manual = manualSetup(at(-86_400_000));
+    const m = await createActivateOrderAsSystem({
+      ...manual.deps,
+      licence: licence(),
+    })(manualInput);
+    expect(m.outcome).toBe("ACTIVATED");
+
+    // Webhook rail: the Order is old but the attempt was initiated after the
+    // cutoff plus tolerance, so the attempt's own timestamp decides.
+    const enrolment = baseEnrolment();
+    const web = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order: baseOrder(enrolment, { createdAt: at(-86_400_000) }),
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+          initiatedAt: at(TOLERANCE_MS + 1),
+        },
+      ],
+    });
+    const w = await createActivateOrderAsSystem({
+      ...web.deps,
+      licence: licence(),
+    })({
+      orderId: BASE_ORDER_ID,
+      provider: "STRIPE",
+      providerIntentId: SESSION_ID,
+      amountMinor: 45_000_000,
+      currency: "NGN",
+      eventId: "evt-1",
+    });
+    expect(w.outcome).toBe("EXCEPTION");
+    expect(web.orders.get(BASE_ORDER_ID)?.status).toBe("EXCEPTION");
   });
 });

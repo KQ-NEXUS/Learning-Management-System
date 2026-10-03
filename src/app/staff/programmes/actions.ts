@@ -13,7 +13,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { programmeService } from "@/server/services/programme-service";
 import { assertSlugMutable, SlugFrozenError } from "@/server/services/catalogue-guards";
 import {
@@ -98,7 +98,7 @@ function toFailure(error: unknown): Extract<ProgrammeActionResult, { ok: false }
     return {
       ok: false,
       errors: [],
-      message: "Your role does not permit creating or editing programmes.",
+      message: refusalMessage(error, "Your role does not permit creating or editing programmes."),
     };
   }
   throw error;

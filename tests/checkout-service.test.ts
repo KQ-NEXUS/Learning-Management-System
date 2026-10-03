@@ -11,7 +11,8 @@
  * `tests/checkout-webhook.integration.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
 import {
   createCheckoutService,
   HoldExpiredError,
@@ -202,6 +203,8 @@ function harness(opts?: {
   paystackFactory?: (input: unknown) => { redirectUrl: string; providerIntentId: string };
   /** Defaults to a verified learner — set false to exercise D-13's gate. */
   emailVerified?: boolean;
+  /** Phase 14 (D-08) — the injected licence guard; absent means no guard. */
+  licence?: { assertWriteAllowed(input: { operation: string; actorId?: string | null }): Promise<void> };
 }) {
   const cohorts = new Map<string, CohortRow>(
     (opts?.cohorts ?? [coh()]).map((c) => [c.id, { ...c }]),
@@ -427,6 +430,7 @@ function harness(opts?: {
   }
 
   const service = createCheckoutService({
+    licence: opts?.licence,
     db: db as never,
     order: {
       findUnique: async ({ where }: { where: { id: string } }) => {
@@ -1502,5 +1506,119 @@ describe("F-13 — learner checkout requires a published cohort inside its enrol
       const { service } = harness({ cohorts: [coh({ status })] });
       await expect(service.startCheckout(learner, "cohort-1", "NGN")).resolves.toMatchObject({ orderId: expect.any(String) });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 14 (D-08, D-09) — explicit restricted-state guard on new checkout sessions
+// ---------------------------------------------------------------------------
+
+describe("Phase 14 — licence guard on new checkout sessions (D-08)", () => {
+  const learner = { userId: "user-1" };
+
+  /** A guard that allows until switched, then rejects with the neutral error. */
+  function switchableGuard() {
+    const state = { blocked: false };
+    const assertWriteAllowed = vi.fn<(input: { operation: string; actorId?: string | null }) => Promise<void>>(async () => {
+      if (state.blocked) throw new LicenceWriteBlockedError();
+    });
+    return { state, licence: { assertWriteAllowed }, assertWriteAllowed };
+  }
+
+  it("startCheckout rejects with LicenceWriteBlockedError before any transaction, passing operation and actor id", async () => {
+    const guard = switchableGuard();
+    guard.state.blocked = true;
+    const { service, transactionOptions, orders, enrolments } = harness({ licence: guard.licence });
+
+    await expect(service.startCheckout(learner, "cohort-1", "NGN")).rejects.toBeInstanceOf(LicenceWriteBlockedError);
+
+    // db.$transaction was called zero times: the fake records one entry per call.
+    expect(transactionOptions).toHaveLength(0);
+    expect(orders.size).toBe(0);
+    expect(enrolments.size).toBe(0);
+    expect(guard.assertWriteAllowed).toHaveBeenCalledTimes(1);
+    expect(guard.assertWriteAllowed).toHaveBeenCalledWith({ operation: "checkout.start", actorId: "user-1" });
+  });
+
+  it("initiateStripePayment rejects before any read, transaction or provider call", async () => {
+    const guard = switchableGuard();
+    const { service, transactionOptions, sessionsCreated, paymentAttempts } = harness({
+      cohorts: [coh({ priceNgnMinor: null, priceUsdMinor: 100_000 })],
+      licence: guard.licence,
+    });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "USD");
+    const transactionsBefore = transactionOptions.length;
+    guard.assertWriteAllowed.mockClear();
+    guard.state.blocked = true;
+
+    await expect(service.initiateStripePayment(learner, orderId, FULL_CONSENT)).rejects.toBeInstanceOf(
+      LicenceWriteBlockedError,
+    );
+
+    expect(transactionOptions).toHaveLength(transactionsBefore);
+    expect(sessionsCreated).toHaveLength(0);
+    expect(paymentAttempts.size).toBe(0);
+    expect(guard.assertWriteAllowed).toHaveBeenCalledWith({ operation: "checkout.initiate_stripe", actorId: "user-1" });
+  });
+
+  it("initiatePaystackPayment rejects before any read, transaction or provider call", async () => {
+    const guard = switchableGuard();
+    const { service, transactionOptions, paystackInitiations, paymentAttempts } = harness({ licence: guard.licence });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "NGN");
+    const transactionsBefore = transactionOptions.length;
+    guard.assertWriteAllowed.mockClear();
+    guard.state.blocked = true;
+
+    await expect(service.initiatePaystackPayment(learner, orderId, FULL_CONSENT)).rejects.toBeInstanceOf(
+      LicenceWriteBlockedError,
+    );
+
+    expect(transactionOptions).toHaveLength(transactionsBefore);
+    expect(paystackInitiations).toHaveLength(0);
+    expect(paymentAttempts.size).toBe(0);
+    expect(guard.assertWriteAllowed).toHaveBeenCalledWith({ operation: "checkout.initiate_paystack", actorId: "user-1" });
+  });
+
+  it("with an allowing guard the happy paths are unchanged", async () => {
+    const guard = switchableGuard();
+    const { service, sessionsCreated, paystackInitiations } = harness({
+      cohorts: [coh({ priceNgnMinor: 45_000_000, priceUsdMinor: 100_000 })],
+      licence: guard.licence,
+    });
+    const ngn = await service.startCheckout(learner, "cohort-1", "NGN");
+    await expect(service.initiatePaystackPayment(learner, ngn.orderId, FULL_CONSENT)).resolves.toMatchObject({
+      url: expect.any(String),
+    });
+    const usd = await service.startCheckout(learner, "cohort-1", "USD");
+    await expect(service.initiateStripePayment(learner, usd.orderId, FULL_CONSENT)).resolves.toMatchObject({
+      url: expect.any(String),
+    });
+    expect(paystackInitiations).toHaveLength(1);
+    expect(sessionsCreated).toHaveLength(1);
+    expect(guard.assertWriteAllowed.mock.calls.map(([input]) => input.operation)).toEqual([
+      "checkout.start",
+      "checkout.initiate_paystack",
+      "checkout.start",
+      "checkout.initiate_stripe",
+    ]);
+  });
+
+  it("with no guard injected startCheckout behaves exactly as before", async () => {
+    const { service } = harness();
+    await expect(service.startCheckout(learner, "cohort-1", "NGN")).resolves.toMatchObject({
+      orderId: expect.any(String),
+    });
+  });
+
+  it("retireOpenPaymentAttempts does not call the guard (it stays allowed in restricted mode)", async () => {
+    const guard = switchableGuard();
+    const { service } = harness({ cohorts: [coh({ priceNgnMinor: null, priceUsdMinor: 100_000 })], licence: guard.licence });
+    const { orderId } = await service.startCheckout(learner, "cohort-1", "USD");
+    await service.initiateStripePayment(learner, orderId, FULL_CONSENT);
+    guard.assertWriteAllowed.mockClear();
+    guard.state.blocked = true;
+
+    await expect(service.retireOpenPaymentAttempts(orderId)).resolves.toBeUndefined();
+    expect(guard.assertWriteAllowed).not.toHaveBeenCalled();
   });
 });

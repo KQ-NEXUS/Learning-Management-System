@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
 import {
   initiateStripePayment,
   initiatePaystackPayment,
@@ -70,6 +71,11 @@ export async function payAction(formData: FormData): Promise<void> {
       err instanceof PolicyConsentRequiredError
     ) {
       redirect(`/checkout/${orderId}`);
+    }
+    // D-08 / OQ8 — restricted continuity mode: the neutral catalogue notice, not
+    // the "nothing was charged, try again" banner, and no operator error log.
+    if (err instanceof LicenceWriteBlockedError) {
+      redirect("/courses?notice=unavailable");
     }
     if (err instanceof OrderNotPayableError) {
       const order = await getOwnOrder(actor, orderId);

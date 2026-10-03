@@ -1,12 +1,13 @@
 /**
  * `links.ts` — every builder, every rejected segment, and `notificationHref`
- * for all ten `NOTIFICATION_TARGET_TYPES` (T-13-10).
+ * for all eleven `NOTIFICATION_TARGET_TYPES` (T-13-10).
  */
 
 import { describe, expect, it } from "vitest";
 import {
   DASHBOARD_PATH,
   EMAIL_LOG_PATH,
+  LICENCE_PATH,
   orderPath,
   enrolmentPath,
   resultsPath,
@@ -122,6 +123,10 @@ describe("notificationHref", () => {
 
     covered.add("STAFF_EMAIL_LOG");
     expect(notificationHref("STAFF_EMAIL_LOG", "anything")).toBe(EMAIL_LOG_PATH);
+
+    covered.add("STAFF_LICENCE");
+    expect(notificationHref("STAFF_LICENCE", "anything")).toBe(LICENCE_PATH);
+    expect(LICENCE_PATH).toBe("/staff/licence");
 
     expect([...covered].sort()).toEqual([...NOTIFICATION_TARGET_TYPES].sort());
   });
