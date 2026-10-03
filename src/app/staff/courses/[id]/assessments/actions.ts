@@ -33,6 +33,7 @@ import {
   assessmentService,
   publishAssessment,
   AssessmentNotPublishableError,
+  PassMarkExceedsTotalError,
   FEEDBACK_BEHAVIOURS,
   type AssessmentRecord,
 } from "@/server/services/assessment-service";
@@ -238,6 +239,9 @@ export type SaveAssessmentState = {
 function toFailure(error: unknown): SaveAssessmentState {
   if (error instanceof z.ZodError) {
     return { ok: false, errors: zodFieldErrors(error), message: null };
+  }
+  if (error instanceof PassMarkExceedsTotalError) {
+    return { ok: false, errors: [{ name: "passMark", message: error.message }], message: null };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {

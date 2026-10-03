@@ -34,7 +34,7 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | Id | Finding | Status |
 |---|---|---|
 | A-01 | Quiz/assignment lessons: skip-able or stuck after passing | done (quiz lesson completes on pass, assignment lesson on submit, in the same transaction; no manual mark or undo on these lessons. Learners who passed BEFORE this fix are not back-filled: use the staff override for any who are stuck) |
-| A-07 | A published quiz can be saved with a pass mark above its total | todo |
+| A-07 | A published quiz can be saved with a pass mark above its total | done (service refuses it on a published assessment, both when the pass mark or total is edited and when the questions are replaced) |
 
 ## Batch 5 — staff workflow
 | Id | Finding | Status |
