@@ -19,7 +19,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ResourceTable, StatusPill, ConfirmModal, type Column, type ResourceTableState } from "@/components/primitives";
+import {
+  ResourceTable,
+  StatusPill,
+  ConfirmModal,
+  FormDialog,
+  type Column,
+  type ResourceTableState,
+} from "@/components/primitives";
+import { SessionCalendar, type CalendarSession } from "@/components/calendar/SessionCalendar";
+import { civilDateIn } from "@/lib/calendar";
 import {
   SessionFormFields,
   EMPTY_SESSION_FIELDS,
@@ -117,6 +126,11 @@ export function SessionsTab({
 }: SessionsTabProps) {
   const router = useRouter();
 
+  // Two views of the same sessions: the table (sort, scan, mark attendance) and a calendar
+  // (click a day to schedule on it). The owner asked for the calendar; the table stays.
+  const [view, setView] = useState<"table" | "calendar">("table");
+  // Today in the cohort's timezone, read once in the browser.
+  const [today] = useState(() => civilDateIn(new Date(), cohortTimezone || "UTC"));
   const [panel, setPanel] = useState<"none" | "add" | "repeat" | "edit">("none");
   const [editTarget, setEditTarget] = useState<SessionRow | null>(null);
   const [fields, setFields] = useState<SessionFieldsValue>(EMPTY_SESSION_FIELDS);
@@ -131,6 +145,14 @@ export function SessionsTab({
     setPanel(next);
     setEditTarget(null);
     setFields(EMPTY_SESSION_FIELDS);
+    setPanelError(null);
+  }
+
+  /** Calendar: a day was clicked. The form opens with that date already set. */
+  function openAddOn(date: string) {
+    setPanel("add");
+    setEditTarget(null);
+    setFields({ ...EMPTY_SESSION_FIELDS, date });
     setPanelError(null);
   }
 
@@ -275,14 +297,117 @@ export function SessionsTab({
     },
   ];
 
+  const calendarSessions: CalendarSession[] = (sessions ?? []).map((s) => ({
+    id: s.id,
+    title: s.title,
+    startsAt: s.startsAt,
+    endsAt: s.endsAt,
+    timezone: s.timezone || cohortTimezone || "UTC",
+    cancelled: s.cancelledAt !== null,
+    meta: whereLabel(s) === "—" ? undefined : whereLabel(s),
+  }));
+
+  /** Calendar: a session was clicked. Managers edit it (a cancelled one cannot be edited); others open its register. */
+  function openFromCalendar(id: string) {
+    const session = sessions?.find((s) => s.id === id);
+    if (!session) return;
+    if (canManage && !session.cancelledAt) openEdit(session);
+    else if (!session.cancelledAt) router.push(`/staff/cohorts/${session.cohortId}/sessions/${session.id}/attendance`);
+  }
+
+  const panelTitle =
+    panel === "edit" ? `Edit ${editTarget?.title ?? "session"}` : panel === "add" ? "Add session" : "Repeat weekly";
+
+  const panelBody = (
+    <>
+      {panelError && (
+        <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
+          {panelError}
+        </p>
+      )}
+
+      {panel === "edit" && (
+        <p className="text-sm text-muted-foreground">
+          Enrolled learners are told when the title, time, location or meeting link changes.
+        </p>
+      )}
+
+      <SessionFormFields
+        variant={panel === "repeat" ? "repeat" : "single"}
+        editing={panel === "edit"}
+        value={fields}
+        onChange={setFields}
+        cohortTimezone={cohortTimezone}
+        courseOptions={courseOptions}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={handleSubmitPanel}
+          disabled={panelPending || !fields.title.trim() || !fields.date || !fields.startTime || !fields.endTime}
+          className={panel === "repeat" ? BTN : BTN_PRIMARY}
+        >
+          {panelPending ? "Saving…" : panel === "edit" ? "Save changes" : panel === "add" ? "Add session" : "Repeat weekly"}
+        </button>
+      </div>
+    </>
+  );
+
   const state: ResourceTableState<SessionRow> = denied
     ? { status: "denied", permission: denied.permission }
     : sessions && sessions.length > 0
       ? { status: "ready", rows: sessions }
       : { status: "empty" };
 
+  const VIEW_BTN = "min-h-10 border border-input-border px-4 text-sm font-semibold -ml-px first:ml-0 first:rounded-l-md last:rounded-r-md";
+  const scheduleButtons = !denied && canManage && (
+    <>
+      <button type="button" className={BTN} onClick={() => openPanel("repeat")}>
+        Repeat weekly…
+      </button>
+      <button type="button" className={BTN_PRIMARY} onClick={() => openPanel("add")}>
+        Add session
+      </button>
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-4">
+      {!denied && (
+        <div role="group" aria-label="Sessions view" className="flex">
+          {(["table", "calendar"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={view === option}
+              onClick={() => setView(option)}
+              className={`${VIEW_BTN} ${view === option ? "bg-foreground text-surface" : "bg-surface text-foreground hover:bg-surface-2"}`}
+            >
+              {option === "table" ? "Table" : "Calendar"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {view === "calendar" && !denied ? (
+        <section aria-label="Sessions calendar" className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {canManage
+                ? `Click a day to add a session on it, or a session to edit it. Times are in ${cohortTimezone}.`
+                : `Times are in ${cohortTimezone}.`}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">{scheduleButtons}</div>
+          </div>
+          <SessionCalendar
+            sessions={calendarSessions}
+            today={today}
+            onDayClick={canManage ? openAddOn : undefined}
+            onItemClick={openFromCalendar}
+          />
+        </section>
+      ) : (
       <ResourceTable<SessionRow>
         noun="sessions"
         title="Sessions"
@@ -295,26 +420,19 @@ export function SessionsTab({
         shownCount={denied ? undefined : sessions?.length}
         emptyHeading="No sessions scheduled"
         emptyBody="Add a session, or set delivery mode to self-paced if this cohort has no live meetings."
-        headerActions={
-          !denied && canManage && (
-            <>
-              <button type="button" className={BTN} onClick={() => openPanel("repeat")}>
-                Repeat weekly…
-              </button>
-              <button type="button" className={BTN_PRIMARY} onClick={() => openPanel("add")}>
-                Add session
-              </button>
-            </>
-          )
-        }
+        headerActions={scheduleButtons}
       />
+      )}
 
-      {panel !== "none" && (
+      {/* From the calendar the form pops up over it; from the table it opens in place below. */}
+      <FormDialog open={view === "calendar" && panel !== "none"} title={panelTitle} pending={panelPending} onClose={closePanel}>
+        {panelBody}
+      </FormDialog>
+
+      {view === "table" && panel !== "none" && (
         <div className="flex flex-col gap-4 border-t border-foreground pt-5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold tracking-tight text-foreground">
-              {panel === "edit" ? `Edit ${editTarget?.title ?? "session"}` : panel === "add" ? "Add session" : "Repeat weekly"}
-            </h3>
+            <h3 className="text-base font-semibold tracking-tight text-foreground">{panelTitle}</h3>
             <button
               type="button"
               onClick={closePanel}
@@ -323,38 +441,7 @@ export function SessionsTab({
               Close
             </button>
           </div>
-
-          {panelError && (
-            <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
-              {panelError}
-            </p>
-          )}
-
-          {panel === "edit" && (
-            <p className="text-sm text-muted-foreground">
-              Enrolled learners are told when the title, time, location or meeting link changes.
-            </p>
-          )}
-
-          <SessionFormFields
-            variant={panel === "repeat" ? "repeat" : "single"}
-            editing={panel === "edit"}
-            value={fields}
-            onChange={setFields}
-            cohortTimezone={cohortTimezone}
-            courseOptions={courseOptions}
-          />
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={handleSubmitPanel}
-              disabled={panelPending || !fields.title.trim() || !fields.date || !fields.startTime || !fields.endTime}
-              className={panel === "repeat" ? BTN : BTN_PRIMARY}
-            >
-              {panelPending ? "Saving…" : panel === "edit" ? "Save changes" : panel === "add" ? "Add session" : "Repeat weekly"}
-            </button>
-          </div>
+          {panelBody}
         </div>
       )}
 

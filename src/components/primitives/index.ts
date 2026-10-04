@@ -1,3 +1,4 @@
+export { FormDialog, type FormDialogProps } from "./FormDialog";
 export { ResourceTable, StatusPill } from "./ResourceTable";
 export type {
   Column,

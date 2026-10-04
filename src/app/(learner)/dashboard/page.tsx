@@ -378,14 +378,16 @@ function UpcomingSessionsSection({ card }: { card: LearnerDashboardCard }) {
               </li>
             ))}
           </ul>
-          {card.hasMoreSessions && (
-            <Link
-              href={`/learn/${card.enrolmentId}/sessions`}
-              className="inline-block pt-4 font-semibold text-accent hover:underline"
-            >
-              View all sessions
+          <div className="flex flex-wrap gap-x-6 pt-4">
+            {card.hasMoreSessions && (
+              <Link href={`/learn/${card.enrolmentId}/sessions`} className="font-semibold text-accent hover:underline">
+                View all sessions
+              </Link>
+            )}
+            <Link href="/learn/calendar" className="font-semibold text-accent hover:underline">
+              Open calendar
             </Link>
-          )}
+          </div>
         </>
       )}
     </Section>

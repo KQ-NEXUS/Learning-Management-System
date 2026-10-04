@@ -69,6 +69,11 @@ export default async function MyLearningPage() {
             </section>
           )}
           <p className="text-sm text-muted-foreground">
+            <Link href="/learn/calendar" className="font-semibold text-accent hover:underline">
+              See your sessions on a calendar
+            </Link>
+          </p>
+          <p className="text-sm text-muted-foreground">
             Looking for something else?{" "}
             <Link href="/courses" className="font-semibold text-accent hover:underline">
               Browse the catalogue
