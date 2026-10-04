@@ -25,6 +25,7 @@ import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 import { licenceService } from "@/server/services/licence-service";
 import { LicenceWriteBlockedError } from "@/server/licence/errors";
+import { issueLearnerNumber, type LearnerNumberTx } from "@/server/services/learner-number-service";
 
 export type RegistrationInput = {
   email: string;
@@ -103,6 +104,12 @@ export function createRegistrationService(deps: {
   hash?: (plaintext: string) => Promise<string>;
   now?: () => Date;
   /**
+   * Takes the next learner number inside the registration transaction, or
+   * returns null when numbers are switched off. Optional: absent means a
+   * learner is created without one.
+   */
+  issueLearnerNumber?: (tx: unknown, at: Date) => Promise<string | null>;
+  /**
    * D-09 — explicit restricted-state guard (this service does not run through
    * `withPermission`). Optional: absent means registration behaves as before.
    */
@@ -110,6 +117,7 @@ export function createRegistrationService(deps: {
     assertWriteAllowed(input: { operation: string; actorId?: string | null }): Promise<void>;
   };
 }) {
+  const registeredAt = deps.now ?? (() => new Date());
   const { store, issueToken, resendVerification, dispatch, audit } = deps;
   const hash = deps.hash ?? hashPassword;
 
@@ -192,6 +200,9 @@ export function createRegistrationService(deps: {
     let user: RegisteredUserRow;
     try {
       user = await store.$transaction(async (tx) => {
+        // Taken in this same transaction: if the account is not created, the
+        // counter's increment rolls back with it and no number is skipped.
+        const learnerNumber = (await deps.issueLearnerNumber?.(tx, registeredAt())) ?? null;
         const created = await tx.user.create({
           data: {
             email,
@@ -199,6 +210,7 @@ export function createRegistrationService(deps: {
             phone: input.phone ?? null,
             passwordHash,
             status: "PENDING_VERIFICATION",
+            ...(learnerNumber ? { learnerNumber } : {}),
           },
         });
 
@@ -288,4 +300,5 @@ export const registrationService = createRegistrationService({
   dispatch: (params) => emailDispatchService.dispatch(params),
   audit: recordAudit,
   licence: licenceService,
+  issueLearnerNumber: (tx, at) => issueLearnerNumber(tx as LearnerNumberTx, at),
 });

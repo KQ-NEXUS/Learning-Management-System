@@ -132,6 +132,12 @@ export const LICENCE_SERVICE_REGISTRY: readonly RegistryEntry[] = [
       "grades.manage is continuity because grading continues in restricted mode (D-06); submissions.view is a read.",
   },
   {
+    file: `${S}learner-number-service.ts`,
+    kind: "withPermission",
+    reason:
+      "Saving the learner number pattern goes through users.manage, a settings write blocked in restricted mode. Issuing a number is a step of registration, which the registration guard already refuses there.",
+  },
+  {
     file: `${S}lesson-progress-service.ts`,
     kind: "withPermission",
     reason:

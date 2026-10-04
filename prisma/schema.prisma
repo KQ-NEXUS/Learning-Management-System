@@ -304,6 +304,11 @@ model User {
   // through the password reset flow. It only drives a suggestion to change it;
   // nothing is blocked while it is true.
   passwordIsTemporary Boolean @default(false)
+
+  // A readable, permanent reference for a learner (KQL-000482), issued in
+  // order at registration from the pattern in LearnerNumberConfig. Null for
+  // staff, and for learners who registered before a pattern was set.
+  learnerNumber String? @unique
   name          String
   phone         String?
   status        UserStatus @default(PENDING_VERIFICATION)
@@ -1927,6 +1932,18 @@ model EmailPreference {
 // migration itself (singleton row, id "deployment", generated UUID), never
 // derived from hostname, MAC or container ID, so it survives restore, scaling
 // and migration. The singleton is enforced by a CHECK in the migration.
+// The one row (id "default") that says how learner numbers are formed and
+// where the counter stands. `pattern` null means numbers are not being issued
+// yet. `nextSequence` only ever goes up, including across pattern changes, so
+// a counter value is never used twice.
+model LearnerNumberConfig {
+  id           String   @id @default("default")
+  pattern      String?
+  nextSequence Int      @default(1)
+  updatedById  String?
+  updatedAt    DateTime @updatedAt
+}
+
 model DeploymentIdentity {
   id           String   @id @default("deployment")
   deploymentId String   @unique @default(dbgenerated("(gen_random_uuid())::text"))
