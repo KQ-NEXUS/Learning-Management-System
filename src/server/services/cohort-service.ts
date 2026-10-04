@@ -424,6 +424,19 @@ export class InstructorUserNotFoundError extends Error {
 }
 
 /**
+ * The account exists but is a learner's, or a staff account that is not active
+ * (owner decision, 2026-10-05). The "Add instructor" pop-up only ever lists
+ * active staff; this is the same rule held on the server, so it stands whatever
+ * sends the request.
+ */
+export class InstructorNotStaffError extends Error {
+  constructor(readonly userId: string) {
+    super("Only active staff accounts can be added as instructors.");
+    this.name = "InstructorNotStaffError";
+  }
+}
+
+/**
  * True for a Prisma `PrismaClientKnownRequestError` with code `P2002`
  * (unique-constraint violation), duck-typed on `.code` so this file stays
  * free of a Prisma client import (copied from `seat-accounting.ts:132-139`).
@@ -473,8 +486,8 @@ export type CohortInstructorDelegate = {
 export type UserExistsDelegate = {
   findUnique(args: {
     where: { id: string };
-    select: { id: true; name: true; email: true };
-  }): Promise<{ id: string; name: string; email: string } | null>;
+    select: { id: true; name: true; email: true; isStaff: true; status: true };
+  }): Promise<{ id: string; name: string; email: string; isStaff: boolean; status: string } | null>;
 };
 
 // ---------------------------------------------------------------------------
@@ -622,7 +635,7 @@ export function createCohortService(deps: CohortServiceDeps) {
   )(async (input, ctx) => {
     const user = await deps.user.findUnique({
       where: { id: input.userId },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, isStaff: true, status: true },
     });
     if (!user) throw new InstructorUserNotFoundError(input.userId);
 
@@ -630,6 +643,9 @@ export function createCohortService(deps: CohortServiceDeps) {
       where: { cohortId_userId: { cohortId: input.cohortId, userId: input.userId } },
     });
     if (!existing) {
+      // Checked only when there is something to add: re-sending an assignment that already
+      // stands stays a no-op, even if that person's account has since been deactivated.
+      if (!user.isStaff || user.status !== "ACTIVE") throw new InstructorNotStaffError(input.userId);
       try {
         await deps.instructor.create({ data: { cohortId: input.cohortId, userId: input.userId } });
       } catch (err) {

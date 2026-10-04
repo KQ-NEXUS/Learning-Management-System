@@ -18,6 +18,7 @@ import {
   NoPublishedOfferError,
   CohortCancelBlockedError,
   InstructorUserNotFoundError,
+  InstructorNotStaffError,
   type CohortRecord,
   type CohortAggregateRow,
   type CohortPublishTx,
@@ -166,6 +167,14 @@ function harness(opts?: {
   const instructorRows = new Map<string, { id: string; cohortId: string; userId: string }>();
   const users = new Map<string, { id: string; name: string; email: string }>([
     ["user-instructor-1", { id: "user-instructor-1", name: "Ije Instructor", email: "instructor@kqnexus.test" }],
+    ["user-learner-1", { id: "user-learner-1", name: "Chidi Okafor", email: "learner1@kqnexus.test" }],
+    ["user-left-1", { id: "user-left-1", name: "Former Staff", email: "former@kqnexus.test" }],
+  ]);
+  // Who each account is: the instructor is active staff, one is a learner, one is staff who has left.
+  const accountKind = new Map<string, { isStaff: boolean; status: string }>([
+    ["user-instructor-1", { isStaff: true, status: "ACTIVE" }],
+    ["user-learner-1", { isStaff: false, status: "ACTIVE" }],
+    ["user-left-1", { isStaff: true, status: "DEACTIVATED" }],
   ]);
   const instructor = {
     findMany: vi.fn(async ({ where }: { where: { cohortId: string } }) =>
@@ -207,7 +216,13 @@ function harness(opts?: {
     }),
   };
   tx.cohortInstructor = { deleteMany: instructor.deleteMany };
-  const user = { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => users.get(where.id) ?? null) };
+  const user = {
+    findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+      const found = users.get(where.id);
+      return found ? { ...found, ...accountKind.get(where.id)! } : null;
+    }),
+  };
+  const deactivate = (id: string) => accountKind.set(id, { ...accountKind.get(id)!, status: "DEACTIVATED" });
 
   const { withPermission } = createTestWithPermission(
     opts?.grants ?? [
@@ -234,7 +249,7 @@ function harness(opts?: {
     now: () => NOW,
   });
 
-  return { service, delegate, enrolment, aggregate, instructor, user, tx, audits, rows };
+  return { service, delegate, enrolment, aggregate, instructor, user, tx, audits, rows, deactivate };
 }
 
 it.each(["CANCELLED", "COMPLETED"])("cannot republish a %s cohort even when ready", async (status) => {
@@ -334,6 +349,33 @@ describe("instructor assignment (D-27) — the readiness gate's only writer", ()
     await expect(
       service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
     ).rejects.toThrow("boom");
+  });
+
+  it("refuses a learner's account, and assigns nothing", async () => {
+    const { service, instructor, audits } = harness();
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-learner-1" }),
+    ).rejects.toBeInstanceOf(InstructorNotStaffError);
+    expect(instructor.create).not.toHaveBeenCalled();
+    expect(audits.some((a) => a.action === "cohort.instructor_assigned")).toBe(false);
+  });
+
+  it("refuses a staff account that is no longer active", async () => {
+    const { service, instructor } = harness();
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-left-1" }),
+    ).rejects.toBeInstanceOf(InstructorNotStaffError);
+    expect(instructor.create).not.toHaveBeenCalled();
+  });
+
+  it("re-sending an assignment that already stands is still a no-op after that person is deactivated", async () => {
+    const { service, instructor, deactivate } = harness();
+    await service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" });
+    deactivate("user-instructor-1");
+    await expect(
+      service.assignCohortInstructor({ cohortId: "cohort-1", userId: "user-instructor-1" }),
+    ).resolves.toBeDefined();
+    expect(instructor.create).toHaveBeenCalledTimes(1);
   });
 
   it("throws InstructorUserNotFoundError for an id with no matching user", async () => {

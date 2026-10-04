@@ -34,6 +34,7 @@ import {
   cancelSession,
   updateSession,
   SessionCancelledError,
+  SessionFacilitatorNotStaffError,
   InvalidTimeZoneError,
   SessionCourseNotInCohortError,
   SessionTimeRangeError,
@@ -71,6 +72,9 @@ function toFailure(error: unknown): Extract<SessionActionResult, { ok: false }> 
     return { ok: false, message: "A reason is required to cancel a session." };
   }
   if (error instanceof SessionCancelledError) {
+    return { ok: false, message: error.message };
+  }
+  if (error instanceof SessionFacilitatorNotStaffError) {
     return { ok: false, message: error.message };
   }
   if (error instanceof SessionNotFoundError) {

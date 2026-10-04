@@ -17,6 +17,7 @@ import {
   SessionCourseNotInCohortError,
   ReasonRequiredError,
   SessionCancelledError,
+  SessionFacilitatorNotStaffError,
   RepeatOccurrencesError,
   type ScheduledSessionRecord,
 } from "@/server/services/scheduled-session-service";
@@ -59,6 +60,8 @@ function harness(opts?: {
   cohort?: CohortInfo | null;
   rows?: ScheduledSessionRecord[];
   enrolled?: boolean;
+  /** Account ids that are active staff. Default: everyone, so tests not about this pass through. */
+  staff?: string[];
   now?: Date;
   createImpl?: (data: Record<string, unknown>) => ScheduledSessionRecord | never;
 }) {
@@ -159,6 +162,7 @@ function harness(opts?: {
     sessionScope: () => ({ cohortId: "cohort-1", courseIds: ["course-1"] }),
     cohortScope: (id) => ({ cohortId: id, courseIds: ["course-1"] }),
     isViewerEnrolled: async () => opts?.enrolled ?? true,
+    isActiveStaff: async (userId) => (opts?.staff ? opts.staff.includes(userId) : true),
     withPermission,
     audit: async (entry) => {
       audits.push(entry as unknown as Record<string, unknown>);
@@ -381,6 +385,47 @@ describe("updateSession — changing a scheduled session (audit A-11)", () => {
     const { service, events } = harness({ rows: [makeSessionRow()] });
     await service.updateSession({ ...unchanged, ...change });
     expect(events.map((event) => event.type)).toEqual(["session.updated"]);
+  });
+
+  describe("the facilitator must be an active staff account", () => {
+    it("refuses a new session whose facilitator is not staff, and saves nothing", async () => {
+      const { service, store, audits } = harness({ staff: ["staff-9"] });
+      await expect(
+        service.createSessionFromWallTime({ ...BASE_CREATE, facilitatorId: "learner-1" }),
+      ).rejects.toBeInstanceOf(SessionFacilitatorNotStaffError);
+      expect(store.size).toBe(0);
+      expect(audits).toHaveLength(0);
+    });
+
+    it("refuses a weekly series whose facilitator is not staff, and saves none of it", async () => {
+      const { service, store } = harness({ staff: ["staff-9"] });
+      await expect(
+        service.repeatWeeklySessions({ ...BASE_CREATE, facilitatorId: "learner-1", occurrences: 3 }),
+      ).rejects.toBeInstanceOf(SessionFacilitatorNotStaffError);
+      expect(store.size).toBe(0);
+    });
+
+    it("accepts a staff facilitator, and a session with none", async () => {
+      const { service } = harness({ staff: ["staff-9"] });
+      const withOne = await service.createSessionFromWallTime({ ...BASE_CREATE, facilitatorId: "staff-9" });
+      const withNone = await service.createSessionFromWallTime({ ...BASE_CREATE });
+      expect(withOne.facilitatorId).toBe("staff-9");
+      expect(withNone.facilitatorId).toBeNull();
+    });
+
+    it("refuses changing a session's facilitator to someone who is not staff", async () => {
+      const { service, store } = harness({ rows: [makeSessionRow()], staff: ["staff-9"] });
+      await expect(
+        service.updateSession({ ...unchanged, facilitatorId: "learner-1" }),
+      ).rejects.toBeInstanceOf(SessionFacilitatorNotStaffError);
+      expect(store.get("session-1")?.facilitatorId).toBeNull();
+    });
+
+    it("still lets a session be edited when its existing facilitator has since left", async () => {
+      const { service, store } = harness({ rows: [makeSessionRow({ facilitatorId: "staff-left" })], staff: ["staff-9"] });
+      await service.updateSession({ ...unchanged, facilitatorId: "staff-left", location: "Room 4" });
+      expect(store.get("session-1")).toMatchObject({ facilitatorId: "staff-left", location: "Room 4" });
+    });
   });
 
   it("mails nobody when only the facilitator or the attendance flag changes, but still saves and audits", async () => {

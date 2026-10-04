@@ -129,6 +129,18 @@ export class SessionCourseNotInCohortError extends Error {
   }
 }
 
+/**
+ * The chosen facilitator is a learner's account, a staff account that is not
+ * active, or no account at all (owner decision, 2026-10-05). The session form
+ * only offers staff; this holds the same rule on the server.
+ */
+export class SessionFacilitatorNotStaffError extends Error {
+  constructor(readonly userId: string) {
+    super("Only active staff accounts can be chosen as a session's facilitator.");
+    this.name = "SessionFacilitatorNotStaffError";
+  }
+}
+
 /** A mandatory reason was blank (D-26). Mirrors `publish-service.ts`. */
 export class ReasonRequiredError extends Error {
   constructor(message = "A reason is required to cancel a session.") {
@@ -309,6 +321,8 @@ export type ScheduledSessionServiceDeps = {
   cohortScope: (id: string) => ResourceScope | Promise<ResourceScope>;
   /** Whether `userId` holds an ACTIVE enrolment in `cohortId` (D-25 gate). */
   isViewerEnrolled: (cohortId: string, userId: string) => Promise<boolean>;
+  /** Whether `userId` is an active staff account: the only kind that may facilitate a session. */
+  isActiveStaff: (userId: string) => Promise<boolean>;
   withPermission: WithPermission;
   audit: (entry: ResourceAuditEntry) => Promise<void>;
   runInTransaction: <R>(fn: () => Promise<R>) => Promise<R>;
@@ -400,6 +414,12 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
     }
   }
 
+  /** A facilitator, when one is named, must be an active staff account. */
+  async function assertFacilitatorIsStaff(facilitatorId: string | undefined | null): Promise<void> {
+    if (facilitatorId == null) return;
+    if (!(await deps.isActiveStaff(facilitatorId))) throw new SessionFacilitatorNotStaffError(facilitatorId);
+  }
+
   /** Builds the row payload for one occurrence. */
   function buildSessionData(
     input: SessionFieldsInput,
@@ -433,6 +453,7 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
   )(async (input, ctx) => {
     const cohort = await loadCohortInfo(input.cohortId);
     assertCourseTaggable(cohort, input.courseId);
+    await assertFacilitatorIsStaff(input.facilitatorId);
 
     const range = toUtcRange(
       parseWallDate(input.date),
@@ -488,6 +509,7 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
 
       const cohort = await loadCohortInfo(input.cohortId);
       assertCourseTaggable(cohort, input.courseId);
+      await assertFacilitatorIsStaff(input.facilitatorId);
 
       const baseDate = parseWallDate(input.date);
       const start = parseTimeOfDay(input.startTime);
@@ -565,6 +587,9 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
 
     const cohort = await loadCohortInfo(before.cohortId);
     assertCourseTaggable(cohort, input.courseId);
+    // Only a CHANGE of facilitator is checked: a session whose facilitator has since left
+    // must still be editable (a new time, a new room) without first replacing them.
+    if ((input.facilitatorId ?? null) !== before.facilitatorId) await assertFacilitatorIsStaff(input.facilitatorId);
 
     const range = toUtcRange(
       parseWallDate(input.date),
@@ -773,6 +798,10 @@ const built = createScheduledSessionService({
       where: { cohortId, userId, status: ACTIVE_ENROLMENT_STATUS },
       select: { id: true },
     });
+    return row !== null;
+  },
+  isActiveStaff: async (userId) => {
+    const row = await prisma.user.findFirst({ where: { id: userId, isStaff: true, status: "ACTIVE" }, select: { id: true } });
     return row !== null;
   },
   withPermission: liveWithPermission,

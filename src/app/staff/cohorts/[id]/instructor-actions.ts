@@ -23,6 +23,7 @@ import {
   assignCohortInstructor,
   removeCohortInstructor,
   InstructorUserNotFoundError,
+  InstructorNotStaffError,
 } from "@/server/services/cohort-service";
 import { listInstructorCandidates } from "@/server/services/instructor-candidate-service";
 
@@ -36,6 +37,9 @@ function toFailure(error: unknown): Extract<InstructorActionResult, { ok: false 
   }
   if (error instanceof InstructorUserNotFoundError) {
     return { ok: false, message: "No user with that id exists." };
+  }
+  if (error instanceof InstructorNotStaffError) {
+    return { ok: false, message: error.message };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
