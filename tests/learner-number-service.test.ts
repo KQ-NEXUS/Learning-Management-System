@@ -9,6 +9,7 @@ import { AuthorizationError } from "@/server/permissions/with-permission";
 import {
   createLearnerNumberService,
   InvalidLearnerNumberPatternError,
+  LearnerNumbersOffError,
   type LearnerNumberServiceDeps,
 } from "@/server/services/learner-number-service";
 
@@ -28,14 +29,16 @@ function harness(
   });
   const count = vi.fn(async (args: { where: Record<string, unknown> }) => ("isStaff" in args.where ? 7 : 3));
   const audit = vi.fn(async () => undefined);
+  const transaction = vi.fn(async () => [] as string[]);
   const service = createLearnerNumberService({
     config: { findUnique, upsert } as unknown as LearnerNumberServiceDeps["config"],
     user: { count } as unknown as LearnerNumberServiceDeps["user"],
+    transaction: transaction as unknown as LearnerNumberServiceDeps["transaction"],
     withPermission: createTestWithPermission(grants).withPermission as unknown as LearnerNumberServiceDeps["withPermission"],
     audit: audit as unknown as LearnerNumberServiceDeps["audit"],
     now: () => AT,
   });
-  return { service, findUnique, upsert, count, audit };
+  return { service, findUnique, upsert, count, audit, transaction };
 }
 
 describe("getLearnerNumberSettings", () => {
@@ -116,5 +119,43 @@ describe("saveLearnerNumberPattern", () => {
     const { service, upsert } = harness([grant("cohorts.manage")]);
     await expect(service.saveLearnerNumberPattern({ pattern: "KQL-######" })).rejects.toBeInstanceOf(AuthorizationError);
     expect(upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("backfillLearnerNumbers", () => {
+  it("is refused while numbering is off, and touches no learner", async () => {
+    const { service, transaction, audit } = harness();
+    await expect(service.backfillLearnerNumbers()).rejects.toBeInstanceOf(LearnerNumbersOffError);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("is refused without users.manage, and touches no learner", async () => {
+    const { service, transaction } = harness([grant("cohorts.manage")], { pattern: "KQL-####", nextSequence: 1 });
+    await expect(service.backfillLearnerNumbers()).rejects.toBeInstanceOf(AuthorizationError);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps going batch by batch until a batch comes back short, and records the run", async () => {
+    const { service, transaction, audit } = harness(undefined, { pattern: "KQL-####", nextSequence: 1 });
+    const full = Array.from({ length: 100 }, (_, i) => `KQL-${String(i + 1).padStart(4, "0")}`);
+    transaction.mockResolvedValueOnce(full).mockResolvedValueOnce(["KQL-0101", "KQL-0102"]);
+
+    const result = await service.backfillLearnerNumbers();
+
+    expect(transaction).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ numbered: 102, first: "KQL-0001", last: "KQL-0102" });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "learner_number.backfilled",
+        outcome: "SUCCESS",
+        after: { numbered: 102, first: "KQL-0001", last: "KQL-0102" },
+      }),
+    );
+  });
+
+  it("reports nobody numbered when every learner already has one", async () => {
+    const { service } = harness(undefined, { pattern: "KQL-####", nextSequence: 9 });
+    expect(await service.backfillLearnerNumbers()).toMatchObject({ numbered: 0, first: null, last: null });
   });
 });

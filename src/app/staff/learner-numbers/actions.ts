@@ -14,7 +14,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import {
+  backfillLearnerNumbers,
   InvalidLearnerNumberPatternError,
+  LearnerNumbersOffError,
   saveLearnerNumberPattern,
   type LearnerNumberSettings,
 } from "@/server/services/learner-number-service";
@@ -35,6 +37,28 @@ export async function saveLearnerNumberPatternAction(input: unknown): Promise<Sa
     return { ok: true, settings };
   } catch (error) {
     if (error instanceof InvalidLearnerNumberPatternError) return { ok: false, message: error.message };
+    if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
+      return { ok: false, message: refusalMessage(error, "Your role does not permit changing learner number settings.") };
+    }
+    throw error;
+  }
+}
+
+export type BackfillLearnerNumbersResult =
+  | { ok: true; numbered: number; first: string | null; last: string | null; settings: LearnerNumberSettings }
+  | { ok: false; message: string };
+
+/**
+ * Gives a number to every learner who has none. Takes no input: who is numbered, and in what
+ * order, is decided entirely by the service.
+ */
+export async function backfillLearnerNumbersAction(): Promise<BackfillLearnerNumbersResult> {
+  try {
+    const result = await backfillLearnerNumbers();
+    revalidatePath("/staff/learner-numbers");
+    return { ok: true, ...result };
+  } catch (error) {
+    if (error instanceof LearnerNumbersOffError) return { ok: false, message: error.message };
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
       return { ok: false, message: refusalMessage(error, "Your role does not permit changing learner number settings.") };
     }

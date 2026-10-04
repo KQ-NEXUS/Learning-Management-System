@@ -1,10 +1,11 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
+import { ConfirmModal } from "@/components/primitives";
 import { useToast } from "@/components/feedback/Toaster";
 import { learnerNumberCapacity, parseLearnerNumberPattern, previewLearnerNumbers } from "@/lib/learner-number";
 import type { LearnerNumberSettings } from "@/server/services/learner-number-service";
-import { saveLearnerNumberPatternAction } from "./actions";
+import { backfillLearnerNumbersAction, saveLearnerNumberPatternAction } from "./actions";
 
 /**
  * The learner number settings form: one field for the pattern, with a preview
@@ -27,9 +28,15 @@ export type LearnerNumberFormProps = {
   /** Today, from the server: the preview's year must not depend on the browser's clock. */
   todayIso: string;
   save?: typeof saveLearnerNumberPatternAction;
+  backfill?: typeof backfillLearnerNumbersAction;
 };
 
-export function LearnerNumberForm({ initial, todayIso, save = saveLearnerNumberPatternAction }: LearnerNumberFormProps) {
+export function LearnerNumberForm({
+  initial,
+  todayIso,
+  save = saveLearnerNumberPatternAction,
+  backfill = backfillLearnerNumbersAction,
+}: LearnerNumberFormProps) {
   const fieldId = useId();
   const hintId = useId();
   const toast = useToast();
@@ -37,6 +44,9 @@ export function LearnerNumberForm({ initial, todayIso, save = saveLearnerNumberP
   const [pattern, setPattern] = useState(initial.pattern ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [confirmingBackfill, setConfirmingBackfill] = useState(false);
+  const [backfillError, setBackfillError] = useState<string | null>(null);
+  const [backfilling, startBackfill] = useTransition();
 
   const today = new Date(todayIso);
   const trimmed = pattern.trim();
@@ -61,6 +71,27 @@ export function LearnerNumberForm({ initial, todayIso, save = saveLearnerNumberP
     });
   }
 
+  function runBackfill() {
+    setBackfillError(null);
+    startBackfill(async () => {
+      const result = await backfill();
+      if (!result.ok) {
+        setBackfillError(result.message);
+        return;
+      }
+      setSettings(result.settings);
+      setConfirmingBackfill(false);
+      toast.success(
+        result.numbered === 0
+          ? "Every learner already has a number"
+          : `${result.numbered} ${result.numbered === 1 ? "learner" : "learners"} given a number, ${result.first} to ${result.last}`,
+      );
+    });
+  }
+
+  const waiting = settings.withoutNumber;
+  const waitingLabel = `${waiting} ${waiting === 1 ? "learner" : "learners"}`;
+
   return (
     <div className="flex max-w-[760px] flex-col gap-8">
       <section className="flex flex-col gap-3">
@@ -84,7 +115,44 @@ export function LearnerNumberForm({ initial, todayIso, save = saveLearnerNumberP
             Learner numbers are off. Save a pattern and every learner who registers from then on gets the next number.
           </p>
         )}
+        {settings.pattern && waiting > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface-2 p-4">
+            <p className="max-w-[46ch] text-sm text-foreground">
+              {waitingLabel} registered before numbering was switched on and {waiting === 1 ? "has" : "have"} no number.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setBackfillError(null);
+                setConfirmingBackfill(true);
+              }}
+              className="inline-flex min-h-[42px] items-center rounded-md border border-input-border bg-surface px-4 text-sm font-semibold text-foreground hover:bg-surface-2"
+            >
+              Give {waiting === 1 ? "this learner a number" : "these learners numbers"}
+            </button>
+          </div>
+        )}
       </section>
+
+      <ConfirmModal
+        open={confirmingBackfill}
+        eyebrow="Cannot be undone"
+        title={`Give numbers to ${waitingLabel}?`}
+        description={
+          <div className="flex flex-col gap-2">
+            <p>
+              Each learner without a number gets the next one, in the order they registered, starting from{" "}
+              <span className="font-mono font-semibold text-foreground">{settings.preview[0]}</span>.
+            </p>
+            <p>A number cannot be changed or taken back once it is given.</p>
+          </div>
+        }
+        confirmLabel="Give numbers"
+        pending={backfilling}
+        error={backfillError}
+        onConfirm={runBackfill}
+        onCancel={() => setConfirmingBackfill(false)}
+      />
 
       <form
         className="flex flex-col gap-4"
@@ -169,7 +237,7 @@ export function LearnerNumberForm({ initial, todayIso, save = saveLearnerNumberP
         <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground">
           <li>A learner&apos;s number never changes once issued.</li>
           <li>Changing the pattern affects only learners who register afterwards. The counter carries on; it does not restart.</li>
-          <li>Learners who registered before a pattern was saved are not given a number.</li>
+          <li>Learners who registered before a pattern was saved get a number only if you choose to give them one.</li>
         </ul>
 
         <div className="flex items-center gap-3 border-t border-foreground pt-6">

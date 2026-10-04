@@ -17,6 +17,11 @@
  *
  * Nothing is issued until a pattern is saved, and saving one never gives a
  * number to a learner who registered before. The counter only moves forward.
+ *
+ * Learners who registered before a pattern was saved get a number only if an
+ * administrator asks for it (`backfillLearnerNumbers`, owner decision later the
+ * same day): oldest registration first, continuing from the counter. It is a
+ * deliberate, audited, one-way step, never something a save does on its own.
  */
 
 import { Prisma } from "@prisma/client";
@@ -28,6 +33,9 @@ import { formatLearnerNumber, parseLearnerNumberPattern, previewLearnerNumbers }
 const CONFIG_ID = "default";
 /** How many counter values to try if a formatted number is somehow already taken. */
 const MAX_ISSUE_ATTEMPTS = 20;
+/** Learners numbered per transaction during a backfill: short transactions, bounded memory. */
+export const BACKFILL_BATCH_SIZE = 100;
+const BACKFILL_TX_TIMEOUT_MS = 60_000;
 
 export type LearnerNumberSettings = {
   /** `null` while learner numbers are switched off. */
@@ -47,6 +55,35 @@ export class InvalidLearnerNumberPatternError extends Error {
     this.name = "InvalidLearnerNumberPatternError";
   }
 }
+
+/** Backfill was asked for while learner numbers are switched off. */
+export class LearnerNumbersOffError extends Error {
+  constructor() {
+    super("Save a learner number pattern before giving numbers to existing learners.");
+    this.name = "LearnerNumbersOffError";
+  }
+}
+
+export type LearnerNumberBackfillResult = {
+  /** How many learners were given a number by this run. */
+  numbered: number;
+  first: string | null;
+  last: string | null;
+  settings: LearnerNumberSettings;
+};
+
+/** What one backfill transaction needs on top of issuing. */
+export type LearnerNumberBackfillTx = LearnerNumberTx & {
+  user: LearnerNumberTx["user"] & {
+    findMany(args: {
+      where: Record<string, unknown>;
+      select: { id: true; createdAt: true };
+      orderBy: Record<string, unknown>[];
+      take: number;
+    }): Promise<{ id: string; createdAt: Date }[]>;
+    update(args: { where: { id: string }; data: { learnerNumber: string } }): Promise<unknown>;
+  };
+};
 
 /** The transaction surface `issueLearnerNumber` needs; a Prisma transaction client satisfies it. */
 export type LearnerNumberTx = {
@@ -89,6 +126,8 @@ export type LearnerNumberServiceDeps = {
     }): Promise<{ pattern: string | null; nextSequence: number }>;
   };
   user: { count(args: { where: Record<string, unknown> }): Promise<number> };
+  /** Runs one backfill batch in its own transaction. */
+  transaction<T>(fn: (tx: LearnerNumberBackfillTx) => Promise<T>, options: { timeout: number }): Promise<T>;
   withPermission: typeof liveWithPermission;
   audit: typeof recordAudit;
   now?: () => Date;
@@ -148,15 +187,79 @@ export function createLearnerNumberService(deps: LearnerNumberServiceDeps) {
     },
   );
 
-  return { getLearnerNumberSettings, saveLearnerNumberPattern };
+  /**
+   * Gives a number to every learner who has none, oldest registration first,
+   * continuing from the counter. `{YYYY}` and `{YY}` take the year each learner
+   * registered, exactly as they would have had numbering been on at the time.
+   *
+   * Each batch locks the settings row first. That makes two backfills started
+   * at once take turns, so the second finds the first's learners already
+   * numbered and no counter value is spent on a learner twice. A registration
+   * arriving mid-batch simply waits a moment for its own number.
+   */
+  const backfillLearnerNumbers = deps.withPermission<void>("users.manage", () => ({}))(
+    async (_input, ctx): Promise<LearnerNumberBackfillResult> => {
+      const config = await deps.config.findUnique({ where: { id: CONFIG_ID } });
+      if (!config?.pattern) throw new LearnerNumbersOffError();
+
+      let numbered = 0;
+      let first: string | null = null;
+      let last: string | null = null;
+
+      for (;;) {
+        const batch = await deps.transaction(
+          async (tx) => {
+            await tx.$queryRaw(Prisma.sql`SELECT 1 FROM "LearnerNumberConfig" WHERE "id" = ${CONFIG_ID} FOR UPDATE`);
+            const learners = await tx.user.findMany({
+              where: { isStaff: false, learnerNumber: null },
+              select: { id: true, createdAt: true },
+              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+              take: BACKFILL_BATCH_SIZE,
+            });
+            const issued: string[] = [];
+            for (const learner of learners) {
+              const number = await issueLearnerNumber(tx, learner.createdAt);
+              if (!number) throw new LearnerNumbersOffError(); // switched off mid-run: roll this batch back
+              await tx.user.update({ where: { id: learner.id }, data: { learnerNumber: number } });
+              issued.push(number);
+            }
+            return issued;
+          },
+          { timeout: BACKFILL_TX_TIMEOUT_MS },
+        );
+        if (batch.length === 0) break;
+        numbered += batch.length;
+        first ??= batch[0]!;
+        last = batch[batch.length - 1]!;
+        if (batch.length < BACKFILL_BATCH_SIZE) break;
+      }
+
+      await deps.audit({
+        action: "learner_number.backfilled",
+        targetType: "LearnerNumberConfig",
+        targetId: CONFIG_ID,
+        actorId: ctx.actor.userId,
+        outcome: "SUCCESS",
+        reason: null,
+        before: null,
+        after: { numbered, first, last },
+      });
+
+      return { numbered, first, last, settings: await snapshot() };
+    },
+  );
+
+  return { getLearnerNumberSettings, saveLearnerNumberPattern, backfillLearnerNumbers };
 }
 
 const built = createLearnerNumberService({
   config: prisma.learnerNumberConfig as unknown as LearnerNumberServiceDeps["config"],
   user: prisma.user as unknown as LearnerNumberServiceDeps["user"],
+  transaction: (fn, options) => prisma.$transaction((tx) => fn(tx as unknown as LearnerNumberBackfillTx), options),
   withPermission: liveWithPermission,
   audit: recordAudit,
 });
 
 export const getLearnerNumberSettings = built.getLearnerNumberSettings;
 export const saveLearnerNumberPattern = built.saveLearnerNumberPattern;
+export const backfillLearnerNumbers = built.backfillLearnerNumbers;
