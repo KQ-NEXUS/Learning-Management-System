@@ -6,7 +6,7 @@ import {
   ResourceForm,
   FormField,
   FormGrid,
-  FormSection,
+  FormStep,
   TextInput,
 } from "@/components/primitives";
 import {
@@ -137,8 +137,8 @@ export function CohortForm(
       )}
 
       <ResourceForm
-        sectioned
-        title={"Details"}
+        title={props.mode === "create" ? "New cohort" : "Cohort details"}
+        stepped={props.mode === "create" ? "linear" : "free"}
         submitLabel={props.mode === "create" ? "Create cohort" : "Save changes"}
         errors={!state.ok ? state.errors : []}
         pending={pending}
@@ -156,7 +156,7 @@ export function CohortForm(
           </>
         )}
 
-        <FormSection
+        <FormStep
           title="Details"
           description="How the cohort is named and what it teaches."
         >
@@ -270,8 +270,8 @@ export function CohortForm(
               </FormField>
             )}
           </FormGrid>
-        </FormSection>
-        <FormSection
+        </FormStep>
+        <FormStep
           title="Schedule"
           description="When it runs and when learners can enrol."
         >
@@ -392,8 +392,8 @@ export function CohortForm(
               )}
             </FormField>
           </FormGrid>
-        </FormSection>
-        <FormSection
+        </FormStep>
+        <FormStep
           title="Capacity and price"
           description="Seats, what learners pay and how attendance counts."
         >
@@ -494,7 +494,7 @@ export function CohortForm(
               )}
             </FormField>
           </FormGrid>
-        </FormSection>
+        </FormStep>
       </ResourceForm>
     </>
   );

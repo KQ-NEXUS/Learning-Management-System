@@ -9,8 +9,8 @@ export type {
   BulkSelection,
 } from "./ResourceTable";
 
-export { ResourceForm, FormField, FormSection, FormGrid, TextInput } from "./ResourceForm";
-export type { FieldError, ResourceFormState, ResourceFormProps } from "./ResourceForm";
+export { ResourceForm, FormField, FormSection, FormStep, FormGrid, TextInput } from "./ResourceForm";
+export type { FieldError, FormStepProps, ResourceFormState, ResourceFormProps } from "./ResourceForm";
 
 export { DetailLayout, DetailFacts } from "./DetailLayout";
 export type { DetailSection, DetailLayoutState, DetailLayoutProps } from "./DetailLayout";
