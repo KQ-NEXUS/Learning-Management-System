@@ -28,13 +28,14 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/app/staff/cohorts/[id]/enrolment-actions", () => ({
   addEnrolmentAction: vi.fn(),
+  listEnrolmentCandidatesAction: vi.fn(),
   approveEnrolmentAction: vi.fn(),
   transferEnrolmentAction: vi.fn(),
   withdrawEnrolmentAction: vi.fn(),
   cancelEnrolmentAction: vi.fn(),
 }));
 
-import { addEnrolmentAction } from "@/app/staff/cohorts/[id]/enrolment-actions";
+import { addEnrolmentAction, listEnrolmentCandidatesAction } from "@/app/staff/cohorts/[id]/enrolment-actions";
 import { RosterTab, type RosterRowView } from "@/app/staff/cohorts/[id]/RosterTab";
 
 afterEach(() => {
@@ -175,28 +176,116 @@ describe("RosterTab", () => {
     });
   });
 
+  describe("Add enrolment: choose a learner, then give the reason", () => {
+    const candidates = [
+      { id: "u2", name: "Alan Turing", email: "alan@example.com", learnerNumber: "KQL-000007", unverified: false, enrolledStatus: null },
+      { id: "u3", name: "Alan Turing", email: "alan.t@example.com", learnerNumber: "KQL-000012", unverified: false, enrolledStatus: null },
+      { id: "u1", name: "Ada Lovelace", email: "ada@example.com", learnerNumber: null, unverified: false, enrolledStatus: "ACTIVE" },
+    ];
+    const mockList = listEnrolmentCandidatesAction as unknown as ReturnType<typeof vi.fn>;
+    const mockAdd = addEnrolmentAction as unknown as ReturnType<typeof vi.fn>;
+
+    async function openPicker(total = candidates.length) {
+      mockList.mockResolvedValue({ ok: true, people: candidates, total });
+      render(<RosterTab cohortId="c1" rows={[row()]} />);
+      fireEvent.click(screen.getByRole("button", { name: "Add enrolment" }));
+      const picker = screen.getByRole("dialog", { name: "Choose a learner" });
+      await within(picker).findAllByRole("radio");
+      return picker;
+    }
+
+    it("opens a list of learners, never a box for a learner id", async () => {
+      const picker = await openPicker();
+
+      expect(mockList).toHaveBeenCalledWith({ cohortId: "c1", query: "" });
+      expect(within(picker).getByLabelText("Search by name, email or learner number")).toBeTruthy();
+      expect(screen.queryByPlaceholderText("Learner id")).toBeNull();
+    });
+
+    it("tells two learners with the same name apart by their learner number", async () => {
+      const picker = await openPicker();
+      const sameName = within(picker).getAllByRole("radio", { name: /Alan Turing/ });
+
+      expect(sameName).toHaveLength(2);
+      expect(sameName[0]!.textContent).toContain("KQL-000007");
+      expect(sameName[1]!.textContent).toContain("KQL-000012");
+    });
+
+    it("shows someone already enrolled here, but they cannot be chosen", async () => {
+      const picker = await openPicker();
+      const enrolled = within(picker).getByRole("radio", { name: /Ada Lovelace/ }) as HTMLButtonElement;
+
+      expect(enrolled.disabled).toBe(true);
+      expect(enrolled.textContent).toContain("Already enrolled here");
+    });
+
+    it("says when the list was cut short", async () => {
+      const picker = await openPicker(312);
+      expect(within(picker).getByText("Showing the first 3 of 312 learners. Search to narrow the list.")).toBeTruthy();
+    });
+
+    it("carries the chosen learner into the reason step and enrols that learner", async () => {
+      mockAdd.mockResolvedValue({ ok: true, enrolmentId: "e9" });
+      const picker = await openPicker();
+      fireEvent.click(within(picker).getAllByRole("radio", { name: /Alan Turing/ })[1]!);
+      fireEvent.click(within(picker).getByRole("button", { name: "Continue" }));
+
+      const dialog = screen.getByRole("dialog", { name: "Add Alan Turing to this cohort?" });
+      expect(within(dialog).getByText("KQL-000012", { exact: false })).toBeTruthy();
+      fireEvent.change(within(dialog).getByLabelText(/reason/i), { target: { value: "Corporate seat for a partner org" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Add enrolment" }));
+
+      await vi.waitFor(() =>
+        expect(mockAdd).toHaveBeenCalledWith({
+          cohortId: "c1",
+          userId: "u3",
+          target: "ACTIVE",
+          reason: "Corporate seat for a partner org",
+        }),
+      );
+    });
+
+    it("Change goes back to the list with the learner still chosen", async () => {
+      const picker = await openPicker();
+      fireEvent.click(within(picker).getAllByRole("radio", { name: /Alan Turing/ })[0]!);
+      fireEvent.click(within(picker).getByRole("button", { name: "Continue" }));
+      fireEvent.click(screen.getByRole("button", { name: "Change" }));
+
+      const again = screen.getByRole("dialog", { name: "Choose a learner" });
+      const radios = await within(again).findAllByRole("radio", { name: /Alan Turing/ });
+      expect(radios[0]!.getAttribute("aria-checked")).toBe("true");
+    });
+
+    it("closing the list before choosing anyone abandons the add", async () => {
+      const picker = await openPicker();
+      fireEvent.click(within(picker).getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(mockAdd).not.toHaveBeenCalled();
+    });
+  });
+
   it("renders a CapacityExceededError result inside the Add-enrolment modal's error slot", async () => {
     const mockAdd = addEnrolmentAction as unknown as ReturnType<typeof vi.fn>;
+    const mockList = listEnrolmentCandidatesAction as unknown as ReturnType<typeof vi.fn>;
+    mockList.mockResolvedValue({
+      ok: true,
+      people: [{ id: "u2", name: "Alan Turing", email: "alan@example.com", learnerNumber: null, unverified: false, enrolledStatus: null }],
+      total: 1,
+    });
     mockAdd.mockResolvedValue({
       ok: false,
       message:
         "This cohort is full. It reached capacity while you were working. Raise capacity or withdraw an enrolment, then try again.",
     });
 
-    render(
-      <RosterTab
-        cohortId="c1"
-        rows={[row()]}
-        candidateLearners={[{ id: "u2", name: "Alan Turing", email: "alan@example.com" }]}
-      />,
-    );
+    render(<RosterTab cohortId="c1" rows={[row()]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add enrolment" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Alan Turing/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "Learner" }), {
-      target: { value: "u2" },
-    });
     fireEvent.change(within(dialog).getByLabelText(/reason/i), {
       target: { value: "Backfilling a comped seat for a partner org" },
     });

@@ -26,6 +26,8 @@ export type PickablePerson = {
   id: string;
   name: string;
   email: string;
+  /** A reference shown before the email and matched by the search: a learner number. */
+  reference?: string;
   /** A short line on the right: a role, or roles joined with commas. */
   detail?: string;
   /** Set to show the person greyed out with this explanation instead of selectable. */
@@ -39,7 +41,10 @@ export type PersonPickerDialogProps = {
   description?: string;
   confirmLabel: string;
   people?: PickablePerson[];
-  load?: (query: string) => Promise<{ ok: true; people: PickablePerson[] } | { ok: false; message: string }>;
+  /** `note` is shown under the list, for example to say the list was cut short. */
+  load?: (query: string) => Promise<{ ok: true; people: PickablePerson[]; note?: string } | { ok: false; message: string }>;
+  /** What the search box says it matches. */
+  searchLabel?: string;
   /** Preselected when the dialog opens (the current facilitator). */
   selectedId?: string | null;
   /** Shown when the list is empty before anything is typed. */
@@ -74,6 +79,7 @@ function Picker({
   confirmLabel,
   people,
   load,
+  searchLabel = "Search by name or email",
   selectedId = null,
   emptyText = "Nobody to show.",
   pending = false,
@@ -85,7 +91,12 @@ function Picker({
   const listId = useId();
   const [query, setQuery] = useState("");
   const [chosenId, setChosenId] = useState<string | null>(selectedId);
-  const [remote, setRemote] = useState<{ key: string; people: PickablePerson[]; error: string | null } | null>(null);
+  const [remote, setRemote] = useState<{
+    key: string;
+    people: PickablePerson[];
+    error: string | null;
+    note?: string;
+  } | null>(null);
 
   // Server-backed list: fetch a moment after typing stops. A slow answer to an
   // older query is dropped rather than shown over a newer one.
@@ -98,7 +109,11 @@ function Picker({
         try {
           const result = await load(key);
           if (cancelled) return;
-          setRemote(result.ok ? { key, people: result.people, error: null } : { key, people: [], error: result.message });
+          setRemote(
+            result.ok
+              ? { key, people: result.people, error: null, note: result.note }
+              : { key, people: [], error: result.message },
+          );
         } catch {
           if (!cancelled) setRemote({ key, people: [], error: "The list could not be loaded. Try again." });
         }
@@ -116,8 +131,13 @@ function Picker({
   const listed: PickablePerson[] = load
     ? (remote?.people ?? [])
     : (people ?? []).filter(
-        (person) => !needle || person.name.toLowerCase().includes(needle) || person.email.toLowerCase().includes(needle),
+        (person) =>
+          !needle ||
+          person.name.toLowerCase().includes(needle) ||
+          person.email.toLowerCase().includes(needle) ||
+          (person.reference ?? "").toLowerCase().includes(needle),
       );
+  const note = load && !loading ? remote?.note : undefined;
   const loadError = load ? (remote?.error ?? null) : null;
   const chosen = listed.find((person) => person.id === chosenId && !person.disabledReason) ?? null;
 
@@ -127,7 +147,7 @@ function Picker({
 
       <div className="relative">
         <label htmlFor={searchId} className="sr-only">
-          Search by name or email
+          {searchLabel}
         </label>
         <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <input
@@ -135,7 +155,7 @@ function Picker({
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name or email"
+          placeholder={searchLabel}
           autoComplete="off"
           aria-controls={listId}
           className="h-11 w-full rounded-md border border-input-border bg-surface pr-3 pl-9 text-sm text-foreground placeholder:text-muted-foreground"
@@ -187,7 +207,12 @@ function Picker({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-foreground">{person.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{person.email}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {person.reference && (
+                        <span className="font-mono font-semibold text-foreground">{person.reference} · </span>
+                      )}
+                      {person.email}
+                    </span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-muted-foreground">
                     {person.disabledReason ?? person.detail}
@@ -199,6 +224,8 @@ function Picker({
           })
         )}
       </ul>
+
+      {note && <p className="-mt-1 text-xs text-muted-foreground">{note}</p>}
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
         <button

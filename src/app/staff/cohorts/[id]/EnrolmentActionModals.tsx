@@ -17,10 +17,12 @@
  * nothing while `open` is false.
  */
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ConfirmModal } from "@/components/primitives";
+import { PersonPickerDialog, type PickablePerson } from "@/components/people/PersonPickerDialog";
 import {
   addEnrolmentAction,
+  listEnrolmentCandidatesAction,
   approveEnrolmentAction,
   transferEnrolmentAction,
   withdrawEnrolmentAction,
@@ -44,8 +46,13 @@ export type EnrolmentActionModalsProps = {
   onSuccess: () => void;
   /** Cohorts of the same course/programme as the source (D-13) — the transfer target picker. */
   siblingCohorts?: { id: string; code: string }[];
-  /** Learners eligible for a comped/corporate add — best-effort, supplied by the mounting page. */
-  candidateLearners?: { id: string; name: string; email: string }[];
+};
+
+/** Why a learner is listed but cannot be chosen, by the status of the place they already hold here. */
+const HOLDING_REASON: Record<string, string> = {
+  ACTIVE: "Already enrolled here",
+  COMPLETED: "Completed this cohort",
+  PENDING_PAYMENT: "Awaiting payment here",
 };
 
 const MIN_REASON_LENGTH = 10;
@@ -67,19 +74,22 @@ export function EnrolmentActionModals({
   onClose,
   onSuccess,
   siblingCohorts = [],
-  candidateLearners = [],
 }: EnrolmentActionModalsProps) {
   const [pending, setPending] = useState(false);
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
-  const [addLearnerId, setAddLearnerId] = useState("");
+  // Adding is two steps: choose the learner in the picker, then give the reason. `choosingLearner`
+  // reopens the picker from the second step ("Change"). The two are never open at once.
+  const [addLearner, setAddLearner] = useState<PickablePerson | null>(null);
+  const [choosingLearner, setChoosingLearner] = useState(false);
   const [addTarget, setAddTarget] = useState<"ACTIVE" | "PENDING_PAYMENT">("ACTIVE");
   const [transferTargetCohortId, setTransferTargetCohortId] = useState("");
 
   function close() {
     setError(null);
     setPending(false);
-    setAddLearnerId("");
+    setAddLearner(null);
+    setChoosingLearner(false);
     setAddTarget("ACTIVE");
     setTransferTargetCohortId("");
     onClose();
@@ -99,44 +109,87 @@ export function EnrolmentActionModals({
     }
   }
 
+  const addCohortId = target?.action === "add" ? target.cohortId : null;
+  const loadLearners = useCallback(
+    async (query: string) => {
+      if (!addCohortId) return { ok: false as const, message: "The list could not be loaded." };
+      const result = await listEnrolmentCandidatesAction({ cohortId: addCohortId, query });
+      if (!result.ok) return result;
+      return {
+        ok: true as const,
+        people: result.people.map((person) => ({
+          id: person.id,
+          name: person.name,
+          email: person.email,
+          reference: person.learnerNumber ?? undefined,
+          detail: person.unverified ? "Email not confirmed" : undefined,
+          disabledReason: person.enrolledStatus
+            ? (HOLDING_REASON[person.enrolledStatus] ?? "Already in this cohort")
+            : undefined,
+        })),
+        note:
+          result.total > result.people.length
+            ? `Showing the first ${result.people.length} of ${result.total} learners. Search to narrow the list.`
+            : undefined,
+      };
+    },
+    [addCohortId],
+  );
+  const pickingLearner = target?.action === "add" && (addLearner === null || choosingLearner);
+
   const transferTargetCode = siblingCohorts.find((c) => c.id === transferTargetCohortId)?.code;
 
   return (
     <>
+      <PersonPickerDialog
+        open={pickingLearner}
+        title="Choose a learner"
+        description="Learners with an account. Search by learner number if you do not know the name."
+        searchLabel="Search by name, email or learner number"
+        confirmLabel="Continue"
+        emptyText="No learners have an account yet."
+        selectedId={addLearner?.id ?? null}
+        load={loadLearners}
+        onConfirm={(person) => {
+          setAddLearner(person);
+          setChoosingLearner(false);
+          setError(null);
+        }}
+        // Leaving the picker without ever choosing abandons the add; leaving it after "Change" keeps the choice.
+        onClose={() => (addLearner ? setChoosingLearner(false) : close())}
+      />
+
       <ConfirmModal
-        open={target?.action === "add"}
-        title="Add enrolment?"
+        open={target?.action === "add" && !pickingLearner}
+        title={`Add ${addLearner?.name ?? "learner"} to this cohort?`}
         description={
           <div className="flex flex-col gap-2">
             <p>
               Adds a comped, corporate or scholarship learner directly, bypassing checkout. The
               reason is audited.
             </p>
-            <label className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
               <span className={FIELD_LABEL}>Learner</span>
-              {candidateLearners.length > 0 ? (
-                <select
-                  value={addLearnerId}
-                  onChange={(e) => setAddLearnerId(e.target.value)}
-                  className={FIELD_INPUT}
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-2 px-3 py-2">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-foreground">{addLearner?.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {addLearner?.reference && (
+                      <span className="font-mono font-semibold text-foreground">{addLearner.reference} · </span>
+                    )}
+                    {addLearner?.email}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChoosingLearner(true)}
+                  disabled={pending}
+                  className="shrink-0 text-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50"
                 >
-                  <option value="">Select a learner…</option>
-                  {candidateLearners.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name} · {l.email}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={addLearnerId}
-                  onChange={(e) => setAddLearnerId(e.target.value)}
-                  placeholder="Learner id"
-                  className={FIELD_INPUT}
-                />
-              )}
-            </label>
+                  Change
+                </button>
+              </div>
+            </div>
             <label className="flex flex-col gap-1">
               <span className={FIELD_LABEL}>Target status</span>
               <select
@@ -157,14 +210,14 @@ export function EnrolmentActionModals({
         error={error}
         onConfirm={(reason) => {
           if (!target || target.action !== "add") return;
-          if (!addLearnerId) {
+          if (!addLearner) {
             setError("Choose a learner first.");
             return;
           }
           run(
             addEnrolmentAction({
               cohortId: target.cohortId,
-              userId: addLearnerId,
+              userId: addLearner.id,
               target: addTarget,
               reason,
             }),
