@@ -29,7 +29,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   CertificateSettingsFields,
   type SelectableTemplate,
@@ -72,12 +72,6 @@ function submit(container: HTMLElement) {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
   }
   fireEvent.submit(form);
-}
-
-/** Opens the form's last step from its progress bar (an edit form lets any step be opened directly). */
-function openLastStep() {
-  const steps = within(screen.getByRole("navigation", { name: "Progress" })).getAllByRole("button");
-  fireEvent.click(steps[steps.length - 1]);
 }
 
 describe("CertificateSettingsFields", () => {
