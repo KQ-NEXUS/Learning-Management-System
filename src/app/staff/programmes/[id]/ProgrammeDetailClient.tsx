@@ -14,6 +14,7 @@ import {
   type CatalogueActionResult,
   type PublishActionResult,
 } from "./publish-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * The Programme action bar + publish dialog — the Programme mirror of
@@ -60,6 +61,7 @@ export function ProgrammeDetailClient({
   affectedCohorts,
 }: ProgrammeDetailClientProps) {
   const router = useRouter();
+  const toast = useToast();
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -72,6 +74,7 @@ export function ProgrammeDetailClient({
 
   function settle(result: CatalogueActionResult | PublishActionResult, ok: string) {
     if (result.ok) {
+      toast.success(ok);
       setFeedback({ tone: "success", text: ok });
       router.refresh();
       return true;

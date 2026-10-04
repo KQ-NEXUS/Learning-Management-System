@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ResourceForm,
@@ -17,6 +17,7 @@ import {
   updateCourseAction,
   type CourseActionResult,
 } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 const INITIAL: CourseActionResult = { ok: false, errors: [], message: null };
 
@@ -55,6 +56,12 @@ export function CourseForm(
   const action =
     props.mode === "create" ? createCourseAction : updateCourseAction;
   const [state, formAction, pending] = useActionState(action, INITIAL);
+
+  // "Saved." at the top of the form is out of view once the page has scrolled; say it in the corner too.
+  const toast = useToast();
+  useEffect(() => {
+    if (mode === "edit" && state.ok === true) toast.success("Changes saved");
+  }, [state, toast, mode]);
   // Lifted so the issuance-mode/template controls below can react live to
   // the checkbox in the same form session, without a page reload — a
   // Course with certificates off offers no meaningful issuance choice.

@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { recordRefundAction } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * "Record a refund" — the PAY-05 dialog (07-UI-SPEC §0.3, §6.1, §7.6).
@@ -53,6 +54,7 @@ export type RefundDialogProps = {
 
 export function RefundDialog({ orderId, currency, eligibleRefundMinor }: RefundDialogProps) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function RefundDialog({ orderId, currency, eligibleRefundMinor }: RefundD
       return;
     }
 
+    toast.success("Refund recorded");
     setOpen(false);
     router.refresh();
   }

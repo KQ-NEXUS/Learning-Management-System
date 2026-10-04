@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { assignInstructorAction, removeInstructorAction } from "./instructor-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type InstructorRow = { id: string; userId: string; userName: string; userEmail: string };
 
@@ -31,6 +32,7 @@ const BTN_PRIMARY =
 
 export function InstructorsPanel({ cohortId, instructors, canManage }: InstructorsPanelProps) {
   const router = useRouter();
+  const toast = useToast();
   const [userId, setUserId] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,7 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
     const result = await assignInstructorAction({ cohortId, userId: userId.trim() });
     setPending(false);
     if (result.ok) {
+      toast.success("Instructor added");
       setUserId("");
       router.refresh();
     } else {
@@ -54,7 +57,10 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
     const result = await removeInstructorAction({ cohortId, userId: targetUserId });
     setPending(false);
     if (!result.ok) setError(result.message);
-    else router.refresh();
+    else {
+      toast.success("Instructor removed");
+      router.refresh();
+    }
   }
 
   return (

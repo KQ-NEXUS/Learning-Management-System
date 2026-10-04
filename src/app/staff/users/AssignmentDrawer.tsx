@@ -10,6 +10,7 @@ import {
   searchStaffUsersAction,
   type CreateAssignmentState,
 } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 const INITIAL: CreateAssignmentState = { errors: [], success: false };
 
@@ -155,9 +156,12 @@ function DrawerPanel({
     };
   }, [scopeType, scopeQuery, scopeKey]);
 
+  const toast = useToast();
   useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+    if (!state.success) return;
+    toast.success("Role assigned");
+    onClose();
+  }, [state.success, onClose, toast]);
 
   const canSave =
     selectedUser !== null && roleId !== "" && (scopeType === "GLOBAL" || (!scopePending && !scopeError && scopeTargets.some(target => target.id === scopeId)));

@@ -33,6 +33,7 @@ import {
   revokeCertificateAction,
   reissueCertificateAction,
 } from "./certificate-record-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type CertificateRecordActionsProps = {
   certificateId: string;
@@ -61,6 +62,7 @@ export function CertificateRecordActions({
   confirmFlagged = confirmFlaggedCertificateAction,
 }: CertificateRecordActionsProps) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState<"revoke" | "reissue" | "keep" | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,7 @@ export function CertificateRecordActions({
         setError(result.message);
         return;
       }
+      toast.success("Certificate revoked");
       setOpen(null);
       router.refresh();
     });
@@ -84,6 +87,7 @@ export function CertificateRecordActions({
         setError(result.message);
         return;
       }
+      toast.success("Certificate kept active");
       setOpen(null);
       router.refresh();
     });
@@ -96,6 +100,7 @@ export function CertificateRecordActions({
         setError(result.message);
         return;
       }
+      toast.success("Certificate reissued");
       setOpen(null);
       router.push(`/staff/certificates/issued/${result.certificateId}`);
     });

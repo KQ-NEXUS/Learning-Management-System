@@ -26,6 +26,7 @@ import {
   releaseGradeAction,
   overrideGradeAction,
 } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type OverrideHistoryRow = {
   previousScore: number;
@@ -86,6 +87,7 @@ export function GradeEntryClient({
   const released = status === "RELEASED";
 
   const [scoreInput, setScoreInput] = useState(score !== null ? String(score) : "");
+  const toast = useToast();
   const [feedbackInput, setFeedbackInput] = useState(feedback ?? "");
   const [errors, setErrors] = useState<string[]>([]);
   const [draftStatus, setDraftStatus] = useState<string | undefined>(undefined);
@@ -117,6 +119,7 @@ export function GradeEntryClient({
         return;
       }
       setDraftStatus(`Draft saved ${formatTimestamp(new Date(result.grade.gradedAt))}`);
+      toast.success("Draft grade saved");
     });
   }
 
@@ -143,7 +146,9 @@ export function GradeEntryClient({
       const result = await release({ cohortId, assessmentId, submissionId, gradeId: id });
       if (!result.ok) {
         setErrors([result.message]);
+        return;
       }
+      toast.success("Grade released to the learner");
     });
   }
 
@@ -166,6 +171,7 @@ export function GradeEntryClient({
         setOverrideError(result.message);
         return;
       }
+      toast.success("Grade overridden");
       setOverrideOpen(false);
     });
   }

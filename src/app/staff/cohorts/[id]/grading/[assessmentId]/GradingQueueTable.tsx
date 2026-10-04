@@ -6,10 +6,12 @@ import { ConfirmModal } from "@/components/primitives/ConfirmModal";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { GradingQueueRow } from "@/server/services/grading-service";
 import { releaseGradesBatchAction } from "../../grading-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 type Props = { cohortId: string; assessmentId: string; rows: GradingQueueRow[]; onRelease?: typeof releaseGradesBatchAction };
 export function GradingQueueTable({ cohortId, assessmentId, rows, onRelease = releaseGradesBatchAction }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
+  const toast = useToast();
   const [status, setStatus] = useState("");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export function GradingQueueTable({ cohortId, assessmentId, rows, onRelease = re
         const result = await onRelease({ cohortId, gradeIds });
         if (!result.ok) { setError(result.message); return; }
         setOpen(false); setSelected([]);
+        toast.success(`${result.released.length} ${result.released.length === 1 ? "grade" : "grades"} released`);
         const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
         setNotice(`${plural(result.released.length, "grade", "grades")} released.${result.skipped.length ? ` ${plural(result.skipped.length, "grade was", "grades were")} already released and skipped.` : ""}`);
       } catch { setError("These grades could not be released. Try again."); }

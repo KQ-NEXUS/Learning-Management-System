@@ -11,6 +11,7 @@ import {
   type CancelCohortActionResult,
   type PublishCohortActionResult,
 } from "@/app/staff/cohorts/[id]/publish-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * The cohort detail action bar (COH-04, COH-05, D-31).
@@ -74,6 +75,7 @@ export function CohortDetailActions({
   canManage,
 }: CohortDetailActionsProps) {
   const router = useRouter();
+  const toast = useToast();
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busy, setBusy] = useState<null | "publish" | "cancel">(null);
 
@@ -88,6 +90,7 @@ export function CohortDetailActions({
 
   function settle(result: PublishCohortActionResult | CancelCohortActionResult, successText: string) {
     if (result.ok) {
+      toast.success(successText);
       setFeedback({ tone: "success", text: successText });
       router.refresh();
       return true;

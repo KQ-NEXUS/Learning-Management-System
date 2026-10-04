@@ -27,6 +27,7 @@ import { useEffect, useState } from "react";
 import { ConfirmModal } from "@/components/primitives";
 import { useUnsavedOrder } from "@/components/catalogue";
 import { saveAttendanceAction, correctAttendanceAction } from "../../../attendance-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /** Local string union — matches `prisma/schema.prisma` `enum AttendanceState`,
  *  kept local so this client component needs no server-side type import. */
@@ -98,6 +99,7 @@ export function AttendanceMarkClient({
   const { setDirty } = useUnsavedOrder();
 
   const [committed, setCommitted] = useState<Record<string, DraftEntry>>(() => toDraftMap(roster));
+  const toast = useToast();
   const [draft, setDraft] = useState<Record<string, DraftEntry>>(() => toDraftMap(roster));
 
   const [saving, setSaving] = useState(false);
@@ -163,6 +165,7 @@ export function AttendanceMarkClient({
     });
     setSaving(false);
     if (result.ok) {
+      toast.success("Attendance saved");
       setCommitted(draft);
     } else {
       setSaveError(result.message);
@@ -186,6 +189,7 @@ export function AttendanceMarkClient({
       setDraft((prev) => ({ ...prev, [enrolmentId]: { ...prev[enrolmentId], state: to } }));
       setCommitted((prev) => ({ ...prev, [enrolmentId]: { ...prev[enrolmentId], state: to } }));
       setPendingCorrection(null);
+      toast.success("Attendance corrected");
     } else {
       setCorrectionError(result.message);
     }

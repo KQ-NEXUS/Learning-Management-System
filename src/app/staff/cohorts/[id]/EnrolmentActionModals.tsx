@@ -27,6 +27,7 @@ import {
   cancelEnrolmentAction,
   type EnrolmentActionResult,
 } from "./enrolment-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /** Every action carries `cohortId` for revalidation (D-10) — see enrolment-actions.ts. */
 export type EnrolmentActionTarget =
@@ -49,6 +50,15 @@ export type EnrolmentActionModalsProps = {
 
 const MIN_REASON_LENGTH = 10;
 
+/** What the corner confirmation says once each roster action has gone through. */
+const ENROLMENT_SUCCESS: Record<string, string> = {
+  add: "Learner added to the cohort",
+  approve: "Enrolment approved",
+  transfer: "Learner transferred",
+  withdraw: "Learner withdrawn",
+  cancel: "Enrolment cancelled",
+};
+
 const FIELD_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 const FIELD_INPUT = "rounded-md border border-input-border bg-surface px-2 py-1 text-sm text-foreground";
 
@@ -60,6 +70,7 @@ export function EnrolmentActionModals({
   candidateLearners = [],
 }: EnrolmentActionModalsProps) {
   const [pending, setPending] = useState(false);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [addLearnerId, setAddLearnerId] = useState("");
   const [addTarget, setAddTarget] = useState<"ACTIVE" | "PENDING_PAYMENT">("ACTIVE");
@@ -80,6 +91,7 @@ export function EnrolmentActionModals({
     const result = await action;
     setPending(false);
     if (result.ok) {
+      toast.success(ENROLMENT_SUCCESS[target?.action ?? ""] ?? "Enrolment updated");
       close();
       onSuccess();
     } else {

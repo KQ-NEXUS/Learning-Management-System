@@ -11,6 +11,7 @@ import {
   assertTemplateSelectable,
   TemplateNotSelectableError,
 } from "@/server/services/certificate-template-service";
+import { withFlash } from "@/lib/flash-notices";
 
 export type CourseFormError = { name: string; message: string };
 export type CourseActionResult =
@@ -105,7 +106,7 @@ export async function createCourseAction(
   }
 
   revalidatePath("/staff/courses");
-  redirect(`/staff/courses/${id}`);
+  redirect(withFlash(`/staff/courses/${id}`, "course-created"));
 }
 
 /** Blank optional text on the edit form clears the column (`null`), unlike create which omits it. */

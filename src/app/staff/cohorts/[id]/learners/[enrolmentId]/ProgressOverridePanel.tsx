@@ -21,6 +21,7 @@ import { ConfirmModal } from "@/components/primitives";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { overrideLessonProgressAction } from "../../progress-actions";
 import { humanizeCode } from "@/lib/humanize";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type ProgressLessonRow = {
   id: string;
@@ -65,6 +66,7 @@ export function ProgressOverridePanel({
   canOverride,
 }: ProgressOverridePanelProps) {
   const router = useRouter();
+  const toast = useToast();
   const [target, setTarget] = useState<OverrideTarget | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +92,7 @@ export function ProgressOverridePanel({
     const result = await overrideLessonProgressAction(formData);
     setPending(false);
     if (result.ok) {
+      toast.success(target.currentlyComplete ? "Lesson marked not complete" : "Lesson marked complete");
       close();
       router.refresh();
     } else {

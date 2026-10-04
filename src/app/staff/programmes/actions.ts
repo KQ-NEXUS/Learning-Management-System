@@ -20,6 +20,7 @@ import {
   assertTemplateSelectable,
   TemplateNotSelectableError,
 } from "@/server/services/certificate-template-service";
+import { withFlash } from "@/lib/flash-notices";
 
 export type ProgrammeFormError = { name: string; message: string };
 export type ProgrammeActionResult =
@@ -120,7 +121,7 @@ export async function createProgrammeAction(
     return toFailure(error);
   }
   revalidatePath("/staff/programmes");
-  redirect(`/staff/programmes/${id}`);
+  redirect(withFlash(`/staff/programmes/${id}`, "programme-created"));
 }
 
 const updateSchema = baseSchema.partial().extend({ programmeId: z.string().min(1) });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ResourceForm,
@@ -17,6 +17,7 @@ import {
   updateProgrammeAction,
   type ProgrammeActionResult,
 } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 const INITIAL: ProgrammeActionResult = { ok: false, errors: [], message: null };
 
@@ -49,6 +50,12 @@ export function ProgrammeForm(
   const action =
     props.mode === "create" ? createProgrammeAction : updateProgrammeAction;
   const [state, formAction, pending] = useActionState(action, INITIAL);
+
+  // "Saved." at the top of the form is out of view once the page has scrolled; say it in the corner too.
+  const toast = useToast();
+  useEffect(() => {
+    if (props.mode === "edit" && state.ok === true) toast.success("Changes saved");
+  }, [state, toast, props.mode]);
   const values = props.mode === "edit" ? props.values : {};
   const templates = props.templates ?? [];
   const certificateEnabled = values.certificateEnabled ?? true;

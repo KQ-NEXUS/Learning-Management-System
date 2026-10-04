@@ -37,6 +37,7 @@ import {
   type SessionFieldsValue,
 } from "./SessionFormFields";
 import { createSessionAction, repeatWeeklyAction, cancelSessionAction, updateSessionAction } from "./session-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type SessionRow = {
   id: string;
@@ -125,6 +126,7 @@ export function SessionsTab({
   facilitatorNames,
 }: SessionsTabProps) {
   const router = useRouter();
+  const toast = useToast();
   // After a save the page re-fetches its sessions. Running that refresh as a transition gives a
   // pending flag for the second or two before the new data is on screen, so the list or calendar
   // can say it is updating instead of looking as if nothing happened.
@@ -193,6 +195,7 @@ export function SessionsTab({
     }
     setPanelPending(false);
     if (result.ok) {
+      toast.success(panel === "edit" ? "Session updated" : panel === "repeat" ? "Weekly sessions added" : "Session added");
       closePanel();
       refreshSessions();
     } else {
@@ -207,6 +210,7 @@ export function SessionsTab({
     const result = await cancelSessionAction({ sessionId: cancelTarget.id, reason });
     setCancelPending(false);
     if (result.ok) {
+      toast.success("Session cancelled");
       setCancelTarget(null);
       refreshSessions();
     } else {
