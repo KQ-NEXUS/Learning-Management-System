@@ -46,6 +46,7 @@ const row = (overrides: Partial<RosterRowView> = {}): RosterRowView => ({
   learnerId: "u1",
   learnerName: "Ada Lovelace",
   learnerEmail: "ada@example.com",
+  learnerNumber: null,
   enrolmentId: "e1",
   status: "ACTIVE",
   transitionCount: 0,

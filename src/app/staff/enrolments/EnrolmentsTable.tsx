@@ -27,6 +27,7 @@ export type EnrolmentListRow = {
   status: string;
   learnerName: string;
   learnerEmail: string;
+  learnerNumber: string | null;
   cohortId: string;
   cohortCode: string;
   offerTitle: string;
@@ -103,6 +104,7 @@ export function EnrolmentsTable({
         (!needle ||
           r.learnerName.toLowerCase().includes(needle) ||
           r.learnerEmail.toLowerCase().includes(needle) ||
+          (r.learnerNumber ?? "").toLowerCase().includes(needle) ||
           r.cohortCode.toLowerCase().includes(needle)) &&
         (!status || r.status === status) &&
         (!cohortId || r.cohortId === cohortId),
@@ -122,7 +124,7 @@ export function EnrolmentsTable({
       key: "learner",
       header: "Learner",
       render: (r) => r.learnerName,
-      subtitle: (r) => r.learnerEmail,
+      subtitle: (r) => (r.learnerNumber ? `${r.learnerNumber} · ${r.learnerEmail}` : r.learnerEmail),
       width: "18%",
     },
     {

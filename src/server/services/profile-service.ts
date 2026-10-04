@@ -35,6 +35,7 @@ export type ProfileUserRow = {
   pendingEmail: string | null;
   passwordHash: string | null;
   passwordIsTemporary?: boolean;
+  learnerNumber?: string | null;
   emailVerified?: Date | null;
 };
 
@@ -44,6 +45,8 @@ export type ProfileSnapshot = {
   email: string;
   pendingEmail: string | null;
   marketingOptIn: boolean;
+  /** `null` for staff, and for learners who registered before numbers were switched on. */
+  learnerNumber: string | null;
 };
 
 export type UpdateProfileResult =
@@ -121,6 +124,7 @@ export function createProfileService(deps: {
       email: user.email,
       pendingEmail: user.pendingEmail,
       marketingOptIn,
+      learnerNumber: user.learnerNumber ?? null,
     };
   }
 
@@ -171,6 +175,7 @@ export function createProfileService(deps: {
         email: after.email,
         pendingEmail: after.pendingEmail,
         marketingOptIn,
+        learnerNumber: after.learnerNumber ?? null,
       },
     };
   }

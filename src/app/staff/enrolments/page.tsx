@@ -24,6 +24,7 @@ export default async function EnrolmentsPage() {
       status: e.status,
       learnerName: e.learnerName,
       learnerEmail: e.learnerEmail,
+      learnerNumber: e.learnerNumber,
       cohortId: e.cohortId,
       cohortCode: e.cohortCode,
       offerTitle: e.offerTitle,

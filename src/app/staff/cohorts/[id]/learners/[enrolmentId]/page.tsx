@@ -204,7 +204,7 @@ export default async function LearnerProgressPage({
         { label: rosterRow.learnerName },
       ]}
       title={rosterRow.learnerName}
-      identifier={rosterRow.learnerEmail}
+      identifier={rosterRow.learnerNumber ?? rosterRow.learnerEmail}
       badges={
         <StatusPill
           label={STATUS_LABEL[rosterRow.status] ?? humanizeCode(rosterRow.status)}
@@ -220,6 +220,7 @@ export default async function LearnerProgressPage({
               <DetailFacts
                 facts={[
                   { label: "Learner", value: rosterRow.learnerName },
+                  { label: "Learner number", value: rosterRow.learnerNumber ?? "Not issued" },
                   { label: "Email", value: rosterRow.learnerEmail },
                   {
                     label: "Enrolment status",

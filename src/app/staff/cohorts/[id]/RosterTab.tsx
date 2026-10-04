@@ -43,6 +43,7 @@ export type RosterRowView = {
   learnerId: string;
   learnerName: string;
   learnerEmail: string;
+  learnerNumber: string | null;
   enrolmentId: string;
   status: string;
   transitionCount: number;
@@ -178,7 +179,7 @@ export function RosterTab({
           {r.learnerName}
         </Link>
       ),
-      subtitle: (r) => r.learnerEmail,
+      subtitle: (r) => (r.learnerNumber ? `${r.learnerNumber} · ${r.learnerEmail}` : r.learnerEmail),
       width: "28%",
     },
     {

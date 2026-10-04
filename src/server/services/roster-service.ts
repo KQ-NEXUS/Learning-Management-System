@@ -113,6 +113,8 @@ export type RosterRow = {
   learnerId: string;
   learnerName: string;
   learnerEmail: string;
+  /** The learner's number, or `null` if they registered before numbers were switched on. */
+  learnerNumber: string | null;
   enrolmentId: string;
   status: string;
   /** How many `AuditEvent` rows target this enrolment. */
@@ -146,7 +148,7 @@ type EnrolmentRosterRow = {
   status: string;
   accessStartsAt: Date | null;
   accessEndsAt: Date | null;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; learnerNumber?: string | null };
 };
 
 type SessionRosterRow = {
@@ -215,7 +217,7 @@ const ENROLMENT_SELECT = {
   status: true,
   accessStartsAt: true,
   accessEndsAt: true,
-  user: { select: { id: true, name: true, email: true } },
+  user: { select: { id: true, name: true, email: true, learnerNumber: true } },
 } as const;
 
 const SESSION_SELECT = {
@@ -559,6 +561,7 @@ export type StaffEnrolmentRow = {
   status: string;
   learnerName: string;
   learnerEmail: string;
+  learnerNumber: string | null;
   cohortId: string;
   cohortCode: string;
   offerTitle: string;
@@ -579,7 +582,7 @@ type StaffEnrolmentStoreRow = {
   accessStartsAt: Date | null;
   accessEndsAt: Date | null;
   createdAt: Date;
-  user: { name: string; email: string };
+  user: { name: string; email: string; learnerNumber?: string | null };
   cohort: { id: string; code: string; title: string };
 };
 
@@ -593,7 +596,7 @@ const STAFF_ENROLMENT_SELECT = {
   accessStartsAt: true,
   accessEndsAt: true,
   createdAt: true,
-  user: { select: { name: true, email: true } },
+  user: { select: { name: true, email: true, learnerNumber: true } },
   cohort: { select: { id: true, code: true, title: true } },
 } as const;
 
@@ -628,6 +631,7 @@ export function createStaffEnrolmentListService(deps: StaffEnrolmentListDeps) {
           (r) =>
             r.user.name.toLowerCase().includes(search) ||
             r.user.email.toLowerCase().includes(search) ||
+            (r.user.learnerNumber ?? "").toLowerCase().includes(search) ||
             r.cohort.code.toLowerCase().includes(search),
         )
       : rows;
@@ -637,6 +641,7 @@ export function createStaffEnrolmentListService(deps: StaffEnrolmentListDeps) {
       status: r.status,
       learnerName: r.user.name,
       learnerEmail: r.user.email,
+      learnerNumber: r.user.learnerNumber ?? null,
       cohortId: r.cohort.id,
       cohortCode: r.cohort.code,
       offerTitle: r.cohort.title,
@@ -744,6 +749,7 @@ export function createRosterService(deps: RosterServiceDeps) {
         learnerId: enrolment.user.id,
         learnerName: enrolment.user.name,
         learnerEmail: enrolment.user.email,
+        learnerNumber: enrolment.user.learnerNumber ?? null,
         enrolmentId: enrolment.id,
         status: enrolment.status,
         transitionCount: history.length,

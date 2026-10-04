@@ -179,6 +179,7 @@ export default async function CohortDetailPage({
       learnerId: r.learnerId,
       learnerName: r.learnerName,
       learnerEmail: r.learnerEmail,
+      learnerNumber: r.learnerNumber,
       enrolmentId: r.enrolmentId,
       status: r.status,
       transitionCount: r.transitionCount,

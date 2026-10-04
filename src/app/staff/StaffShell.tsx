@@ -9,6 +9,7 @@ import {
   BookOpen,
   ChevronRight,
   CreditCard,
+  Hash,
   KeyRound,
   Layers,
   LayoutGrid,
@@ -57,6 +58,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/staff/roles": ShieldCheck,
   "/staff/audit": ListChecks,
   "/staff/licence": KeyRound,
+  "/staff/learner-numbers": Hash,
 };
 
 // ---------------------------------------------------------------------------
