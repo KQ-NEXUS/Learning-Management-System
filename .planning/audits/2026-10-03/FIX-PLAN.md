@@ -55,6 +55,6 @@ Status: `todo` / `done <commit>` / `deferred (why)`.
 | R3-09 | Attempt wording off by one in the submit dialog | done |
 | R3-10 | Dashboard results panel "No results yet" after a pass | done (a completed course's card now loads its released results) |
 | R3-11 | Certificate design upload accepts PNG/JPEG only (no PDF) | todo |
-| R3-12 | Temporary staff password is not forced to change | done as a SUGGESTION (owner decision 2026-10-04): a staff member still on the password an administrator set sees a notice with a link to choose their own; nothing is blocked. Migration `20261004120000` adds the flag. Accounts created before it are not prompted |
+| R3-12 | Temporary staff password is not forced to change | done as a SUGGESTION (owner decision 2026-10-04): a staff member still on the password an administrator set sees a notice with a link to choose their own; nothing is blocked. The notice hides itself after 12 seconds and has a Dismiss button that keeps it away for 30 days on that browser. Migration `20261004120000` adds the flag. Accounts created before it are not prompted |
 | U-14 | Notification time is drain time, not event time | done |
 | other | Remaining U-/NOTE items in the two source documents | todo |

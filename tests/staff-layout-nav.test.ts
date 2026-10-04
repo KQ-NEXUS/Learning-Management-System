@@ -46,6 +46,12 @@ vi.mock("@/server/services/notification-service", () => ({
 // about. Mocking the bell itself (same treatment as StaffShell below) keeps
 // this file's scope to what it actually asserts: which nav items render.
 vi.mock("@/components/notifications/NotificationBell", () => ({ NotificationBell: () => null }));
+// The notice itself decides in the browser whether to show (it can be dismissed), so it renders
+// nothing on the server; its own behaviour is covered in tests/components/temporary-password-notice.
+// Here a marker stands in for it, to assert when the layout includes it and where.
+vi.mock("@/components/shell/TemporaryPasswordNotice", () => ({
+  TemporaryPasswordNotice: () => createElement("p", null, "TEMP-PASSWORD-NOTICE"),
+}));
 vi.mock("@/app/staff/StaffShell", () => ({ StaffShell: () => null }));
 // The layout reads the licence status for the banner and the restriction mirror (14-19).
 vi.mock("@/server/services/licence-service", () => ({
@@ -232,8 +238,7 @@ describe("staff layout temporary-password suggestion (R3-12)", () => {
   it("suggests a change, with a link to the reset flow, while the temporary password is still in use", async () => {
     mocks.isUsingTemporaryPassword.mockResolvedValue(true);
     const html = await bannerHtml();
-    expect(html).toContain("We recommend choosing your own.");
-    expect(html).toContain('href="/forgot-password"');
+    expect(html).toContain("TEMP-PASSWORD-NOTICE");
     expect(mocks.isUsingTemporaryPassword).toHaveBeenCalledWith(expect.objectContaining({ userId: "staff-1" }));
   });
 
@@ -249,7 +254,7 @@ describe("staff layout temporary-password suggestion (R3-12)", () => {
     mocks.getStatusSnapshot.mockResolvedValue(snapshot({ state: "RESTRICTED_CONTINUITY", isRestricted: true, daysRemaining: null }));
     const html = await bannerHtml();
     expect(html.indexOf("Restricted continuity mode")).toBeGreaterThanOrEqual(0);
-    expect(html.indexOf("Temporary password")).toBeGreaterThan(html.indexOf("Restricted continuity mode"));
+    expect(html.indexOf("TEMP-PASSWORD-NOTICE")).toBeGreaterThan(html.indexOf("Restricted continuity mode"));
   });
 
   it("a failed read shows nothing rather than breaking the shell", async () => {
