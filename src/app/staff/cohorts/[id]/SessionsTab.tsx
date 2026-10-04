@@ -16,7 +16,7 @@
  * `ConfirmModal` with a mandatory reason (D-26).
  */
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -125,6 +125,11 @@ export function SessionsTab({
   facilitatorNames,
 }: SessionsTabProps) {
   const router = useRouter();
+  // After a save the page re-fetches its sessions. Running that refresh as a transition gives a
+  // pending flag for the second or two before the new data is on screen, so the list or calendar
+  // can say it is updating instead of looking as if nothing happened.
+  const [refreshing, startRefresh] = useTransition();
+  const refreshSessions = () => startRefresh(() => router.refresh());
 
   // Two views of the same sessions: the table (sort, scan, mark attendance) and a calendar
   // (click a day to schedule on it). The owner asked for the calendar; the table stays.
@@ -189,7 +194,7 @@ export function SessionsTab({
     setPanelPending(false);
     if (result.ok) {
       closePanel();
-      router.refresh();
+      refreshSessions();
     } else {
       setPanelError(result.message);
     }
@@ -203,7 +208,7 @@ export function SessionsTab({
     setCancelPending(false);
     if (result.ok) {
       setCancelTarget(null);
-      router.refresh();
+      refreshSessions();
     } else {
       setCancelError(result.message);
     }
@@ -376,18 +381,29 @@ export function SessionsTab({
   return (
     <div className="flex flex-col gap-4">
       {!denied && (
-        <div role="group" aria-label="Sessions view" className="flex">
-          {(["table", "calendar"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={view === option}
-              onClick={() => setView(option)}
-              className={`${VIEW_BTN} ${view === option ? "bg-foreground text-surface" : "bg-surface text-foreground hover:bg-surface-2"}`}
-            >
-              {option === "table" ? "Table" : "Calendar"}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-4">
+          <div role="group" aria-label="Sessions view" className="flex">
+            {(["table", "calendar"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={view === option}
+                onClick={() => setView(option)}
+                className={`${VIEW_BTN} ${view === option ? "bg-foreground text-surface" : "bg-surface text-foreground hover:bg-surface-2"}`}
+              >
+                {option === "table" ? "Table" : "Calendar"}
+              </button>
+            ))}
+          </div>
+          {/* Always in the page so a screen reader announces the change; empty when idle. */}
+          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+            {refreshing && (
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden className="inline-block size-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                Updating sessions…
+              </span>
+            )}
+          </p>
         </div>
       )}
 

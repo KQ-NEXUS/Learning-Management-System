@@ -183,6 +183,13 @@ describe("Sessions tab — table and calendar views", () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
+  it("has a status line for 'Updating sessions…' that is silent when nothing is being saved", () => {
+    renderTab();
+    const status = screen.getByRole("status");
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    expect(status.textContent).toBe("");
+  });
+
   it("Close dismisses the pop-up without saving", () => {
     renderTab();
     openCalendar();
