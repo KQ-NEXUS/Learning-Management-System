@@ -126,25 +126,24 @@ describe("Sessions tab — table and calendar views", () => {
     for (const name of ["title", "date", "startTime", "endTime", "location", "meetingUrl"]) {
       expect(more.contains(field(dialog, name))).toBe(false);
     }
-    for (const name of ["linkVisibleFromMinutes", "facilitatorId"]) {
-      expect(more.contains(field(dialog, name))).toBe(true);
-    }
+    expect(more.contains(field(dialog, "linkVisibleFromMinutes"))).toBe(true);
+    expect(more.contains(within(dialog).getByRole("button", { name: "Choose facilitator", hidden: true }))).toBe(true);
 
     fireEvent.change(field(dialog, "title"), { target: { value: "Fire drill" } });
     fireEvent.change(field(dialog, "startTime"), { target: { value: "10:00" } });
     fireEvent.change(field(dialog, "endTime"), { target: { value: "11:00" } });
-    fireEvent.change(field(dialog, "facilitatorId"), { target: { value: "staff-9" } });
+    fireEvent.change(field(dialog, "linkVisibleFromMinutes"), { target: { value: "30" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Add session" }));
 
     await waitFor(() => expect(mocks.createSessionAction).toHaveBeenCalledTimes(1));
-    expect(mocks.createSessionAction.mock.calls[0]![0]).toMatchObject({ facilitatorId: "staff-9", attendanceExpected: true });
+    expect(mocks.createSessionAction.mock.calls[0]![0]).toMatchObject({ linkVisibleFromMinutes: 30, attendanceExpected: true });
   });
 
   it("the table view's form stays in full, with nothing folded away", () => {
     renderTab();
     fireEvent.click(screen.getByRole("button", { name: "Add session" }));
     expect(document.querySelector("details")).toBeNull();
-    expect(document.querySelector('[name="facilitatorId"]')).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Choose facilitator" })).toBeTruthy();
   });
 
   it("clicking a session pops up the edit form on its current values", async () => {
@@ -221,6 +220,89 @@ describe("Sessions tab — table and calendar views", () => {
     fireEvent.click(chip);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  describe("facilitator (chosen from the cohort's instructors, never typed as an id)", () => {
+    const instructors = [
+      { id: "staff-1", name: "Ije Instructor", email: "ije@example.test" },
+      { id: "staff-2", name: "Tunde Bakare", email: "tunde@example.test" },
+    ];
+
+    it("there is no field to type a user id into", () => {
+      renderTab({ facilitatorOptions: instructors });
+      fireEvent.click(screen.getByRole("button", { name: "Add session" }));
+
+      expect(document.querySelector('[name="facilitatorId"]')).toBeNull();
+      expect(screen.queryByLabelText(/user id/i)).toBeNull();
+      expect(screen.getByText("No facilitator")).toBeTruthy();
+    });
+
+    it("opens a pop-up listing the cohort's instructors, and the chosen one is sent with the session", async () => {
+      renderTab({ facilitatorOptions: instructors });
+      fireEvent.click(screen.getByRole("button", { name: "Add session" }));
+      fireEvent.click(screen.getByRole("button", { name: "Choose facilitator" }));
+
+      const picker = screen.getByRole("dialog", { name: "Choose facilitator" });
+      expect(within(picker).getAllByRole("radio").map((r) => r.textContent)).toEqual([
+        expect.stringContaining("Ije Instructor"),
+        expect.stringContaining("Tunde Bakare"),
+      ]);
+      expect((within(picker).getByRole("button", { name: "Set facilitator" }) as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(within(picker).getByRole("radio", { name: /Tunde Bakare/ }));
+      fireEvent.click(within(picker).getByRole("button", { name: "Set facilitator" }));
+
+      expect(screen.queryByRole("dialog", { name: "Choose facilitator" })).toBeNull();
+      expect(screen.getByText("Tunde Bakare · tunde@example.test")).toBeTruthy();
+
+      fireEvent.change(document.querySelector('[name="title"]') as HTMLInputElement, { target: { value: "Fire drill" } });
+      fireEvent.change(document.querySelector('[name="date"]') as HTMLInputElement, { target: { value: "2026-10-14" } });
+      fireEvent.change(document.querySelector('[name="startTime"]') as HTMLInputElement, { target: { value: "10:00" } });
+      fireEvent.change(document.querySelector('[name="endTime"]') as HTMLInputElement, { target: { value: "11:00" } });
+      fireEvent.click(screen.getAllByRole("button", { name: "Add session" }).at(-1) as HTMLElement);
+
+      await waitFor(() => expect(mocks.createSessionAction).toHaveBeenCalledTimes(1));
+      expect(mocks.createSessionAction.mock.calls[0]![0]).toMatchObject({ facilitatorId: "staff-2" });
+    });
+
+    it("searching narrows the list, and Clear removes the facilitator", () => {
+      renderTab({ facilitatorOptions: instructors });
+      fireEvent.click(screen.getByRole("button", { name: "Add session" }));
+      fireEvent.click(screen.getByRole("button", { name: "Choose facilitator" }));
+      const picker = screen.getByRole("dialog", { name: "Choose facilitator" });
+
+      fireEvent.change(within(picker).getByLabelText("Search by name or email"), { target: { value: "ije@" } });
+      expect(within(picker).getAllByRole("radio")).toHaveLength(1);
+      fireEvent.click(within(picker).getByRole("radio", { name: /Ije Instructor/ }));
+      fireEvent.click(within(picker).getByRole("button", { name: "Set facilitator" }));
+      expect(screen.getByRole("button", { name: "Change" })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      expect(screen.getByText("No facilitator")).toBeTruthy();
+    });
+
+    it("a cohort with no instructors says how to get some, rather than showing an empty list", () => {
+      renderTab({ facilitatorOptions: [] });
+      fireEvent.click(screen.getByRole("button", { name: "Add session" }));
+      fireEvent.click(screen.getByRole("button", { name: "Choose facilitator" }));
+
+      expect(within(screen.getByRole("dialog", { name: "Choose facilitator" })).getByText(/no instructors yet/i)).toBeTruthy();
+    });
+
+    it("from the calendar pop-up, Escape closes the chooser and leaves the session form open", () => {
+      renderTab({ facilitatorOptions: instructors });
+      openCalendar();
+      fireEvent.click(screen.getByRole("button", { name: /^Add a session on Wednesday 14 October 2026/ }));
+      const form = screen.getByRole("dialog", { name: "Add session" });
+      fireEvent.click(within(form).getByText("More options"));
+      fireEvent.click(within(form).getByRole("button", { name: "Choose facilitator" }));
+      expect(screen.getByRole("dialog", { name: "Choose facilitator" })).toBeTruthy();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByRole("dialog", { name: "Choose facilitator" })).toBeNull();
+      expect(screen.getByRole("dialog", { name: "Add session" })).toBeTruthy();
+    });
   });
 
   it("the table view still adds a session in place, with no pop-up", () => {

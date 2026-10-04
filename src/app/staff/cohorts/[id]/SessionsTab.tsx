@@ -67,6 +67,8 @@ export type SessionsTabProps = {
   denied?: { permission: string };
   /** Present only for a Programme cohort (D-24) — omitted for a Course cohort. */
   courseOptions?: { id: string; title: string }[];
+  /** The cohort's instructors, offered when choosing a session's facilitator. */
+  facilitatorOptions?: { id: string; name: string; email: string }[];
   /** Show add / repeat / cancel (needs cohorts.manage). Default true. */
   canManage?: boolean;
   /** Instructor names by user id, so the Facilitator column shows a person rather than an id. */
@@ -122,6 +124,7 @@ export function SessionsTab({
   sessions,
   denied,
   courseOptions,
+  facilitatorOptions,
   canManage = true,
   facilitatorNames,
 }: SessionsTabProps) {
@@ -349,6 +352,7 @@ export function SessionsTab({
         onChange={setFields}
         cohortTimezone={cohortTimezone}
         courseOptions={courseOptions}
+        facilitatorOptions={facilitatorOptions?.map((person) => ({ ...person, detail: "Instructor" }))}
       />
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">

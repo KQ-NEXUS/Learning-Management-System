@@ -445,6 +445,7 @@ export default async function CohortDetailPage({
           content: (
             <SessionsTab
               facilitatorNames={Object.fromEntries(instructorRows.map((row) => [row.userId, row.userName]))}
+              facilitatorOptions={instructorRows.map((row) => ({ id: row.userId, name: row.userName, email: row.userEmail }))}
               cohortId={cohortId}
               cohortTimezone={cohort.timezone}
               sessions={sessions}

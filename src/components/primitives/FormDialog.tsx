@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -23,6 +23,11 @@ export type FormDialogProps = {
   children: ReactNode;
 };
 
+// Dialogs can stack: the person picker opens on top of the session form. Each registers here
+// while open, and only the last one in (the one on top) handles Escape and Tab, so Escape closes
+// the picker and leaves the form behind it open.
+const openDialogs: symbol[] = [];
+
 export function FormDialog(props: FormDialogProps) {
   if (!props.open) return null;
   return <Dialog {...props} />;
@@ -31,6 +36,8 @@ export function FormDialog(props: FormDialogProps) {
 function Dialog({ title, pending = false, onClose, children }: FormDialogProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  // How many dialogs were open when this one mounted, counting itself: its place in the stack.
+  const [depth] = useState(() => openDialogs.length + 1);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -40,7 +47,18 @@ function Dialog({ title, pending = false, onClose, children }: FormDialogProps) 
   }, []);
 
   useEffect(() => {
+    const token = Symbol("form-dialog");
+    openDialogs.push(token);
+    return () => {
+      const index = openDialogs.indexOf(token);
+      if (index >= 0) openDialogs.splice(index, 1);
+    };
+  }, []);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // Not the dialog on top: the one above this handles the key.
+      if (dialogRef.current?.dataset.dialogDepth !== String(openDialogs.length)) return;
       if (event.key === "Escape" && !pending) {
         event.preventDefault();
         onClose();
@@ -74,13 +92,18 @@ function Dialog({ title, pending = false, onClose, children }: FormDialogProps) 
   return (
     // `items-start` with `my-auto` on the panel: centred when it fits, and scrollable from its
     // very top when it does not. Centring with `items-center` would cut the top off a tall form.
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/40 p-4">
+    <div
+      className="fixed inset-0 flex items-start justify-center overflow-y-auto bg-foreground/40 p-4"
+      // A dialog opened from another sits above it.
+      style={{ zIndex: 50 + depth }}
+    >
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        data-dialog-depth={depth}
         className="my-auto flex w-full max-w-xl flex-col gap-4 rounded-xl bg-surface p-6 shadow-card"
       >
         <div className="flex items-start justify-between gap-4">

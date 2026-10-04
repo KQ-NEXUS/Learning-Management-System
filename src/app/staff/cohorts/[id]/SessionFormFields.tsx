@@ -14,6 +14,11 @@
  */
 
 import { FormField, TextInput } from "@/components/primitives";
+import { useState } from "react";
+import { PersonPickerDialog, type PickablePerson } from "@/components/people/PersonPickerDialog";
+
+const CHOOSE_BTN =
+  "inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-4 text-sm font-semibold text-foreground hover:bg-surface-2";
 
 export type SessionFieldsValue = {
   title: string;
@@ -120,6 +125,8 @@ export type SessionFormFieldsProps = {
   cohortTimezone: string;
   /** Present only for a Programme cohort (D-24) — omitted/[] for a Course cohort. */
   courseOptions?: { id: string; title: string }[];
+  /** Who can facilitate: the cohort's instructors. */
+  facilitatorOptions?: PickablePerson[];
   errors?: Record<string, string>;
 };
 
@@ -143,8 +150,12 @@ export function SessionFormFields({
   onChange,
   cohortTimezone,
   courseOptions,
+  facilitatorOptions,
   errors = {},
 }: SessionFormFieldsProps) {
+  const [facilitatorPickerOpen, setFacilitatorPickerOpen] = useState(false);
+  const facilitator = facilitatorOptions?.find((person) => person.id === value.facilitatorId) ?? null;
+
   function set<K extends keyof SessionFieldsValue>(key: K, next: SessionFieldsValue[K]) {
     onChange({ ...value, [key]: next });
   }
@@ -176,16 +187,48 @@ export function SessionFormFields({
           )}
         </FormField>
 
-        <FormField name="facilitatorId" label="Facilitator (user id)" error={errors.facilitatorId}>
-          {(field) => (
-            <TextInput
-              {...field}
-              type="text"
-              value={value.facilitatorId}
-              onChange={(e) => set("facilitatorId", e.target.value)}
-            />
+        {/* The facilitator is chosen from the cohort's instructors in a pop-up, never typed as an id. */}
+        <div className="flex flex-col gap-1">
+          <span id="field-facilitatorId-label" className="text-sm font-semibold text-foreground">
+            Facilitator
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              id="field-facilitatorId"
+              aria-labelledby="field-facilitatorId-label"
+              className="min-w-0 flex-1 basis-40 truncate rounded-md border border-input-border bg-surface-2 px-4 py-3 text-sm text-foreground"
+            >
+              {facilitator ? `${facilitator.name} · ${facilitator.email}` : value.facilitatorId ? "Assigned (no longer an instructor here)" : "No facilitator"}
+            </span>
+            <button type="button" onClick={() => setFacilitatorPickerOpen(true)} className={CHOOSE_BTN}>
+              {value.facilitatorId ? "Change" : "Choose facilitator"}
+            </button>
+            {value.facilitatorId && (
+              <button type="button" onClick={() => set("facilitatorId", "")} className={CHOOSE_BTN}>
+                Clear
+              </button>
+            )}
+          </div>
+          {errors.facilitatorId && (
+            <p role="alert" className="text-sm text-danger">
+              {errors.facilitatorId}
+            </p>
           )}
-        </FormField>
+        </div>
+        <PersonPickerDialog
+          open={facilitatorPickerOpen}
+          title="Choose facilitator"
+          description="This cohort's instructors. Add someone as an instructor on the Overview tab to list them here."
+          confirmLabel="Set facilitator"
+          people={facilitatorOptions ?? []}
+          selectedId={value.facilitatorId || null}
+          emptyText="This cohort has no instructors yet. Add one on the Overview tab first."
+          onConfirm={(person) => {
+            set("facilitatorId", person.id);
+            setFacilitatorPickerOpen(false);
+          }}
+          onClose={() => setFacilitatorPickerOpen(false)}
+        />
 
         {courseOptions && courseOptions.length > 0 && (
           <FormField
