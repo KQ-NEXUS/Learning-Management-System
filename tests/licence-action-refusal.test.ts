@@ -158,6 +158,7 @@ const BLOCKED_ACTION_FILES = [
   "src/app/staff/programmes/[id]/publish-actions.ts",
   "src/app/staff/certificates/templates/template-actions.ts",
   "src/app/staff/certificates/templates/template-asset-actions.ts",
+  "src/app/staff/learner-numbers/actions.ts",
   "src/app/staff/roles/actions.ts",
   "src/app/staff/users/actions.ts",
 ] as const;
@@ -510,9 +511,9 @@ describe("behaviour: programme, template and user action files wrap every author
 // ---------------------------------------------------------------------------
 
 describe("gate: blocked-class files surface the licence refusal", () => {
-  it("gate: the BLOCKED list has 22 entries and each exists", () => {
-    expect(BLOCKED_FILES).toHaveLength(22);
-    expect(new Set(BLOCKED_FILES).size).toBe(22);
+  it("gate: the BLOCKED list has 23 entries and each exists", () => {
+    expect(BLOCKED_FILES).toHaveLength(23);
+    expect(new Set(BLOCKED_FILES).size).toBe(23);
     for (const file of BLOCKED_FILES) {
       expect(() => readSource(file), file).not.toThrow();
     }

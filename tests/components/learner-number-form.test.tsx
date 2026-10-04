@@ -89,7 +89,7 @@ describe("LearnerNumberForm", () => {
 
     await waitFor(() => expect(screen.getByText("On")).toBeTruthy());
     expect(save).toHaveBeenCalledWith({ pattern: "KQL-######" });
-    expect(screen.getByRole("button", { name: "Save pattern" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Save pattern" })).toBeTruthy();
   });
 
   it("shows the server's refusal and keeps what was typed", async () => {
