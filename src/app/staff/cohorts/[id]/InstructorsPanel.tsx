@@ -130,7 +130,11 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
           </button>
         </div>
       ) : null}
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }
