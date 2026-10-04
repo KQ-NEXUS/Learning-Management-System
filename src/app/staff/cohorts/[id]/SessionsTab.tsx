@@ -335,6 +335,7 @@ export function SessionsTab({
       <SessionFormFields
         variant={panel === "repeat" ? "repeat" : "single"}
         editing={panel === "edit"}
+        compact={view === "calendar"}
         value={fields}
         onChange={setFields}
         cohortTimezone={cohortTimezone}

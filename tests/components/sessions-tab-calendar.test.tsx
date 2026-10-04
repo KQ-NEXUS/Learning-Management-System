@@ -113,6 +113,40 @@ describe("Sessions tab — table and calendar views", () => {
     expect(mocks.refresh).toHaveBeenCalled();
   });
 
+  it("the pop-up is a short form: rarely changed fields are folded under 'More options' but still submitted", async () => {
+    renderTab();
+    openCalendar();
+    fireEvent.click(screen.getByRole("button", { name: /^Add a session on Wednesday 14 October 2026/ }));
+    const dialog = screen.getByRole("dialog", { name: "Add session" });
+
+    const more = dialog.querySelector("details") as HTMLDetailsElement;
+    expect(more.open).toBe(false);
+    expect(within(dialog).getByText("More options")).toBeTruthy();
+    // Up front: what every session needs. Folded away: what most sessions leave alone.
+    for (const name of ["title", "date", "startTime", "endTime", "location", "meetingUrl"]) {
+      expect(more.contains(field(dialog, name))).toBe(false);
+    }
+    for (const name of ["linkVisibleFromMinutes", "facilitatorId"]) {
+      expect(more.contains(field(dialog, name))).toBe(true);
+    }
+
+    fireEvent.change(field(dialog, "title"), { target: { value: "Fire drill" } });
+    fireEvent.change(field(dialog, "startTime"), { target: { value: "10:00" } });
+    fireEvent.change(field(dialog, "endTime"), { target: { value: "11:00" } });
+    fireEvent.change(field(dialog, "facilitatorId"), { target: { value: "staff-9" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add session" }));
+
+    await waitFor(() => expect(mocks.createSessionAction).toHaveBeenCalledTimes(1));
+    expect(mocks.createSessionAction.mock.calls[0]![0]).toMatchObject({ facilitatorId: "staff-9", attendanceExpected: true });
+  });
+
+  it("the table view's form stays in full, with nothing folded away", () => {
+    renderTab();
+    fireEvent.click(screen.getByRole("button", { name: "Add session" }));
+    expect(document.querySelector("details")).toBeNull();
+    expect(document.querySelector('[name="facilitatorId"]')).toBeTruthy();
+  });
+
   it("clicking a session pops up the edit form on its current values", async () => {
     renderTab();
     openCalendar();

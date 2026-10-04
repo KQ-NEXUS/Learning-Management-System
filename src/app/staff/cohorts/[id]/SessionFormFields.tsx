@@ -113,6 +113,8 @@ export type SessionFormFieldsProps = {
   variant: "single" | "repeat";
   /** Editing an existing session: the meeting link field says a blank value keeps the current link. */
   editing?: boolean;
+  /** A short form (the calendar pop-up): the rarely changed fields are folded under "More options". */
+  compact?: boolean;
   value: SessionFieldsValue;
   onChange: (next: SessionFieldsValue) => void;
   cohortTimezone: string;
@@ -136,6 +138,7 @@ function ZonedLabel({ label, timezone }: { label: string; timezone: string }) {
 export function SessionFormFields({
   variant,
   editing = false,
+  compact = false,
   value,
   onChange,
   cohortTimezone,
@@ -151,6 +154,75 @@ export function SessionFormFields({
     variant === "repeat" && value.date && Number.isInteger(occurrencesNumber) && occurrencesNumber > 0
       ? `Creates ${occurrencesNumber} session${occurrencesNumber === 1 ? "" : "s"}, weekly from ${value.date}.`
       : undefined;
+
+  const optionalFields = (
+    <>
+        <FormField
+          name="linkVisibleFromMinutes"
+          label="Link visible from (minutes before start)"
+          error={errors.linkVisibleFromMinutes}
+          hint="Default 60."
+        >
+          {(field) => (
+            <TextInput
+              {...field}
+              type="number"
+              min={0}
+              step={1}
+              mono
+              value={value.linkVisibleFromMinutes}
+              onChange={(e) => set("linkVisibleFromMinutes", e.target.value)}
+            />
+          )}
+        </FormField>
+
+        <FormField name="facilitatorId" label="Facilitator (user id)" error={errors.facilitatorId}>
+          {(field) => (
+            <TextInput
+              {...field}
+              type="text"
+              value={value.facilitatorId}
+              onChange={(e) => set("facilitatorId", e.target.value)}
+            />
+          )}
+        </FormField>
+
+        {courseOptions && courseOptions.length > 0 && (
+          <FormField
+            name="courseId"
+            label="Member course (optional)"
+            error={errors.courseId}
+            hint="Tag this session to one of the programme's member courses."
+          >
+            {(field) => (
+              <select
+                {...field}
+                value={value.courseId}
+                onChange={(e) => set("courseId", e.target.value)}
+                className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+              >
+                <option value="">No course tag</option>
+                {courseOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
+        )}
+
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={value.attendanceExpected}
+            onChange={(e) => set("attendanceExpected", e.target.checked)}
+            className="size-3.5 accent-accent"
+          />
+          Attendance expected
+        </label>
+    </>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -251,7 +323,7 @@ export function SessionFormFields({
         hint={
           editing
             ? "Leave blank to keep the current meeting link. Enter a new one to replace it."
-            : "The meeting link appears {n} minutes before the session starts — never shown in the sessions list."
+            : "Enrolled learners see the link shortly before the session starts (60 minutes by default). It is never shown in the sessions list."
         }
       >
         {(field) => (
@@ -265,70 +337,19 @@ export function SessionFormFields({
         )}
       </FormField>
 
-      <FormField
-        name="linkVisibleFromMinutes"
-        label="Link visible from (minutes before start)"
-        error={errors.linkVisibleFromMinutes}
-        hint="Default 60."
-      >
-        {(field) => (
-          <TextInput
-            {...field}
-            type="number"
-            min={0}
-            step={1}
-            mono
-            value={value.linkVisibleFromMinutes}
-            onChange={(e) => set("linkVisibleFromMinutes", e.target.value)}
-          />
-        )}
-      </FormField>
-
-      <FormField name="facilitatorId" label="Facilitator (user id)" error={errors.facilitatorId}>
-        {(field) => (
-          <TextInput
-            {...field}
-            type="text"
-            value={value.facilitatorId}
-            onChange={(e) => set("facilitatorId", e.target.value)}
-          />
-        )}
-      </FormField>
-
-      {courseOptions && courseOptions.length > 0 && (
-        <FormField
-          name="courseId"
-          label="Member course (optional)"
-          error={errors.courseId}
-          hint="Tag this session to one of the programme's member courses."
-        >
-          {(field) => (
-            <select
-              {...field}
-              value={value.courseId}
-              onChange={(e) => set("courseId", e.target.value)}
-              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
-            >
-              <option value="">No course tag</option>
-              {courseOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
-          )}
-        </FormField>
+      {/* The pop-up from the calendar is a short form: the fields most sessions leave alone sit
+          under a disclosure, closed until asked for. The values are submitted either way. */}
+      {compact ? (
+        <details className="group rounded-md border border-border">
+          <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-accent hover:underline">
+            <span className="group-open:hidden">More options</span>
+            <span className="hidden group-open:inline">Fewer options</span>
+          </summary>
+          <div className="flex flex-col gap-4 border-t border-border p-3">{optionalFields}</div>
+        </details>
+      ) : (
+        optionalFields
       )}
-
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={value.attendanceExpected}
-          onChange={(e) => set("attendanceExpected", e.target.checked)}
-          className="size-3.5 accent-accent"
-        />
-        Attendance expected
-      </label>
 
       {variant === "repeat" && (
         <FormField
