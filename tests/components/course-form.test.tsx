@@ -95,6 +95,14 @@ describe("CourseForm — edit mode", () => {
     return view;
   }
 
+  it("never rewrites the stored web address of an existing course", () => {
+    renderEdit();
+    const slug = screen.getByLabelText(/^Slug/) as HTMLInputElement;
+    const before = slug.value;
+    fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "A completely different title" } });
+    expect(slug.value).toBe(before);
+  });
+
   it("renders the stored values in the fields", () => {
     renderEdit();
     expect((screen.getByLabelText(/^Title/) as HTMLInputElement).value).toBe("Workplace Safety");
@@ -175,7 +183,7 @@ describe("CourseForm — edit mode", () => {
     expect(option.textContent).toContain("(archived)");
   });
 
-  it("create mode starts with certificates unchecked, and offers Create course only on the last step", () => {
+  it("create mode starts with certificates unchecked, and offers Create course only on the Review step", () => {
     renderEdit();
     cleanup();
     render(<CourseForm mode="create" />);
@@ -185,10 +193,32 @@ describe("CourseForm — edit mode", () => {
 
     fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "Fire Safety" } });
     fireEvent.change(screen.getByLabelText(/^Slug/), { target: { value: "fire-safety" } });
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    // Three steps, then the Review step that carries the submit button.
+    for (let step = 0; step < 3; step++) fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Review and create" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create course" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  });
+});
+
+describe("CourseForm — web address from the title", () => {
+  const slugInput = () => screen.getByLabelText(/^Slug/) as HTMLInputElement;
+  const title = (value: string) => fireEvent.change(screen.getByLabelText(/^Title/), { target: { value } });
+
+  it("follows the title while creating", () => {
+    render(<CourseForm mode="create" />);
+    title("Fire Safety 101");
+    expect(slugInput().value).toBe("fire-safety-101");
+    title("Fire Safety Basics");
+    expect(slugInput().value).toBe("fire-safety-basics");
+  });
+
+  it("stops following once the person edits the web address", () => {
+    render(<CourseForm mode="create" />);
+    title("Fire Safety");
+    fireEvent.change(slugInput(), { target: { value: "my-own-address" } });
+    title("Fire Safety Basics");
+    expect(slugInput().value).toBe("my-own-address");
   });
 });
 

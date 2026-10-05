@@ -1,5 +1,6 @@
 "use client";
 
+import { majorToMinorString, minorToMajorString } from "@/lib/money-input";
 import { useActionState, useState, useSyncExternalStore, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -79,6 +80,57 @@ export type Values = {
   holdMinutes?: number | null;
 };
 
+type PriceFieldProps = {
+  id: string;
+  name: string;
+  "aria-invalid": boolean | undefined;
+  "aria-describedby": string | undefined;
+};
+
+/**
+ * A price typed in major units (naira, dollars) with its currency sign in front. The visible box has
+ * no `name`, so it is not sent; a hidden field named `sendAs` carries the same amount in minor units.
+ */
+function PriceInput({
+  field,
+  symbol,
+  value,
+  onChange,
+  sendAs,
+}: {
+  field: PriceFieldProps;
+  symbol: string;
+  value: string;
+  onChange: (value: string) => void;
+  sendAs: string;
+}) {
+  return (
+    <div className="flex">
+      <span
+        aria-hidden
+        className="inline-flex items-center rounded-l-md border border-r-0 border-input-border bg-surface-2 px-4 text-sm font-semibold text-muted-foreground"
+      >
+        {symbol}
+      </span>
+      <TextInput
+        id={field.id}
+        aria-invalid={field["aria-invalid"]}
+        aria-describedby={field["aria-describedby"]}
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        pattern="[0-9][0-9,]*(\.[0-9]{1,2})?"
+        title="An amount such as 450000 or 450000.50"
+        mono
+        className="w-full rounded-l-none"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <input type="hidden" name={sendAs} value={majorToMinorString(value)} />
+    </div>
+  );
+}
+
 export function CohortForm(
   props:
     | { mode: "create"; courses: OfferOption[]; programmes: OfferOption[] }
@@ -102,6 +154,11 @@ export function CohortForm(
     if (props.mode === "edit" && state.ok === true) toast.success("Changes saved");
   }, [state, toast, props.mode]);
   const values = props.mode === "edit" ? props.values : {};
+
+  // People type naira and dollars; the form sends kobo and cents (hidden fields below),
+  // so the save code and the database are unchanged.
+  const [priceNgn, setPriceNgn] = useState(minorToMajorString(values.priceNgnMinor));
+  const [priceUsd, setPriceUsd] = useState(minorToMajorString(values.priceUsdMinor));
 
   // A single control picks the offer's KIND, then a second dependent select
   // picks the record — the "both" state is not reachable in the happy path,
@@ -433,16 +490,15 @@ export function CohortForm(
               name="priceNgnMinor"
               label="NGN base price"
               error={errorFor("priceNgnMinor")}
-              hint="Whole integer minor units (kobo) — e.g. 45000000 for ₦450,000.00. Leave blank if this Cohort does not sell in NGN."
+              hint="In naira, for example 450000 for ₦450,000. Kobo are allowed: 450000.50. Leave blank if this Cohort does not sell in NGN."
             >
               {(field) => (
-                <TextInput
-                  {...field}
-                  type="number"
-                  min={0}
-                  step={1}
-                  mono
-                  defaultValue={values.priceNgnMinor ?? ""}
+                <PriceInput
+                  field={field}
+                  symbol="₦"
+                  value={priceNgn}
+                  onChange={setPriceNgn}
+                  sendAs="priceNgnMinor"
                 />
               )}
             </FormField>
@@ -451,16 +507,15 @@ export function CohortForm(
               name="priceUsdMinor"
               label="USD base price"
               error={errorFor("priceUsdMinor")}
-              hint="Whole integer minor units (cents) — e.g. 50000 for $500.00. Leave blank if this Cohort does not sell in USD."
+              hint="In US dollars, for example 500 for $500. Cents are allowed: 500.50. Leave blank if this Cohort does not sell in USD."
             >
               {(field) => (
-                <TextInput
-                  {...field}
-                  type="number"
-                  min={0}
-                  step={1}
-                  mono
-                  defaultValue={values.priceUsdMinor ?? ""}
+                <PriceInput
+                  field={field}
+                  symbol="$"
+                  value={priceUsd}
+                  onChange={setPriceUsd}
+                  sendAs="priceUsdMinor"
                 />
               )}
             </FormField>
