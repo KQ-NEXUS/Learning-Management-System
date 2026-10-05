@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "@/app/staff/cohorts/[id]/EnrolmentActionModals";
+import { EnrolmentRowActions } from "@/app/staff/cohorts/[id]/EnrolmentRowActions";
+import { formatDateShort } from "@/lib/format-timestamp";
 import { humanizeCode } from "@/lib/humanize";
 
 /** Dates are ISO strings — converted once at the RSC boundary in `page.tsx`,
@@ -65,11 +67,9 @@ const STATUS_OPTIONS = [
 ];
 
 function formatAccessWindow(startsAt: string | null, endsAt: string | null): string {
-  const fmt = (iso: string | null) => (iso ? new Date(iso).toISOString().slice(0, 10) : "—");
+  const fmt = (iso: string | null) => (iso ? formatDateShort(new Date(iso)) : "—");
   return `${fmt(startsAt)} → ${fmt(endsAt)}`;
 }
-
-const ACTION_BTN = "text-xs font-semibold underline underline-offset-2";
 
 export function EnrolmentsTable({
   rows,
@@ -166,7 +166,7 @@ export function EnrolmentsTable({
     {
       key: "createdAt",
       header: "Created",
-      render: (r) => new Date(r.createdAt).toISOString().slice(0, 10),
+      render: (r) => formatDateShort(new Date(r.createdAt)),
       mono: true,
       width: "10%",
       hideOnMobile: true,
@@ -174,57 +174,15 @@ export function EnrolmentsTable({
     {
       key: "actions",
       header: "Actions",
-      render: (r) => {
-        const open = (t: EnrolmentActionTarget) => setTarget(t);
-        if (r.status === "PENDING_PAYMENT") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() => open({ action: "approve", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() => open({ action: "cancel", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        if (r.status === "ACTIVE") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() => open({ action: "transfer", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Transfer
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() => open({ action: "withdraw", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Withdraw
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() => open({ action: "cancel", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        return "—";
-      },
+      render: (r) => (
+        <EnrolmentRowActions
+          status={r.status}
+          cohortId={r.cohortId}
+          enrolmentId={r.id}
+          learnerName={r.learnerName}
+          onOpen={setTarget}
+        />
+      ),
       width: "18%",
     },
   ];
