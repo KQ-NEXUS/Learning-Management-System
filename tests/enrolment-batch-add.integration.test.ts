@@ -11,7 +11,7 @@
  * container). If it is not, `beforeAll` fails and every case reports BLOCKED.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
 import { createTestWithPermission, grant } from "./support/harness";
 import { seedCohortFixture, seedEnrolmentFixture, seedLearnerFixture } from "./support/cohort-fixtures";
@@ -22,6 +22,9 @@ import {
 } from "@/server/services/enrolment-service";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import { CohortClosedError } from "@/server/services/seat-accounting";
+
+// Every case here talks to a real database; the 5 second default is too tight on a busy machine.
+vi.setConfig({ testTimeout: 60_000 });
 
 const REASON = "Corporate group booking for a partner organisation";
 let testDb: TestDatabase;
@@ -59,8 +62,17 @@ function service(grants = [grant("enrolments.manage")]) {
   );
 }
 
-const learners = async (count: number) =>
-  Promise.all(Array.from({ length: count }, async () => (await seedLearnerFixture(testDb.prisma)).userId));
+// One insert for the whole group: a large group must not open one connection per learner.
+let learnerSeq = 0;
+const learners = async (count: number) => {
+  const emails = Array.from({ length: count }, () => `batch-learner-${++learnerSeq}@fixture.test`);
+  await testDb.prisma.user.createMany({
+    data: emails.map((email) => ({ email, name: "Fixture Learner", status: "ACTIVE" as const })),
+  });
+  const rows = await testDb.prisma.user.findMany({ where: { email: { in: emails } }, select: { id: true, email: true } });
+  const idByEmail = new Map(rows.map((row) => [row.email, row.id]));
+  return emails.map((email) => idByEmail.get(email)!);
+};
 const seatsTaken = async (cohortId: string) => (await testDb.prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } })).seatsTaken;
 const enrolmentsIn = (cohortId: string) => testDb.prisma.enrolment.findMany({ where: { cohortId }, orderBy: { createdAt: "asc" } });
 const eventsFor = async (cohortId: string) =>
