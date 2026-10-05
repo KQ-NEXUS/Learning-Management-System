@@ -59,7 +59,7 @@ const columns: Column<AssessmentRow>[] = [
   {
     key: "status",
     header: "Status",
-    render: (row) => <StatusPill label={row.status} tone={STATUS_TONE[row.status] ?? "neutral"} />,
+    render: (row) => <StatusPill label={humanizeCode(row.status)} tone={STATUS_TONE[row.status] ?? "neutral"} />,
     width: "18%",
   },
   {

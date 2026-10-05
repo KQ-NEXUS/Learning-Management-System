@@ -115,6 +115,8 @@ export type ExistingAttemptFacts = {
 
 export type PaymentRefundRow = {
   id: string;
+  /** The payment provider's own reference for the refund; null until the provider has one. */
+  providerRef?: string | null;
   amountMinor: number;
   currency: string;
   status: string;
@@ -149,6 +151,8 @@ export type PaymentDetailResult = {
   eligibleRefundMinor: number;
   refunds: Array<{
     id: string;
+    /** The payment provider's own reference for the refund; null until the provider has one. */
+    providerRef: string | null;
     amountMinor: number;
     currency: string;
     status: string;
@@ -277,6 +281,7 @@ export function createPaymentReadService(deps: PaymentReadServiceDeps) {
       eligibleRefundMinor,
       refunds: row.refunds.map((r) => ({
         id: r.id,
+        providerRef: r.providerRef ?? null,
         amountMinor: r.amountMinor,
         currency: r.currency,
         status: r.status,
@@ -356,6 +361,7 @@ export function createPrismaBackedPaymentReadService(
             refunds: {
               select: {
                 id: true,
+                providerRef: true,
                 amountMinor: true,
                 currency: true,
                 status: true,

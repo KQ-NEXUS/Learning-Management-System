@@ -1,5 +1,6 @@
 "use client";
 
+import { humanizeCode } from "@/lib/humanize";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -63,7 +64,7 @@ const columns: Column<ProgrammeIndexRow>[] = [
     header: "Status",
     render: (p) => (
       <span className="flex flex-wrap gap-1">
-        <StatusPill label={p.status} tone={TONE[p.status] ?? "neutral"} />
+        <StatusPill label={humanizeCode(p.status)} tone={TONE[p.status] ?? "neutral"} />
         {p.publiclyListed && <StatusPill label="Listed" tone="accent" />}
       </span>
     ),

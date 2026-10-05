@@ -25,10 +25,18 @@ const CHECKBOX = "mt-0.5 size-4 shrink-0 rounded-[4px] border-[1.5px] border-inp
 const BTN_PRIMARY =
   "w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto";
 
-function SubmitButton({ disabled, label }: { disabled: boolean; label: string }) {
+function SubmitButton({
+  disabled,
+  label,
+  describedBy,
+}: {
+  disabled: boolean;
+  label: string;
+  describedBy?: string;
+}) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={disabled || pending} className={BTN_PRIMARY}>
+    <button type="submit" disabled={disabled || pending} aria-describedby={describedBy} className={BTN_PRIMARY}>
       {pending ? "Paying…" : label}
     </button>
   );
@@ -52,6 +60,12 @@ export function PolicyConsentForm({
   const [acceptedMarketing, setAcceptedMarketing] = useState(false);
 
   const canPay = acceptedTerms && acceptedRefundCancellation && !forceDisabled;
+  // Say why Pay is greyed out, instead of leaving the learner to guess.
+  const payHelp = forceDisabled
+    ? "Confirm your email address first, then you can pay."
+    : !canPay
+      ? "Tick the Terms of Service and the Refund & Cancellation Policy to pay."
+      : null;
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -105,8 +119,13 @@ export function PolicyConsentForm({
         </label>
       </div>
 
-      <div className="flex">
-        <SubmitButton disabled={!canPay} label={submitLabel} />
+      <div className="flex flex-col gap-2">
+        <SubmitButton disabled={!canPay} label={submitLabel} describedBy={payHelp ? "pay-help" : undefined} />
+        {payHelp && (
+          <p id="pay-help" className="text-sm text-muted-foreground">
+            {payHelp}
+          </p>
+        )}
       </div>
     </form>
   );

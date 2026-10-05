@@ -195,6 +195,16 @@ function ManualPaymentDialogBody({
     reasonValid &&
     !pending;
 
+  // Say what is still missing, instead of leaving Confirm greyed out without a reason.
+  const stillNeeded = [
+    !amountValid && "an amount above zero",
+    !date && "the payment date",
+    channel.trim().length === 0 && "the payment channel",
+    reference.trim().length === 0 && "a reference",
+    evidence.trim().length === 0 && "where the evidence is held",
+    !reasonValid && `a reason of at least ${MIN_REASON} characters`,
+  ].filter(Boolean) as string[];
+
   function submit() {
     if (!canConfirm) return;
     onConfirm({
@@ -361,8 +371,20 @@ function ManualPaymentDialogBody({
           </p>
         </div>
 
+        {stillNeeded.length > 0 && !pending && (
+          <p id="manual-confirm-help" className="text-sm text-muted-foreground">
+            Still needed to confirm: {stillNeeded.join(", ")}.
+          </p>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <button type="button" disabled={!canConfirm} onClick={submit} className={BTN_PRIMARY}>
+          <button
+            type="button"
+            disabled={!canConfirm}
+            aria-describedby={stillNeeded.length > 0 && !pending ? "manual-confirm-help" : undefined}
+            onClick={submit}
+            className={BTN_PRIMARY}
+          >
             {pending ? "Confirming…" : "Confirm payment"}
           </button>
           <button type="button" onClick={onCancel} disabled={pending} className={BTN}>

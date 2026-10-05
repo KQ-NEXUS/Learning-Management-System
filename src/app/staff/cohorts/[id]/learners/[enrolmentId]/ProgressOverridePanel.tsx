@@ -154,7 +154,7 @@ export function ProgressOverridePanel({
             ? `${target.currentlyComplete ? "Mark incomplete" : "Mark complete"}: ${target.lessonTitle}?`
             : ""
         }
-        description="This overrides the learner's own progress record. The reason is audited (D-14)."
+        description="This overrides the learner's own progress record. The reason is recorded in the audit log."
         confirmLabel={target?.currentlyComplete ? "Mark incomplete" : "Mark complete"}
         tone="default"
         minReasonLength={MIN_REASON_LENGTH}

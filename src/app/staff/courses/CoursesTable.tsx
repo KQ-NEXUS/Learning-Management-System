@@ -1,5 +1,6 @@
 "use client";
 
+import { humanizeCode } from "@/lib/humanize";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -60,7 +61,7 @@ const columns: Column<CourseRow>[] = [
   {
     key: "status",
     header: "Status",
-    render: (c) => <StatusPill label={c.status} tone={TONE[c.status] ?? "neutral"} />,
+    render: (c) => <StatusPill label={humanizeCode(c.status)} tone={TONE[c.status] ?? "neutral"} />,
     width: "14%",
   },
 ];
