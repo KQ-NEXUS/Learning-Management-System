@@ -28,6 +28,7 @@ import { UserInputError } from "@/server/errors/user-input-error";
 import { CapacityExceededError, AlreadyEnrolledError, StaleEnrolmentError, CohortClosedError } from "@/server/services/seat-accounting";
 import {
   addEnrolment,
+  addEnrolments,
   approveEnrolment,
   transferEnrolment,
   withdrawEnrolment,
@@ -45,6 +46,7 @@ import { listEnrolmentCandidates, type EnrolmentCandidate } from "@/server/servi
 
 export type EnrolmentActionResult =
   | { ok: true; enrolmentId: string }
+  | { ok: true; added: number }
   | { ok: true; sourceEnrolmentId: string; targetEnrolmentId: string }
   | { ok: false; message: string };
 
@@ -131,6 +133,16 @@ const addEnrolmentSchema = z
   })
   .strict();
 
+/** No upper limit on how many learners (owner decision, 2026-10-05); the service adds all or none. */
+const addEnrolmentsSchema = z
+  .object({
+    cohortId: z.string().min(1),
+    userIds: z.array(z.string().min(1)).min(1, "Choose at least one learner."),
+    target: z.enum(["ACTIVE", "PENDING_PAYMENT"]),
+    reason: reasonSchema,
+  })
+  .strict();
+
 const approveEnrolmentSchema = z
   .object({
     cohortId: z.string().min(1), // revalidation only — the service re-resolves scope from enrolmentId
@@ -201,6 +213,23 @@ export async function addEnrolmentAction(
     });
     revalidateEnrolmentSurfaces(parsed.data.cohortId);
     return { ok: true, enrolmentId: created.id };
+  } catch (error) {
+    return toFailure(error);
+  }
+}
+
+/** Adds one or several learners with one status and one reason. All are added, or none. */
+export async function addEnrolmentsAction(
+  input: z.input<typeof addEnrolmentsSchema>,
+): Promise<EnrolmentActionResult> {
+  const parsed = addEnrolmentsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "The enrolment details were invalid." };
+  }
+  try {
+    const result = await addEnrolments(parsed.data);
+    revalidateEnrolmentSurfaces(parsed.data.cohortId);
+    return { ok: true, added: result.added };
   } catch (error) {
     return toFailure(error);
   }

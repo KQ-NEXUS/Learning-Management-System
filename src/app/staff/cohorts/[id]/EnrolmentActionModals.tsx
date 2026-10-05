@@ -21,7 +21,7 @@ import { useCallback, useState } from "react";
 import { ConfirmModal } from "@/components/primitives";
 import { PersonPickerDialog, type PickablePerson } from "@/components/people/PersonPickerDialog";
 import {
-  addEnrolmentAction,
+  addEnrolmentsAction,
   listEnrolmentCandidatesAction,
   approveEnrolmentAction,
   transferEnrolmentAction,
@@ -78,9 +78,10 @@ export function EnrolmentActionModals({
   const [pending, setPending] = useState(false);
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
-  // Adding is two steps: choose the learner in the picker, then give the reason. `choosingLearner`
-  // reopens the picker from the second step ("Change"). The two are never open at once.
-  const [addLearner, setAddLearner] = useState<PickablePerson | null>(null);
+  // Adding is two steps: tick the learners in the picker, then give one status and one reason for
+  // all of them. `choosingLearner` reopens the picker from the second step ("Change"). The two are
+  // never open at once.
+  const [addLearners, setAddLearners] = useState<PickablePerson[]>([]);
   const [choosingLearner, setChoosingLearner] = useState(false);
   const [addTarget, setAddTarget] = useState<"ACTIVE" | "PENDING_PAYMENT">("ACTIVE");
   const [transferTargetCohortId, setTransferTargetCohortId] = useState("");
@@ -88,7 +89,7 @@ export function EnrolmentActionModals({
   function close() {
     setError(null);
     setPending(false);
-    setAddLearner(null);
+    setAddLearners([]);
     setChoosingLearner(false);
     setAddTarget("ACTIVE");
     setTransferTargetCohortId("");
@@ -101,7 +102,11 @@ export function EnrolmentActionModals({
     const result = await action;
     setPending(false);
     if (result.ok) {
-      toast.success(ENROLMENT_SUCCESS[target?.action ?? ""] ?? "Enrolment updated");
+      toast.success(
+        "added" in result && result.added > 1
+          ? `${result.added} learners added to the cohort`
+          : (ENROLMENT_SUCCESS[target?.action ?? ""] ?? "Enrolment updated"),
+      );
       close();
       onSuccess();
     } else {
@@ -135,7 +140,8 @@ export function EnrolmentActionModals({
     },
     [addCohortId],
   );
-  const pickingLearner = target?.action === "add" && (addLearner === null || choosingLearner);
+  const pickingLearner = target?.action === "add" && (addLearners.length === 0 || choosingLearner);
+  const addingOne = addLearners.length === 1 ? addLearners[0]! : null;
 
   const transferTargetCode = siblingCohorts.find((c) => c.id === transferTargetCohortId)?.code;
 
@@ -143,43 +149,37 @@ export function EnrolmentActionModals({
     <>
       <PersonPickerDialog
         open={pickingLearner}
-        title="Choose a learner"
-        description="Learners with an account. Search by learner number if you do not know the name."
+        multiple
+        noun={{ one: "learner", many: "learners" }}
+        title="Choose learners"
+        description="Tick everyone you want to add. Search by learner number if you do not know a name."
         searchLabel="Search by name, email or learner number"
         confirmLabel="Continue"
         emptyText="No learners have an account yet."
-        selectedId={addLearner?.id ?? null}
+        selectedPeople={addLearners}
         load={loadLearners}
-        onConfirm={(person) => {
-          setAddLearner(person);
+        onConfirmMany={(people) => {
+          setAddLearners(people);
           setChoosingLearner(false);
           setError(null);
         }}
         // Leaving the picker without ever choosing abandons the add; leaving it after "Change" keeps the choice.
-        onClose={() => (addLearner ? setChoosingLearner(false) : close())}
+        onClose={() => (addLearners.length > 0 ? setChoosingLearner(false) : close())}
       />
 
       <ConfirmModal
         open={target?.action === "add" && !pickingLearner}
-        title={`Add ${addLearner?.name ?? "learner"} to this cohort?`}
+        title={addingOne ? `Add ${addingOne.name} to this cohort?` : `Add ${addLearners.length} learners to this cohort?`}
         description={
           <div className="flex flex-col gap-2">
             <p>
-              Adds a comped, corporate or scholarship learner directly, bypassing checkout. The
-              reason is audited.
+              {addingOne
+                ? "Adds a comped, corporate or scholarship learner directly, bypassing checkout. The reason is audited."
+                : "Adds comped, corporate or scholarship learners directly, bypassing checkout. They all get the same status and the same audited reason. If the cohort cannot seat every one of them, nobody is added."}
             </p>
             <div className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Learner</span>
-              <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-2 px-3 py-2">
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-foreground">{addLearner?.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {addLearner?.reference && (
-                      <span className="font-mono font-semibold text-foreground">{addLearner.reference} · </span>
-                    )}
-                    {addLearner?.email}
-                  </span>
-                </span>
+              <div className="flex items-center justify-between gap-3">
+                <span className={FIELD_LABEL}>{addingOne ? "Learner" : `Learners (${addLearners.length})`}</span>
                 <button
                   type="button"
                   onClick={() => setChoosingLearner(true)}
@@ -189,6 +189,22 @@ export function EnrolmentActionModals({
                   Change
                 </button>
               </div>
+              <ul
+                aria-label="Learners to add"
+                className="flex max-h-[168px] flex-col overflow-y-auto rounded-md border border-border bg-surface-2"
+              >
+                {addLearners.map((learner) => (
+                  <li key={learner.id} className="border-b border-border px-3 py-2 last:border-b-0">
+                    <span className="block truncate text-sm font-semibold text-foreground">{learner.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {learner.reference && (
+                        <span className="font-mono font-semibold text-foreground">{learner.reference} · </span>
+                      )}
+                      {learner.email}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
             <label className="flex flex-col gap-1">
               <span className={FIELD_LABEL}>Target status</span>
@@ -203,21 +219,21 @@ export function EnrolmentActionModals({
             </label>
           </div>
         }
-        confirmLabel="Add enrolment"
+        confirmLabel={addingOne ? "Add enrolment" : `Add ${addLearners.length} enrolments`}
         tone="default"
         minReasonLength={MIN_REASON_LENGTH}
         pending={pending}
         error={error}
         onConfirm={(reason) => {
           if (!target || target.action !== "add") return;
-          if (!addLearner) {
+          if (addLearners.length === 0) {
             setError("Choose a learner first.");
             return;
           }
           run(
-            addEnrolmentAction({
+            addEnrolmentsAction({
               cohortId: target.cohortId,
-              userId: addLearner.id,
+              userIds: addLearners.map((learner) => learner.id),
               target: addTarget,
               reason,
             }),
