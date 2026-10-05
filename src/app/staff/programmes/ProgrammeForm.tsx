@@ -1,5 +1,6 @@
 "use client";
 
+import { slugFromTitle } from "@/lib/slug";
 import { useActionState, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -50,6 +51,9 @@ export function ProgrammeForm(
   const action =
     props.mode === "create" ? createProgrammeAction : updateProgrammeAction;
   const [state, formAction, pending] = useActionState(action, INITIAL);
+  // Creating: the web address follows the title until the person edits it themselves.
+  const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
 
   // "Saved." at the top of the form is out of view once the page has scrolled; say it in the corner too.
   const toast = useToast();
@@ -118,6 +122,9 @@ export function ProgrammeForm(
                 required
                 maxLength={200}
                 defaultValue={values.title ?? ""}
+                onChange={(event) => {
+                  if (props.mode === "create" && !slugEdited) setSlug(slugFromTitle(event.target.value));
+                }}
               />
             )}
           </FormField>
@@ -136,8 +143,16 @@ export function ProgrammeForm(
                 required
                 maxLength={120}
                 mono
-                defaultValue={values.slug ?? ""}
-                placeholder="operational-leadership"
+                {...(props.mode === "create"
+                  ? {
+                      value: slug,
+                      onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+                        setSlug(event.target.value);
+                        setSlugEdited(true);
+                      },
+                    }
+                  : { defaultValue: values.slug ?? "" })}
+                placeholder="e.g. operational-leadership"
               />
             )}
           </FormField>

@@ -1,5 +1,6 @@
 "use client";
 
+import { humanizeCode } from "@/lib/humanize";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrangeBoard, type ArrangeContainer } from "@/components/catalogue";
@@ -53,7 +54,7 @@ export function ProgrammeArrangeClient({
           id: m.membershipId,
           label: m.title,
           sublabel:
-            (m.status !== "PUBLISHED" ? `${m.status} · ` : "") +
+            (m.status !== "PUBLISHED" ? `${humanizeCode(m.status)} · ` : "") +
             (m.otherProgrammeTitles.length > 0
               ? `also in ${m.otherProgrammeTitles.join(", ")}`
               : "only in this programme"),
@@ -232,7 +233,7 @@ export function ProgrammeArrangeClient({
                   <span className="truncate font-semibold text-foreground">{course.title}</span>
                   <span className="block truncate text-sm text-muted-foreground">
                     {course.slug}
-                    {course.status !== "PUBLISHED" && ` · ${course.status}`}
+                    {course.status !== "PUBLISHED" && ` · ${humanizeCode(course.status)}`}
                   </span>
                 </span>
                 <button

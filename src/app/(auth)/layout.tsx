@@ -21,7 +21,7 @@ import { BrandMark } from "@/components/shell/BrandMark";
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-sidebar-bg md:flex-row">
-      <div className="flex w-full shrink-0 flex-col justify-between gap-8 bg-sidebar-bg p-12 md:w-[44%]">
+      <header className="flex w-full shrink-0 flex-col justify-between gap-3 bg-sidebar-bg p-5 md:w-[44%] md:gap-8 md:p-12">
         <div className="flex items-center gap-2">
           <BrandMark className="size-7" />
           <span className="text-base font-semibold tracking-[-0.01em] text-white">
@@ -29,10 +29,14 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
 
-        <div className="flex flex-col gap-4">
-          <h2 className="max-w-[18ch] text-[36px] leading-[1.15] font-bold tracking-[-0.04em] text-white">
+        <p className="text-sm text-sidebar-muted md:hidden">
+          Professional training that an employer can verify.
+        </p>
+
+        <div className="hidden flex-col gap-4 md:flex">
+          <p className="max-w-[18ch] text-[36px] leading-[1.15] font-bold tracking-[-0.04em] text-white">
             Professional training that an employer can verify.
-          </h2>
+          </p>
           <p className="max-w-[38ch] text-sm leading-relaxed text-sidebar-muted">
             Every certificate carries a public verification link. No phone call, no letterhead.
           </p>
@@ -44,12 +48,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </Link>
         </div>
 
-        <span className="font-mono text-xs tracking-wide text-sidebar-muted">
+        <span className="hidden font-mono text-xs tracking-wide text-sidebar-muted md:inline">
           AFRICA/LAGOS
         </span>
-      </div>
+      </header>
 
-      <main className="flex flex-1 items-center justify-center rounded-t-[28px] bg-surface p-8 md:rounded-l-[28px] md:rounded-tr-none">
+      <main className="flex flex-1 items-center justify-center rounded-t-[28px] bg-surface p-5 md:p-8 md:rounded-l-[28px] md:rounded-tr-none">
         <div className="flex w-full max-w-[378px] flex-col gap-5">{children}</div>
       </main>
     </div>

@@ -1,3 +1,4 @@
+import { humanizeCode } from "@/lib/humanize";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { courseService } from "@/server/services/course-service";
@@ -106,7 +107,7 @@ export default async function CourseDetailPage({
                         {lesson.title}
                       </Link>
                       <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {lesson.type}
+                        {humanizeCode(lesson.type)}
                       </span>
                       {lesson.required && (
                         <span className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -173,7 +174,7 @@ export default async function CourseDetailPage({
       }
       badges={
         <>
-          <StatusPill label={course.status} tone={TONE[course.status] ?? "neutral"} />
+          <StatusPill label={humanizeCode(course.status)} tone={TONE[course.status] ?? "neutral"} />
           {course.publiclyListed && <StatusPill label="Listed publicly" tone="accent" />}
           {course.certificateEnabled && (
             <StatusPill label="Certificate enabled" tone="accent" />

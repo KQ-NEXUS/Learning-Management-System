@@ -1,7 +1,9 @@
 /**
  * Stepped forms (owner request, 2026-10-04): a long form is shown one step at a
- * time with a progress bar on top, Back and Next between steps, and the submit
- * button only at the end, so filling it in feels like finishing things.
+ * time with a numbered step bar on top, Back and Next between steps. Creating
+ * ends on a Review step that lists every answer and carries the submit button;
+ * editing opens any step directly. Problems are listed in one summary, never in
+ * the browser's own pop-up.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -43,16 +45,16 @@ const type = (label: string, value: string) => fireEvent.change(screen.getByLabe
 const next = () => fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
 describe("stepped form — creating (linear)", () => {
-  it("opens on the first step with the progress bar, Next, and no submit button yet", () => {
+  it("opens on the first step with the step bar (ending in Review), Next, and no submit button yet", () => {
     render(<Steps mode="linear" onSubmit={vi.fn()} />);
 
     expect(within(progress()).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "1Details (current step)",
       "2Schedule",
       "3Price",
+      "4Review",
     ]);
-    expect(screen.getByText("Step 1 of 3")).toBeTruthy();
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1");
+    expect(screen.getByText("Step 1 of 4")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Details" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Schedule" })).toBeNull();
     expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
@@ -66,20 +68,20 @@ describe("stepped form — creating (linear)", () => {
     next();
 
     expect(currentStepName()).toContain("Details");
-    expect(screen.getByRole("alert").textContent).toContain("Fill in the highlighted field");
+    expect(screen.getByRole("alert").textContent).toContain("Title is required");
     // A later step cannot be jumped to past the unfinished one either.
     fireEvent.click(stepButton(/Schedule/));
     expect(currentStepName()).toContain("Details");
     expect((stepButton(/Price/) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("moves forward step by step, ticks finished steps, and shows the submit button only on the last", () => {
+  it("moves forward step by step, ticks finished steps, and shows the submit button only on Review", () => {
     render(<Steps mode="linear" onSubmit={vi.fn()} />);
 
     type("Title", "Fire Marshal");
     next();
     expect(currentStepName()).toContain("Schedule");
-    expect(screen.getByText("Step 2 of 3")).toBeTruthy();
+    expect(screen.getByText("Step 2 of 4")).toBeTruthy();
     expect(stepButton(/Details/).textContent).toContain("(done)");
     expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Create cohort" })).toBeNull();
@@ -87,9 +89,76 @@ describe("stepped form — creating (linear)", () => {
     type("Starts", "2026-11-01");
     next();
     expect(currentStepName()).toContain("Price");
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("3");
+    expect(screen.queryByRole("button", { name: "Create cohort" })).toBeNull();
+
+    next();
+    expect(currentStepName()).toContain("Review");
     expect(screen.getByRole("button", { name: "Create cohort" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  });
+
+  it("the Review step lists every answer, says what was left blank, and Change goes back to that step", () => {
+    render(<Steps mode="linear" onSubmit={vi.fn()} />);
+    type("Title", "Fire Marshal");
+    next();
+    type("Starts", "2026-11-01");
+    next();
+    next();
+
+    expect(screen.getByRole("heading", { name: "Review and create" })).toBeTruthy();
+    const details = screen.getByRole("heading", { name: "Details" }).closest("div")!.parentElement!;
+    expect(details.textContent).toContain("Fire Marshal");
+    const price = screen.getByRole("heading", { name: "Price" }).closest("div")!.parentElement!;
+    expect(price.textContent).toContain("Not set");
+
+    fireEvent.click(screen.getByRole("button", { name: "Change Schedule" }));
+    expect(currentStepName()).toContain("Schedule");
+    expect((screen.getByLabelText(/^Starts/) as HTMLInputElement).value).toBe("2026-11-01");
+  });
+
+  it("shows dates on the Review step as people read them", () => {
+    render(
+      <ResourceForm title="New cohort" stepped="linear" submitLabel="Create cohort" onSubmit={vi.fn()}>
+        <FormStep title="Schedule">
+          <FormField name="startsAt" label="Starts">
+            {(field) => <input {...field} type="datetime-local" defaultValue="2027-03-01T09:00" />}
+          </FormField>
+          <FormField name="day" label="Day">
+            {(field) => <input {...field} type="date" defaultValue="2027-12-25" />}
+          </FormField>
+        </FormStep>
+      </ResourceForm>,
+    );
+    next();
+
+    expect(screen.getByText("1 Mar 2027, 09:00")).toBeTruthy();
+    expect(screen.getByText("25 Dec 2027")).toBeTruthy();
+  });
+
+  it("lists every problem in one summary with links, flags the step, and never uses the browser pop-up", async () => {
+    const reportValidity = vi.spyOn(HTMLInputElement.prototype, "reportValidity");
+    render(<Steps mode="linear" onSubmit={vi.fn()} />);
+
+    next();
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("1 thing needs fixing");
+    expect(reportValidity).not.toHaveBeenCalled();
+    expect(stepButton(/Details/).textContent).toContain("(has a problem)");
+    expect(screen.getByLabelText(/^Title/).getAttribute("aria-invalid")).toBe("true");
+
+    fireEvent.click(within(alert).getByRole("link", { name: "Title is required" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Title/)));
+    reportValidity.mockRestore();
+  });
+
+  it("clears a field's invalid mark as soon as it is fixed", () => {
+    render(<Steps mode="linear" onSubmit={vi.fn()} />);
+    next();
+    expect(screen.getByLabelText(/^Title/).getAttribute("aria-invalid")).toBe("true");
+
+    type("Title", "Fire Marshal");
+    expect(screen.getByLabelText(/^Title/).getAttribute("aria-invalid")).toBeNull();
   });
 
   it("Back and the progress bar return to an earlier step with what was typed still there", () => {
@@ -115,6 +184,7 @@ describe("stepped form — creating (linear)", () => {
     type("Starts", "2026-11-01");
     next();
     type("Price", "12500000");
+    next();
 
     fireEvent.click(screen.getByRole("button", { name: "Create cohort" }));
 
@@ -159,7 +229,15 @@ describe("stepped form — editing (free)", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(currentStepName()).toContain("Details");
-    expect(screen.getByRole("alert").textContent).toContain("before you save");
+    expect(screen.getByRole("alert").textContent).toContain("Title is required");
+  });
+
+  it("says whether there are unsaved changes", () => {
+    render(<Steps mode="free" onSubmit={vi.fn()} />);
+    expect(screen.getByText("All changes saved")).toBeTruthy();
+
+    type("Title", "Fire Marshal");
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 });
 
@@ -177,6 +255,8 @@ describe("stepped form — a save the server refuses", () => {
     type("Starts", "2020-01-01");
     next();
     expect(currentStepName()).toContain("Price");
+    next();
+    expect(currentStepName()).toContain("Review");
 
     fireEvent.click(screen.getByRole("button", { name: "Create cohort" }));
 

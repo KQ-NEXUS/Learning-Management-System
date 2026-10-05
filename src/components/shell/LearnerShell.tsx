@@ -33,6 +33,8 @@ type LearnerShellProps = {
   /** Where the brand mark links. Defaults to the public catalogue; signed-in shells pass /dashboard. */
   homeHref?: string;
   rightSlot: ReactNode;
+  /** Extra content at the end of the open phone menu, e.g. sign-in links hidden from the cramped header. */
+  mobileMenuExtra?: ReactNode;
   children: ReactNode;
 };
 
@@ -41,7 +43,7 @@ function isActiveNavItem(pathname: string | null, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function LearnerShell({ nav, rightSlot, children, homeHref = "/courses" }: LearnerShellProps) {
+export function LearnerShell({ nav, rightSlot, mobileMenuExtra, children, homeHref = "/courses" }: LearnerShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -151,6 +153,7 @@ export function LearnerShell({ nav, rightSlot, children, homeHref = "/courses" }
                 </Link>
               );
             })}
+            {mobileMenuExtra}
           </nav>
         )}
       </header>

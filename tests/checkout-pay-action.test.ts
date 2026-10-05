@@ -24,6 +24,8 @@ vi.mock("@/server/services/checkout-service", async (importOriginal) => {
 import { payAction } from "@/app/(checkout)/checkout/[orderId]/actions";
 import { HoldExpiredError } from "@/server/services/checkout-service";
 import { LicenceWriteBlockedError } from "@/server/licence/errors";
+import { MissingSettlementAccountError } from "@/server/payments/settlement-config";
+import { StripeNotConfiguredError } from "@/server/payments/providers/stripe/client";
 
 function form() {
   const fd = new FormData();
@@ -43,6 +45,19 @@ describe("payAction — a provider failure returns the learner to checkout, not 
     vi.spyOn(console, "error").mockImplementation(() => {});
     m.initiatePaystackPayment.mockRejectedValue(new Error('"email" must be a valid email'));
     await expect(payAction(form())).rejects.toThrow("NEXT_REDIRECT:/checkout/order-1?payment=unavailable");
+  });
+
+  it("a missing payment configuration lands on payment=not-set-up, not the try-again banner", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    m.initiatePaystackPayment.mockRejectedValue(new MissingSettlementAccountError("PAYSTACK_SECRET_KEY"));
+    await expect(payAction(form())).rejects.toThrow("NEXT_REDIRECT:/checkout/order-1?payment=not-set-up");
+  });
+
+  it("the same applies when Stripe has no key", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    m.getOwnOrder.mockResolvedValue({ id: "order-1", reference: "ORD-1", selectedProvider: "STRIPE" });
+    m.initiateStripePayment.mockRejectedValue(new StripeNotConfiguredError());
+    await expect(payAction(form())).rejects.toThrow("NEXT_REDIRECT:/checkout/order-1?payment=not-set-up");
   });
 
   it("the typed hold-expired refusal still returns to the plain order page", async () => {

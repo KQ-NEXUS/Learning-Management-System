@@ -162,7 +162,32 @@ describe("/dashboard", () => {
     const count = (html.match(/role="progressbar"/g) ?? []).length;
 
     expect(count).toBe(1);
-    expect(html).toContain("80% of 75% required");
+    expect(html).toContain("80% attended");
+    expect(html).toContain("75% needed to qualify");
+  });
+
+  it("says no sessions have been attended yet when attendance is 0%", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [
+        card({
+          progress: progress({
+            attendance: {
+              kind: "computed",
+              earnedPct: 0,
+              requiredPct: 75,
+              attendedCount: 0,
+              countableCount: 4,
+              meetsThreshold: false,
+            },
+          }),
+        }),
+      ],
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("No sessions attended yet");
+    expect(html).toContain("You need 75% to qualify");
   });
 
   it("renders exactly one progressbar when the cohort has no attendance rule", async () => {

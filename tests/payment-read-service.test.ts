@@ -366,6 +366,7 @@ describe("getPaymentDetailForStaff — permission gating and shape (D-14, D-18, 
             refunds: [
               {
                 id: "refund-1",
+                providerRef: "re_3Nx92",
                 amountMinor: 20_000_000,
                 currency: "NGN",
                 status: "COMPLETED",
@@ -393,6 +394,9 @@ describe("getPaymentDetailForStaff — permission gating and shape (D-14, D-18, 
     expect(detail?.eligibleRefundMinor).toBe(25_675_000);
     expect(detail?.refunds).toHaveLength(2);
     expect(detail?.refunds[0]).toMatchObject({ id: "refund-1", actorName: "Finance Officer" });
+    // The reference staff see is the provider's own, and it is null (never the database id) until there is one.
+    expect(detail?.refunds[0]?.providerRef).toBe("re_3Nx92");
+    expect(detail?.refunds[1]?.providerRef).toBeNull();
   });
 
   it("returns eligibleRefundMinor of 0 when no payment was ever captured, regardless of the learner total", async () => {

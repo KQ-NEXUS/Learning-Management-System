@@ -4,6 +4,9 @@ import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { EnrolmentRow } from "@/components/learner/EnrolmentRow";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { loadLearnerDashboard } from "@/server/services/enrolment-dashboard-service";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "My learning" };
 
 /**
  * `/learn` — "My learning": every course and programme cohort the signed-in learner is enrolled

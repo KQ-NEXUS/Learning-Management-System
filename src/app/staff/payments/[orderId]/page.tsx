@@ -303,7 +303,7 @@ export default async function PaymentDetailPage({
                   <tbody>
                     {detail.refunds.map((refund) => (
                       <tr key={refund.id} className="border-b border-border">
-                        <td className="py-2 pr-2 font-mono text-sm">{refund.id}</td>
+                        <td className="py-2 pr-2 font-mono text-sm">{refund.providerRef ?? "Not issued yet"}</td>
                         <td className="py-2 pr-2 font-mono tabular-nums">
                           {money(refund.amountMinor, refund.currency)}
                         </td>

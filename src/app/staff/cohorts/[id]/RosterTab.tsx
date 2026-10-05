@@ -28,6 +28,7 @@ import { ResourceTable, StatusPill, type Column, type ResourceTableState } from 
 import type { AttendanceComponent } from "@/server/services/attendance-component";
 import type { DeferredColumn, TrackedProgress } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
+import { EnrolmentRowActions } from "./EnrolmentRowActions";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { humanizeCode } from "@/lib/humanize";
 
@@ -148,8 +149,6 @@ function AttendanceCell({ attendance }: { attendance: AttendanceComponent }) {
   );
 }
 
-const ACTION_BTN = "text-xs font-semibold underline underline-offset-2";
-
 export function RosterTab({
   cohortId,
   rows,
@@ -192,7 +191,7 @@ export function RosterTab({
             <div className="mt-1 flex flex-col gap-1 text-muted-foreground">
               {r.latestTransition ? (
                 <span>
-                  Latest: {r.latestTransition.action} by {r.latestTransition.actorName ?? "system"} on{" "}
+                  Latest: {humanizeCode(r.latestTransition.action).toLowerCase()} by {r.latestTransition.actorName ?? "system"} on{" "}
                   {formatTimestamp(new Date(r.latestTransition.at))}
                   {r.latestTransition.reason ? ` — "${r.latestTransition.reason}"` : ""}
                 </span>
@@ -228,65 +227,15 @@ export function RosterTab({
       header: "Actions",
       render: (r) => {
         if (!canManage) return "—";
-        const open = (t: EnrolmentActionTarget) => setTarget(t);
-        if (r.status === "PENDING_PAYMENT") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() =>
-                  open({ action: "approve", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() =>
-                  open({ action: "cancel", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        if (r.status === "ACTIVE") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() =>
-                  open({ action: "transfer", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Transfer
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() =>
-                  open({ action: "withdraw", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Withdraw
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() =>
-                  open({ action: "cancel", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        return "—";
+        return (
+          <EnrolmentRowActions
+            status={r.status}
+            cohortId={cohortId}
+            enrolmentId={r.enrolmentId}
+            learnerName={r.learnerName}
+            onOpen={setTarget}
+          />
+        );
       },
       width: "16%",
     },

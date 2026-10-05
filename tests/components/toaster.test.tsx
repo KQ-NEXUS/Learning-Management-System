@@ -95,6 +95,11 @@ describe("ToastProvider", () => {
     ]);
   });
 
+  it("the corner is a named region even when it holds no message", () => {
+    render(<ToastProvider><Buttons /></ToastProvider>);
+    expect(screen.getByRole("region", { name: "Notifications" })).toBeTruthy();
+  });
+
   it("useToast outside a provider does nothing rather than throwing", () => {
     render(<Buttons />);
     expect(() => click("ok")).not.toThrow();

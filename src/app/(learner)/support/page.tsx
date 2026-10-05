@@ -6,10 +6,13 @@ import { BTN, BTN_PRIMARY, NOTE_DANGER } from "@/components/primitives/controls"
 import { TicketStatusPill, TicketTime, ticketCategoryLabel } from "@/components/support/ticket-labels";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { listOwnTickets } from "@/server/services/ticket-service";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
+
+export const metadata: Metadata = { title: "Support" };
 
 /** `/support` — the actor's own tickets only, newest-updated first, 20 per page. */
 export default async function SupportIndexPage({

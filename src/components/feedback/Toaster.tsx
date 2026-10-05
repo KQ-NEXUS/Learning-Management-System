@@ -118,6 +118,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {/* Above dialogs (z-50), so the result of a dialog's action is never hidden behind its backdrop. */}
       <div
+        role="region"
         aria-label="Notifications"
         className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
       >

@@ -52,11 +52,12 @@ describe("ReadinessPanel", () => {
     expect(states).toEqual(new Set(["PASS", "FAIL", "WARN", "NOT_YET_CHECKED"]));
   });
 
-  it("renders a NOT_YET_CHECKED item with its Phase 5 deferral text and no tick or cross", () => {
+  it("renders a NOT_YET_CHECKED item in plain words, with no phase number, tick or cross", () => {
     render(<ReadinessPanel items={allStates()} />);
     const row = screen.getByTestId("readiness-item-schedule");
     expect(row.getAttribute("data-state")).toBe("NOT_YET_CHECKED");
-    expect(within(row).getByText(/Phase 5/)).toBeTruthy();
+    expect(within(row).getByText(/not checked yet/i)).toBeTruthy();
+    expect(row.textContent).not.toMatch(/phase/i);
     expect(within(row).queryByText("✓")).toBeNull();
     expect(within(row).queryByText("✗")).toBeNull();
   });
@@ -147,7 +148,7 @@ describe("ReadinessPanel", () => {
     expect(screen.getByTestId("readiness-item-title").textContent).toMatch(/ready/i);
     expect(screen.getByTestId("readiness-item-summary").textContent).toMatch(/not ready|blocking/i);
     expect(screen.getByTestId("readiness-item-outcomes").textContent).toMatch(/warning/i);
-    expect(screen.getByTestId("readiness-item-schedule").textContent).toMatch(/not yet checked/i);
+    expect(screen.getByTestId("readiness-item-schedule").textContent).toMatch(/not checked yet/i);
   });
 
   it("exposes the panel as a section with an accessible name", () => {

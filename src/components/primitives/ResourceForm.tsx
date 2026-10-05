@@ -95,9 +95,14 @@ export type ResourceFormProps = {
    * hidden), so nothing typed is lost moving between them and the whole form is submitted at once.
    *
    *   - "linear" (creating something): steps are taken in order. Next checks the current step's
-   *     required fields first, and the submit button appears only on the last step.
+   *     required fields first. A final Review step lists every answer with a Change link per
+   *     step, and the submit button appears only there.
    *   - "free" (editing something): every step can be opened directly and the submit button is
-   *     always there, so changing one field does not mean paging through the rest.
+   *     always there, so changing one field does not mean paging through the rest. The footer
+   *     says whether there are unsaved changes.
+   *
+   * Problems found while stepping (an empty required field, a bad number) are listed in one
+   * summary with a link to each field. The browser's own pop-up is not used.
    */
   stepped?: "linear" | "free";
   children: ReactNode;
@@ -128,6 +133,58 @@ export function FormStep({ title, description, children }: FormStepProps) {
 
 function isFormStep(node: ReactNode): node is ReactElement<FormStepProps> {
   return isValidElement(node) && node.type === FormStep;
+}
+
+type StepIssue = { id: string; message: string; step: number };
+type ReviewRow = { label: string; value: string };
+type ReviewSection = { title: string; rows: ReviewRow[] };
+
+type AnswerField = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+/** The visible name of a control: its label's own text, without a "required" badge or a hint. */
+function labelOf(field: AnswerField): string {
+  const label = field.labels?.[0];
+  if (!label) return field.getAttribute("aria-label") ?? field.name ?? "This field";
+  const own = Array.from(label.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent ?? "")
+    .join("")
+    .trim();
+  if (own) return own;
+  const strong = label.querySelector<HTMLElement>(".font-semibold");
+  return (strong ?? label).textContent?.trim() || field.name || "This field";
+}
+
+/** Plain words for what the browser would have said in its own pop-up. */
+function issueMessage(field: AnswerField): string {
+  const label = labelOf(field);
+  if (field.validity.valueMissing) {
+    return field instanceof HTMLInputElement && field.type === "checkbox"
+      ? `${label} must be ticked`
+      : `${label} is required`;
+  }
+  return `${label}: ${field.validationMessage}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2027-03-01" or "2027-03-01T09:00" as "1 Mar 2027" or "1 Mar 2027, 09:00", read as typed (no time zone shift). */
+function readableDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}:\d{2}))?/.exec(value);
+  if (!match) return value;
+  const [, year, month, day, time] = match;
+  const base = `${Number(day)} ${MONTHS[Number(month) - 1] ?? month} ${year}`;
+  return time ? `${base}, ${time}` : base;
+}
+
+/** What a field currently holds, for the Review step. Empty string means nothing was entered. */
+function answerOf(field: AnswerField): string {
+  if (field instanceof HTMLInputElement && field.type === "checkbox") return field.checked ? "Yes" : "No";
+  if (field instanceof HTMLInputElement && (field.type === "date" || field.type === "datetime-local")) {
+    return field.value ? readableDate(field.value) : "";
+  }
+  if (field instanceof HTMLSelectElement) return field.selectedOptions[0]?.textContent?.trim() ?? "";
+  return field.value.trim();
 }
 
 const BTN =
@@ -168,48 +225,99 @@ export function ResourceForm({
   const allChildren = Children.toArray(children);
   const steps = stepped ? allChildren.filter(isFormStep) : [];
   const outsideSteps = stepped ? allChildren.filter((child) => !isFormStep(child)) : null;
-  const lastStep = steps.length - 1;
   const [currentStep, setCurrentStep] = useState(0);
   // The furthest step reached: a linear form lets you go back to any of these, never past them.
   const [reachedStep, setReachedStep] = useState(0);
-  const [stepMessage, setStepMessage] = useState<string | null>(null);
+  const [issues, setIssues] = useState<StepIssue[]>([]);
+  // Steps that hold a problem (found while stepping, or reported by the server): shown with a "!" in the bar.
+  const [flaggedSteps, setFlaggedSteps] = useState<number[]>([]);
+  const [review, setReview] = useState<ReviewSection[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [wasPending, setWasPending] = useState(pending);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const issuesRef = useRef<HTMLDivElement>(null);
+  // Creating adds a Review step after the last real one.
+  const reviewIndex = stepped === "linear" ? steps.length : -1;
+  const lastIndex = steps.length - 1 + (reviewIndex >= 0 ? 1 : 0);
+
+  // A finished save with nothing refused means there is nothing left unsaved.
+  if (wasPending !== pending) {
+    setWasPending(pending);
+    if (!pending && errors.length === 0) setDirty(false);
+  }
 
   function stepPanel(index: number): HTMLElement | null {
     return formRef.current?.querySelector<HTMLElement>(`[data-form-step="${index}"]`) ?? null;
   }
 
-  /** The step's first field the browser considers invalid (a required field left empty, a bad number...). */
-  function firstInvalidIn(index: number): HTMLInputElement | null {
-    const fields = stepPanel(index)?.querySelectorAll<HTMLInputElement>("input, select, textarea") ?? [];
-    for (const field of fields) {
-      if (!field.disabled && !field.checkValidity()) return field;
+  function answerFields(index: number): AnswerField[] {
+    const all = stepPanel(index)?.querySelectorAll<AnswerField>("input, select, textarea") ?? [];
+    return Array.from(all).filter((field) => !(field instanceof HTMLInputElement && field.type === "hidden"));
+  }
+
+  /** Every field in the step that the browser considers invalid (a required field left empty, a bad number...). */
+  function invalidIn(index: number): StepIssue[] {
+    const found: StepIssue[] = [];
+    for (const field of answerFields(index)) {
+      if (field.disabled || field.checkValidity()) continue;
+      field.setAttribute("aria-invalid", "true");
+      field.setAttribute("data-step-invalid", "");
+      found.push({ id: field.id, message: issueMessage(field), step: index });
     }
-    return null;
+    return found;
+  }
+
+  function showIssues(found: StepIssue[]) {
+    const stepsWithIssues = [...new Set(found.map((issue) => issue.step))];
+    setIssues(found);
+    setFlaggedSteps(stepsWithIssues);
+    setCurrentStep(stepsWithIssues[0] ?? currentStep);
+  }
+
+  function buildReview() {
+    setReview(
+      steps.map((step, index) => {
+        const rows: ReviewRow[] = [];
+        const seenRadios = new Set<string>();
+        for (const field of answerFields(index)) {
+          if (field instanceof HTMLInputElement && field.type === "password") continue;
+          // A disabled field is not sent, so it is not part of what is about to be created.
+          if (field.disabled) continue;
+          if (field instanceof HTMLInputElement && field.type === "radio") {
+            if (seenRadios.has(field.name)) continue;
+            seenRadios.add(field.name);
+            const chosen = formRef.current?.querySelector<HTMLInputElement>(`input[type="radio"][name="${field.name}"]:checked`);
+            // A radio group is named by its legend; each option's own label is the answer.
+            const group = field.closest("fieldset")?.querySelector("legend")?.textContent?.trim();
+            rows.push({ label: group || labelOf(field), value: chosen ? labelOf(chosen) : "" });
+            continue;
+          }
+          rows.push({ label: labelOf(field), value: answerOf(field) });
+        }
+        return { title: step.props.title, rows };
+      }),
+    );
   }
 
   function showStep(index: number) {
     setCurrentStep(index);
     setReachedStep((reached) => Math.max(reached, index));
-    setStepMessage(null);
+    setIssues([]);
     // After the step is shown: move focus to its heading so keyboard and screen-reader users land on it.
     requestAnimationFrame(() => stepHeadingRef.current?.focus());
   }
 
   /** Stops at the first step from `from` up to (not including) `to` that still has an invalid field. */
   function advanceTo(to: number, from = currentStep) {
-    for (let index = from; index < to; index++) {
-      const invalid = firstInvalidIn(index);
-      if (invalid) {
-        if (index !== currentStep) setCurrentStep(index);
-        setStepMessage("Fill in the highlighted field before you continue.");
-        requestAnimationFrame(() => {
-          invalid.focus();
-          invalid.reportValidity();
-        });
+    for (let index = from; index < Math.min(to, steps.length); index++) {
+      const found = invalidIn(index);
+      if (found.length > 0) {
+        showIssues(found);
         return false;
       }
     }
+    setFlaggedSteps([]);
+    if (to === reviewIndex) buildReview();
     showStep(to);
     return true;
   }
@@ -219,6 +327,17 @@ export function ResourceForm({
     if (index < currentStep || stepped === "free") showStep(index);
     else advanceTo(index);
   }
+
+  /** A link in the problems summary: open the step the field is on, then put focus in it. */
+  function openIssue(issue: StepIssue) {
+    if (issue.step !== currentStep) setCurrentStep(issue.step);
+    requestAnimationFrame(() => document.getElementById(issue.id)?.focus());
+  }
+
+  // Moves focus to the problems summary whenever it appears.
+  useEffect(() => {
+    if (issues.length > 0) issuesRef.current?.focus();
+  }, [issues]);
 
   // The save runs from a submit handler, NOT from the form's `action` prop.
   // React resets every uncontrolled field of a <form action={fn}> once the
@@ -230,24 +349,19 @@ export function ResourceForm({
     event.preventDefault();
     if (!onSubmit) return;
     if (stepped) {
-      // Enter in a text field submits a form. In a linear form that is "Next" until the last step.
-      if (stepped === "linear" && currentStep < lastStep) {
+      // Enter in a text field submits a form. In a linear form that is "Next" until the Review step.
+      if (stepped === "linear" && currentStep < lastIndex) {
         advanceTo(currentStep + 1);
         return;
       }
       // Before sending: no step may still have an invalid field, including ones not on screen.
-      for (let index = 0; index <= lastStep; index++) {
-        const invalid = firstInvalidIn(index);
-        if (invalid) {
-          setCurrentStep(index);
-          setStepMessage("Fill in the highlighted field before you save.");
-          requestAnimationFrame(() => {
-            invalid.focus();
-            invalid.reportValidity();
-          });
-          return;
-        }
+      const found = steps.flatMap((_, index) => invalidIn(index));
+      if (found.length > 0) {
+        showIssues(found);
+        return;
       }
+      setIssues([]);
+      setFlaggedSteps([]);
     }
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const formData = new FormData(event.currentTarget, submitter);
@@ -294,16 +408,18 @@ export function ResourceForm({
   useIsomorphicLayoutEffect(() => {
     if (!stepped || errorsKey === errorsShownKey) return;
     setErrorsShownKey(errorsKey);
+    const stepsWithErrors: number[] = [];
     for (const error of errors) {
       // Looked up by id rather than a selector: a field name is not always a valid selector.
       const field = document.getElementById(`field-${error.name}`);
       const index = field && formRef.current?.contains(field)
         ? field.closest<HTMLElement>("[data-form-step]")?.dataset.formStep
         : undefined;
-      if (index !== undefined) {
-        setCurrentStep(Number(index));
-        return;
-      }
+      if (index !== undefined && !stepsWithErrors.includes(Number(index))) stepsWithErrors.push(Number(index));
+    }
+    if (stepsWithErrors.length > 0) {
+      setCurrentStep(stepsWithErrors[0]);
+      setFlaggedSteps(stepsWithErrors);
     }
   }, [errors, errorsKey, errorsShownKey, stepped]);
 
@@ -382,6 +498,14 @@ export function ResourceForm({
       id={formId}
       ref={formRef}
       onSubmit={handleSubmit}
+      onChange={(event) => {
+        setDirty(true);
+        const target = event.target as unknown as AnswerField;
+        if (target.hasAttribute?.("data-step-invalid") && target.checkValidity()) {
+          target.removeAttribute("aria-invalid");
+          target.removeAttribute("data-step-invalid");
+        }
+      }}
       noValidate
       className={`flex w-full flex-col ${sectioned ? "max-w-[1100px]" : "max-w-[720px]"}`}
     >
@@ -436,70 +560,87 @@ export function ResourceForm({
 
             <nav aria-label="Progress" className="flex flex-col gap-2">
               <ol className="flex flex-wrap items-center gap-y-3">
-                {steps.map((step, index) => {
+                {[...steps.map((step) => step.props.title), ...(reviewIndex >= 0 ? ["Review"] : [])].map((stepTitle, index) => {
                   const isCurrent = index === currentStep;
-                  const isDone = index < currentStep || (index <= reachedStep && !isCurrent);
+                  const isFlagged = flaggedSteps.includes(index);
+                  const isDone = !isFlagged && (index < currentStep || (index <= reachedStep && !isCurrent));
                   const reachable = stepped === "free" || index <= reachedStep + 1;
                   return (
-                    <li key={step.props.title} className="flex items-center">
+                    <li key={stepTitle} className="flex items-center">
                       <button
                         type="button"
                         onClick={() => goToStep(index)}
                         disabled={!reachable}
                         aria-current={isCurrent ? "step" : undefined}
-                        className="group flex items-center gap-2 rounded-md py-1 pr-1 text-sm disabled:cursor-not-allowed"
+                        className="group flex min-h-11 items-center gap-2 rounded-md pr-1 text-sm disabled:cursor-not-allowed"
                       >
                         <span
                           aria-hidden
                           className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                            isCurrent
-                              ? "border-accent bg-accent text-accent-contrast"
-                              : isDone
-                                ? "border-accent bg-accent-wash text-accent"
-                                : "border-input-border bg-surface text-muted-foreground"
+                            isFlagged
+                              ? "border-danger bg-danger text-accent-contrast"
+                              : isCurrent
+                                ? "border-accent bg-accent text-accent-contrast"
+                                : isDone
+                                  ? "border-accent bg-accent-wash text-accent"
+                                  : "border-input-border bg-surface text-muted-foreground"
                           }`}
                         >
-                          {isDone ? <Check className="size-4" /> : index + 1}
+                          {isFlagged ? "!" : isDone ? <Check className="size-4" /> : index + 1}
                         </span>
+                        {/* On a phone only the current step keeps its name, so the whole bar fits on one line. */}
                         <span
-                          className={`${isCurrent ? "font-semibold text-foreground" : isDone ? "text-foreground group-hover:underline" : "text-muted-foreground"}`}
+                          className={`${isCurrent ? "" : "hidden sm:inline"} ${isCurrent ? "font-semibold text-foreground" : isDone ? "text-foreground group-hover:underline" : "text-muted-foreground"}`}
                         >
-                          {step.props.title}
+                          {stepTitle}
                         </span>
-                        <span className="sr-only">{isCurrent ? " (current step)" : isDone ? " (done)" : ""}</span>
+                        <span className="sr-only">
+                          {isFlagged ? " (has a problem)" : isCurrent ? " (current step)" : isDone ? " (done)" : ""}
+                        </span>
                       </button>
-                      {index < lastStep && (
+                      {index < lastIndex && (
                         <span
                           aria-hidden
-                          className={`mx-3 h-px w-6 sm:w-12 ${index < currentStep ? "bg-accent" : "bg-border"}`}
+                          className={`mx-2 h-px w-4 sm:mx-3 sm:w-12 ${index < currentStep ? "bg-accent" : "bg-border"}`}
                         />
                       )}
                     </li>
                   );
                 })}
               </ol>
-              <div
-                role="progressbar"
-                aria-label="Form progress"
-                aria-valuemin={0}
-                aria-valuemax={steps.length}
-                aria-valuenow={currentStep + 1}
-                className="h-1 w-full overflow-hidden rounded-full bg-accent-wash"
-              >
-                <div
-                  className="h-full rounded-full bg-accent transition-[width] duration-300"
-                  style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
-                />
-              </div>
               <p className="text-sm text-muted-foreground">
-                Step {currentStep + 1} of {steps.length}
+                Step {currentStep + 1} of {lastIndex + 1}
               </p>
             </nav>
 
-            {stepMessage && (
-              <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
-                {stepMessage}
-              </p>
+            {issues.length > 0 && (
+              <div
+                ref={issuesRef}
+                role="alert"
+                aria-labelledby={`${summaryId}-issues`}
+                tabIndex={-1}
+                className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
+              >
+                <p id={`${summaryId}-issues`} className="text-sm font-semibold text-danger">
+                  {issues.length} {issues.length === 1 ? "thing needs" : "things need"} fixing before you continue
+                </p>
+                <ul className="mt-2 flex flex-col gap-1">
+                  {issues.map((issue) => (
+                    <li key={issue.id || issue.message}>
+                      <a
+                        href={`#${issue.id}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          openIssue(issue);
+                        }}
+                        className="text-sm text-danger underline underline-offset-2"
+                      >
+                        {issue.message}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {steps.map((step, index) => (
@@ -518,6 +659,45 @@ export function ResourceForm({
                 {step.props.children}
               </section>
             ))}
+
+            {reviewIndex >= 0 && currentStep === reviewIndex && (
+              <section className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <h3
+                    ref={stepHeadingRef}
+                    tabIndex={-1}
+                    className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground outline-none"
+                  >
+                    Review and create
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Check the details below. It is saved as a draft, so nothing is public until you publish it.
+                  </p>
+                </div>
+                {review.map((section, index) => (
+                  <div key={section.title} className="rounded-md border border-border">
+                    <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-2 px-4 py-2">
+                      <h4 className="text-sm font-semibold text-foreground">{section.title}</h4>
+                      <button type="button" onClick={() => showStep(index)} aria-label={`Change ${section.title}`} className={BTN}>
+                        Change
+                      </button>
+                    </div>
+                    <dl className="grid gap-x-4 px-4 py-2 sm:grid-cols-[200px_minmax(0,1fr)]">
+                      {section.rows.map((row, rowIndex) => (
+                        <div key={`${row.label}-${rowIndex}`} className="contents">
+                          <dt className="pt-2 text-sm text-muted-foreground sm:border-t sm:border-border sm:py-2">{row.label}</dt>
+                          <dd
+                            className={`pb-2 text-sm break-words sm:border-t sm:border-border sm:py-2 ${row.value ? "text-foreground" : "text-muted-foreground italic"}`}
+                          >
+                            {row.value || "Not set"}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+              </section>
+            )}
           </>
         ) : (
           <div className={sectioned ? "flex flex-col" : "flex flex-col gap-4"}>{children}</div>
@@ -525,10 +705,17 @@ export function ResourceForm({
       </div>
 
       <div
-        className={`mt-8 flex flex-wrap items-center gap-4 border-t border-foreground pt-6 ${hideFooter ? "hidden" : ""}`}
+        className={`mt-8 flex flex-wrap items-center gap-4 border-t border-foreground pt-6 ${
+          stepped ? "sticky bottom-0 z-10 bg-surface pb-4" : ""
+        } ${hideFooter ? "hidden" : ""}`}
       >
         {draftStatus && (
           <p className="font-mono text-xs text-muted-foreground">{draftStatus}</p>
+        )}
+        {stepped === "free" && (
+          <p aria-live="polite" className={`text-sm ${dirty ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+            {dirty ? "Unsaved changes" : "All changes saved"}
+          </p>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-3">
           {onCancel && (
@@ -541,18 +728,18 @@ export function ResourceForm({
               Back
             </button>
           )}
-          {/* A linear form offers the submit button only once every step has been taken. */}
-          {(!stepped || stepped === "free" || currentStep === lastStep) && (
+          {/* A linear form offers the submit button only on its Review step. */}
+          {(!stepped || stepped === "free" || currentStep === lastIndex) && (
             <button
               type="submit"
               disabled={pending || blockedByLicence}
               aria-describedby={blockedByLicence && !hideFooter ? restrictedReasonId : undefined}
-              className={stepped === "free" && currentStep < lastStep ? BTN : BTN_PRIMARY}
+              className={stepped === "free" && currentStep < lastIndex ? BTN : BTN_PRIMARY}
             >
               {pending ? "Saving…" : submitLabel}
             </button>
           )}
-          {stepped && currentStep < lastStep && (
+          {stepped === "linear" && currentStep < lastIndex && (
             <button type="button" onClick={() => advanceTo(currentStep + 1)} disabled={pending} className={BTN_PRIMARY}>
               Next
             </button>

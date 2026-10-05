@@ -177,6 +177,11 @@ function RefundDialogBody({
   const amountValid = Number.isInteger(amountMinor) && amountMinor > 0 && amountMinor <= eligibleRefundMinor;
   const reasonValid = reason.trim().length >= MIN_REASON;
   const canConfirm = amountValid && reasonValid && !pending;
+  // Say what is still missing, instead of leaving Record refund greyed out without a reason.
+  const stillNeeded = [
+    !amountValid && "an amount above zero, no more than the refundable total",
+    !reasonValid && `a reason of at least ${MIN_REASON} characters`,
+  ].filter(Boolean) as string[];
 
   function submit() {
     if (!canConfirm) return;
@@ -277,8 +282,20 @@ function RefundDialogBody({
           </p>
         </div>
 
+        {stillNeeded.length > 0 && !pending && (
+          <p id="refund-confirm-help" className="text-sm text-muted-foreground">
+            Still needed to record the refund: {stillNeeded.join(", ")}.
+          </p>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <button type="button" disabled={!canConfirm} onClick={submit} className={BTN_DANGER}>
+          <button
+            type="button"
+            disabled={!canConfirm}
+            aria-describedby={stillNeeded.length > 0 && !pending ? "refund-confirm-help" : undefined}
+            onClick={submit}
+            className={BTN_DANGER}
+          >
             {pending ? "Recording…" : "Record refund"}
           </button>
           <button type="button" onClick={onCancel} disabled={pending} className={BTN}>

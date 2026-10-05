@@ -19,3 +19,6 @@ export { ConfirmModal } from "./ConfirmModal";
 export type { ConfirmModalProps } from "./ConfirmModal";
 
 export { PasswordInput } from "./PasswordInput";
+
+export { RowActionMenu } from "./RowActionMenu";
+export type { RowActionItem } from "./RowActionMenu";
