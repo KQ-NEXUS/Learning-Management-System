@@ -323,9 +323,13 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
         queue.push({
           key: "payments:exception",
           kind: "payment",
-          title: "Payments needing review",
+          // An ORDER in the EXCEPTION status (for example a payment that arrived after the order
+          // was cancelled). This is not the reconciliation queue, which tracks ledger mismatches
+          // as its own cases, so the title says "orders" and the link opens the payments list
+          // already filtered to them (audit A-12).
+          title: "Orders needing review",
           detail: `${exceptions.length} ${exceptions.length === 1 ? "order" : "orders"} in an exception state`,
-          href: "/staff/payments",
+          href: "/staff/payments?status=EXCEPTION",
           ageDays: age,
           overdue: age >= OVERDUE_AFTER_DAYS,
         });

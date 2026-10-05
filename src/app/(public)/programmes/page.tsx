@@ -60,7 +60,9 @@ export default async function PublicProgrammesPage() {
                     )}
                     <div className={`mt-1 font-semibold ${programme.nextCohort ? "" : "text-muted-foreground"}`}>
                       {programme.nextCohort
-                        ? `Next start ${shortDate(programme.nextCohort.startsAt)}`
+                        ? programme.nextCohort.hasStarted
+                          ? "Enrolling now"
+                          : `Next start ${shortDate(programme.nextCohort.startsAt)}`
                         : "No dates scheduled"}
                     </div>
                   </div>

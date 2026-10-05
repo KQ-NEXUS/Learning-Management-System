@@ -14,6 +14,7 @@ import {
   AssessmentNotPublishableError,
   AssessmentNotFoundError,
   NotAQuizError,
+  PassMarkExceedsTotalError,
   InvalidFeedbackBehaviourError,
   type AssessmentRecord,
   type AssessmentAggregateRow,
@@ -334,6 +335,79 @@ describe("publishAssessment — version bump (ASM-01)", () => {
 
     const result = await publishAssessment({ assessmentId: "a1" });
     expect(result.version).toBe(2);
+  });
+});
+
+describe("a published assessment cannot be saved into an unpassable state (A-07)", () => {
+  const published = (over: Partial<AssessmentRecord> = {}) =>
+    makeAssessmentRow({ id: "a1", courseId: "course-a", type: "QUIZ", status: "PUBLISHED", passMark: 2, totalMarks: 2, ...over });
+  const oneQuestion = (marks: number) => [
+    {
+      prompt: "Q1",
+      type: "SINGLE_CHOICE" as const,
+      marks,
+      options: [
+        { label: "A", isCorrect: true },
+        { label: "B", isCorrect: false },
+      ],
+    },
+  ];
+
+  it("update refuses a pass mark above the total and writes nothing", async () => {
+    const { assessmentService, delegate, audits } = harness({ assessmentRows: [published()] });
+
+    const attempt = assessmentService.update("a1", { passMark: 70 });
+
+    await expect(attempt).rejects.toBeInstanceOf(PassMarkExceedsTotalError);
+    await expect(attempt).rejects.toMatchObject({ passMark: 70, totalMarks: 2 });
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(audits).toEqual([]);
+  });
+
+  it("update refuses lowering an assignment's total below its pass mark", async () => {
+    const { assessmentService, delegate } = harness({
+      assessmentRows: [published({ type: "ASSIGNMENT", passMark: 50, totalMarks: 100 })],
+    });
+
+    await expect(assessmentService.update("a1", { totalMarks: 40 })).rejects.toBeInstanceOf(PassMarkExceedsTotalError);
+    expect(delegate.update).not.toHaveBeenCalled();
+  });
+
+  it("update accepts a pass mark equal to the total, a cleared pass mark, and edits that touch neither", async () => {
+    const { assessmentService, delegate } = harness({ assessmentRows: [published()] });
+
+    await assessmentService.update("a1", { passMark: 2 });
+    await assessmentService.update("a1", { passMark: null });
+    await assessmentService.update("a1", { title: "Renamed" });
+    expect(delegate.update).toHaveBeenCalledTimes(3);
+  });
+
+  it("a draft is not checked on save: publishing is its gate", async () => {
+    const { assessmentService, delegate } = harness({ assessmentRows: [published({ status: "DRAFT" })] });
+
+    await assessmentService.update("a1", { passMark: 70 });
+    expect(delegate.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reveal the marks to a caller who may not edit the assessment", async () => {
+    const { assessmentService } = harness({
+      assessmentRows: [published()],
+      grants: [grant("assessments.edit", "COURSE", "course-other")],
+    });
+
+    await expect(assessmentService.update("a1", { passMark: 70 })).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("saveQuizQuestions refuses a question set worth less than the pass mark, and keeps the existing questions", async () => {
+    const { saveQuizQuestions, tx, delegate } = harness({ assessmentRows: [published({ passMark: 5, totalMarks: 5 })] });
+
+    await expect(saveQuizQuestions({ assessmentId: "a1", questions: oneQuestion(3) })).rejects.toBeInstanceOf(
+      PassMarkExceedsTotalError,
+    );
+    expect(tx.quizQuestion.deleteMany).not.toHaveBeenCalled();
+    expect(delegate.update).not.toHaveBeenCalled();
+
+    await expect(saveQuizQuestions({ assessmentId: "a1", questions: oneQuestion(5) })).resolves.toMatchObject({ totalMarks: 5 });
   });
 });
 

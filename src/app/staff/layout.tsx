@@ -1,3 +1,4 @@
+import { TemporaryPasswordNotice } from "@/components/shell/TemporaryPasswordNotice";
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { can, canAnywhere } from "@/server/permissions";
@@ -38,6 +39,7 @@ const NAV: StaffNavItem[] = [
   { label: "Support", href: "/staff/support", group: "Operations" },
   { label: "Users", href: "/staff/users", group: "Administration" },
   { label: "Roles", href: "/staff/roles", group: "Administration" },
+  { label: "Learner numbers", href: "/staff/learner-numbers", group: "Administration" },
   { label: "Audit", href: "/staff/audit", group: "Administration" },
   { label: "Email log", href: "/staff/email-log", group: "Administration" },
   { label: "Licence", href: "/staff/licence", group: "Administration" },
@@ -60,6 +62,7 @@ const NAV_PERMISSION: Record<string, Parameters<typeof can>[0]> = {
   "/staff/email-log": "audit.view",
   // licence.view is Global only, so it is deliberately absent from SCOPE_AWARE_SECTIONS.
   "/staff/licence": "licence.view",
+  "/staff/learner-numbers": "users.manage",
 };
 
 /** Sections whose list pages filter to the caller's scope (integration warning #1). */
@@ -146,7 +149,24 @@ export default async function StaffLayout({
     licenceRestriction = undefined;
   }
   // JSX is built outside the try block: a failed render is not catchable there, only the read is.
-  const banner = bannerCopyValue ? <LicenceBanner {...bannerCopyValue} href="/staff/licence" /> : null;
+  const licenceBanner = bannerCopyValue ? <LicenceBanner {...bannerCopyValue} href="/staff/licence" /> : null;
+
+  // R3-12 — a suggestion only. Same chrome discipline as the bell: a failed read shows nothing.
+  let suggestPasswordChange = false;
+  try {
+    suggestPasswordChange = await profileService.isUsingTemporaryPassword(actor);
+  } catch {
+    suggestPasswordChange = false;
+  }
+  // The licence banner is passed through untouched unless the notice is shown with it.
+  const banner = suggestPasswordChange ? (
+    <>
+      {licenceBanner}
+      <TemporaryPasswordNotice />
+    </>
+  ) : (
+    licenceBanner
+  );
 
   // Hide sections this person cannot open, instead of offering a link that lands on a denial.
   // Overview is every staff member's home; each section is checked against its own view permission.

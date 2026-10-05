@@ -172,6 +172,16 @@ async function authorize(tx: Tx, userId: string, dataset: ExportDataset, sensiti
       if (uncovered > 0) throw new AuthorizationError(required[1]);
     }
   }
+  if (definition.dataPermission) {
+    // A-02: the records' own module grant must cover everything the export will contain.
+    const data = collectionScopeFromGrants(active, definition.dataPermission, asOf);
+    if (!data) throw new AuthorizationError(definition.dataPermission);
+    if (scope.kind === "GLOBAL" && data.kind !== "GLOBAL") throw new AuthorizationError(definition.dataPermission);
+    if (scope.kind === "LIMITED" && data.kind === "LIMITED") {
+      const uncovered = await tx.cohort.count({ where: { AND: [cohortWhereForCollection(scope), { NOT: cohortWhereForCollection(data) }] } });
+      if (uncovered > 0) throw new AuthorizationError(definition.dataPermission);
+    }
+  }
   if (dataset === "support") {
     // Tickets are not cohort-owned: viewing them requires a GLOBAL ticket grant.
     const tickets = collectionScopeFromGrants(active, "tickets.view", asOf);

@@ -38,6 +38,10 @@
 
 import { prisma } from "@/server/db";
 import { recalculateCompletionAndIssue } from "@/server/services/certificate-issuance-service";
+import {
+  completeAssessmentLessons,
+  type AssessmentLessonCompletionTx,
+} from "@/server/services/assessment-lesson-completion";
 import type { CompletionServiceTxClient } from "@/server/services/completion-service";
 import type { Actor } from "@/server/permissions/with-permission";
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
@@ -316,6 +320,15 @@ export type AttemptServiceDeps = {
   recalculateCompletion?: (
     tx: unknown,
     args: { enrolmentId: string; now: Date; actorId?: string | null },
+  ) => Promise<unknown>;
+  /**
+   * A-01: completes the quiz's lesson(s) for this enrolment inside the same
+   * transaction as a passing attempt, before completion is re-evaluated.
+   * Bound to `completeAssessmentLessons` in production.
+   */
+  completeAssessmentLessons?: (
+    tx: unknown,
+    args: { enrolmentId: string; assessmentId: string; now: Date },
   ) => Promise<unknown>;
 };
 
@@ -780,6 +793,17 @@ export function createAttemptService(deps: AttemptServiceDeps) {
         occurredAt: params.submittedAt,
       });
 
+      // A-01: passing the quiz IS completing its lesson. A failed attempt
+      // (`passed === false`) completes nothing; a quiz with no pass mark has
+      // nothing to pass (`passed === null`), so submitting it is enough.
+      if (attemptScore.passed !== false) {
+        await deps.completeAssessmentLessons?.(tx, {
+          enrolmentId: params.attempt.enrolmentId,
+          assessmentId: params.attempt.assessmentId,
+          now: params.submittedAt,
+        });
+      }
+
       await deps.recalculateCompletion?.(tx, {
         enrolmentId: params.attempt.enrolmentId,
         now: params.submittedAt,
@@ -1077,6 +1101,8 @@ export function createPrismaBackedAttemptService(client: AnyPrisma, audit: Audit
     writeEvent: writeDomainEvent,
     recalculateCompletion: (tx, args) =>
       recalculateCompletionAndIssue(tx as unknown as CompletionServiceTxClient, args),
+    completeAssessmentLessons: (tx, args) =>
+      completeAssessmentLessons(tx as unknown as AssessmentLessonCompletionTx, args),
     audit,
   });
 }

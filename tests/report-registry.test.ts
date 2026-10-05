@@ -74,7 +74,7 @@ describe("report registry", () => {
     ]);
 
     for (const definition of EXPORT_DATASET_REGISTRY) {
-      expect(Object.keys(definition).sort()).toEqual([
+      expect(Object.keys(definition).filter((key) => key !== "dataPermission").sort()).toEqual([
         "filterSchema",
         "id",
         "permission",
@@ -91,6 +91,13 @@ describe("report registry", () => {
       expect(definition).not.toHaveProperty("group");
       expect(definition.sensitiveColumns.every((column) => column.permission === "users.view")).toBe(true);
     }
+  });
+
+  it("guards the payments dataset with payments.view as well, in both registries, and no other dataset (A-02)", () => {
+    const guarded = (registry: readonly { id: string; dataPermission?: string }[]) =>
+      registry.filter((definition) => definition.dataPermission).map((definition) => [definition.id, definition.dataPermission]);
+    expect(guarded(REPORT_REGISTRY)).toEqual([["payments", "payments.view"]]);
+    expect(guarded(EXPORT_DATASET_REGISTRY)).toEqual([["payments", "payments.view"]]);
   });
 
   it("is immutable and rejects unknown report and export identifiers at runtime", () => {

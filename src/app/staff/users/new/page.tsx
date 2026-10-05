@@ -19,11 +19,7 @@ export default async function NewStaffAccountPage() {
     }
     if (error instanceof AuthorizationError) {
       return (
-        <ResourceForm
-          title="New staff account"
-          state={{ status: "denied", permission: "users.manage" }}
-          onSubmit={() => {}}
-        >
+        <ResourceForm title="New staff account" state={{ status: "denied", permission: "users.manage" }}>
           {null}
         </ResourceForm>
       );

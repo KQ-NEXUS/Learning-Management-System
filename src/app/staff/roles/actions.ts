@@ -11,6 +11,7 @@ import {
 import { ContinuityError } from "@/server/services/continuity-service";
 import { AuthorizationError, refusalMessage } from "@/server/permissions";
 import type { FieldError } from "@/components/primitives";
+import { withFlash } from "@/lib/flash-notices";
 
 export type CreateRoleState = { errors: FieldError[] };
 export type UpdateRoleState = { errors: FieldError[] };
@@ -61,7 +62,7 @@ export async function createRoleAction(
   }
 
   revalidatePath("/staff/roles");
-  redirect("/staff/roles");
+  redirect(withFlash("/staff/roles", "role-created"));
 }
 
 export async function updateRoleAction(

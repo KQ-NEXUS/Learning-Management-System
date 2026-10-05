@@ -272,22 +272,32 @@ export function LessonFormFields({
                 </span>
               </span>
             </label>
-            <label className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                name="allowManualComplete"
-                defaultChecked={values.allowManualComplete ?? true}
-                className="mt-1 size-5 rounded-md border border-input-border accent-accent"
-              />
-              <span>
-                <span className="block font-semibold text-foreground">
-                  Allow manual complete
+            {lessonType === "QUIZ" || lessonType === "ASSIGNMENT" ? (
+              // A-01: these lessons are completed by their assessment, so there is no manual
+              // control to offer. No `allowManualComplete` field is sent, which saves it as off.
+              <p className="text-sm text-muted-foreground">
+                {lessonType === "QUIZ"
+                  ? "This lesson is marked complete automatically when the learner passes the quiz."
+                  : "This lesson is marked complete automatically when the learner submits the assignment."}
+              </p>
+            ) : (
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  name="allowManualComplete"
+                  defaultChecked={values.allowManualComplete ?? true}
+                  className="mt-1 size-5 rounded-md border border-input-border accent-accent"
+                />
+                <span>
+                  <span className="block font-semibold text-foreground">
+                    Allow manual complete
+                  </span>
+                  <span className="block text-sm text-muted-foreground">
+                    Show a learner completion control.
+                  </span>
                 </span>
-                <span className="block text-sm text-muted-foreground">
-                  Show a learner completion control.
-                </span>
-              </span>
-            </label>
+              </label>
+            )}
           </div>
         </section>
 

@@ -1,3 +1,5 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -15,15 +17,22 @@ const { mocks } = vi.hoisted(() => ({
       throw new Error(`NEXT_REDIRECT:${url}`);
     }),
     getStatusSnapshot: vi.fn(),
+    isUsingTemporaryPassword: vi.fn(async () => false),
   },
 }));
 
+vi.mock("next/link", () => ({
+  default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never),
+}));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/server/auth/current-actor", () => ({ getCurrentActor: mocks.getCurrentActor }));
 vi.mock("@/server/permissions", () => ({ can: mocks.can, canAnywhere: mocks.canAnywhere }));
 vi.mock("@/app/(auth)/signin/actions", () => ({ signOutAction: vi.fn() }));
 vi.mock("@/server/services/profile-service", () => ({
-  profileService: { getOwnProfile: async () => ({ name: "Ada Admin", email: "ada@example.test" }) },
+  profileService: {
+    getOwnProfile: async () => ({ name: "Ada Admin", email: "ada@example.test" }),
+    isUsingTemporaryPassword: mocks.isUsingTemporaryPassword,
+  },
 }));
 // The layout now also fetches the header's unread count (D-18/D-22); a fixed
 // value here keeps this file's navigation assertions unaffected by Plan 06.
@@ -37,6 +46,12 @@ vi.mock("@/server/services/notification-service", () => ({
 // about. Mocking the bell itself (same treatment as StaffShell below) keeps
 // this file's scope to what it actually asserts: which nav items render.
 vi.mock("@/components/notifications/NotificationBell", () => ({ NotificationBell: () => null }));
+// The notice itself decides in the browser whether to show (it can be dismissed), so it renders
+// nothing on the server; its own behaviour is covered in tests/components/temporary-password-notice.
+// Here a marker stands in for it, to assert when the layout includes it and where.
+vi.mock("@/components/shell/TemporaryPasswordNotice", () => ({
+  TemporaryPasswordNotice: () => createElement("p", null, "TEMP-PASSWORD-NOTICE"),
+}));
 vi.mock("@/app/staff/StaffShell", () => ({ StaffShell: () => null }));
 // The layout reads the licence status for the banner and the restriction mirror (14-19).
 vi.mock("@/server/services/licence-service", () => ({
@@ -201,8 +216,56 @@ describe("staff layout navigation", () => {
   });
 });
 
+describe("staff layout temporary-password suggestion (R3-12)", () => {
+  beforeEach(() => {
+    mocks.getCurrentActor.mockReset().mockResolvedValue({ userId: "staff-1", isStaff: true, roles: [] });
+    mocks.can.mockReset();
+    mocks.canAnywhere.mockReset().mockResolvedValue(false);
+    mocks.getStatusSnapshot.mockReset().mockResolvedValue(snapshot());
+    mocks.isUsingTemporaryPassword.mockReset().mockResolvedValue(false);
+    grantAllExcept();
+  });
+
+  const bannerHtml = async () => {
+    const element = await layoutElement();
+    return element.props.banner ? renderToStaticMarkup(element.props.banner as never) : "";
+  };
+
+  it("shows nothing for someone who has chosen their own password", async () => {
+    expect((await layoutElement()).props.banner).toBeNull();
+  });
+
+  it("suggests a change, with a link to the reset flow, while the temporary password is still in use", async () => {
+    mocks.isUsingTemporaryPassword.mockResolvedValue(true);
+    const html = await bannerHtml();
+    expect(html).toContain("TEMP-PASSWORD-NOTICE");
+    expect(mocks.isUsingTemporaryPassword).toHaveBeenCalledWith(expect.objectContaining({ userId: "staff-1" }));
+  });
+
+  it("is a suggestion only: the layout still renders the page and never redirects", async () => {
+    mocks.isUsingTemporaryPassword.mockResolvedValue(true);
+    const element = await layoutElement();
+    expect(element.props.nav.length).toBeGreaterThan(0);
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("appears beneath the licence banner when both apply", async () => {
+    mocks.isUsingTemporaryPassword.mockResolvedValue(true);
+    mocks.getStatusSnapshot.mockResolvedValue(snapshot({ state: "RESTRICTED_CONTINUITY", isRestricted: true, daysRemaining: null }));
+    const html = await bannerHtml();
+    expect(html.indexOf("Restricted continuity mode")).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf("TEMP-PASSWORD-NOTICE")).toBeGreaterThan(html.indexOf("Restricted continuity mode"));
+  });
+
+  it("a failed read shows nothing rather than breaking the shell", async () => {
+    mocks.isUsingTemporaryPassword.mockRejectedValue(new Error("database down"));
+    expect((await layoutElement()).props.banner).toBeNull();
+  });
+});
+
 describe("staff layout licence banner and restriction mirror (14-19, D-15, D-09)", () => {
   beforeEach(() => {
+    mocks.isUsingTemporaryPassword.mockReset().mockResolvedValue(false);
     mocks.getCurrentActor.mockReset().mockResolvedValue({ userId: "staff-1", isStaff: true, roles: [] });
     mocks.can.mockReset();
     mocks.canAnywhere.mockReset().mockResolvedValue(false);

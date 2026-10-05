@@ -179,6 +179,7 @@ export default async function CohortDetailPage({
       learnerId: r.learnerId,
       learnerName: r.learnerName,
       learnerEmail: r.learnerEmail,
+      learnerNumber: r.learnerNumber,
       enrolmentId: r.enrolmentId,
       status: r.status,
       transitionCount: r.transitionCount,
@@ -445,6 +446,7 @@ export default async function CohortDetailPage({
           content: (
             <SessionsTab
               facilitatorNames={Object.fromEntries(instructorRows.map((row) => [row.userId, row.userName]))}
+              facilitatorOptions={instructorRows.map((row) => ({ id: row.userId, name: row.userName, email: row.userEmail }))}
               cohortId={cohortId}
               cohortTimezone={cohort.timezone}
               sessions={sessions}

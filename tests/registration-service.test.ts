@@ -724,7 +724,13 @@ describe("Phase 14 — registerAction maps UNAVAILABLE to the neutral learner se
 
     const state = await registerAction({ error: null, sent: false }, registerForm());
 
-    expect(state).toEqual({ error: "Enrolment is temporarily unavailable. Please contact support.", sent: false });
+    // A refusal also echoes the typed name and email back to the form (R3-05); never the password.
+    expect(state).toEqual({
+      error: "Enrolment is temporarily unavailable. Please contact support.",
+      sent: false,
+      values: { name: "Ada Lovelace", email: "learner@example.com" }, attempt: 1,
+    });
+    expect(JSON.stringify(state)).not.toMatch(/password/i);
     expect(state.error).toBe(LEARNER_REFUSAL_MESSAGE);
     expect(state.error).not.toMatch(/licen[cs]e|restricted|expir/i);
   });
@@ -734,6 +740,7 @@ describe("Phase 14 — registerAction maps UNAVAILABLE to the neutral learner se
     expect(await registerAction({ error: null, sent: false }, registerForm())).toEqual({
       error: "Something went wrong. Nothing was saved — try again.",
       sent: false,
+      values: { name: "Ada Lovelace", email: "learner@example.com" }, attempt: 1,
     });
 
     registerActionMock.registerLearner.mockResolvedValue(REGISTRATION_ACCEPTED);

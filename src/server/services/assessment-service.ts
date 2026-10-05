@@ -199,6 +199,34 @@ export class AssessmentNotFoundError extends Error {
   }
 }
 
+/**
+ * A save would leave a PUBLISHED assessment with a pass mark above its total
+ * marks, which nobody can pass (audit A-07). `publishAssessment` already
+ * refuses that state; this is the same rule on the two edits that can
+ * re-create it afterwards: changing the pass mark (or an assignment's total),
+ * and replacing a quiz's questions with a set worth fewer marks.
+ */
+export class PassMarkExceedsTotalError extends Error {
+  readonly passMark: number;
+  readonly totalMarks: number;
+
+  constructor(passMark: number, totalMarks: number) {
+    super(
+      `The pass mark (${passMark}) is higher than the total marks (${totalMarks}), so nobody could pass. ` +
+        `Lower the pass mark or raise the total marks.`,
+    );
+    this.name = "PassMarkExceedsTotalError";
+    this.passMark = passMark;
+    this.totalMarks = totalMarks;
+  }
+}
+
+function assertPassable(status: string, passMark: number | null, totalMarks: number | null): void {
+  if (status !== "PUBLISHED") return; // a draft is checked when it is published
+  if (passMark == null || totalMarks == null) return;
+  if (passMark > totalMarks) throw new PassMarkExceedsTotalError(passMark, totalMarks);
+}
+
 /** `saveQuizQuestions` was called on an Assessment whose `type` is not `QUIZ`. */
 export class NotAQuizError extends Error {
   readonly assessmentId: string;
@@ -291,6 +319,19 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     // `PublicationStatus`, same as Course (D-16 precedent, no `restoreData`).
   });
 
+  // A-07: runs behind the same permission and scope as the update itself, so
+  // a caller who may not edit the assessment learns nothing about its marks.
+  const assertUpdateKeepsPassable = deps.withPermission<{ id: string; data: Record<string, unknown> }>(
+    "assessments.edit",
+    (input) => assessmentCourseScope(input.id),
+  )(async (input) => {
+    const before = await deps.delegate.findUnique({ where: { id: input.id } });
+    if (!before) return; // the update below reports the missing row its own way
+    const next = (key: "passMark" | "totalMarks") =>
+      key in input.data ? (input.data[key] as number | null) : before[key];
+    assertPassable(before.status, next("passMark"), next("totalMarks"));
+  });
+
   // feedbackBehaviour has no database-level constraint (a raw Prisma
   // `String` column) — validated here, before the factory's write, because
   // this is the only place the closed set is enforced (T-10-13).
@@ -306,6 +347,7 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     },
     update: async (id: string, data: Record<string, unknown>, reason?: string) => {
       assertValidFeedbackBehaviour(data);
+      await assertUpdateKeepsPassable({ id, data });
       return baseService.update(id, data, reason);
     },
   };
@@ -327,6 +369,7 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     if (before.type !== "QUIZ") throw new NotAQuizError(input.assessmentId);
 
     const totalMarks = input.questions.reduce((sum, question) => sum + question.marks, 0);
+    assertPassable(before.status, before.passMark, totalMarks);
 
     const { beforeCount, createdQuestions } = await deps.db.$transaction(async (tx) => {
       const existing = await tx.quizQuestion.findMany({

@@ -213,6 +213,9 @@ function findLessonInPath(
 function defaultAssertLessonOpenable(path: ReturnType<typeof pathFixture>, lessonId: string) {
   const lesson = findLessonInPath(path, lessonId);
   if (!lesson) return { ok: false as const, reason: "not-found" as const };
+  if (path.enrolment.status === "COMPLETED") {
+    return { ok: false as const, reason: "access-window-closed" as const };
+  }
   if (path.enrolment.accessWindow.readOnly) {
     return { ok: false as const, reason: "access-window-closed" as const };
   }
@@ -297,6 +300,23 @@ describe("/learn/[enrolmentId]/lessons/[lessonId]", () => {
     expect(html).toContain("Your access window has ended");
     expect(html).not.toContain("Lesson body text for Lesson One");
     expect(html).not.toContain("Lesson One");
+    expect(mocks.getLessonContentForLearner).not.toHaveBeenCalled();
+  });
+
+  it("a COMPLETED enrolment shows a 'completed' panel with certificate and results links, never a 404 and never content (R3-04, G-01)", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({ enrolment: { ...pathFixture().enrolment, status: "COMPLETED" } }),
+    );
+
+    const html = await renderPage();
+
+    expect(mocks.loadLearnerPath).toHaveBeenCalledWith(ACTOR, "enrolment-1", { includeCompleted: true });
+    expect(mocks.notFound).not.toHaveBeenCalled();
+    expect(html).toContain("You&#x27;ve completed this course");
+    expect(html).toContain('href="/dashboard"');
+    expect(html).toContain('href="/learn/enrolment-1/results"');
+    expect(html).not.toContain("Your access window has ended");
+    expect(html).not.toContain("Lesson body text for Lesson One");
     expect(mocks.getLessonContentForLearner).not.toHaveBeenCalled();
   });
 

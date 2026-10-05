@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState, useState, useSyncExternalStore } from "react";
+import { useActionState, useState, useSyncExternalStore, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ResourceForm,
   FormField,
   FormGrid,
-  FormSection,
+  FormStep,
   TextInput,
 } from "@/components/primitives";
 import {
@@ -14,6 +14,7 @@ import {
   updateCohortAction,
   type CohortActionResult,
 } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 const INITIAL: CohortActionResult = { ok: false, errors: [], message: null };
 
@@ -94,6 +95,12 @@ export function CohortForm(
   const action =
     props.mode === "create" ? createCohortAction : updateCohortAction;
   const [state, formAction, pending] = useActionState(action, INITIAL);
+
+  // "Saved." at the top of the form is out of view once the page has scrolled; say it in the corner too.
+  const toast = useToast();
+  useEffect(() => {
+    if (props.mode === "edit" && state.ok === true) toast.success("Changes saved");
+  }, [state, toast, props.mode]);
   const values = props.mode === "edit" ? props.values : {};
 
   // A single control picks the offer's KIND, then a second dependent select
@@ -137,8 +144,8 @@ export function CohortForm(
       )}
 
       <ResourceForm
-        sectioned
-        title={"Details"}
+        title={props.mode === "create" ? "New cohort" : "Cohort details"}
+        stepped={props.mode === "create" ? "linear" : "free"}
         submitLabel={props.mode === "create" ? "Create cohort" : "Save changes"}
         errors={!state.ok ? state.errors : []}
         pending={pending}
@@ -156,7 +163,7 @@ export function CohortForm(
           </>
         )}
 
-        <FormSection
+        <FormStep
           title="Details"
           description="How the cohort is named and what it teaches."
         >
@@ -270,8 +277,8 @@ export function CohortForm(
               </FormField>
             )}
           </FormGrid>
-        </FormSection>
-        <FormSection
+        </FormStep>
+        <FormStep
           title="Schedule"
           description="When it runs and when learners can enrol."
         >
@@ -392,8 +399,8 @@ export function CohortForm(
               )}
             </FormField>
           </FormGrid>
-        </FormSection>
-        <FormSection
+        </FormStep>
+        <FormStep
           title="Capacity and price"
           description="Seats, what learners pay and how attendance counts."
         >
@@ -494,7 +501,7 @@ export function CohortForm(
               )}
             </FormField>
           </FormGrid>
-        </FormSection>
+        </FormStep>
       </ResourceForm>
     </>
   );

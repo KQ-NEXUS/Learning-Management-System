@@ -13,6 +13,7 @@ import type {
 import { createTemplateAction, saveTemplateLayoutAction } from "./template-actions";
 import { TemplateCanvas, pageDimensions, PENDING_UPLOAD_ASSET_KEY } from "./TemplateCanvas";
 import { ElementInspector } from "./ElementInspector";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * The certificate-template editor's chrome (UI-SPEC 7.3.2-7.3.5, D-09).
@@ -113,6 +114,7 @@ export function TemplateEditorShell({
   onCreate = createTemplateAction,
 }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, transition] = useTransition();
   const [name, setName] = useState(initial.name);
   const [pageSize, setPageSize] = useState(initial.layout.pageSize);
@@ -183,6 +185,7 @@ export function TemplateEditorShell({
           setSaveError(result.message);
           return;
         }
+        toast.success("Template saved");
         setDirty(false);
         return;
       }
@@ -191,6 +194,7 @@ export function TemplateEditorShell({
         setSaveError(result.message);
         return;
       }
+      toast.success("Certificate template created");
       setDirty(false);
       router.push(`/staff/certificates/templates/${result.id}`);
     });

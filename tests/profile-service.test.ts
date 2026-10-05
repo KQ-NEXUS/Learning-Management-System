@@ -670,3 +670,26 @@ describe("confirmEmailChange — F-14c: the old address is told, and every sessi
     expect(h.users[0].email).toBe("new.address@example.com");
   });
 });
+
+describe("isUsingTemporaryPassword (R3-12)", () => {
+  const user = (over: Partial<ProfileUserRow>): ProfileUserRow => ({
+    id: "u1",
+    email: "staff@example.com",
+    name: "Staff Member",
+    phone: null,
+    pendingEmail: null,
+    passwordHash: "hash",
+    ...over,
+  });
+
+  it("is true only while the account still has the password an administrator set", async () => {
+    const h = sharedHarness();
+    h.users.push(user({ id: "u1", passwordIsTemporary: true }), user({ id: "u2", email: "own@example.com", passwordIsTemporary: false }), user({ id: "u3", email: "old@example.com" }));
+
+    expect(await h.profileService.isUsingTemporaryPassword({ userId: "u1" })).toBe(true);
+    expect(await h.profileService.isUsingTemporaryPassword({ userId: "u2" })).toBe(false);
+    // An account from before the flag existed is not nagged.
+    expect(await h.profileService.isUsingTemporaryPassword({ userId: "u3" })).toBe(false);
+    expect(await h.profileService.isUsingTemporaryPassword({ userId: "nobody" })).toBe(false);
+  });
+});

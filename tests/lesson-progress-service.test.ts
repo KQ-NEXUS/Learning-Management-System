@@ -280,7 +280,7 @@ function buildDeps(opts: BuildDepsOpts) {
       return result;
     },
     enrolmentScope: async () => ({ cohortId: "cohort-1" }),
-    withPermission: createTestWithPermission([grant("enrolments.manage")]).withPermission,
+    withPermission: createTestWithPermission([grant("enrolments.manage"), grant("attendance.manage")]).withPermission,
     now: () => opts.now ?? NOW,
   };
 
@@ -1057,6 +1057,59 @@ describe("getOwnWatchProgress", () => {
 });
 
 // ---------------------------------------------------------------------------
+// A-01 — quiz and assignment lessons are completed only by their assessment
+// ---------------------------------------------------------------------------
+
+describe("quiz and assignment lessons (A-01)", () => {
+  it.each(["QUIZ", "ASSIGNMENT"])(
+    "markLessonComplete refuses a %s lesson even when allowManualComplete is true, and writes nothing",
+    async (type) => {
+      const path = makePath({ lessons: [makeLesson({ id: "les-1", type, allowManualComplete: true })] });
+      const { deps, h, auditCalls } = buildDeps({ path });
+      const service = createLessonProgressService(deps);
+
+      await expect(
+        service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
+      ).rejects.toBeInstanceOf(ManualCompletionNotPermittedError);
+      expect(h.lessonProgressRows).toHaveLength(0);
+      expect(auditCalls).toEqual([]);
+    },
+  );
+
+  it.each(["QUIZ", "ASSIGNMENT"])(
+    "undoLessonComplete refuses a %s lesson and keeps the completion its assessment earned",
+    async (type) => {
+      const path = makePath({ lessons: [makeLesson({ id: "les-1", type, completed: true })] });
+      const { deps, h, auditCalls } = buildDeps({ path });
+      h.lessonProgressRows.push({
+        enrolmentId: "enr-1",
+        lessonId: "les-1",
+        source: "AUTO_ASSESSMENT",
+        completedAt: NOW,
+      } as (typeof h.lessonProgressRows)[number]);
+      const service = createLessonProgressService(deps);
+
+      await expect(
+        service.undoLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" }),
+      ).rejects.toBeInstanceOf(ManualCompletionNotPermittedError);
+      expect(h.lessonProgressRows).toHaveLength(1);
+      expect(auditCalls).toEqual([]);
+    },
+  );
+
+  it("a TEXT lesson keeps both manual paths", async () => {
+    const path = makePath({ lessons: [makeLesson({ id: "les-1", type: "TEXT", allowManualComplete: true })] });
+    const { deps, h } = buildDeps({ path });
+    const service = createLessonProgressService(deps);
+
+    await service.markLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" });
+    expect(h.lessonProgressRows).toHaveLength(1);
+    await service.undoLessonComplete({ userId: "learner-1" }, { enrolmentId: "enr-1", lessonId: "les-1" });
+    expect(h.lessonProgressRows).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Task 3 — overrideLessonProgress
 // ---------------------------------------------------------------------------
 
@@ -1209,6 +1262,31 @@ describe("overrideLessonProgress", () => {
     expect(err.reason).toBe("not-found");
   });
 
+  it.each([
+    { role: "Finance/Operations (enrolments.manage only)", held: "enrolments.manage", missing: "attendance.manage" },
+    { role: "Instructor (attendance.manage only)", held: "attendance.manage", missing: "enrolments.manage" },
+  ] as const)("refuses $role: both grants are required, the refusal is audited and nothing is written (A-05)", async ({ held, missing }) => {
+    const path = makePath({ lessons: [makeLesson({ id: "les-1" })] });
+    const { deps, h, auditCalls } = buildDeps({ path });
+    const oneGrant = createTestWithPermission([grant(held)]);
+    const service = createLessonProgressService({ ...deps, withPermission: oneGrant.withPermission });
+
+    const attempt = service.overrideLessonProgress({
+      enrolmentId: "enr-1",
+      lessonId: "les-1",
+      complete: true,
+      reason: "Marked complete from the payments desk",
+    });
+
+    await expect(attempt).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(attempt).rejects.toMatchObject({ permission: missing });
+    expect(oneGrant.audits).toEqual([
+      expect.objectContaining({ action: "authorization.denied", outcome: "DENIED", permission: missing }),
+    ]);
+    expect(h.lessonProgressRows).toHaveLength(0);
+    expect(auditCalls).toEqual([]);
+  });
+
   it("a learner calling this for their own enrolment without the permission receives AuthorizationError", async () => {
     const path = makePath({ lessons: [makeLesson({ id: "les-1" })] });
     const { deps } = buildDeps({ path, enrolmentOwnerUserId: "learner-1" });
@@ -1293,7 +1371,7 @@ describe("createPrismaBackedLessonProgressService — post-commit certificate fi
 
     const service = createPrismaBackedLessonProgressService(
       client as never,
-      createTestWithPermission([grant("enrolments.manage")]).withPermission,
+      createTestWithPermission([grant("enrolments.manage"), grant("attendance.manage")]).withPermission,
       async () => {},
       recalc,
       async () => path,
@@ -1343,7 +1421,7 @@ describe("createPrismaBackedLessonProgressService — post-commit certificate fi
     };
     const service = createPrismaBackedLessonProgressService(
       client as never,
-      createTestWithPermission([grant("enrolments.manage")]).withPermission,
+      createTestWithPermission([grant("enrolments.manage"), grant("attendance.manage")]).withPermission,
       async () => {},
       async () => ({ kind: "evaluated", results: [] }) as CompletionRecalculationResult,
       async () => path,

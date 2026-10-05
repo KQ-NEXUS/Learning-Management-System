@@ -38,6 +38,12 @@ export type LessonRowProps = {
   isCurrent: boolean;
   /** "1.1" — module number, dot, lesson number. Omitted, the column is left out. */
   number?: string;
+  /**
+   * The enrolment is COMPLETED (G-01: visible, not operable): every row is a
+   * plain record of what was done, with no link, because the lesson page
+   * would refuse to open it.
+   */
+  readOnly?: boolean;
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -80,7 +86,25 @@ function Tail({ lesson }: { lesson: LessonRowLesson }) {
   );
 }
 
-export function LessonRow({ lesson, href, isCurrent, number }: LessonRowProps) {
+export function LessonRow({ lesson, href, isCurrent, number, readOnly = false }: LessonRowProps) {
+  if (readOnly) {
+    return (
+      <div className={ROW_BASE}>
+        {lesson.completed ? (
+          <CheckCircle2 aria-hidden className={`${ICON} text-accent`} />
+        ) : (
+          <Circle aria-hidden className={`${ICON} text-muted-foreground opacity-60`} />
+        )}
+        <Meta number={number} />
+        <span className="min-w-0 grow font-medium text-foreground">
+          {lesson.title}
+          <span className="sr-only">{lesson.completed ? " (completed)" : " (not completed)"}</span>
+        </span>
+        <Tail lesson={lesson} />
+      </div>
+    );
+  }
+
   if (lesson.completed) {
     return (
       <Link href={href} className={`${ROW_BASE} hover:bg-surface-2/60`}>

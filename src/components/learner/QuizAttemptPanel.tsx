@@ -15,6 +15,18 @@ type Props = LearnerQuizView & {
 };
 const BUTTON = "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast disabled:opacity-50";
 
+/**
+ * The submit confirmation's wording. `remainingAfterThis` is the server's `attemptsRemaining` while
+ * an attempt is open: the limit minus every attempt started, INCLUDING this one. So 0 means this is
+ * the last attempt, and 1 means one more is left afterwards, not that this is the last (R3-09).
+ */
+export function submitConfirmationText(remainingAfterThis: number | null): string {
+  const lead = "Your answers are scored as soon as you submit.";
+  if (remainingAfterThis == null) return `${lead} You can start another attempt afterwards.`;
+  if (remainingAfterThis <= 0) return `${lead} This is your last attempt.`;
+  return `${lead} You'll have ${remainingAfterThis} more ${remainingAfterThis === 1 ? "attempt" : "attempts"} after this one.`;
+}
+
 export function QuizAttemptPanel(props: Props) {
   const [active, setActive] = useState<SafeQuizAttempt | null>(null);
   const [result, setResult] = useState<AttemptResultView | null>(props.result);
@@ -115,11 +127,7 @@ export function QuizAttemptPanel(props: Props) {
         eyebrow="Submit quiz"
         title="Submit your answers?"
         tone="default"
-        description={remaining == null
-          ? "Your answers are scored as soon as you submit. You can start another attempt afterwards."
-          : remaining <= 1
-            ? "Your answers are scored as soon as you submit. This is your last attempt."
-            : `Your answers are scored as soon as you submit. This uses one of your ${remaining} remaining attempts.`}
+        description={submitConfirmationText(remaining)}
         confirmLabel="Submit quiz"
         pending={pending}
         onCancel={() => setConfirmSubmit(false)}

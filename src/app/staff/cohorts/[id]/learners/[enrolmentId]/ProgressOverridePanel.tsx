@@ -21,6 +21,7 @@ import { ConfirmModal } from "@/components/primitives";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { overrideLessonProgressAction } from "../../progress-actions";
 import { humanizeCode } from "@/lib/humanize";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type ProgressLessonRow = {
   id: string;
@@ -28,7 +29,7 @@ export type ProgressLessonRow = {
   moduleTitle: string;
   required: boolean;
   completed: boolean;
-  /** `"MANUAL" | "AUTO_VIDEO" | "STAFF_OVERRIDE"`, or `null` when never completed. */
+  /** `"MANUAL" | "AUTO_VIDEO" | "AUTO_ASSESSMENT" | "STAFF_OVERRIDE"`, or `null` when never completed. */
   completedSource: string | null;
   /** ISO instant, or `null` when never completed. */
   completedAt: string | null;
@@ -50,6 +51,7 @@ export type ProgressOverridePanelProps = {
 const SOURCE_LABEL: Record<string, string> = {
   MANUAL: "Marked by learner",
   AUTO_VIDEO: "Auto-completed (video)",
+  AUTO_ASSESSMENT: "Auto-completed (quiz passed or assignment submitted)",
   STAFF_OVERRIDE: "Staff override",
 };
 
@@ -64,6 +66,7 @@ export function ProgressOverridePanel({
   canOverride,
 }: ProgressOverridePanelProps) {
   const router = useRouter();
+  const toast = useToast();
   const [target, setTarget] = useState<OverrideTarget | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +92,7 @@ export function ProgressOverridePanel({
     const result = await overrideLessonProgressAction(formData);
     setPending(false);
     if (result.ok) {
+      toast.success(target.currentlyComplete ? "Lesson marked not complete" : "Lesson marked complete");
       close();
       router.refresh();
     } else {

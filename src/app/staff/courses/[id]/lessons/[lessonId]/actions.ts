@@ -27,6 +27,7 @@ import type { FieldError } from "@/components/primitives";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
 import { AssessmentLinkError, createLesson, lessonService, updateLesson } from "@/server/services/lesson-service";
+import { withFlash } from "@/lib/flash-notices";
 
 const LESSON_TYPES = [
   "TEXT",
@@ -175,7 +176,7 @@ export async function saveLessonAction(
   // A brand-new lesson: move to its own editor, where the UploadPanel (which
   // needs a lessonId) and the rest of the per-type fields become usable.
   if (newLessonId) {
-    redirect(`/staff/courses/${courseId}/lessons/${newLessonId}`);
+    redirect(withFlash(`/staff/courses/${courseId}/lessons/${newLessonId}`, "lesson-created"));
   }
   return { ok: true, errors: [], message: null };
 }

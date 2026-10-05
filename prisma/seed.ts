@@ -397,12 +397,18 @@ async function main() {
       deliveryMode: "INSTRUCTOR_LED",
       timezone: "Africa/Lagos",
       startsAt: daysFromNow(30),
-      endsAt: daysFromNow(30),
+      // A one-day, 8-hour masterclass: the cohort form requires the end to be
+      // after the start.
+      endsAt: new Date(daysFromNow(30).getTime() + 8 * 3_600_000),
       enrolmentOpensAt: daysFromNow(-3),
       enrolmentClosesAt: daysFromNow(28),
       capacity: 40,
       seatsTaken: 0,
       priceMinor: 12500000, // NGN 125,000.00
+      // Checkout sells from the per-rail prices, not the legacy `priceMinor`:
+      // without them the offer page shows no price and no pay button.
+      priceNgnMinor: 12_500_000, // NGN 125,000.00
+      priceUsdMinor: 8_500, // USD 85.00
       currency: "NGN",
       status: "PUBLISHED",
       publishedAt: new Date(),
@@ -449,12 +455,34 @@ async function main() {
       seatsTaken: 0,
       holdMinutes: 0,
       priceMinor: 45000000,
+      // NGN only: a null USD price means the Stripe rail is not offered.
+      priceNgnMinor: 45_000_000,
       currency: "NGN",
       status: "PUBLISHED",
       attendanceThresholdPct: 75,
       publishedAt: new Date(),
     },
   });
+
+  // Repair databases seeded before the per-rail prices existed. Each step only
+  // fills a value that is still missing, so a price a member of staff has set
+  // since is never overwritten.
+  await prisma.cohort.updateMany({
+    where: { code: "FCM-2026-02", priceNgnMinor: null },
+    data: { priceNgnMinor: 12_500_000 },
+  });
+  await prisma.cohort.updateMany({
+    where: { code: "FCM-2026-02", priceUsdMinor: null },
+    data: { priceUsdMinor: 8_500 },
+  });
+  await prisma.cohort.updateMany({
+    where: { code: "SLP-2026-03", priceNgnMinor: null },
+    data: { priceNgnMinor: 45_000_000 },
+  });
+  await prisma.$executeRaw`
+    UPDATE "Cohort"
+    SET "endsAt" = "startsAt" + INTERVAL '8 hours'
+    WHERE "code" = 'FCM-2026-02' AND "endsAt" <= "startsAt"`;
 
   for (const [i, slug] of programmeCourseSlugs.entries()) {
     await prisma.cohortCourse.upsert({
@@ -774,6 +802,26 @@ async function main() {
       },
     });
   }
+
+  // Repair the two demo assessments on databases seeded before 2026-09-20. The
+  // blocks above only create them when missing, so the first seed's values
+  // stayed: a pass mark of 70 on a 2-mark quiz (pass marks are marks, not a
+  // percentage, so it could never be passed) and a MIME type where the
+  // submission check compares file extensions (every PDF was rejected). Each
+  // update matches only that exact stale value.
+  await prisma.assessment.updateMany({
+    where: { courseId: safetyCourseId, type: "QUIZ", title: "Hazard identification check", passMark: 70, totalMarks: 2 },
+    data: { passMark: 2, instructions: "Answer both questions correctly to pass." },
+  });
+  await prisma.assessment.updateMany({
+    where: {
+      courseId: safetyCourseId,
+      type: "ASSIGNMENT",
+      title: "Site hazard report",
+      allowedFileTypes: { equals: ["application/pdf"] },
+    },
+    data: { allowedFileTypes: [".pdf"] },
+  });
 
   // --- Gateway fee schedules (Phase 7, plan 07-02, D-11) --------------------
   // Seed examples of each rail's published fee schedule -- configurable

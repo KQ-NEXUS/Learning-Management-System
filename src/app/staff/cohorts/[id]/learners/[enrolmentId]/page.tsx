@@ -165,7 +165,11 @@ export default async function LearnerProgressPage({
   const path = await loadLearnerPath({ userId: rosterRow.learnerId }, enrolmentId, { includeCompleted: true });
   if (!path) notFound(); // defensive — the roster row above already confirmed the enrolment is in this cohort
 
-  const canOverride = await can("enrolments.manage", await enrolmentCohortScope(enrolmentId));
+  // Both grants, as `overrideLessonProgress` requires (A-05): `enrolments.manage` alone is the
+  // Finance/Operations role, which must not change what feeds completion.
+  const overrideScope = await enrolmentCohortScope(enrolmentId);
+  const canOverride =
+    (await can("enrolments.manage", overrideScope)) && (await can("attendance.manage", overrideScope));
 
   // COH-07 — null when the viewer lacks submissions.view here (not an error).
   let results: LearnerResultCard[] | null;
@@ -200,7 +204,7 @@ export default async function LearnerProgressPage({
         { label: rosterRow.learnerName },
       ]}
       title={rosterRow.learnerName}
-      identifier={rosterRow.learnerEmail}
+      identifier={rosterRow.learnerNumber ?? rosterRow.learnerEmail}
       badges={
         <StatusPill
           label={STATUS_LABEL[rosterRow.status] ?? humanizeCode(rosterRow.status)}
@@ -216,6 +220,7 @@ export default async function LearnerProgressPage({
               <DetailFacts
                 facts={[
                   { label: "Learner", value: rosterRow.learnerName },
+                  { label: "Learner number", value: rosterRow.learnerNumber ?? "Not issued" },
                   { label: "Email", value: rosterRow.learnerEmail },
                   {
                     label: "Enrolment status",

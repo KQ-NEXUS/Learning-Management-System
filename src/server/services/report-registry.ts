@@ -42,6 +42,13 @@ export type ReportDefinition = Readonly<{
   group: ReportGroup;
   availability: ReportAvailability;
   permission: Permission;
+  /**
+   * The permission that guards the underlying records in their own module,
+   * required IN ADDITION to `permission` wherever the dataset is read, exported
+   * or downloaded. Without it a report would hand row-level data to a role the
+   * module itself refuses (audit A-02: payments via `reports.view` alone).
+   */
+  dataPermission?: Permission;
   scopePolicy: "COLLECTION";
   definition: string;
   businessDateLabel: string;
@@ -56,6 +63,8 @@ export type ExportDefinition = Readonly<{
   id: ExportDataset;
   version: string;
   permission: Permission;
+  /** See `ReportDefinition.dataPermission`. */
+  dataPermission?: Permission;
   scopePolicy: ReportScopePolicy;
   filterSchema: ZodType;
   safeColumns: readonly ReportColumn[];
@@ -132,6 +141,7 @@ export const REPORT_REGISTRY: readonly ReportDefinition[] = Object.freeze([
     group: "ADMISSIONS_FINANCE",
     availability: "AVAILABLE",
     permission: "reports.view",
+    dataPermission: "payments.view",
     definition: "Confirmed learner payments grouped by provider and exact currency.",
     businessDateLabel: "Payment confirmation date",
     safeColumns: safe(["reference", "Reference", "TEXT"], ["confirmedAt", "Confirmed", "DATE"], ["amountMinor", "Learner total", "MONEY_MINOR"], ["currency", "Currency", "TEXT"]),
@@ -256,6 +266,7 @@ const reportExportDefinitions = REPORT_REGISTRY.map((definition): ExportDefiniti
     id: definition.id,
     version: definition.version,
     permission: definition.permission,
+    ...(definition.dataPermission ? { dataPermission: definition.dataPermission } : {}),
     scopePolicy: definition.scopePolicy,
     filterSchema: definition.filterSchema,
     safeColumns: definition.safeColumns,

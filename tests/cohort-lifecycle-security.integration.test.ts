@@ -326,6 +326,7 @@ describe("F-04 — cohort-row lock shared by publish and readiness-changing writ
       sessionScope: scopes.sessionCohortScope,
       cohortScope: scopes.cohortResourceScope,
       isViewerEnrolled: async () => false,
+      isActiveStaff: async () => true,
       withPermission,
       audit: async () => {},
     });

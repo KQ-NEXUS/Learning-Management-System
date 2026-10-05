@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { CourseForm } from "@/app/staff/courses/CourseForm";
 import { createCourseAction, updateCourseAction } from "@/app/staff/courses/actions";
 
@@ -24,7 +18,18 @@ afterEach(() => {
 });
 
 function submit(container: HTMLElement) {
-  fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+  const form = container.querySelector("form") as HTMLFormElement;
+  // A stepped create form shows its submit button only on the last step: take "Next" until it is there.
+  for (let step = 0; step < 6 && !form.querySelector('button[type="submit"]'); step++) {
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  }
+  fireEvent.submit(form);
+}
+
+/** Opens the form's last step from its progress bar (an edit form lets any step be opened directly). */
+function openLastStep() {
+  const steps = within(screen.getByRole("navigation", { name: "Progress" })).getAllByRole("button");
+  fireEvent.click(steps[steps.length - 1]);
 }
 
 describe("CourseForm", () => {
@@ -77,7 +82,7 @@ describe("CourseForm — edit mode", () => {
   };
 
   function renderEdit(overrides: Partial<typeof values> = {}, tpls = templates) {
-    return render(
+    const view = render(
       <CourseForm
         mode="edit"
         courseId="course-9"
@@ -85,6 +90,9 @@ describe("CourseForm — edit mode", () => {
         templates={tpls}
       />,
     );
+    // The certificate settings these tests read sit on the last step.
+    openLastStep();
+    return view;
   }
 
   it("renders the stored values in the fields", () => {
@@ -167,12 +175,20 @@ describe("CourseForm — edit mode", () => {
     expect(option.textContent).toContain("(archived)");
   });
 
-  it("keeps create mode unchanged: starts unchecked and says Create course", () => {
+  it("create mode starts with certificates unchecked, and offers Create course only on the last step", () => {
     renderEdit();
     cleanup();
     render(<CourseForm mode="create" />);
     expect((screen.getByLabelText("Certificate enabled") as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole("button", { name: "Create course" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "Fire Safety" } });
+    fireEvent.change(screen.getByLabelText(/^Slug/), { target: { value: "fire-safety" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("button", { name: "Create course" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
   });
 });
 

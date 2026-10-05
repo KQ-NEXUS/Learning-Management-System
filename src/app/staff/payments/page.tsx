@@ -1,6 +1,6 @@
 import { listPaymentsForStaff } from "@/server/services/payment-read-service";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
-import { PaymentsTable, type PaymentRow } from "./PaymentsTable";
+import { initialPaymentStatus, PaymentsTable, type PaymentRow } from "./PaymentsTable";
 import { SessionEnded } from "@/components/shell/SessionEnded";
 
 /**
@@ -13,7 +13,12 @@ import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Payments" };
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const { status } = await searchParams;
   let rows: PaymentRow[];
 
   try {
@@ -28,5 +33,5 @@ export default async function PaymentsPage() {
     throw error;
   }
 
-  return <PaymentsTable rows={rows} />;
+  return <PaymentsTable rows={rows} initialStatus={initialPaymentStatus(status)} />;
 }

@@ -179,6 +179,50 @@ const ticketEscalatedStaffAlert: EventMapper = async (event, ctx) => {
 };
 
 // ---------------------------------------------------------------------------
+// ticket.reopened — staff (audit A-15)
+// ---------------------------------------------------------------------------
+
+/**
+ * A learner reopening a resolved ticket puts it back in its owner's hands, so
+ * the owner is told. The owner is read from the Ticket row, not the payload's
+ * `ownerId`, for the same reason `ticket.escalated` does (A-03): by drain time
+ * the ticket may have been reassigned, and the alert belongs to whoever holds
+ * it now. With no owner, every GLOBAL `tickets.manage` holder is told instead,
+ * so a reopened ticket never comes back unseen. In-product only (D-08): the
+ * learner-facing mail for this event is the support group's.
+ */
+const ticketReopenedStaffAlert: EventMapper = async (event, ctx) => {
+  const ticketId = requireString(event.payload, "ticketId");
+
+  // The reference comes from the ticket row too, as in the support group's own
+  // `ticket.reopened` mapper: requiring it on the payload would make this
+  // mapper throw for an event that mapper accepts, and one throwing mapper
+  // fails the whole event, taking the learner's mail down with it.
+  const ticket = await ctx.tx.ticket.findUnique({
+    where: { id: ticketId },
+    select: { assigneeId: true, userId: true, reference: true },
+  });
+  if (!ticket) return [];
+  const reference = ticket.reference;
+
+  const recipients = ticket.assigneeId
+    ? [ticket.assigneeId]
+    : await resolveStaffHolders(ctx.tx, { permission: "tickets.manage", scope: {} });
+
+  return recipients
+    .filter((recipientId) => recipientId !== ticket.userId)
+    .map((recipientId) => ({
+      recipientUserId: recipientId,
+      notification: {
+        type: "staff.ticket_reopened" as const,
+        targetType: "STAFF_TICKET" as const,
+        targetId: reference,
+        params: { reference },
+      },
+    }));
+};
+
+// ---------------------------------------------------------------------------
 // order.exception / payment.reconciliation_exception — staff (D-08, T-13-03)
 // ---------------------------------------------------------------------------
 
@@ -325,6 +369,7 @@ export function createStaffMappers(): MapperGroup {
     "ticket.created": ticketCreatedStaffAlert,
     "ticket.assigned": ticketAssignedStaffMail,
     "ticket.escalated": ticketEscalatedStaffAlert,
+    "ticket.reopened": ticketReopenedStaffAlert,
     "order.exception": orderExceptionStaffMail,
     "payment.reconciliation_exception": reconciliationExceptionStaffMail,
     "submission.created": submissionCreatedStaffAlert,

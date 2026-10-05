@@ -34,6 +34,8 @@ export type ProfileUserRow = {
   phone: string | null;
   pendingEmail: string | null;
   passwordHash: string | null;
+  passwordIsTemporary?: boolean;
+  learnerNumber?: string | null;
   emailVerified?: Date | null;
 };
 
@@ -43,6 +45,8 @@ export type ProfileSnapshot = {
   email: string;
   pendingEmail: string | null;
   marketingOptIn: boolean;
+  /** `null` for staff, and for learners who registered before numbers were switched on. */
+  learnerNumber: string | null;
 };
 
 export type UpdateProfileResult =
@@ -120,7 +124,18 @@ export function createProfileService(deps: {
       email: user.email,
       pendingEmail: user.pendingEmail,
       marketingOptIn,
+      learnerNumber: user.learnerNumber ?? null,
     };
+  }
+
+  /**
+   * Whether the caller is still using a password an administrator set for
+   * them (R3-12). Drives a suggestion to change it, never a gate. False for
+   * an unknown user.
+   */
+  async function isUsingTemporaryPassword(actor: Actor): Promise<boolean> {
+    const user = await store.user.findUnique({ where: { id: actor.userId } });
+    return user?.passwordIsTemporary === true;
   }
 
   async function updateOwnProfile(
@@ -160,6 +175,7 @@ export function createProfileService(deps: {
         email: after.email,
         pendingEmail: after.pendingEmail,
         marketingOptIn,
+        learnerNumber: after.learnerNumber ?? null,
       },
     };
   }
@@ -345,6 +361,7 @@ export function createProfileService(deps: {
 
   return {
     getOwnProfile,
+    isUsingTemporaryPassword,
     updateOwnProfile,
     requestEmailChange,
     confirmEmailChange,

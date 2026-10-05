@@ -895,13 +895,25 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       structure: "structure",
     };
 
-    // A COMPLETED card does not load Assessments/Results: those reads share
-    // ACTIVE-only ownership resolvers with the write paths (G-01), so they
-    // would return nothing and read as a false "No results yet". The
-    // dashboard page (plan 11-18) does not render those two slots for a
-    // COMPLETED card; `base`'s deferred constants stand in.
+    // A COMPLETED card has no assessment obligations left (that read is
+    // ACTIVE-only, G-01), but its released results stay readable (ASM-07):
+    // `getOwnResults` resolves COMPLETED enrolments too, and the dashboard
+    // renders the Results slot for a completed course. Leaving `base`'s
+    // deferred constant here showed "No results yet" to a learner who had
+    // just passed (audit R3-10).
     if (isCompleted) {
-      return { card: { ...base, progress, nextAction }, verdict, path, futureNonCancelled };
+      const results = await learnerResults.getOwnResults(actor, { enrolmentId: enrolment.id });
+      return {
+        card: {
+          ...base,
+          results: { kind: "tracked", recent: mostRecentFirst(results).slice(0, MAX_RECENT_RESULTS) },
+          progress,
+          nextAction,
+        },
+        verdict,
+        path,
+        futureNonCancelled,
+      };
     }
 
     // Plan 10-15 — tracked only once a course structure is pinned (`path`

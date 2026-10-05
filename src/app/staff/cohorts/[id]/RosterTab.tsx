@@ -43,6 +43,7 @@ export type RosterRowView = {
   learnerId: string;
   learnerName: string;
   learnerEmail: string;
+  learnerNumber: string | null;
   enrolmentId: string;
   status: string;
   transitionCount: number;
@@ -63,8 +64,6 @@ export type RosterTabProps = {
   denied?: { permission: string };
   /** Cohorts of the same course/programme (D-13) — the transfer target picker. */
   siblingCohorts?: { id: string; code: string }[];
-  /** Learners eligible for a comped/corporate add — best-effort. */
-  candidateLearners?: { id: string; name: string; email: string }[];
   /** Show the enrolment actions (needs enrolments.manage). Default true. */
   canManage?: boolean;
 };
@@ -156,7 +155,6 @@ export function RosterTab({
   rows,
   denied,
   siblingCohorts,
-  candidateLearners,
   canManage = true,
 }: RosterTabProps) {
   const router = useRouter();
@@ -178,7 +176,7 @@ export function RosterTab({
           {r.learnerName}
         </Link>
       ),
-      subtitle: (r) => r.learnerEmail,
+      subtitle: (r) => (r.learnerNumber ? `${r.learnerNumber} · ${r.learnerEmail}` : r.learnerEmail),
       width: "28%",
     },
     {
@@ -331,7 +329,6 @@ export function RosterTab({
         onClose={() => setTarget(null)}
         onSuccess={onSuccess}
         siblingCohorts={siblingCohorts}
-        candidateLearners={candidateLearners}
       />
     </div>
   );

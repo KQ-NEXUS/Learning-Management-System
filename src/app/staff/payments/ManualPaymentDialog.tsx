@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmManualPaymentAction } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * "Confirm manual payment" — the PAY-03 dialog (07-UI-SPEC §0.3, §6.1, §7.6).
@@ -49,6 +50,7 @@ export type ManualPaymentDialogProps = {
 
 export function ManualPaymentDialog({ orderId, currency }: ManualPaymentDialogProps) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export function ManualPaymentDialog({ orderId, currency }: ManualPaymentDialogPr
     // ACTIVATED/EXCEPTION outcome are both handled the same way: close the
     // dialog and let the server-rendered page — the source of truth for
     // PAY-04's already-paid banner — re-render.
+    toast.success("Manual payment confirmed");
     setOpen(false);
     router.refresh();
   }

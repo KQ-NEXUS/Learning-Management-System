@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
-import { loadAssessmentForAuthoring, saveQuizQuestions, NotAQuizError } from "@/server/services/assessment-service";
+import { loadAssessmentForAuthoring, saveQuizQuestions, NotAQuizError, PassMarkExceedsTotalError } from "@/server/services/assessment-service";
 import type { QuestionSaveResult } from "@/components/catalogue/QuestionBuilder";
 
 const schema = z.object({
@@ -28,6 +28,7 @@ export async function saveQuizQuestionsAction(input: unknown): Promise<QuestionS
     return { ok: true, totalMarks: saved.totalMarks };
   } catch (error) {
     if (error instanceof NotAQuizError) return { ok: false, message: "Questions can only be saved to a quiz." };
+    if (error instanceof PassMarkExceedsTotalError) return { ok: false, message: error.message };
     if (error instanceof AuthenticationError || error instanceof AuthorizationError) {
       return { ok: false, message: refusalMessage(error, "Your role no longer permits editing this assessment.") };
     }

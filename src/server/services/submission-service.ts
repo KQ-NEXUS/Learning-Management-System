@@ -36,6 +36,12 @@ import { recordAudit } from "@/server/services/audit-service";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
 import { writeDomainEvent, type DomainEventTxClient } from "@/server/services/domain-event-service";
 import {
+  completeAssessmentLessons,
+  type AssessmentLessonCompletionTx,
+} from "@/server/services/assessment-lesson-completion";
+import { recalculateCompletionAndIssue } from "@/server/services/certificate-issuance-service";
+import type { CompletionServiceTxClient } from "@/server/services/completion-service";
+import {
   buildStagedSubmissionStorageKey,
   finalSubmissionKeyFor,
   presignLessonUploadUrl,
@@ -256,6 +262,15 @@ export type CreateSubmissionServiceDeps = {
   audit: (entry: ResourceAuditEntry) => Promise<void>;
   writeEvent: typeof writeDomainEvent;
   runInTransaction: <R>(fn: (tx: SubmissionTxClient) => Promise<R>) => Promise<R>;
+  /**
+   * A-01: submitting the assignment IS completing its lesson. Runs inside the
+   * transaction that marks the submission READY; production completes the
+   * lesson(s) and then re-evaluates course completion.
+   */
+  completeAssessmentLessons?: (
+    tx: unknown,
+    args: { enrolmentId: string; assessmentId: string; now: Date },
+  ) => Promise<unknown>;
   now?: () => Date;
 };
 
@@ -572,6 +587,11 @@ export function createSubmissionService(deps: CreateSubmissionServiceDeps) {
         },
         occurredAt: nowValue,
       });
+      await deps.completeAssessmentLessons?.(tx, {
+        enrolmentId: after.enrolmentId,
+        assessmentId: after.assessmentId,
+        now: nowValue,
+      });
     });
 
     await deps.audit({
@@ -770,6 +790,15 @@ const built = createSubmissionService({
   audit: liveAudit,
   writeEvent: writeDomainEvent,
   runInTransaction: (fn) => (prisma as AnyPrisma).$transaction((tx: unknown) => fn(tx as SubmissionTxClient)),
+  completeAssessmentLessons: async (tx, args) => {
+    const completed = await completeAssessmentLessons(tx as unknown as AssessmentLessonCompletionTx, args);
+    if (completed.length > 0) {
+      await recalculateCompletionAndIssue(tx as unknown as CompletionServiceTxClient, {
+        enrolmentId: args.enrolmentId,
+        now: args.now,
+      });
+    }
+  },
 });
 
 export const beginSubmissionUpload = built.beginSubmissionUpload;

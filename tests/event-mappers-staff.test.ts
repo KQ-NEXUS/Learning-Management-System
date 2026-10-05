@@ -83,7 +83,7 @@ function makeCtx(overrides: CtxOverrides = {}): MapperContext {
 }
 
 describe("createStaffMappers registration", () => {
-  it("registers exactly the six documented staff event types", () => {
+  it("registers exactly the seven documented staff event types", () => {
     expect(Object.keys(staffMappers).sort()).toEqual(
       [
         "order.exception",
@@ -92,6 +92,7 @@ describe("createStaffMappers registration", () => {
         "ticket.assigned",
         "ticket.created",
         "ticket.escalated",
+        "ticket.reopened",
       ].sort(),
     );
   });
@@ -107,6 +108,60 @@ describe("createStaffMappers registration", () => {
     }
     expect(mapperTable["ticket.created"]).toHaveLength(2);
     expect(mapperTable["order.exception"]).toHaveLength(2);
+  });
+});
+
+describe("ticket.reopened staff alert (A-15)", () => {
+  const reopened = (id = "evt-reopen-1") =>
+    // No `reference` on the payload: the mapper must take it from the ticket row.
+    makeEvent("ticket.reopened", { ticketId: "t-9", ownerId: "stale-owner" }, id);
+
+  it("tells the ticket's current owner, read from the ticket row rather than the payload, in-product only", async () => {
+    const mapper = requireMapper("ticket.reopened");
+    const ctx = makeCtx({
+      ticket: async () => ({ assigneeId: "owner-now", userId: "learner-1", reference: "KQT-9" }),
+      holderIds: ["holder-a"],
+    });
+
+    const intents = await mapper(reopened(), ctx);
+
+    expect(intents).toEqual([
+      {
+        recipientUserId: "owner-now",
+        notification: {
+          type: "staff.ticket_reopened",
+          targetType: "STAFF_TICKET",
+          targetId: "KQT-9",
+          params: { reference: "KQT-9" },
+        },
+      },
+    ]);
+  });
+
+  it("with no owner, tells every ticket manager except the learner who reopened it", async () => {
+    const mapper = requireMapper("ticket.reopened");
+    const ctx = makeCtx({
+      ticket: async () => ({ assigneeId: null, userId: "learner-1", reference: "KQT-9" }),
+      holderIds: ["holder-a", "holder-b", "learner-1"],
+    });
+
+    const intents = await mapper(reopened(), ctx);
+
+    expect(intents.map((intent) => intent.recipientUserId).sort()).toEqual(["holder-a", "holder-b"]);
+    for (const intent of intents) {
+      expect(intent.email).toBeUndefined();
+      expect(intent.notification!.type).toBe("staff.ticket_reopened");
+    }
+  });
+
+  it("a ticket that no longer exists yields no intents", async () => {
+    const mapper = requireMapper("ticket.reopened");
+    expect(await mapper(reopened(), makeCtx({ ticket: async () => null, holderIds: ["holder-a"] }))).toEqual([]);
+  });
+
+  it("fans out alongside the learner's own reopened mail", () => {
+    expect(mapperTable["ticket.reopened"]).toHaveLength(2);
+    expect(mapperTable["ticket.reopened"]).toContain(staffMappers["ticket.reopened"]);
   });
 });
 

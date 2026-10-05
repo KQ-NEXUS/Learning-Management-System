@@ -79,7 +79,8 @@ export function CohortCards({ cohorts, durationLabel }: { cohorts: PublicCohort[
           >
             <div className="flex min-w-0 flex-col break-words">
               <span className={`text-[16px] font-semibold ${isFull ? "text-muted-foreground" : "text-foreground"}`}>
-                Starts {formatStartDate(cohort.startsAt)}
+                {cohort.hasStarted ? "Started" : "Starts"} {formatStartDate(cohort.startsAt)}
+                {cohort.hasStarted && <span className="font-normal text-muted-foreground"> · still enrolling</span>}
               </span>
               <span className="text-sm text-muted-foreground">
                 <span>{DELIVERY_MODE_LABEL[cohort.deliveryMode] ?? humanizeCode(cohort.deliveryMode)}</span>

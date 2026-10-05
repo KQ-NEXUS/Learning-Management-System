@@ -40,9 +40,12 @@ export function RegisterForm() {
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-semibold text-foreground">Full name</span>
           <input
+            // Remounted on each refusal so it shows what was typed, not the reset blank.
+            key={`name-${state.attempt ?? 0}`}
             name="name"
             type="text"
             autoComplete="name"
+            defaultValue={state.values?.name ?? ""}
             required
             className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
           />
@@ -51,9 +54,11 @@ export function RegisterForm() {
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-semibold text-foreground">Email address</span>
           <input
+            key={`email-${state.attempt ?? 0}`}
             name="email"
             type="email"
             autoComplete="email"
+            defaultValue={state.values?.email ?? ""}
             required
             className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
           />

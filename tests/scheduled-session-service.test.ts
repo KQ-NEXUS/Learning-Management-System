@@ -16,6 +16,8 @@ import {
   SessionTimeRangeError,
   SessionCourseNotInCohortError,
   ReasonRequiredError,
+  SessionCancelledError,
+  SessionFacilitatorNotStaffError,
   RepeatOccurrencesError,
   type ScheduledSessionRecord,
 } from "@/server/services/scheduled-session-service";
@@ -58,6 +60,8 @@ function harness(opts?: {
   cohort?: CohortInfo | null;
   rows?: ScheduledSessionRecord[];
   enrolled?: boolean;
+  /** Account ids that are active staff. Default: everyone, so tests not about this pass through. */
+  staff?: string[];
   now?: Date;
   createImpl?: (data: Record<string, unknown>) => ScheduledSessionRecord | never;
 }) {
@@ -158,6 +162,7 @@ function harness(opts?: {
     sessionScope: () => ({ cohortId: "cohort-1", courseIds: ["course-1"] }),
     cohortScope: (id) => ({ cohortId: id, courseIds: ["course-1"] }),
     isViewerEnrolled: async () => opts?.enrolled ?? true,
+    isActiveStaff: async (userId) => (opts?.staff ? opts.staff.includes(userId) : true),
     withPermission,
     audit: async (entry) => {
       audits.push(entry as unknown as Record<string, unknown>);
@@ -346,6 +351,124 @@ describe("createSessionFromWallTime — member-course tag (D-24)", () => {
       courseId: "course-b",
     });
     expect(created.courseId).toBe("course-b");
+  });
+});
+
+describe("updateSession — changing a scheduled session (audit A-11)", () => {
+  // The fixture session runs 08:00-11:00 UTC on 1 March 2026, which is 09:00-12:00 in Lagos.
+  const unchanged = { sessionId: "session-1", title: "Week 1", date: "2026-03-01", startTime: "09:00", endTime: "12:00" };
+
+  it("moves the time from wall-clock values in the cohort's timezone, emits session.updated and audits before/after", async () => {
+    const { service, store, events, audits } = harness({ rows: [makeSessionRow()] });
+
+    const result = await service.updateSession({ ...unchanged, date: "2026-03-02", startTime: "14:00", endTime: "16:30" });
+
+    expect(result.startsAt.toISOString()).toBe("2026-03-02T13:00:00.000Z");
+    expect(result.endsAt.toISOString()).toBe("2026-03-02T15:30:00.000Z");
+    expect(store.get("session-1")?.startsAt.toISOString()).toBe("2026-03-02T13:00:00.000Z");
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "session.updated",
+        payload: expect.objectContaining({ sessionId: "session-1", cohortId: "cohort-1", actorId: "user-1" }),
+      }),
+    ]);
+    const audit = audits.find((entry) => entry.action === "session.updated");
+    expect((audit?.before as { startsAt: Date }).startsAt.toISOString()).toBe("2026-03-01T08:00:00.000Z");
+    expect((audit?.after as { startsAt: Date }).startsAt.toISOString()).toBe("2026-03-02T13:00:00.000Z");
+  });
+
+  it.each([
+    ["the title", { title: "Week 1 (moved online)" }],
+    ["the location", { location: "Room 4" }],
+    ["the meeting link", { meetingUrl: "https://meet.example/new" }],
+  ])("tells learners when %s changes", async (_what, change) => {
+    const { service, events } = harness({ rows: [makeSessionRow()] });
+    await service.updateSession({ ...unchanged, ...change });
+    expect(events.map((event) => event.type)).toEqual(["session.updated"]);
+  });
+
+  describe("the facilitator must be an active staff account", () => {
+    it("refuses a new session whose facilitator is not staff, and saves nothing", async () => {
+      const { service, store, audits } = harness({ staff: ["staff-9"] });
+      await expect(
+        service.createSessionFromWallTime({ ...BASE_CREATE, facilitatorId: "learner-1" }),
+      ).rejects.toBeInstanceOf(SessionFacilitatorNotStaffError);
+      expect(store.size).toBe(0);
+      expect(audits).toHaveLength(0);
+    });
+
+    it("refuses a weekly series whose facilitator is not staff, and saves none of it", async () => {
+      const { service, store } = harness({ staff: ["staff-9"] });
+      await expect(
+        service.repeatWeeklySessions({ ...BASE_CREATE, facilitatorId: "learner-1", occurrences: 3 }),
+      ).rejects.toBeInstanceOf(SessionFacilitatorNotStaffError);
+      expect(store.size).toBe(0);
+    });
+
+    it("accepts a staff facilitator, and a session with none", async () => {
+      const { service } = harness({ staff: ["staff-9"] });
+      const withOne = await service.createSessionFromWallTime({ ...BASE_CREATE, facilitatorId: "staff-9" });
+      const withNone = await service.createSessionFromWallTime({ ...BASE_CREATE });
+      expect(withOne.facilitatorId).toBe("staff-9");
+      expect(withNone.facilitatorId).toBeNull();
+    });
+
+    it("refuses changing a session's facilitator to someone who is not staff", async () => {
+      const { service, store } = harness({ rows: [makeSessionRow()], staff: ["staff-9"] });
+      await expect(
+        service.updateSession({ ...unchanged, facilitatorId: "learner-1" }),
+      ).rejects.toBeInstanceOf(SessionFacilitatorNotStaffError);
+      expect(store.get("session-1")?.facilitatorId).toBeNull();
+    });
+
+    it("still lets a session be edited when its existing facilitator has since left", async () => {
+      const { service, store } = harness({ rows: [makeSessionRow({ facilitatorId: "staff-left" })], staff: ["staff-9"] });
+      await service.updateSession({ ...unchanged, facilitatorId: "staff-left", location: "Room 4" });
+      expect(store.get("session-1")).toMatchObject({ facilitatorId: "staff-left", location: "Room 4" });
+    });
+  });
+
+  it("mails nobody when only the facilitator or the attendance flag changes, but still saves and audits", async () => {
+    const { service, store, events, audits } = harness({ rows: [makeSessionRow()] });
+
+    await service.updateSession({ ...unchanged, facilitatorId: "staff-9", attendanceExpected: false });
+
+    expect(store.get("session-1")).toMatchObject({ facilitatorId: "staff-9", attendanceExpected: false });
+    expect(events).toEqual([]);
+    expect(audits.filter((entry) => entry.action === "session.updated")).toHaveLength(1);
+  });
+
+  it("a blank meeting link keeps the current one; a blank location clears it", async () => {
+    const { service, store } = harness({ rows: [makeSessionRow({ location: "Room 1" })] });
+
+    await service.updateSession({ ...unchanged });
+
+    expect(store.get("session-1")?.meetingUrl).toBe("https://meet.example/abc");
+    expect(store.get("session-1")?.linkVisibleFromMinutes).toBe(60);
+    expect(store.get("session-1")?.location).toBeNull();
+  });
+
+  it("refuses a cancelled session, an end before its start, and an unknown session, writing nothing", async () => {
+    const cancelled = harness({ rows: [makeSessionRow({ cancelledAt: new Date("2026-02-01T00:00:00.000Z") })] });
+    await expect(cancelled.service.updateSession({ ...unchanged, title: "Changed" })).rejects.toBeInstanceOf(
+      SessionCancelledError,
+    );
+    expect(cancelled.store.get("session-1")?.title).toBe("Week 1");
+    expect(cancelled.events).toEqual([]);
+
+    const live = harness({ rows: [makeSessionRow()] });
+    await expect(live.service.updateSession({ ...unchanged, startTime: "12:00", endTime: "09:00" })).rejects.toBeInstanceOf(
+      SessionTimeRangeError,
+    );
+    await expect(live.service.updateSession({ ...unchanged, sessionId: "nope" })).rejects.toThrow();
+    expect(live.events).toEqual([]);
+    expect(live.audits).toEqual([]);
+  });
+
+  it("is denied without cohorts.manage", async () => {
+    const { service, store } = harness({ rows: [makeSessionRow()], grants: [grant("cohorts.view")] });
+    await expect(service.updateSession({ ...unchanged, title: "Changed" })).rejects.toBeInstanceOf(AuthorizationError);
+    expect(store.get("session-1")?.title).toBe("Week 1");
   });
 });
 

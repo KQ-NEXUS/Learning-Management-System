@@ -16,17 +16,28 @@
  * `ConfirmModal` with a mandatory reason (D-26).
  */
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ResourceTable, StatusPill, ConfirmModal, type Column, type ResourceTableState } from "@/components/primitives";
+import {
+  ResourceTable,
+  StatusPill,
+  ConfirmModal,
+  FormDialog,
+  type Column,
+  type ResourceTableState,
+} from "@/components/primitives";
+import { SessionCalendar, type CalendarSession } from "@/components/calendar/SessionCalendar";
+import { civilDateIn } from "@/lib/calendar";
 import {
   SessionFormFields,
   EMPTY_SESSION_FIELDS,
+  sessionFieldsFromRow,
   toSessionActionFields,
   type SessionFieldsValue,
 } from "./SessionFormFields";
-import { createSessionAction, repeatWeeklyAction, cancelSessionAction } from "./session-actions";
+import { createSessionAction, repeatWeeklyAction, cancelSessionAction, updateSessionAction } from "./session-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type SessionRow = {
   id: string;
@@ -56,6 +67,8 @@ export type SessionsTabProps = {
   denied?: { permission: string };
   /** Present only for a Programme cohort (D-24) — omitted for a Course cohort. */
   courseOptions?: { id: string; title: string }[];
+  /** The cohort's instructors, offered when choosing a session's facilitator. */
+  facilitatorOptions?: { id: string; name: string; email: string }[];
   /** Show add / repeat / cancel (needs cohorts.manage). Default true. */
   canManage?: boolean;
   /** Instructor names by user id, so the Facilitator column shows a person rather than an id. */
@@ -111,12 +124,25 @@ export function SessionsTab({
   sessions,
   denied,
   courseOptions,
+  facilitatorOptions,
   canManage = true,
   facilitatorNames,
 }: SessionsTabProps) {
   const router = useRouter();
+  const toast = useToast();
+  // After a save the page re-fetches its sessions. Running that refresh as a transition gives a
+  // pending flag for the second or two before the new data is on screen, so the list or calendar
+  // can say it is updating instead of looking as if nothing happened.
+  const [refreshing, startRefresh] = useTransition();
+  const refreshSessions = () => startRefresh(() => router.refresh());
 
-  const [panel, setPanel] = useState<"none" | "add" | "repeat">("none");
+  // Two views of the same sessions: the table (sort, scan, mark attendance) and a calendar
+  // (click a day to schedule on it). The owner asked for the calendar; the table stays.
+  const [view, setView] = useState<"table" | "calendar">("table");
+  // Today in the cohort's timezone, read once in the browser.
+  const [today] = useState(() => civilDateIn(new Date(), cohortTimezone || "UTC"));
+  const [panel, setPanel] = useState<"none" | "add" | "repeat" | "edit">("none");
+  const [editTarget, setEditTarget] = useState<SessionRow | null>(null);
   const [fields, setFields] = useState<SessionFieldsValue>(EMPTY_SESSION_FIELDS);
   const [panelPending, setPanelPending] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
@@ -127,12 +153,29 @@ export function SessionsTab({
 
   function openPanel(next: "add" | "repeat") {
     setPanel(next);
+    setEditTarget(null);
     setFields(EMPTY_SESSION_FIELDS);
+    setPanelError(null);
+  }
+
+  /** Calendar: a day was clicked. The form opens with that date already set. */
+  function openAddOn(date: string) {
+    setPanel("add");
+    setEditTarget(null);
+    setFields({ ...EMPTY_SESSION_FIELDS, date });
+    setPanelError(null);
+  }
+
+  function openEdit(session: SessionRow) {
+    setPanel("edit");
+    setEditTarget(session);
+    setFields(sessionFieldsFromRow(session));
     setPanelError(null);
   }
 
   function closePanel() {
     setPanel("none");
+    setEditTarget(null);
     setPanelError(null);
   }
 
@@ -140,17 +183,24 @@ export function SessionsTab({
     setPanelPending(true);
     setPanelError(null);
     const base = toSessionActionFields(cohortId, fields);
-    const result =
-      panel === "add"
-        ? await createSessionAction(base)
-        : await repeatWeeklyAction({
-            ...base,
-            occurrences: Number.parseInt(fields.occurrences, 10) || 0,
-          });
+    let result;
+    if (panel === "edit" && editTarget) {
+      const { cohortId: _cohortId, ...sessionFields } = base;
+      void _cohortId;
+      result = await updateSessionAction({ ...sessionFields, sessionId: editTarget.id });
+    } else if (panel === "add") {
+      result = await createSessionAction(base);
+    } else {
+      result = await repeatWeeklyAction({
+        ...base,
+        occurrences: Number.parseInt(fields.occurrences, 10) || 0,
+      });
+    }
     setPanelPending(false);
     if (result.ok) {
+      toast.success(panel === "edit" ? "Session updated" : panel === "repeat" ? "Weekly sessions added" : "Session added");
       closePanel();
-      router.refresh();
+      refreshSessions();
     } else {
       setPanelError(result.message);
     }
@@ -163,8 +213,9 @@ export function SessionsTab({
     const result = await cancelSessionAction({ sessionId: cancelTarget.id, reason });
     setCancelPending(false);
     if (result.ok) {
+      toast.success("Session cancelled");
       setCancelTarget(null);
-      router.refresh();
+      refreshSessions();
     } else {
       setCancelError(result.message);
     }
@@ -234,6 +285,15 @@ export function SessionsTab({
             {canManage && (
               <button
                 type="button"
+                onClick={() => openEdit(s)}
+                className="text-sm font-semibold text-accent hover:underline"
+              >
+                Edit
+              </button>
+            )}
+            {canManage && (
+              <button
+                type="button"
                 onClick={() => {
                   setCancelTarget(s);
                   setCancelError(null);
@@ -249,14 +309,130 @@ export function SessionsTab({
     },
   ];
 
+  const calendarSessions: CalendarSession[] = (sessions ?? []).map((s) => ({
+    id: s.id,
+    title: s.title,
+    startsAt: s.startsAt,
+    endsAt: s.endsAt,
+    timezone: s.timezone || cohortTimezone || "UTC",
+    cancelled: s.cancelledAt !== null,
+    meta: whereLabel(s) === "—" ? undefined : whereLabel(s),
+  }));
+
+  /** Calendar: a session was clicked. Managers edit it (a cancelled one cannot be edited); others open its register. */
+  function openFromCalendar(id: string) {
+    const session = sessions?.find((s) => s.id === id);
+    if (!session) return;
+    if (canManage && !session.cancelledAt) openEdit(session);
+    else if (!session.cancelledAt) router.push(`/staff/cohorts/${session.cohortId}/sessions/${session.id}/attendance`);
+  }
+
+  const panelTitle =
+    panel === "edit" ? `Edit ${editTarget?.title ?? "session"}` : panel === "add" ? "Add session" : "Repeat weekly";
+
+  const panelBody = (
+    <>
+      {panelError && (
+        <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
+          {panelError}
+        </p>
+      )}
+
+      {panel === "edit" && (
+        <p className="text-sm text-muted-foreground">
+          Enrolled learners are told when the title, time, location or meeting link changes.
+        </p>
+      )}
+
+      <SessionFormFields
+        variant={panel === "repeat" ? "repeat" : "single"}
+        editing={panel === "edit"}
+        compact={view === "calendar"}
+        value={fields}
+        onChange={setFields}
+        cohortTimezone={cohortTimezone}
+        courseOptions={courseOptions}
+        facilitatorOptions={facilitatorOptions?.map((person) => ({ ...person, detail: "Instructor" }))}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={handleSubmitPanel}
+          disabled={panelPending || !fields.title.trim() || !fields.date || !fields.startTime || !fields.endTime}
+          className={panel === "repeat" ? BTN : BTN_PRIMARY}
+        >
+          {panelPending ? "Saving…" : panel === "edit" ? "Save changes" : panel === "add" ? "Add session" : "Repeat weekly"}
+        </button>
+      </div>
+    </>
+  );
+
   const state: ResourceTableState<SessionRow> = denied
     ? { status: "denied", permission: denied.permission }
     : sessions && sessions.length > 0
       ? { status: "ready", rows: sessions }
       : { status: "empty" };
 
+  const VIEW_BTN = "min-h-10 border border-input-border px-4 text-sm font-semibold -ml-px first:ml-0 first:rounded-l-md last:rounded-r-md";
+  const scheduleButtons = !denied && canManage && (
+    <>
+      <button type="button" className={BTN} onClick={() => openPanel("repeat")}>
+        Repeat weekly…
+      </button>
+      <button type="button" className={BTN_PRIMARY} onClick={() => openPanel("add")}>
+        Add session
+      </button>
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-4">
+      {!denied && (
+        <div className="flex flex-wrap items-center gap-4">
+          <div role="group" aria-label="Sessions view" className="flex">
+            {(["table", "calendar"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={view === option}
+                onClick={() => setView(option)}
+                className={`${VIEW_BTN} ${view === option ? "bg-foreground text-surface" : "bg-surface text-foreground hover:bg-surface-2"}`}
+              >
+                {option === "table" ? "Table" : "Calendar"}
+              </button>
+            ))}
+          </div>
+          {/* Always in the page so a screen reader announces the change; empty when idle. */}
+          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+            {refreshing && (
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden className="inline-block size-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                Updating sessions…
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {view === "calendar" && !denied ? (
+        <section aria-label="Sessions calendar" className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {canManage
+                ? `Click a day to add a session on it, or a session to edit it. Times are in ${cohortTimezone}.`
+                : `Times are in ${cohortTimezone}.`}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">{scheduleButtons}</div>
+          </div>
+          <SessionCalendar
+            sessions={calendarSessions}
+            today={today}
+            onDayClick={canManage ? openAddOn : undefined}
+            onItemClick={openFromCalendar}
+          />
+        </section>
+      ) : (
       <ResourceTable<SessionRow>
         noun="sessions"
         title="Sessions"
@@ -269,26 +445,19 @@ export function SessionsTab({
         shownCount={denied ? undefined : sessions?.length}
         emptyHeading="No sessions scheduled"
         emptyBody="Add a session, or set delivery mode to self-paced if this cohort has no live meetings."
-        headerActions={
-          !denied && canManage && (
-            <>
-              <button type="button" className={BTN} onClick={() => openPanel("repeat")}>
-                Repeat weekly…
-              </button>
-              <button type="button" className={BTN_PRIMARY} onClick={() => openPanel("add")}>
-                Add session
-              </button>
-            </>
-          )
-        }
+        headerActions={scheduleButtons}
       />
+      )}
 
-      {panel !== "none" && (
+      {/* From the calendar the form pops up over it; from the table it opens in place below. */}
+      <FormDialog open={view === "calendar" && panel !== "none"} title={panelTitle} pending={panelPending} onClose={closePanel}>
+        {panelBody}
+      </FormDialog>
+
+      {view === "table" && panel !== "none" && (
         <div className="flex flex-col gap-4 border-t border-foreground pt-5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold tracking-tight text-foreground">
-              {panel === "add" ? "Add session" : "Repeat weekly"}
-            </h3>
+            <h3 className="text-base font-semibold tracking-tight text-foreground">{panelTitle}</h3>
             <button
               type="button"
               onClick={closePanel}
@@ -297,31 +466,7 @@ export function SessionsTab({
               Close
             </button>
           </div>
-
-          {panelError && (
-            <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
-              {panelError}
-            </p>
-          )}
-
-          <SessionFormFields
-            variant={panel === "add" ? "single" : "repeat"}
-            value={fields}
-            onChange={setFields}
-            cohortTimezone={cohortTimezone}
-            courseOptions={courseOptions}
-          />
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={handleSubmitPanel}
-              disabled={panelPending || !fields.title.trim() || !fields.date || !fields.startTime || !fields.endTime}
-              className={panel === "add" ? BTN_PRIMARY : BTN}
-            >
-              {panelPending ? "Saving…" : panel === "add" ? "Add session" : "Repeat weekly"}
-            </button>
-          </div>
+          {panelBody}
         </div>
       )}
 

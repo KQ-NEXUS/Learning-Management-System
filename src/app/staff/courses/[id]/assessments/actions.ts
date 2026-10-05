@@ -33,11 +33,13 @@ import {
   assessmentService,
   publishAssessment,
   AssessmentNotPublishableError,
+  PassMarkExceedsTotalError,
   FEEDBACK_BEHAVIOURS,
   type AssessmentRecord,
 } from "@/server/services/assessment-service";
 import { ALLOWED_ASSIGNMENT_FILE_TYPES } from "@/lib/assignment-file-types";
 import { parseCohortDateTime } from "@/lib/cohort-datetime";
+import { withFlash } from "@/lib/flash-notices";
 
 const ASSESSMENT_TYPES = ["QUIZ", "ASSIGNMENT"] as const;
 const ATTEMPT_GRADING_METHODS = ["HIGHEST", "LATEST", "AVERAGE"] as const;
@@ -239,6 +241,9 @@ function toFailure(error: unknown): SaveAssessmentState {
   if (error instanceof z.ZodError) {
     return { ok: false, errors: zodFieldErrors(error), message: null };
   }
+  if (error instanceof PassMarkExceedsTotalError) {
+    return { ok: false, errors: [{ name: "passMark", message: error.message }], message: null };
+  }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
       ok: false,
@@ -295,7 +300,7 @@ export async function createAssessmentAction(
   // a fresh RSC payload for whatever route the action IS invoked from into
   // its own response, so a second call for "this page" would be redundant.
   revalidatePath(`/staff/courses/${courseId}/assessments`);
-  redirect(`/staff/courses/${courseId}/assessments/${created.id}`);
+  redirect(withFlash(`/staff/courses/${courseId}/assessments/${created.id}`, "assessment-created"));
 }
 
 // ---------------------------------------------------------------------------

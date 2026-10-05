@@ -14,6 +14,11 @@
  */
 
 import { FormField, TextInput } from "@/components/primitives";
+import { useState } from "react";
+import { PersonPickerDialog, type PickablePerson } from "@/components/people/PersonPickerDialog";
+
+const CHOOSE_BTN =
+  "inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-4 text-sm font-semibold text-foreground hover:bg-surface-2";
 
 export type SessionFieldsValue = {
   title: string;
@@ -68,13 +73,60 @@ export function toSessionActionFields(cohortId: string, fields: SessionFieldsVal
   };
 }
 
+/** "2026-10-05" and "09:00" for an instant, as read on a clock in `timeZone`. */
+function wallParts(iso: string, timeZone: string): { date: string; time: string } {
+  const at = new Date(iso);
+  // en-CA formats a date as YYYY-MM-DD, which is what a date input holds.
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+  return { date, time };
+}
+
+/**
+ * The form's starting values when editing an existing session (audit A-11): its date and times as
+ * read in the cohort's timezone, the way they were entered. The meeting link and its visibility
+ * window start blank on purpose. The staff list never carries the link (D-25), and a blank field
+ * on save means "leave it unchanged".
+ */
+export function sessionFieldsFromRow(row: {
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  location: string | null;
+  facilitatorId: string | null;
+  attendanceExpected: boolean;
+  courseId: string | null;
+}): SessionFieldsValue {
+  const zone = row.timezone || "UTC";
+  const start = wallParts(row.startsAt, zone);
+  const end = wallParts(row.endsAt, zone);
+  return {
+    ...EMPTY_SESSION_FIELDS,
+    title: row.title,
+    date: start.date,
+    startTime: start.time,
+    endTime: end.time,
+    location: row.location ?? "",
+    facilitatorId: row.facilitatorId ?? "",
+    attendanceExpected: row.attendanceExpected,
+    courseId: row.courseId ?? "",
+  };
+}
+
 export type SessionFormFieldsProps = {
   variant: "single" | "repeat";
+  /** Editing an existing session: the meeting link field says a blank value keeps the current link. */
+  editing?: boolean;
+  /** A short form (the calendar pop-up): the rarely changed fields are folded under "More options". */
+  compact?: boolean;
   value: SessionFieldsValue;
   onChange: (next: SessionFieldsValue) => void;
   cohortTimezone: string;
   /** Present only for a Programme cohort (D-24) — omitted/[] for a Course cohort. */
   courseOptions?: { id: string; title: string }[];
+  /** Who can facilitate: the cohort's instructors. */
+  facilitatorOptions?: PickablePerson[];
   errors?: Record<string, string>;
 };
 
@@ -92,12 +144,18 @@ function ZonedLabel({ label, timezone }: { label: string; timezone: string }) {
 
 export function SessionFormFields({
   variant,
+  editing = false,
+  compact = false,
   value,
   onChange,
   cohortTimezone,
   courseOptions,
+  facilitatorOptions,
   errors = {},
 }: SessionFormFieldsProps) {
+  const [facilitatorPickerOpen, setFacilitatorPickerOpen] = useState(false);
+  const facilitator = facilitatorOptions?.find((person) => person.id === value.facilitatorId) ?? null;
+
   function set<K extends keyof SessionFieldsValue>(key: K, next: SessionFieldsValue[K]) {
     onChange({ ...value, [key]: next });
   }
@@ -107,6 +165,107 @@ export function SessionFormFields({
     variant === "repeat" && value.date && Number.isInteger(occurrencesNumber) && occurrencesNumber > 0
       ? `Creates ${occurrencesNumber} session${occurrencesNumber === 1 ? "" : "s"}, weekly from ${value.date}.`
       : undefined;
+
+  const optionalFields = (
+    <>
+        <FormField
+          name="linkVisibleFromMinutes"
+          label="Link visible from (minutes before start)"
+          error={errors.linkVisibleFromMinutes}
+          hint="Default 60."
+        >
+          {(field) => (
+            <TextInput
+              {...field}
+              type="number"
+              min={0}
+              step={1}
+              mono
+              value={value.linkVisibleFromMinutes}
+              onChange={(e) => set("linkVisibleFromMinutes", e.target.value)}
+            />
+          )}
+        </FormField>
+
+        {/* The facilitator is chosen from the cohort's instructors in a pop-up, never typed as an id. */}
+        <div className="flex flex-col gap-1">
+          <span id="field-facilitatorId-label" className="text-sm font-semibold text-foreground">
+            Facilitator
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              id="field-facilitatorId"
+              aria-labelledby="field-facilitatorId-label"
+              className="min-w-0 flex-1 basis-40 truncate rounded-md border border-input-border bg-surface-2 px-4 py-3 text-sm text-foreground"
+            >
+              {facilitator ? `${facilitator.name} · ${facilitator.email}` : value.facilitatorId ? "Assigned (no longer an instructor here)" : "No facilitator"}
+            </span>
+            <button type="button" onClick={() => setFacilitatorPickerOpen(true)} className={CHOOSE_BTN}>
+              {value.facilitatorId ? "Change" : "Choose facilitator"}
+            </button>
+            {value.facilitatorId && (
+              <button type="button" onClick={() => set("facilitatorId", "")} className={CHOOSE_BTN}>
+                Clear
+              </button>
+            )}
+          </div>
+          {errors.facilitatorId && (
+            <p role="alert" className="text-sm text-danger">
+              {errors.facilitatorId}
+            </p>
+          )}
+        </div>
+        <PersonPickerDialog
+          open={facilitatorPickerOpen}
+          title="Choose facilitator"
+          description="This cohort's instructors. Add someone as an instructor on the Overview tab to list them here."
+          confirmLabel="Set facilitator"
+          people={facilitatorOptions ?? []}
+          selectedId={value.facilitatorId || null}
+          emptyText="This cohort has no instructors yet. Add one on the Overview tab first."
+          onConfirm={(person) => {
+            set("facilitatorId", person.id);
+            setFacilitatorPickerOpen(false);
+          }}
+          onClose={() => setFacilitatorPickerOpen(false)}
+        />
+
+        {courseOptions && courseOptions.length > 0 && (
+          <FormField
+            name="courseId"
+            label="Member course (optional)"
+            error={errors.courseId}
+            hint="Tag this session to one of the programme's member courses."
+          >
+            {(field) => (
+              <select
+                {...field}
+                value={value.courseId}
+                onChange={(e) => set("courseId", e.target.value)}
+                className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+              >
+                <option value="">No course tag</option>
+                {courseOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
+        )}
+
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={value.attendanceExpected}
+            onChange={(e) => set("attendanceExpected", e.target.checked)}
+            className="size-3.5 accent-accent"
+          />
+          Attendance expected
+        </label>
+    </>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -204,7 +363,11 @@ export function SessionFormFields({
         name="meetingUrl"
         label="Meeting URL"
         error={errors.meetingUrl}
-        hint="The meeting link appears {n} minutes before the session starts — never shown in the sessions list."
+        hint={
+          editing
+            ? "Leave blank to keep the current meeting link. Enter a new one to replace it."
+            : "Enrolled learners see the link shortly before the session starts (60 minutes by default). It is never shown in the sessions list."
+        }
       >
         {(field) => (
           <TextInput
@@ -217,70 +380,19 @@ export function SessionFormFields({
         )}
       </FormField>
 
-      <FormField
-        name="linkVisibleFromMinutes"
-        label="Link visible from (minutes before start)"
-        error={errors.linkVisibleFromMinutes}
-        hint="Default 60."
-      >
-        {(field) => (
-          <TextInput
-            {...field}
-            type="number"
-            min={0}
-            step={1}
-            mono
-            value={value.linkVisibleFromMinutes}
-            onChange={(e) => set("linkVisibleFromMinutes", e.target.value)}
-          />
-        )}
-      </FormField>
-
-      <FormField name="facilitatorId" label="Facilitator (user id)" error={errors.facilitatorId}>
-        {(field) => (
-          <TextInput
-            {...field}
-            type="text"
-            value={value.facilitatorId}
-            onChange={(e) => set("facilitatorId", e.target.value)}
-          />
-        )}
-      </FormField>
-
-      {courseOptions && courseOptions.length > 0 && (
-        <FormField
-          name="courseId"
-          label="Member course (optional)"
-          error={errors.courseId}
-          hint="Tag this session to one of the programme's member courses."
-        >
-          {(field) => (
-            <select
-              {...field}
-              value={value.courseId}
-              onChange={(e) => set("courseId", e.target.value)}
-              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
-            >
-              <option value="">No course tag</option>
-              {courseOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
-          )}
-        </FormField>
+      {/* The pop-up from the calendar is a short form: the fields most sessions leave alone sit
+          under a disclosure, closed until asked for. The values are submitted either way. */}
+      {compact ? (
+        <details className="group rounded-md border border-border">
+          <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-accent hover:underline">
+            <span className="group-open:hidden">More options</span>
+            <span className="hidden group-open:inline">Fewer options</span>
+          </summary>
+          <div className="flex flex-col gap-4 border-t border-border p-3">{optionalFields}</div>
+        </details>
+      ) : (
+        optionalFields
       )}
-
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={value.attendanceExpected}
-          onChange={(e) => set("attendanceExpected", e.target.checked)}
-          className="size-3.5 accent-accent"
-        />
-        Attendance expected
-      </label>
 
       {variant === "repeat" && (
         <FormField

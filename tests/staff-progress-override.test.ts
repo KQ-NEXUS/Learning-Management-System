@@ -365,23 +365,19 @@ describe("LearnerProgressPage (D-14, DD-31)", () => {
     expect(lessons.find((l) => l.id === "l3")).toMatchObject({ completed: false, completedAt: null });
   });
 
-  it("threads the RBAC courtesy check into canOverride — true when the caller holds enrolments.manage", async () => {
+  // `can` is also asked about submissions.view on this page, so each case answers per permission.
+  it.each([
+    { name: "true when the caller holds enrolments.manage and attendance.manage", held: ["enrolments.manage", "attendance.manage"], expected: true },
+    { name: "false for Finance/Operations, which holds enrolments.manage without attendance.manage (A-05)", held: ["enrolments.manage"], expected: false },
+    { name: "false for attendance.manage without enrolments.manage", held: ["attendance.manage"], expected: false },
+    { name: "false for a caller with neither", held: [], expected: false },
+  ])("threads the RBAC courtesy check into canOverride: $name", async ({ held, expected }) => {
     mocks.loadCohortRoster.mockResolvedValue([rosterRow()]);
     mocks.loadLearnerPath.mockResolvedValue(learnerPath([decoratedLesson()]));
-    mocks.can.mockResolvedValue(true);
+    mocks.can.mockImplementation(async (permission: string) => (held as string[]).includes(permission));
 
     const result = await LearnerProgressPage(pageParams());
     const panel = findByType(result as AnyElement, ProgressOverridePanel);
-    expect(panel!.props!.canOverride).toBe(true);
-  });
-
-  it("threads canOverride as false for a caller without enrolments.manage", async () => {
-    mocks.loadCohortRoster.mockResolvedValue([rosterRow()]);
-    mocks.loadLearnerPath.mockResolvedValue(learnerPath([decoratedLesson()]));
-    mocks.can.mockResolvedValue(false);
-
-    const result = await LearnerProgressPage(pageParams());
-    const panel = findByType(result as AnyElement, ProgressOverridePanel);
-    expect(panel!.props!.canOverride).toBe(false);
+    expect(panel!.props!.canOverride).toBe(expected);
   });
 });

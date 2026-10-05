@@ -405,3 +405,105 @@ describe("resolveAttemptExpiry — real-Postgres lazy EXPIRED transition", () =>
     expect(grades[0].status).toBe("RELEASED");
   });
 });
+
+// ---------------------------------------------------------------------------
+// A-01 — passing the quiz completes its lesson, in the same transaction
+// ---------------------------------------------------------------------------
+
+describe("submitAttempt — a pass completes the quiz lesson (A-01)", () => {
+  async function seedQuizLesson(fixture: Awaited<ReturnType<typeof seedQuizFixture>>) {
+    const mod = await testDb.prisma.module.create({
+      data: { courseId: fixture.courseId, title: "A-01 module", position: 0 },
+      select: { id: true },
+    });
+    const quizLesson = await testDb.prisma.lesson.create({
+      // allowManualComplete false is the "stuck after passing" half of A-01.
+      data: {
+        moduleId: mod.id,
+        title: "Quiz lesson",
+        type: "QUIZ",
+        position: 0,
+        assessmentId: fixture.assessmentId,
+        allowManualComplete: false,
+      },
+      select: { id: true },
+    });
+    const withdrawn = await testDb.prisma.lesson.create({
+      data: {
+        moduleId: mod.id,
+        title: "Withdrawn quiz lesson",
+        type: "QUIZ",
+        position: 1,
+        assessmentId: fixture.assessmentId,
+        withdrawnAt: new Date(),
+      },
+      select: { id: true },
+    });
+    return { quizLessonId: quizLesson.id, withdrawnLessonId: withdrawn.id };
+  }
+
+  const progressFor = (enrolmentId: string) =>
+    testDb.prisma.lessonProgress.findMany({ where: { enrolmentId }, orderBy: { lessonId: "asc" } });
+
+  it("writes one AUTO_ASSESSMENT LessonProgress row and one lesson.completed event for the live quiz lesson only", async () => {
+    const fixture = await seedQuizFixture(testDb.prisma);
+    const { quizLessonId } = await seedQuizLesson(fixture);
+    const svc: Svc = buildService();
+
+    const started = await svc.startAttempt({ userId: fixture.userId }, { assessmentId: fixture.assessmentId });
+    const result = await svc.submitAttempt(
+      { userId: fixture.userId },
+      { attemptId: started.id, responses: fullyCorrectResponses(fixture) },
+    );
+    expect(result.passed).toBe(true);
+
+    const rows = await progressFor(fixture.enrolmentId);
+    expect(rows.map((row) => [row.lessonId, row.source])).toEqual([[quizLessonId, "AUTO_ASSESSMENT"]]);
+
+    const events = await testDb.prisma.domainEvent.findMany({ where: { type: "lesson.completed" } });
+    const mine = events.filter((event) => (event.payload as { enrolmentId?: string }).enrolmentId === fixture.enrolmentId);
+    expect(mine.map((event) => event.payload)).toEqual([
+      { enrolmentId: fixture.enrolmentId, lessonId: quizLessonId, source: "AUTO_ASSESSMENT" },
+    ]);
+  });
+
+  it("writes nothing for a failed attempt, then completes the lesson when a later attempt passes", async () => {
+    const fixture = await seedQuizFixture(testDb.prisma, { maxAttempts: 2 });
+    const { quizLessonId } = await seedQuizLesson(fixture);
+    const svc: Svc = buildService();
+
+    const first = await svc.startAttempt({ userId: fixture.userId }, { assessmentId: fixture.assessmentId });
+    const failed = await svc.submitAttempt({ userId: fixture.userId }, { attemptId: first.id, responses: [] });
+    expect(failed.passed).toBe(false);
+    expect(await progressFor(fixture.enrolmentId)).toEqual([]);
+
+    const second = await svc.startAttempt({ userId: fixture.userId }, { assessmentId: fixture.assessmentId });
+    await svc.submitAttempt(
+      { userId: fixture.userId },
+      { attemptId: second.id, responses: fullyCorrectResponses(fixture) },
+    );
+    expect((await progressFor(fixture.enrolmentId)).map((row) => row.lessonId)).toEqual([quizLessonId]);
+  });
+
+  it("leaves an existing completion (a staff override) untouched and writes no second event", async () => {
+    const fixture = await seedQuizFixture(testDb.prisma);
+    const { quizLessonId } = await seedQuizLesson(fixture);
+    const overriddenAt = new Date("2026-01-02T03:04:05.000Z");
+    await testDb.prisma.lessonProgress.create({
+      data: { enrolmentId: fixture.enrolmentId, lessonId: quizLessonId, source: "STAFF_OVERRIDE", completedAt: overriddenAt },
+    });
+    const svc: Svc = buildService();
+
+    const started = await svc.startAttempt({ userId: fixture.userId }, { assessmentId: fixture.assessmentId });
+    await svc.submitAttempt(
+      { userId: fixture.userId },
+      { attemptId: started.id, responses: fullyCorrectResponses(fixture) },
+    );
+
+    const rows = await progressFor(fixture.enrolmentId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ source: "STAFF_OVERRIDE", completedAt: overriddenAt });
+    const events = await testDb.prisma.domainEvent.findMany({ where: { type: "lesson.completed" } });
+    expect(events.filter((event) => (event.payload as { enrolmentId?: string }).enrolmentId === fixture.enrolmentId)).toEqual([]);
+  });
+});

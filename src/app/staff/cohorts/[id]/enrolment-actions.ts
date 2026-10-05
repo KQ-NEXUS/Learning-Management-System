@@ -28,6 +28,7 @@ import { UserInputError } from "@/server/errors/user-input-error";
 import { CapacityExceededError, AlreadyEnrolledError, StaleEnrolmentError, CohortClosedError } from "@/server/services/seat-accounting";
 import {
   addEnrolment,
+  addEnrolments,
   approveEnrolment,
   transferEnrolment,
   withdrawEnrolment,
@@ -37,6 +38,7 @@ import {
   EnrolmentNotFoundError,
   ReasonRequiredError,
 } from "@/server/services/enrolment-service";
+import { listEnrolmentCandidates, type EnrolmentCandidate } from "@/server/services/enrolment-candidate-service";
 
 // ---------------------------------------------------------------------------
 // Result shape
@@ -44,6 +46,7 @@ import {
 
 export type EnrolmentActionResult =
   | { ok: true; enrolmentId: string }
+  | { ok: true; added: number }
   | { ok: true; sourceEnrolmentId: string; targetEnrolmentId: string }
   | { ok: false; message: string };
 
@@ -130,6 +133,16 @@ const addEnrolmentSchema = z
   })
   .strict();
 
+/** No upper limit on how many learners (owner decision, 2026-10-05); the service adds all or none. */
+const addEnrolmentsSchema = z
+  .object({
+    cohortId: z.string().min(1),
+    userIds: z.array(z.string().min(1)).min(1, "Choose at least one learner."),
+    target: z.enum(["ACTIVE", "PENDING_PAYMENT"]),
+    reason: reasonSchema,
+  })
+  .strict();
+
 const approveEnrolmentSchema = z
   .object({
     cohortId: z.string().min(1), // revalidation only — the service re-resolves scope from enrolmentId
@@ -156,6 +169,31 @@ const terminalEnrolmentSchema = z
   .strict();
 
 // ---------------------------------------------------------------------------
+// The learner list behind "Add enrolment"
+// ---------------------------------------------------------------------------
+
+const candidatesSchema = z.object({ cohortId: z.string().min(1), query: z.string().max(100).optional() }).strict();
+
+/**
+ * The learners who can be offered when adding an enrolment by hand, for the picker that replaced
+ * the typed learner id. Gated in the service by `enrolments.manage` on the cohort, like the add itself.
+ */
+export async function listEnrolmentCandidatesAction(
+  input: z.input<typeof candidatesSchema>,
+): Promise<{ ok: true; people: EnrolmentCandidate[]; total: number } | { ok: false; message: string }> {
+  const parsed = candidatesSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "The list could not be loaded." };
+  try {
+    return { ok: true, ...(await listEnrolmentCandidates(parsed.data)) };
+  } catch (error) {
+    if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
+      return { ok: false, message: refusalMessage(error, "Your role does not permit adding enrolments to this cohort.") };
+    }
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 
@@ -175,6 +213,23 @@ export async function addEnrolmentAction(
     });
     revalidateEnrolmentSurfaces(parsed.data.cohortId);
     return { ok: true, enrolmentId: created.id };
+  } catch (error) {
+    return toFailure(error);
+  }
+}
+
+/** Adds one or several learners with one status and one reason. All are added, or none. */
+export async function addEnrolmentsAction(
+  input: z.input<typeof addEnrolmentsSchema>,
+): Promise<EnrolmentActionResult> {
+  const parsed = addEnrolmentsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "The enrolment details were invalid." };
+  }
+  try {
+    const result = await addEnrolments(parsed.data);
+    revalidateEnrolmentSurfaces(parsed.data.cohortId);
+    return { ok: true, added: result.added };
   } catch (error) {
     return toFailure(error);
   }

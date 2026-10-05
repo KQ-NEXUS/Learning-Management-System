@@ -62,6 +62,7 @@ export const WRITE_MODAL_FILES: readonly string[] = [
   "src/app/staff/cohorts/[id]/EnrolmentActionModals.tsx",
   "src/app/staff/cohorts/[id]/SessionsTab.tsx",
   "src/app/staff/courses/[id]/lessons/[lessonId]/LessonEditorClient.tsx",
+  "src/app/staff/learner-numbers/LearnerNumberForm.tsx",
   "src/app/staff/programmes/[id]/ProgrammeDetailClient.tsx",
   "src/app/staff/roles/RoleDetailPanels.tsx",
   "src/components/catalogue/AssessmentFormFields.tsx",

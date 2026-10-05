@@ -38,6 +38,7 @@ import { cohortService, updateCohort, OfferLockedError } from "@/server/services
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { isValidTimeZone } from "@/lib/timezone";
 import { parseCohortDateTime } from "@/lib/cohort-datetime";
+import { withFlash } from "@/lib/flash-notices";
 
 export type CohortFormError = { name: string; message: string };
 export type CohortActionResult =
@@ -268,7 +269,7 @@ export async function createCohortAction(
     return toFailure(error);
   }
   revalidatePath("/staff/cohorts");
-  redirect(`/staff/cohorts/${id}`);
+  redirect(withFlash(`/staff/cohorts/${id}`, "cohort-created"));
 }
 
 const updateSchema = baseSchema.extend({

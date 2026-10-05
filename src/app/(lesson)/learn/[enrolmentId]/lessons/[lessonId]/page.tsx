@@ -74,7 +74,11 @@ export default async function LessonReadingPage({
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
-  const path = await loadLearnerPath(actor, enrolmentId);
+  // `includeCompleted` only so a COMPLETED enrolment gets its own panel below
+  // instead of the catalogue 404 (passing the final quiz completes the
+  // enrolment while the learner is still on this page). G-01 is unchanged:
+  // `assertLessonOpenable` refuses a COMPLETED path, so no content is read.
+  const path = await loadLearnerPath(actor, enrolmentId, { includeCompleted: true });
   if (!path) notFound();
 
   const openResult = assertLessonOpenable(path, lessonId);
@@ -99,6 +103,31 @@ export default async function LessonReadingPage({
             >
               Back to your course
             </Link>
+          </div>
+        </LessonFrame>
+      );
+    }
+
+    if (path.enrolment.status === "COMPLETED") {
+      return (
+        <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
+          <div className="flex flex-col items-start gap-3 border-t border-foreground py-12">
+            <p className="text-base font-semibold text-foreground">You&apos;ve completed this course</p>
+            <p className="max-w-prose text-sm text-muted-foreground">
+              Lessons are closed now that the course is complete. Your progress, results and certificate stay on
+              record.
+            </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              >
+                View your certificate
+              </Link>
+              <Link href={`/learn/${enrolmentId}/results`} className="text-sm font-semibold text-accent hover:underline">
+                View results
+              </Link>
+            </div>
           </div>
         </LessonFrame>
       );
@@ -243,6 +272,7 @@ export default async function LessonReadingPage({
         completed={openResult.lesson.completed}
         completedSource={openResult.lesson.completedSource}
         allowManualComplete={openResult.lesson.allowManualComplete}
+        lessonType={content.type}
         relockCount={relockCount}
       />
 

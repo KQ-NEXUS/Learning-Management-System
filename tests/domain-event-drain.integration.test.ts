@@ -138,6 +138,23 @@ describe("domain-event-drain-service — tracer: ticket.public_reply_added (D-02
     expect(notifications).toHaveLength(1);
   });
 
+  it("stamps the notification with the time the event happened, not the time it was drained (U-14)", async () => {
+    const harness = startDrainHarness(testDb.prisma);
+    const learner = await seedVerifiedLearner(testDb.prisma);
+    const event = await writeEvent(testDb.prisma, "ticket.public_reply_added", {
+      ticketId: "ticket-internal-u14",
+      reference: "KQT-U14-0001",
+      recipientId: learner.id,
+    });
+    const happenedAt = new Date(Date.now() - 6 * 60 * 60_000);
+    await testDb.prisma.domainEvent.update({ where: { id: event.id }, data: { occurredAt: happenedAt } });
+
+    await harness.drainService.drain({ events: 25, sends: 25 });
+
+    const [notification] = await testDb.prisma.notification.findMany({ where: { sourceEventId: event.id } });
+    expect(notification.createdAt.getTime()).toBe(happenedAt.getTime());
+  });
+
   it("resetting processedAt to null and draining again still leaves exactly one dispatch, one notification, and no second send", async () => {
     const harness = startDrainHarness(testDb.prisma);
     const learner = await seedVerifiedLearner(testDb.prisma);

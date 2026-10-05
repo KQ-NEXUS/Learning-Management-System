@@ -320,7 +320,14 @@ function toEpoch(value: Date | string): number {
  * is `blocking` only when `enabledRails` says this deployment has turned
  * that rail on, and FAILs when the matching price is null or non-positive.
  * A rail this deployment has not enabled is never blocking, however it is
- * priced — D-08 only requires a price for every ENABLED rail.
+ * priced.
+ *
+ * One price is enough to publish (owner decision 2026-10-03, audit R3-06,
+ * narrowing D-08): a null rail price means "not offered in that currency",
+ * so when another enabled rail IS priced, an unpriced rail is a WARN that
+ * says which currency learners cannot pay in, not a FAIL. A cohort with no
+ * price on any enabled rail still FAILs, and so does a rail priced at zero
+ * or below, which is bad data rather than a rail left out.
  */
 export function evaluateCohortReadiness(cohort: ReadinessCohortInput): ReadinessItem[] {
   const selfPaced = cohort.deliveryMode === "SELF_PACED";
@@ -379,27 +386,35 @@ export function evaluateCohortReadiness(cohort: ReadinessCohortInput): Readiness
 
   // --- Price (D-06/D-08) — per-rail, blocking only for an enabled rail ---
   const ngnPricePass = cohort.priceNgnMinor != null && cohort.priceNgnMinor > 0;
+  const usdPricePass = cohort.priceUsdMinor != null && cohort.priceUsdMinor > 0;
+  // "Not offered" (null) on one enabled rail is acceptable when the other enabled rail is priced.
+  const ngnNotOffered = cohort.priceNgnMinor == null && cohort.enabledRails.usd && usdPricePass;
+  const usdNotOffered = cohort.priceUsdMinor == null && cohort.enabledRails.ngn && ngnPricePass;
+
   const priceNgn: ReadinessItem = {
     id: "price-ngn",
     category: "Price",
     label: "NGN price set (Paystack)",
     blocking: cohort.enabledRails.ngn,
-    state: ngnPricePass ? "PASS" : "FAIL",
+    state: ngnPricePass ? "PASS" : ngnNotOffered ? "WARN" : "FAIL",
     detail: ngnPricePass
       ? `${formatRailAmount(cohort.priceNgnMinor as number, "NGN")} (Paystack)`
-      : "No NGN price set — this rail is unavailable to learners until an administrator adds one.",
+      : ngnNotOffered
+        ? "No NGN price set — learners will not be able to pay in NGN (Paystack). They can still pay in USD."
+        : "No NGN price set — this rail is unavailable to learners until an administrator adds one.",
   };
 
-  const usdPricePass = cohort.priceUsdMinor != null && cohort.priceUsdMinor > 0;
   const priceUsd: ReadinessItem = {
     id: "price-usd",
     category: "Price",
     label: "USD price set (Stripe)",
     blocking: cohort.enabledRails.usd,
-    state: usdPricePass ? "PASS" : "FAIL",
+    state: usdPricePass ? "PASS" : usdNotOffered ? "WARN" : "FAIL",
     detail: usdPricePass
       ? `${formatRailAmount(cohort.priceUsdMinor as number, "USD")} (Stripe)`
-      : "No USD price set — this rail is unavailable to learners until an administrator adds one.",
+      : usdNotOffered
+        ? "No USD price set — learners will not be able to pay in USD (Stripe). They can still pay in NGN."
+        : "No USD price set — this rail is unavailable to learners until an administrator adds one.",
   };
 
   // --- Capacity (D-28) --------------------------------------------------
