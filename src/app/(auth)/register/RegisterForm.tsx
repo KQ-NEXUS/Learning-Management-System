@@ -3,16 +3,20 @@
 import { useActionState } from "react";
 import { AuthFooterLine, AuthTitle } from "../AuthPanel";
 import { CheckEmail } from "../CheckEmail";
+import { useFocusOnError } from "@/lib/use-focus-on-error";
 import { registerAction, type RegisterState } from "./actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/identity";
 import { PasswordInput } from "@/components/primitives/PasswordInput";
 
 const INITIAL: RegisterState = { error: null, sent: false };
 
-const CHECKBOX = "size-4 shrink-0 rounded-[4px] border-[1.5px] border-input-border";
+const CHECKBOX = "size-6 shrink-0 rounded-[4px] border-[1.5px] border-input-border";
+const CHECK_LABEL = "flex min-h-11 items-start gap-3 py-2 text-sm text-foreground";
+const CHECK_LINK = "inline-block py-2 text-accent underline underline-offset-2";
 
 export function RegisterForm() {
   const [state, action, pending] = useActionState(registerAction, INITIAL);
+  const alertRef = useFocusOnError<HTMLParagraphElement>(state, state.error !== null);
 
   if (state.sent) {
     return (
@@ -30,6 +34,8 @@ export function RegisterForm() {
       <form action={action} className="flex w-full max-w-sm flex-col gap-4">
         {state.error && (
           <p
+            ref={alertRef}
+            tabIndex={-1}
             role="alert"
             className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
           >
@@ -76,22 +82,22 @@ export function RegisterForm() {
           <span className="text-xs text-muted-foreground">At least 10 characters.</span>
         </label>
 
-        <label className="flex items-center gap-2 text-sm text-foreground">
+        <label className={CHECK_LABEL}>
           <input name="acceptTerms" type="checkbox" required className={CHECKBOX} />
-          <span>
+          <span className="min-w-0">
             I agree to the{" "}
-            <a href="/policies/terms" target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">
+            <a href="/policies/terms" target="_blank" rel="noopener noreferrer" className={CHECK_LINK}>
               terms of service
             </a>
             .
           </span>
         </label>
 
-        <label className="flex items-center gap-2 text-sm text-foreground">
+        <label className={CHECK_LABEL}>
           <input name="acceptPrivacy" type="checkbox" required className={CHECKBOX} />
-          <span>
+          <span className="min-w-0">
             I agree to the{" "}
-            <a href="/policies/privacy" target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">
+            <a href="/policies/privacy" target="_blank" rel="noopener noreferrer" className={CHECK_LINK}>
               privacy notice
             </a>
             .

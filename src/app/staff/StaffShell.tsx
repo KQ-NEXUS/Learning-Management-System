@@ -74,10 +74,13 @@ const NAV_ICONS: Record<string, LucideIcon> = {
 const COLLAPSED_GROUPS_KEY = "kq.staffNav.collapsedGroups";
 const COLLAPSED_GROUPS_EVENT = "kq:staff-nav-groups";
 
-/** The stored value ("" when nothing is folded), or `null` when storage cannot be read at all. */
+/** Stands for "the user has never chosen". Not a valid group label, so it cannot clash with a stored value. */
+const UNSET = "*";
+
+/** The stored value ("" when the user opened everything), `UNSET` when nothing was ever stored, or `null` when storage cannot be read at all. */
 function readCollapsedGroups(): string | null {
   try {
-    return window.localStorage.getItem(COLLAPSED_GROUPS_KEY) ?? "";
+    return window.localStorage.getItem(COLLAPSED_GROUPS_KEY) ?? UNSET;
   } catch {
     return null;
   }
@@ -107,15 +110,20 @@ function subscribeCollapsedGroups(onChange: () => void): () => void {
   };
 }
 
-/** The labels of the folded groups. Falls back to the last value set in this page when storage is blocked. */
-function useCollapsedGroups(): Set<string> {
+/**
+ * The folded groups. Before the user has ever folded or opened a group, every group
+ * is folded except the one holding the current page (`unset`), so the whole menu fits
+ * on a laptop screen. The server and first client render agree on "everything open".
+ * Falls back to the last value set in this page when storage is blocked.
+ */
+function useCollapsedGroups(): { labels: Set<string>; unset: boolean } {
   const raw = useSyncExternalStore(
     subscribeCollapsedGroups,
     // Storage is the truth when it can be read; the in-page value only stands in when it cannot.
-    () => readCollapsedGroups() ?? collapsedGroupsFallback ?? "",
+    () => readCollapsedGroups() ?? collapsedGroupsFallback ?? UNSET,
     () => "",
   );
-  return new Set(raw ? raw.split("|") : []);
+  return { labels: new Set(raw && raw !== UNSET ? raw.split("|") : []), unset: raw === UNSET };
 }
 
 /** Groups consecutive items that share a group label, preserving nav order. */
@@ -270,11 +278,14 @@ export function StaffShell({ nav, identity, signOut, bell, banner, licenceRestri
   const display = deriveIdentityDisplay(identity);
 
   const groups = groupNav(nav);
-  const collapsedGroups = useCollapsedGroups();
+  const { labels: collapsedGroups, unset: groupsUnset } = useCollapsedGroups();
   const navGroupId = useId();
 
   function toggleGroup(label: string) {
-    const next = new Set(collapsedGroups);
+    // The default is "all folded", so the first choice starts from that.
+    const next = new Set(
+      groupsUnset ? groups.flatMap((group) => (group.label ? [group.label] : [])) : collapsedGroups,
+    );
     if (next.has(label)) next.delete(label);
     else next.add(label);
     writeCollapsedGroups([...next]);
@@ -305,7 +316,7 @@ export function StaffShell({ nav, identity, signOut, bell, banner, licenceRestri
         inert={!desktop && !mobileOpen}
         aria-hidden={!desktop && !mobileOpen ? true : undefined}
         aria-label="Workspace navigation"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-hidden [@media(max-height:691px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:[scrollbar-width:thin] lg:[&::-webkit-scrollbar]:block lg:[&::-webkit-scrollbar]:w-1.5 [@media(max-height:691px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -326,7 +337,8 @@ export function StaffShell({ nav, identity, signOut, bell, banner, licenceRestri
           {groups.map((group, groupIndex) => {
             // The group holding the current page is always open, so you never lose your place.
             const holdsCurrentPage = group.items.some((item) => isActiveNavItem(pathname, item.href));
-            const collapsed = group.label !== null && collapsedGroups.has(group.label) && !holdsCurrentPage;
+            const collapsed =
+              group.label !== null && (groupsUnset || collapsedGroups.has(group.label)) && !holdsCurrentPage;
             const itemsId = `${navGroupId}-group-${groupIndex}`;
             return (
             <div key={group.label ?? "top"} className="flex flex-col gap-1">

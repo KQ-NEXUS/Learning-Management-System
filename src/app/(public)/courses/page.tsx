@@ -41,7 +41,18 @@ export default async function PublicCoursesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <LearnerPageHeader size="hero" title="Courses" subtitle="Professional training you can enrol on." />
+      <LearnerPageHeader
+        size="hero"
+        title="Courses"
+        subtitle={
+          <>
+            Professional training an employer can verify.{" "}
+            <Link href="/verify-certificate" className="font-semibold text-white underline underline-offset-4">
+              Verify a certificate
+            </Link>
+          </>
+        }
+      />
       <CheckoutNotice notice={notice} />
       {courses.length === 0 ? (
         <p className="border-t border-foreground py-12 text-sm text-muted-foreground">
@@ -61,7 +72,7 @@ export default async function PublicCoursesPage({
               <li key={course.slug} className="border-b border-border">
                 <Link
                   href={`/courses/${course.slug}`}
-                  className="grid gap-3 py-8 text-foreground hover:bg-surface-2/60 md:grid-cols-[minmax(0,1fr)_220px_150px_28px] md:items-center md:gap-8"
+                  className="grid gap-3 py-8 text-foreground hover:bg-surface-2/60 md:grid-cols-[minmax(0,1fr)_200px_140px_auto] md:items-center md:gap-8"
                 >
                   <div className="min-w-0">
                     <div className="text-[24px] leading-[1.2] font-semibold tracking-[-0.025em] break-words">
@@ -82,9 +93,14 @@ export default async function PublicCoursesPage({
                     </div>
                   </div>
                   <div className="font-mono text-[16px] font-medium tabular-nums md:text-right">
-                    {price ?? <span className="text-muted-foreground">—</span>}
+                    {price ?? (
+                      <span className="font-sans text-[13px] font-normal text-muted-foreground">Price shown with dates</span>
+                    )}
                   </div>
-                  <ArrowRight aria-hidden className="hidden size-5 text-accent md:block" />
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-accent">
+                    View course
+                    <ArrowRight aria-hidden className="size-5" />
+                  </span>
                 </Link>
               </li>
             );

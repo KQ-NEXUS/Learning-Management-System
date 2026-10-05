@@ -4,6 +4,7 @@ import { getCurrentActor } from "@/server/auth/current-actor";
 import { loadLearnerPath } from "@/server/services/learner-access";
 import { getOwnResults } from "@/server/services/learner-results-service";
 import { ResultsList } from "@/components/learner/ResultsList";
+import type { Metadata } from "next";
 
 /**
  * `/learn/[enrolmentId]/results` (ASM-07, plan 10-15, UI-SPEC §7.5) — the
@@ -19,6 +20,8 @@ import { ResultsList } from "@/components/learner/ResultsList";
  */
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Results" };
 
 export default async function ResultsPage({
   params,

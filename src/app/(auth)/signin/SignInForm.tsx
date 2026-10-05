@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { useFocusOnError } from "@/lib/use-focus-on-error";
 import { PasswordInput } from "@/components/primitives/PasswordInput";
 import { AuthFooterLine } from "../AuthPanel";
 import { signInAction, type SignInState } from "./actions";
@@ -10,11 +11,14 @@ const INITIAL: SignInState = { error: null };
 
 export function SignInForm() {
   const [state, action, pending] = useActionState(signInAction, INITIAL);
+  const alertRef = useFocusOnError<HTMLParagraphElement>(state, state.error !== null);
 
   return (
     <form action={action} className="flex w-full flex-col gap-5">
       {state.error && (
         <p
+          ref={alertRef}
+          tabIndex={-1}
           role="alert"
           className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
         >
@@ -25,9 +29,12 @@ export function SignInForm() {
       <label className="flex flex-col gap-2 text-sm">
         <span className="font-semibold text-foreground">Email address</span>
         <input
+          // Remounted on each refusal so it shows what was typed, not the reset blank.
+          key={`email-${state.attempt ?? 0}`}
           name="email"
           type="email"
           autoComplete="username"
+          defaultValue={state.email ?? ""}
           required
           className="h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground"
         />

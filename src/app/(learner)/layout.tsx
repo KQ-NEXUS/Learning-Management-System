@@ -3,7 +3,8 @@ import { getCurrentActor } from "@/server/auth/current-actor";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { profileService } from "@/server/services/profile-service";
 import { notificationService } from "@/server/services/notification-service";
-import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
+import { LearnerShell } from "@/components/shell/LearnerShell";
+import { LEARNER_NAV } from "@/components/shell/learner-nav";
 import { LearnerAccountSlot } from "@/components/shell/LearnerAccountSlot";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { deriveAvatarDisplay } from "@/lib/avatar-display";
@@ -25,14 +26,6 @@ import { deriveAvatarDisplay } from "@/lib/avatar-display";
  * learner out mid-session — the avatar degrades to a neutral state instead,
  * matching `account/layout.tsx`'s identical handling.
  */
-
-const NAV: LearnerNavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "My learning", href: "/learn" },
-  { label: "Support", href: "/support" },
-  { label: "Catalogue", href: "/courses" },
-  { label: "Account", href: "/account" },
-];
 
 export default async function LearnerDeliveryLayout({
   children,
@@ -62,7 +55,7 @@ export default async function LearnerDeliveryLayout({
   );
 
   return (
-    <LearnerShell nav={NAV} homeHref="/dashboard" rightSlot={rightSlot}>
+    <LearnerShell nav={LEARNER_NAV} homeHref="/dashboard" rightSlot={rightSlot}>
       {children}
     </LearnerShell>
   );

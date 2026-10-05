@@ -45,37 +45,36 @@ afterEach(() => {
 });
 
 describe("staff sidebar — collapsible groups", () => {
-  it("starts with every group open, each heading a button that says so", () => {
+  it("before any choice, folds every group except the one holding the current page", () => {
     render(<Shell />);
 
-    for (const group of ["Delivery", "Catalogue", "Administration"]) {
-      expect(heading(group).getAttribute("aria-expanded")).toBe("true");
-    }
-    for (const name of ["Overview", "Cohorts", "Enrolments", "Courses", "Programmes", "Users"]) {
-      expect(link(name)).toBeTruthy();
-    }
+    expect(heading("Catalogue").getAttribute("aria-expanded")).toBe("true");
+    expect(heading("Delivery").getAttribute("aria-expanded")).toBe("false");
+    expect(heading("Administration").getAttribute("aria-expanded")).toBe("false");
+    for (const name of ["Overview", "Courses", "Programmes"]) expect(link(name)).toBeTruthy();
+    for (const name of ["Cohorts", "Enrolments", "Users"]) expect(link(name)).toBeNull();
   });
 
-  it("folds a group to its heading and opens it again", () => {
+  it("opens a folded group and folds it again", () => {
     render(<Shell />);
-
-    fireEvent.click(heading("Delivery"));
-    expect(heading("Delivery").getAttribute("aria-expanded")).toBe("false");
-    expect(link("Cohorts")).toBeNull();
-    expect(link("Enrolments")).toBeNull();
-    // Other groups, and the ungrouped Overview link, are untouched.
-    expect(link("Overview")).toBeTruthy();
-    expect(link("Users")).toBeTruthy();
 
     fireEvent.click(heading("Delivery"));
     expect(heading("Delivery").getAttribute("aria-expanded")).toBe("true");
     expect(link("Cohorts")).toBeTruthy();
+    expect(link("Enrolments")).toBeTruthy();
+    // Other groups, and the ungrouped Overview link, are untouched.
+    expect(link("Overview")).toBeTruthy();
+    expect(link("Users")).toBeNull();
+
+    fireEvent.click(heading("Delivery"));
+    expect(heading("Delivery").getAttribute("aria-expanded")).toBe("false");
+    expect(link("Cohorts")).toBeNull();
   });
 
   it("the heading names the links it controls", () => {
     render(<Shell />);
     const controlled = document.getElementById(heading("Delivery").getAttribute("aria-controls") as string);
-    expect(within(controlled as HTMLElement).getAllByRole("link").map((a) => a.textContent)).toEqual(["Cohorts", "Enrolments"]);
+    expect(within(controlled as HTMLElement).getAllByRole("link", { hidden: true }).map((a) => a.textContent)).toEqual(["Cohorts", "Enrolments"]);
   });
 
   it("keeps the group holding the current page open, and will not fold it", () => {
@@ -90,17 +89,25 @@ describe("staff sidebar — collapsible groups", () => {
     expect(window.localStorage.getItem("kq.staffNav.collapsedGroups")).toBeNull();
   });
 
-  it("remembers folded groups for the next visit", () => {
+  it("remembers the user's choice for the next visit, and it wins over the default", () => {
     const first = render(<Shell />);
     fireEvent.click(heading("Delivery"));
-    fireEvent.click(heading("Administration"));
-    expect(window.localStorage.getItem("kq.staffNav.collapsedGroups")).toBe("Delivery|Administration");
+    expect(window.localStorage.getItem("kq.staffNav.collapsedGroups")).toBe("Catalogue|Administration");
     first.unmount();
 
     render(<Shell />);
-    expect(heading("Delivery").getAttribute("aria-expanded")).toBe("false");
+    expect(heading("Delivery").getAttribute("aria-expanded")).toBe("true");
     expect(heading("Administration").getAttribute("aria-expanded")).toBe("false");
-    expect(link("Cohorts")).toBeNull();
+    expect(link("Cohorts")).toBeTruthy();
+  });
+
+  it("opening every group is a saved choice too, not a return to the default", () => {
+    window.localStorage.setItem("kq.staffNav.collapsedGroups", "");
+    render(<Shell />);
+
+    for (const group of ["Delivery", "Catalogue", "Administration"]) {
+      expect(heading(group).getAttribute("aria-expanded")).toBe("true");
+    }
   });
 
   it("a folded group opens by itself when you are on one of its pages", () => {

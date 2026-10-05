@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { listOwnCohortSessions } from "@/server/services/learner-session-service";
 import { SessionCard } from "@/components/learner/SessionCard";
+import type { Metadata } from "next";
 
 /**
  * `/learn/[enrolmentId]/sessions` (LRN-06, 09-10 Task 2, UI-SPEC 7.4) — the
@@ -20,6 +21,8 @@ import { SessionCard } from "@/components/learner/SessionCard";
 // `force-dynamic`-equivalent (no explicit export elsewhere in `(learner)`,
 // but every sibling page here re-resolves fresh data on every request).
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Sessions" };
 
 export default async function SessionsPage({
   params,

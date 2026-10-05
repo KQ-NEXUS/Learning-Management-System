@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { profileService } from "@/server/services/profile-service";
-import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
+import { LearnerShell } from "@/components/shell/LearnerShell";
+import { LEARNER_NAV } from "@/components/shell/learner-nav";
 import { LearnerAccountSlot } from "@/components/shell/LearnerAccountSlot";
 
 /**
@@ -12,12 +13,6 @@ import { LearnerAccountSlot } from "@/components/shell/LearnerAccountSlot";
  * summary" state. Convenience only — each Server Action's own actor
  * resolution is the security boundary, not this layout guard.
  */
-
-const NAV: LearnerNavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Courses", href: "/courses" },
-  { label: "Account", href: "/account" },
-];
 
 /** Copied verbatim from `account/layout.tsx` so the avatar chip renders
  * identically across both shells (UI-SPEC 8.18 chrome-persistence rule). */
@@ -54,7 +49,7 @@ export default async function CheckoutLayout({
   const rightSlot = <LearnerAccountSlot display={display} signOut={signOutAction} />;
 
   return (
-    <LearnerShell nav={NAV} homeHref="/dashboard" rightSlot={rightSlot}>
+    <LearnerShell nav={LEARNER_NAV} homeHref="/dashboard" rightSlot={rightSlot}>
       {children}
     </LearnerShell>
   );

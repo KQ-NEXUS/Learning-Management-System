@@ -20,6 +20,7 @@ const NAV: LearnerNavItem[] = [
 
 const GHOST =
   "inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover";
+const MENU_LINK = "flex min-h-11 items-center rounded-md px-2 text-sm";
 const PRIMARY =
   "inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
 
@@ -31,18 +32,35 @@ export default async function PublicLayout({ children }: { children: React.React
       {actor.isStaff ? "Open workspace" : "My dashboard"}
     </Link>
   ) : (
-    <>
+    // Below `sm` the two buttons would collide with the brand, so they move into the menu.
+    <div className="flex items-center gap-3 max-sm:hidden">
       <Link href="/signin" className={GHOST}>
         Sign in
       </Link>
       <Link href="/register" className={PRIMARY}>
         Register
       </Link>
+    </div>
+  );
+
+  const mobileMenuExtra = actor ? null : (
+    <>
+      <Link href="/signin" className={`${MENU_LINK} font-medium text-sidebar-fg`}>
+        Sign in
+      </Link>
+      <Link href="/register" className={`${MENU_LINK} font-semibold text-white`}>
+        Create an account
+      </Link>
     </>
   );
 
   return (
-    <LearnerShell nav={NAV} rightSlot={rightSlot} homeHref={actor ? landingPathFor(actor) : "/courses"}>
+    <LearnerShell
+      nav={NAV}
+      rightSlot={rightSlot}
+      mobileMenuExtra={mobileMenuExtra}
+      homeHref={actor ? landingPathFor(actor) : "/courses"}
+    >
       {children}
     </LearnerShell>
   );

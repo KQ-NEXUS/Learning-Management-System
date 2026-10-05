@@ -17,6 +17,7 @@ import { DeferredSlot } from "@/components/learner/DeferredSlot";
 import { CertificateSlot } from "@/components/learner/CertificateSlot";
 import { utcToWallParts } from "@/lib/timezone";
 import { TicketStatusPill, TicketTime } from "@/components/support/ticket-labels";
+import type { Metadata } from "next";
 
 /**
  * `/dashboard` (LRN-01, 09-08 Task 3) — the entry point every other learner
@@ -291,7 +292,16 @@ function HeroSection({ card }: { card: LearnerDashboardCard }) {
           {progress.structure !== "unpinned" && progress.attendance.kind === "computed" && (
             <RailItem
               label="Attendance"
-              value={`${progress.attendance.earnedPct}% of ${progress.attendance.requiredPct}% required`}
+              value={
+                progress.attendance.earnedPct === 0
+                  ? "No sessions attended yet"
+                  : `${progress.attendance.earnedPct}% attended`
+              }
+              sub={
+                progress.attendance.earnedPct === 0
+                  ? `You need ${progress.attendance.requiredPct}% to qualify`
+                  : `${progress.attendance.requiredPct}% needed to qualify`
+              }
               last
             />
           )}
@@ -438,6 +448,8 @@ function SupportTicketsSection({ tickets }: { tickets: DashboardTicketSummary[] 
     </Section>
   );
 }
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const actor = await getCurrentActor();

@@ -7,17 +7,23 @@ import { SESSION_COOKIE, SESSION_TTL_DAYS } from "@/server/auth/lockout";
 import { clientIpFrom } from "@/server/auth/sign-in-throttle";
 import { checkoutReturnPathFor, CHECKOUT_INTENT_COOKIE } from "@/server/auth/landing";
 
-export type SignInState = { error: string | null };
+export type SignInState = {
+  error: string | null;
+  /** What was typed, so a failed attempt does not blank the field. Never the password. */
+  email?: string;
+  /** Counts refusals; it remounts the email field so React's form reset cannot blank it. */
+  attempt?: number;
+};
 
 export async function signInAction(
-  _prev: SignInState,
+  prev: SignInState,
   formData: FormData,
 ): Promise<SignInState> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
 
   if (!email || !password) {
-    return { error: "Enter your email address and password." };
+    return { error: "Enter your email address and password.", email, attempt: (prev.attempt ?? 0) + 1 };
   }
 
   // F-14b — throttled per device, from a trusted client-IP header only.
@@ -25,6 +31,8 @@ export async function signInAction(
 
   if (!result.ok) {
     return {
+      email,
+      attempt: (prev.attempt ?? 0) + 1,
       error:
         result.reason === "THROTTLED"
           ? "Too many sign-in attempts from this device. Wait 15 minutes, or reset your password."
