@@ -163,7 +163,8 @@ function EnrolmentTrend({ weekly }: { weekly: NonNullable<StaffOverview["weekly"
   const y = (v: number) => 176 - (v / max) * 160;
   const pts = weekly.map((w, i) => `${x(i).toFixed(1)},${y(w.count).toFixed(1)}`).join(" ");
   const last = weekly[weekly.length - 1];
-  const label = (d: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(d);
+  // SVG text cannot hold a <time> element, so the week label is formatted in Lagos time directly (D-17).
+  const label = (d: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Lagos" }).format(d);
   const total = weekly.reduce((n, w) => n + w.count, 0);
   return (
     <section aria-labelledby="enrolment-trend">
@@ -273,7 +274,7 @@ export default async function StaffOverviewPage() {
   const [overview, canCreateCohort] = await Promise.all([loadStaffOverview(), can("cohorts.manage", {})]);
 
   return (
-    <div className="flex flex-col">
+    <div data-primary-content className="flex flex-col">
       <PageHeader
         title="Overview"
         subtitle={dateFormat.format(overview.now)}

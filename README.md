@@ -52,8 +52,14 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Deploy and operate
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Production runs on Netlify with a Neon Postgres database and a private Cloudflare R2 bucket. The Docker Compose stack is for local testing only. The operating runbooks live in [`docs/runbooks`](docs/runbooks):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Deployment](docs/runbooks/deployment.md): build settings, environment variables by deploy context, migrations first, after-deploy checks.
+- [Rollback](docs/runbooks/rollback.md): publishing the previous deploy and what forward-only migrations mean for it.
+- [Restore](docs/runbooks/restore.md): Neon point-in-time branch, dump restored into Docker, and files in object storage.
+- [Job recovery](docs/runbooks/job-recovery.md): every scheduled and background function, and how to re-run it safely.
+- [Incident and secrets](docs/runbooks/incident-and-secrets.md): who to call, reading the Operations status page and host logs, rotating every secret.
+
+The scheduled functions are listed in [`docs/deployment/netlify-scheduled-functions.md`](docs/deployment/netlify-scheduled-functions.md).

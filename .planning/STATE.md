@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-current_phase: 14
-current_phase_name: Software Licence & Deployment Control
-status: verifying
-stopped_at: Completed 14-21-PLAN.md
-last_updated: "2026-10-02T03:21:17.354Z"
-last_activity: 2026-10-01
-last_activity_desc: Phase 14 execution started
-state_head: ab749951d2867ad3ad5abdb4562fab8a41506a06
+current_phase: 15
+current_phase_name: Launch Readiness — NFR Verification & Operational Cutover
+status: executing
+stopped_at: Completed 15-28-PLAN.md
+last_updated: "2026-10-10T11:49:44.475Z"
+last_activity: 2026-10-06
+last_activity_desc: Phase 15 execution started
+state_head: 95990608db5bec5c8b2e43a12015c9cc7898c3aa
 progress:
   total_phases: 16
   completed_phases: 9
-  total_plans: 226
-  completed_plans: 226
+  total_plans: 259
+  completed_plans: 256
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 14 — Software Licence & Deployment Control
+**Current focus:** Phase 15 — Launch Readiness — NFR Verification & Operational Cutover
 
 ## Current Position
 
-Phase: 14 (Software Licence & Deployment Control) — EXECUTING
-Plan: 21 of 21
-Status: Phase complete — ready for verification
-Last activity: 2026-10-01 — Phase 14 execution started
+Phase: 15 (Launch Readiness — NFR Verification & Operational Cutover) — EXECUTING
+Plan: 22 of 33
+Status: Ready to execute
+Last activity: 2026-10-06 — Phase 15 execution started
 
 Progress: [██████████] 99%
 
@@ -136,6 +136,33 @@ Progress: [██████████] 99%
 | Phase 14 P19 | 30min | 3 tasks | 31 files |
 | Phase 14 P20 | 35min | 3 tasks | 14 files |
 | Phase 14 P21 | 95min | 3 tasks | 3 files |
+| Phase 15 P01 | 3 min | 3 tasks | 1 files |
+| Phase 15 P07 | 36 min | 2 tasks | 7 files |
+| Phase 15 P02 | 1h 36m | 3 tasks | 8 files |
+| Phase 15 P03 | 30 min | 3 tasks | 16 files |
+| Phase 15 P06 | 12 min | 2 tasks | 6 files |
+| Phase 15 P08 | 13 min | 2 tasks | 8 files |
+| Phase 15 P09 | 76 min | 3 tasks | 12 files |
+| Phase 15 P04 | 86 min | 3 tasks | 6 files |
+| Phase 15 P05 | 35min | 2 tasks | 15 files |
+| Phase 15 P11 | 50min | 3 tasks | 11 files |
+| Phase 15 P12 | 95min | 3 tasks | 8 files |
+| Phase 15 P15 | 60min | 3 tasks | 12 files |
+| Phase 15 P10 | 25min | 2 tasks | 12 files |
+| Phase 15 P13 | 90min | 3 tasks | 12 files |
+| Phase 15 P16 | 100 min | 3 tasks | 15 files |
+| Phase 15 P17 | 190min | 3 tasks | 12 files |
+| Phase 15 P32 | ~25min | 2 tasks | 14 files |
+| Phase 15 P21 | about 2 h | 2 tasks | 10 files |
+| Phase 15 P33 | resumed | 3 tasks | 13 files |
+| Phase 15 P18 | not timed | 2 tasks | 17 files |
+| Phase 15 P22 | 55 min | 3 tasks | 16 files |
+| Phase 15 P24 | resumed session | 2 tasks | 15 files |
+| Phase 15 P19 | 3h | 3 tasks | 15 files |
+| Phase 15 P20 | 2h20m | 3 tasks | 9 files |
+| Phase 15 P26 | 75min | 3 tasks | 11 files |
+| Phase 15 P27 | 35min | 3 tasks | 7 files |
+| Phase 15 P28 | about 9h wall (two executors, long waits on 13-minute load runs and 30-minute sweeps) | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -304,6 +331,35 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 14]: [Phase 14 P21]: No production code changed; no end-to-end test exposed a defect in plans 14-01 to 14-20
 - [Phase 14]: [Phase 14 P21]: No-deletion scan exempts a delete call on a same-file new Map or Set receiver (licence-service.ts enforcementAudited.delete is the in-memory coalescing map); prisma delete, deleteMany, DELETE FROM and TRUNCATE still count
 - [Phase 14]: [Phase 14 P21]: OQ3 proof uses grants equal to the full PERMISSIONS spread and demonstrates licence.activate recovers a restricted deployment; PRD 18.4 deviation stays documented in 14-DECISIONS.md
+- [Phase 15]: 15-01: NFR-09 owner chose option-a, build narrow WebVTT caption tracks (plans 15-23/15-24 execute, no waiver)
+- [Phase 15]: 15-01: privacy tool owner chose option-a, new Global-only permission privacy.manage; conservative retention keep-list; hard deletion stays blocked
+- [Phase 15]: 15-07: integrity checks treat PAID, PARTIALLY_REFUNDED and REFUNDED as paid, and ACTIVE or COMPLETED as live enrolments; seed certificates now carry a completion record
+- [Phase 15]: 15-07: every Phase 15 database script runs assertSafeDatabaseUrl (or assert-local-db.ts) before importing Prisma; staging needs STAGING_DATABASE_HOSTS plus ALLOW_STAGING_DATABASE=1
+- [Phase 15]: 15-02: next and eslint-config-next exact-pinned at 16.3.8; prod audit gate (npm audit --omit=dev --audit-level=high) green; sharp 0.35.5 and source-map-js 1.2.2 fixed in range, nothing waived
+- [Phase 15]: 15-02: CI pins actions/checkout v7.0.1 and actions/setup-node v7.0.0 by SHA; static job runs next typegen before tsc; Dependabot ignores every exact pin (guarded by tests/ci-config.test.ts)
+- [Phase 15]: 15-03: a limiter failure falls back to each entry point's existing failure state (neutral sent / generic refusal / not-created), and an audit-write failure never lifts a refusal
+- [Phase 15]: 15-06: /api/health returns a fixed ok/degraded body with no-store and no route segment config; onRequestError logs route template, route type, method, error name and digest only
+- [Phase 15]: [Phase 15/15-08] Client mutation catch blocks call unstable_rethrow(error) first (ArrangeClient, ProgrammeArrangeClient, LessonEditorClient, ModuleComposer); handleRestore uses an in-client ref guard because ArrangeBoard's Restore button is a shared component outside this plan
+- [Phase 15]: 15-09: staff support queue filters, orders, counts (groupBy + count) and pages in SQL; buildQueueView kept as the differential-test oracle; Prisma contains search escapes \, % and _
+- [Phase 15]: 15-09: getCurrentActor and loadGrantsForUser wrapped with React cache() (request-scoped only; no module-level or unstable_cache caching)
+- [Phase 15]: 15-09: listPaymentsForStaff pages 50 (max 100) newest-first then id with a total from the same scoped where; PaymentsTable client filters now cover the current page only (deferred)
+- [Phase 15]: 15-04: auth audit writes (sign-in/out) are best-effort, logged by error name only, never change the sign-in result
+- [Phase 15]: 15-04: auth.sign_out is audited only when the call actually revoked a session
+- [Phase 15]: 15-05: Lagos formatter uses a fixed month table (ICU en-GB prints 'Sept' on Node 24) and numeric formatToParts with a literal ' WAT'; central functions return '—' for invalid input
+- [Phase 15]: 15-05: formatTimestamp is now minutes precision; seconds only via formatTimestampWithSeconds / LagosTime dateTimeSeconds (audit)
+- [Phase 15]: 15-11: restore rehearsal RTO = integrity pass minus start; target is always a fresh container on its own port, licence_test and the source refused on top of the host guard
+- [Phase 15]: 15-11: poisoned-event replay documented as an owner-approved single-row SQL reset guarded to poisoned rows only, recorded in the incident record
+- [Phase 15]: 15-12: applyVerdict wraps the open CompletionRecord insert in a SAVEPOINT so a P2002 from CompletionRecord_open_key means 'already completed' without aborting the caller's transaction
+- [Phase 15]: 15-12: Grade_submissionId_key and CompletionRecord_open_key are partial unique indexes kept only in migration 20261006120000 (Prisma cannot express them); never db push, strip any generated DROP INDEX
+- [Phase 15]: 15-16: privacy.manage (Global only, licence write) gates learner anonymisation; lost race is AnonymiseConflictError, all other refusals one generic error
+- [Phase 15]: 15-16: Phase 13 no-delete and 37-permission invariants updated with one reviewed exception for privacy-anonymise-service (notification, emailPreference)
+- [Phase 15]: 15-22: privacy-read-service carries a fifth reviewed licence continuity override (LIC-08) so the lookup and record pages stay reachable in restricted mode — privacy.manage is a licence write because it also guards anonymisation; without the override both reads would refuse in restricted mode and the continuity export could not be reached. Pinned in registry CONTINUITY_TAG_SNAPSHOT and tests/licence-enforcement-boundary.test.ts.
+- [Phase 15]: 15-24: NFR-09 missing-captions readiness item is a non-blocking warning (option-a); READY counts as clean; caption removal shares UploadPanel's single confirm dialog
+- [Phase 15]: 15-19: the accessibility sweep enables axe's landmark rules beside the five WCAG tags, runs against its own throwaway database, and the manifest has one entry per page with no exclusions — Landmark rules carry no WCAG tag; the operations All clear state needs a controllable database; token pages are swept in their invalid-link state
+- [Phase 15]: 15-20: scroll check rejects hidden overflow; tab strips (record sections, support queue, list filters) are allow-listed as kind tabs; ResourceTable search box shrinks and table box is a labelled focusable region
+- [Phase 15]: 15-26: restoring a record that is not archived, publishing an archived record, cancelling a cancelled session and writing to a closed ticket are refused on the server (found by the record-state matrix); grant end instant is inclusive (isGrantActive: ended only when endsAt < now)
+- [Phase 15]: 15-27: attendance exceptions CSV route denies with an empty 404 and private, no-store (ledger P-07); export object keys stay exports/<jobId>/<version>.csv (cuid job id, not UUID v4) pending owner decision
+- [Phase 15]: 15-28: local rehearsal runs use Prisma connection_limit=25 and next start --keepAliveTimeout 70000; default pool of 9 timed out at 160 users; staging pool tuning stays P-10 in plan 15-30. Local numbers are relative, not the signed NFR-02.
 
 ### Pending Todos
 
@@ -359,6 +415,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T03:21:06.505Z
-Stopped at: Completed 14-21-PLAN.md
+Last session: 2026-10-10T11:49:40.876Z
+Stopped at: Completed 15-28-PLAN.md
 Resume file: None

@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/primitives", () => ({ ResourceTable: () => null, StatusPill: () => null }));
 
-import { initialPaymentStatus } from "@/app/staff/payments/PaymentsTable";
+import { initialPaymentStatus } from "@/app/staff/payments/payment-status";
 
 describe("initialPaymentStatus", () => {
   it("accepts each status the list has a tab for", () => {

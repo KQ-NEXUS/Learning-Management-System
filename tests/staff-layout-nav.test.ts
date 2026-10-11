@@ -186,6 +186,23 @@ describe("staff layout navigation", () => {
     expect(hrefs).not.toContain("/staff/audit");
   });
 
+  it("shows Operations status under Operations, after Support, to staff holding audit.view (15-13)", async () => {
+    grantAllExcept();
+    const nav = await visibleNav();
+
+    const supportIndex = nav.findIndex((item) => item.href === "/staff/support");
+    const operationsIndex = nav.findIndex((item) => item.href === "/staff/operations");
+    expect(nav[operationsIndex]).toMatchObject({ label: "Operations status", group: "Operations" });
+    expect(operationsIndex).toBeGreaterThan(supportIndex);
+  });
+
+  it("hides Operations status from someone without audit.view (15-13)", async () => {
+    grantAllExcept("audit.view");
+    const hrefs = (await visibleNav()).map((item) => item.href);
+
+    expect(hrefs).not.toContain("/staff/operations");
+  });
+
   it("shows Licence under Administration, after Email log, to staff holding licence.view (14-10)", async () => {
     grantAllExcept();
     const nav = await visibleNav();

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { DELIVERY_MODE_LABEL, formatPrice } from "@/app/(public)/CohortCards";
+import { LagosTime } from "@/components/time/LagosTime";
 import { listPublicProgrammes, type PublicCohort } from "@/server/services/public-catalogue-service";
 import { humanizeCode } from "@/lib/humanize";
 
@@ -9,13 +10,6 @@ import { humanizeCode } from "@/lib/humanize";
 // DATABASE_URL (04-15 planner fallback; 04-10 `docker build` requirement).
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Programmes" };
-
-/** "30 Nov 2026" — pinned locale so server and browser agree. */
-function shortDate(value: Date): string {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
-    new Date(value),
-  );
-}
 
 function headlinePrice(cohort: PublicCohort | null): string | null {
   if (!cohort) return null;
@@ -62,7 +56,9 @@ export default async function PublicProgrammesPage() {
                       {programme.nextCohort
                         ? programme.nextCohort.hasStarted
                           ? "Enrolling now"
-                          : `Next start ${shortDate(programme.nextCohort.startsAt)}`
+                          : <>
+                            Next start <LagosTime value={programme.nextCohort.startsAt} variant="date" />
+                          </>
                         : "No dates scheduled"}
                     </div>
                   </div>

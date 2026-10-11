@@ -37,10 +37,10 @@ export default async function ResultsPage({
   const path = await loadLearnerPath(actor, enrolmentId, { includeCompleted: true });
   if (!path) notFound();
 
-  const results = await getOwnResults(actor, { enrolmentId });
+  const results = await getOwnResults(actor, { enrolmentId }, { path });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-primary-content className="flex flex-col gap-6">
       <LearnerPageHeader
         size="hero"
         title="Your results"

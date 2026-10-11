@@ -21,7 +21,11 @@ import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission, Actor } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
-import { hasActiveEnrolmentCoveringCourse } from "@/server/services/learner-access";
+import {
+  assertLessonOpenable,
+  hasActiveEnrolmentCoveringCourse,
+  type LearnerPath,
+} from "@/server/services/learner-access";
 import { nextAppendPosition, parkedWithdrawnPosition } from "@/lib/positions";
 import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
 import {
@@ -374,6 +378,16 @@ export type LearnerLessonContent = {
 export async function getLessonContentForLearner(
   actor: Actor,
   lessonId: string,
+  options?: {
+    /**
+     * The caller's own path, already loaded by `loadLearnerPath(actor, ...)` in this same request.
+     * When it opens this lesson (`assertLessonOpenable`: pinned, unlocked, window open) that is a
+     * stricter proof than "an ACTIVE enrolment covers the course", so the second enrolment lookup
+     * is skipped. A path that does not open the lesson falls back to the full check (plan 15-28,
+     * ledger P-09).
+     */
+    verifiedPath?: LearnerPath;
+  },
 ): Promise<LearnerLessonContent | null> {
   const row = await prisma.lesson.findUnique({
     where: { id: lessonId },
@@ -391,7 +405,11 @@ export async function getLessonContentForLearner(
   });
   if (!row) return null;
 
-  const authorized = await hasActiveEnrolmentCoveringCourse(actor.userId, row.module.courseId);
+  const openedByPath = options?.verifiedPath
+    ? assertLessonOpenable(options.verifiedPath, lessonId).ok
+    : false;
+  const authorized =
+    openedByPath || (await hasActiveEnrolmentCoveringCourse(actor.userId, row.module.courseId));
   if (!authorized) return null;
 
   return {

@@ -20,7 +20,7 @@
 
 import { useMemo, useState } from "react";
 import { ResourceTable, StatusPill, type Column } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import {
   CERTIFICATE_STATUS_LABEL,
   CERTIFICATE_STATUS_TONE,
@@ -66,7 +66,7 @@ const columns: Column<CertificateRow>[] = [
     key: "issuedAt",
     header: "Issued",
     mono: true,
-    render: (row) => formatTimestamp(row.issuedAt),
+    render: (row) => <LagosTime value={row.issuedAt} className="font-mono text-[13px] whitespace-nowrap" />,
   },
   {
     key: "status",

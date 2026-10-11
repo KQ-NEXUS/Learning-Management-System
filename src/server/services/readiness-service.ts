@@ -52,6 +52,12 @@ export type ReadinessItem = {
 export type ReadinessLessonInput = {
   type: string;
   withdrawnAt: Date | string | null;
+  /**
+   * NFR-09 (plan 15-24): true when the lesson has at least one caption track that
+   * finished its upload checks (READY). Only read for VIDEO lessons. The caller
+   * derives it from stored data; this module stays free of data access.
+   */
+  hasCleanCaptions?: boolean;
 };
 
 export type ReadinessModuleInput = {
@@ -96,6 +102,40 @@ function hasAssessmentLesson(modules: ReadinessModuleInput[]): boolean {
         (lessonRow) => lessonRow.withdrawnAt == null && (lessonRow.type === "QUIZ" || lessonRow.type === "ASSIGNMENT"),
       ),
     );
+}
+
+/**
+ * NFR-09 (plan 15-24, decision option-a): a video lesson with no caption track is
+ * counted so publishers are told, in plain words, how many need captions. This is
+ * a WARNING and never blocks publication; 15-DECISIONS.md records option-a. When a
+ * course has no live video lesson the item is not produced at all.
+ */
+function videoCaptionsItem(modules: ReadinessModuleInput[]): ReadinessItem | null {
+  const videoLessons = modules
+    .filter((moduleRow) => moduleRow.withdrawnAt == null)
+    .flatMap((moduleRow) => moduleRow.lessons)
+    .filter((lessonRow) => lessonRow.withdrawnAt == null && lessonRow.type === "VIDEO");
+  if (videoLessons.length === 0) return null;
+
+  const missing = videoLessons.filter((lessonRow) => lessonRow.hasCleanCaptions !== true).length;
+  if (missing === 0) {
+    return {
+      id: "video-captions",
+      category: "Content",
+      label: "Every video lesson has captions",
+      blocking: false,
+      state: "PASS",
+    };
+  }
+  return {
+    id: "video-captions",
+    category: "Content",
+    label: missing === 1 ? "1 video lesson has no captions." : `${missing} video lessons have no captions.`,
+    blocking: false,
+    state: "WARN",
+    detail:
+      "Add a .vtt caption file on each video lesson so learners who cannot hear the video can follow it. You can still publish without them.",
+  };
 }
 
 /**
@@ -182,6 +222,9 @@ export function evaluateCourseReadiness(course: ReadinessCourseInput): Readiness
     // (05-RESEARCH.md, RESOLVED) and plan 05-03 Task 1. The `assessments`
     // slot stays here — Phase 10 owns it and it is genuinely per-Course.
   ];
+
+  const videoCaptions = videoCaptionsItem(course.modules);
+  if (videoCaptions) items.push(videoCaptions);
 
   // D-31 named gap — only present when the course actually has a QUIZ or
   // ASSIGNMENT lesson; the assessment picker has nothing to choose from yet.

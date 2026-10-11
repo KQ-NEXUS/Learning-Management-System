@@ -137,6 +137,7 @@ function buildPaymentDetailLookup(actorId: string, hasPaymentsView: boolean) {
   const deps: PaymentReadServiceDeps = {
     order: {
       findMany: () => Promise.resolve([] as PaymentListOrderRow[]),
+      count: () => Promise.resolve(0),
       findUnique: ({ where }) =>
         testDb.prisma.order
           .findUnique({

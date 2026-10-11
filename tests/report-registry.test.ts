@@ -66,15 +66,16 @@ describe("report registry", () => {
     });
   });
 
-  it("defines twelve metadata-only export datasets without dashboard or producer fields", () => {
+  it("defines thirteen metadata-only export datasets without dashboard or producer fields", () => {
     expect(EXPORT_DATASET_REGISTRY.map((definition) => definition.id)).toEqual([
       ...REPORT_IDS,
       "reconciliation-refunds",
       "audit",
+      "learner-subject",
     ]);
 
     for (const definition of EXPORT_DATASET_REGISTRY) {
-      expect(Object.keys(definition).filter((key) => key !== "dataPermission").sort()).toEqual([
+      expect(Object.keys(definition).filter((key) => key !== "dataPermission" && key !== "standalone").sort()).toEqual([
         "filterSchema",
         "id",
         "permission",
@@ -98,6 +99,22 @@ describe("report registry", () => {
       registry.filter((definition) => definition.dataPermission).map((definition) => [definition.id, definition.dataPermission]);
     expect(guarded(REPORT_REGISTRY)).toEqual([["payments", "payments.view"]]);
     expect(guarded(EXPORT_DATASET_REGISTRY)).toEqual([["payments", "payments.view"]]);
+  });
+
+  it("gates the learner-subject export by privacy.manage alone, at Global scope, with a sensitive value column (D-12)", () => {
+    const definition = getExportDatasetDefinition("learner-subject");
+    expect(definition.permission).toBe("privacy.manage");
+    expect(definition.scopePolicy).toBe("GLOBAL");
+    expect(definition.standalone).toBe(true);
+    expect(definition.sensitiveColumns.map((column) => column.key)).toEqual(["value"]);
+    expect(definition.safeColumns.map((column) => column.key)).toEqual(["section", "recordType", "recordId", "field", "recordedAt"]);
+    // Only learner-subject is standalone; every other dataset still needs reports.export (or audit.export).
+    expect(EXPORT_DATASET_REGISTRY.filter((item) => item.standalone).map((item) => item.id)).toEqual(["learner-subject"]);
+    // One learner at a time: the only filter is a single user id, strictly.
+    expect(definition.filterSchema.safeParse({ userId: "abc" }).success).toBe(true);
+    expect(definition.filterSchema.safeParse({}).success).toBe(false);
+    expect(definition.filterSchema.safeParse({ userId: "abc", from: "2026-01-01" }).success).toBe(false);
+    expect(definition.filterSchema.safeParse({ userId: ["a", "b"] }).success).toBe(false);
   });
 
   it("is immutable and rejects unknown report and export identifiers at runtime", () => {

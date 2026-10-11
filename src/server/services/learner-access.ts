@@ -368,8 +368,24 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     actor: Actor,
     enrolmentId: string,
     allowedStatuses: readonly string[],
+    preloaded?: EnrolmentStoreRow,
   ): Promise<OwnEnrolmentSnapshot | null> {
-    const enrolment = await store.enrolment.findUnique({ where: { id: enrolmentId } });
+    return (await resolveOwnEnrolmentWithCohort(actor, enrolmentId, allowedStatuses, preloaded))?.snapshot ?? null;
+  }
+
+  /**
+   * The same resolution, also handing back the cohort row it read. `loadLearnerPath` needs that
+   * row again to find the pinned publications; passing it on saves one lookup per path (plan 15-28,
+   * NFR-02 statement budget). Every denial rule is the one `resolveOwnEnrolment` documents.
+   */
+  async function resolveOwnEnrolmentWithCohort(
+    actor: Actor,
+    enrolmentId: string,
+    allowedStatuses: readonly string[],
+    preloaded?: EnrolmentStoreRow,
+  ): Promise<{ snapshot: OwnEnrolmentSnapshot; cohort: CohortStoreRow } | null> {
+    // A list read already holds the row; every rule below still runs on it (owner, status).
+    const enrolment = preloaded ?? (await store.enrolment.findUnique({ where: { id: enrolmentId } }));
     if (
       !enrolment ||
       enrolment.userId !== actor.userId ||
@@ -392,7 +408,7 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
 
     // `userId` is destructured out by construction — this object literal
     // simply never has the field, so no consumer can echo the owner id.
-    return {
+    const snapshot: OwnEnrolmentSnapshot = {
       id: enrolment.id,
       cohortId: enrolment.cohortId,
       status: enrolment.status,
@@ -412,6 +428,7 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
       },
       accessWindow,
     };
+    return { snapshot, cohort };
   }
 
   /** Own ACTIVE enrolment only — `null` for not-found, not-mine and every non-ACTIVE status (incl. COMPLETED, G-01). */
@@ -464,7 +481,7 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
 
     const snapshots: OwnEnrolmentSnapshot[] = [];
     for (const row of rows.slice().sort(byActivatedAtDescThenId)) {
-      const snapshot = await getOwnActiveEnrolment(actor, row.id);
+      const snapshot = await resolveOwnEnrolment(actor, row.id, ["ACTIVE"], row);
       if (snapshot) snapshots.push(snapshot);
     }
     return snapshots;
@@ -485,7 +502,7 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     for (const status of ["ACTIVE", "COMPLETED"] as const) {
       const rows = await store.enrolment.findMany({ where: { userId: actor.userId, status } });
       for (const row of rows.slice().sort(byActivatedAtDescThenId)) {
-        const snapshot = await resolveOwnEnrolment(actor, row.id, ["ACTIVE", "COMPLETED"]);
+        const snapshot = await resolveOwnEnrolment(actor, row.id, ["ACTIVE", "COMPLETED"], row);
         if (snapshot) snapshots.push(snapshot);
       }
     }
@@ -535,8 +552,9 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
    */
   async function loadLearnerCourseStructure(
     enrolment: OwnEnrolmentSnapshot,
+    knownCohort?: CohortStoreRow,
   ): Promise<LearnerCourseStructure> {
-    const cohort = await store.cohort.findUnique({ where: { id: enrolment.cohortId } });
+    const cohort = knownCohort ?? (await store.cohort.findUnique({ where: { id: enrolment.cohortId } }));
     if (!cohort) return { kind: "unpinned" };
 
     if (cohort.courseId) {
@@ -682,12 +700,15 @@ export function createLearnerAccessService(deps: LearnerAccessDeps) {
     enrolmentId: string,
     options?: LoadLearnerPathOptions,
   ): Promise<LearnerPath | null> {
-    const enrolment = options?.includeCompleted
-      ? await resolveOwnEnrolment(actor, enrolmentId, ["ACTIVE", "COMPLETED"])
-      : await getOwnActiveEnrolment(actor, enrolmentId);
-    if (!enrolment) return null;
+    const resolved = await resolveOwnEnrolmentWithCohort(
+      actor,
+      enrolmentId,
+      options?.includeCompleted ? ["ACTIVE", "COMPLETED"] : ["ACTIVE"],
+    );
+    if (!resolved) return null;
+    const enrolment = resolved.snapshot;
 
-    const structure = await loadLearnerCourseStructure(enrolment);
+    const structure = await loadLearnerCourseStructure(enrolment, resolved.cohort);
     const courses = structure.kind === "structure" ? structure.courses : [];
 
     const progressRows = await store.lessonProgress.findMany({ where: { enrolmentId: enrolment.id } });

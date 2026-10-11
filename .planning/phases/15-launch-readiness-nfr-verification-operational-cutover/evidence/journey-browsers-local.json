@@ -1,0 +1,27 @@
+[
+  {
+    "project": "chrome",
+    "browserVersion": "154.0.8037.98",
+    "passed": true,
+    "ranAt": "2026-10-09T01:41:19.383Z"
+  },
+  {
+    "project": "edge",
+    "browserVersion": "154.0.4258.62",
+    "passed": true,
+    "ranAt": "2026-10-09T01:41:19.383Z"
+  },
+  {
+    "project": "firefox",
+    "browserVersion": "155.0",
+    "passed": true,
+    "ranAt": "2026-10-09T01:41:19.383Z"
+  },
+  {
+    "project": "webkit",
+    "browserVersion": "26.6",
+    "passed": true,
+    "ranAt": "2026-10-09T01:41:19.383Z",
+    "note": "Playwright WebKit does not send the Secure session cookie to http://localhost, so the harness re-adds the same value without the Secure flag (e2e/support/session.ts). WebKit is not Safari: the manual Safari and iPhone pass stays."
+  }
+]

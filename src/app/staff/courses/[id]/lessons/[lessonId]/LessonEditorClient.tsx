@@ -3,7 +3,7 @@
 import { useActionState, useId, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { ConfirmModal, ResourceForm } from "@/components/primitives";
 import { LessonFormFields, type LessonFieldValues } from "@/components/catalogue";
 import type { LinkableAssessment } from "@/components/catalogue/LessonFormFields";
@@ -62,14 +62,20 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
         reason,
       });
       if (result.ok) {
+        // WR-03: release the modal before navigating, so a stalled push can
+        // never leave it on "Working…" with ESC suppressed.
+        setWithdrawing(false);
+        setWithdrawOpen(false);
         router.push(`/staff/courses/${courseId}/arrange`);
         router.refresh();
         return;
       }
       setWithdrawError(result.message);
-      setWithdrawing(false);
-    } catch {
+    } catch (error) {
+      // WR-02: hand Next.js control flow (redirect / notFound) back first.
+      unstable_rethrow(error);
       setWithdrawError("The lesson was not withdrawn.");
+    } finally {
       setWithdrawing(false);
     }
   }

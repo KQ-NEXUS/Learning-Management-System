@@ -5,7 +5,7 @@ import {
   CERTIFICATE_STATUS_TONE,
   certificateDisplayStatus,
 } from "@/lib/certificate-display-status";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 // `import type` only: this component takes plain props and must not pull the service graph in.
 import type { CertificateRow, IssuanceSource } from "@/server/services/certificate-service";
 
@@ -55,7 +55,9 @@ export function RecentlyIssuedList({
                     <span className="text-sm text-muted-foreground break-words">{row.awardTitle}</span>
                   </span>
                   <span className="flex flex-wrap items-center gap-3 text-sm">
-                    <span className="font-mono text-muted-foreground">{formatTimestamp(row.issuedAt)}</span>
+                    <span className="font-mono text-muted-foreground">
+                      <LagosTime value={row.issuedAt} />
+                    </span>
                     <StatusPill
                       tone={CERTIFICATE_STATUS_TONE[display]}
                       label={CERTIFICATE_STATUS_LABEL[display]}

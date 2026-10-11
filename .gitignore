@@ -82,3 +82,11 @@ reference/
 .planning/*-lint.json
 .planning/*.log
 _tmp-*
+
+# Phase 15 test and evidence output (Playwright reports, k6 results, database
+# dumps and saved sign-in state). Signed evidence lives in the phase directory.
+/playwright-report/
+/test-results/
+/perf/results/
+/dumps/
+/e2e/.auth/

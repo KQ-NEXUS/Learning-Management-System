@@ -84,6 +84,11 @@ export const PERMISSIONS = Object.freeze([
   // Global only (PRD 18.4).
   "licence.view",
   "licence.activate",
+
+  // Privacy (PRD NFR-11, approved in 15-DECISIONS.md, "Privacy tool permission
+  // and retention decision", option-a): gates both actions of the staff privacy
+  // tool, exporting one learner's data and anonymising one account. Global only.
+  "privacy.manage",
 ] as const);
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -106,6 +111,7 @@ export function isPermission(value: string): value is Permission {
 export const GLOBAL_ONLY_PERMISSIONS: ReadonlySet<Permission> = new Set([
   "licence.view",
   "licence.activate",
+  "privacy.manage",
 ] as const);
 
 export function isGlobalOnly(permission: Permission): boolean {

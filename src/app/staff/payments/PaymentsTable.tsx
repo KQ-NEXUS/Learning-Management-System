@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ResourceTable, StatusPill, type Column, type SortState } from "@/components/primitives";
 import type { PaymentListRow } from "@/server/services/payment-read-service";
 import { humanizeCode } from "@/lib/humanize";
+import { STATUS_TABS } from "./payment-status";
 
 /**
  * The Finance payments list (07-UI-SPEC §7.5). `PaymentRow` mirrors
@@ -127,16 +128,6 @@ const columns: Column<PaymentRow>[] = [
 ];
 
 // Status tabs, with counts; a tab only shows once at least one order is in that status.
-const STATUS_TABS = [
-  { value: "PENDING", label: "Awaiting confirmation" },
-  { value: "PAID", label: "Paid" },
-  { value: "PARTIALLY_REFUNDED", label: "Partially refunded" },
-  { value: "REFUNDED", label: "Refunded" },
-  { value: "EXCEPTION", label: "Exception" },
-  { value: "FAILED", label: "Failed" },
-  { value: "CANCELLED", label: "Cancelled" },
-];
-
 // Exactly 4 options (including "All") — `ResourceTable`'s own `isSegmented`
 // threshold (`options.length <= 4`) applies automatically; no new
 // segmented-vs-select logic is written here.
@@ -146,14 +137,6 @@ const PROVIDER_OPTIONS = [
   { value: "STRIPE", label: "Stripe" },
   { value: "MANUAL", label: "Manual" },
 ];
-
-/**
- * The status tab the list opens on, from the page's `?status=` (the overview's "orders needing
- * review" link lands on Exception, audit A-12). Anything that is not a known tab opens on All.
- */
-export function initialPaymentStatus(value: string | undefined): string {
-  return value && STATUS_TABS.some((tab) => tab.value === value) ? value : "";
-}
 
 export function PaymentsTable({
   rows,

@@ -1,0 +1,112 @@
+[
+  {
+    "url": "/staff",
+    "persona": "staff",
+    "budget": 25,
+    "statements": 24,
+    "coldStatements": 24,
+    "transactionControl": 0,
+    "withinBudget": true,
+    "topQueries": [
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Assignment\".\"id\", \"public\".\"Assignment\".\"scopeType\"::text, \"public\".\"Assignment\".\"scopeId\", \"public\"..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Enrolment\".\"id\", \"public\".\"Enrolment\".\"createdAt\" FROM \"public\".\"Enrolment\" WHERE (\"public\".\"Enrolme..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Refund\".\"id\", \"public\".\"Refund\".\"createdAt\", \"public\".\"Refund\".\"currency\", \"public\".\"Refund\".\"amount..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"LicenceState\".\"id\", \"public\".\"LicenceState\".\"activeRecordId\", \"public\".\"LicenceState\".\"registeredCli..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Cohort\".\"id\", \"public\".\"Cohort\".\"code\", \"public\".\"Cohort\".\"title\", \"public\".\"Cohort\".\"startsAt\", \"pu..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"User\".\"id\", \"public\".\"User\".\"email\", \"public\".\"User\".\"emailVerified\", \"public\".\"User\".\"passwordHash\"..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT COUNT(*) AS \"_count$_all\", \"public\".\"AttendanceRecord\".\"state\"::text FROM \"public\".\"AttendanceRecord\" LEFT JOI..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Certificate\".\"id\", \"public\".\"Certificate\".\"reviewFlaggedAt\" FROM \"public\".\"Certificate\" WHERE (\"publ..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT COUNT(*) AS \"_count$_all\" FROM (SELECT \"public\".\"Notification\".\"id\" FROM \"public\".\"Notification\" WHERE (\"publi..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"User\".\"id\", \"public\".\"User\".\"status\"::text, \"public\".\"User\".\"isStaff\" FROM \"public\".\"User\" WHERE \"pu..."
+      }
+    ],
+    "beforeFix": {
+      "statements": 31,
+      "note": "first measurement on the final code of plans 15-01 to 15-27, before the plan 15-28 query reductions"
+    }
+  },
+  {
+    "url": "/learn/cmv1owltt0002s5gkt2uagb5j/lessons/cmv1owbkg001hs5ssz4pxgv1e",
+    "persona": "learner",
+    "budget": 20,
+    "statements": 19,
+    "coldStatements": 19,
+    "transactionControl": 0,
+    "withinBudget": true,
+    "topQueries": [
+      {
+        "calls": 2,
+        "query": "SELECT \"public\".\"Module\".\"id\", \"public\".\"Module\".\"courseId\", \"public\".\"Module\".\"title\", \"public\".\"Module\".\"summary\", ..."
+      },
+      {
+        "calls": 2,
+        "query": "SELECT \"public\".\"Lesson\".\"id\", \"public\".\"Lesson\".\"moduleId\", \"public\".\"Lesson\".\"title\", \"public\".\"Lesson\".\"type\"::tex..."
+      },
+      {
+        "calls": 2,
+        "query": "SELECT \"public\".\"Course\".\"id\", \"public\".\"Course\".\"slug\", \"public\".\"Course\".\"title\", \"public\".\"Course\".\"summary\", \"pub..."
+      },
+      {
+        "calls": 2,
+        "query": "SELECT \"public\".\"CoursePublication\".\"id\", \"public\".\"CoursePublication\".\"courseId\", \"public\".\"CoursePublication\".\"vers..."
+      },
+      {
+        "calls": 2,
+        "query": "SELECT \"public\".\"Module\".\"id\", \"public\".\"Module\".\"courseId\" FROM \"public\".\"Module\" WHERE \"public\".\"Module\".\"id\" IN ($..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Enrolment\".\"id\", \"public\".\"Enrolment\".\"userId\", \"public\".\"Enrolment\".\"cohortId\", \"public\".\"Enrolment..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Lesson\".\"id\", \"public\".\"Lesson\".\"title\", \"public\".\"Lesson\".\"type\"::text, \"public\".\"Lesson\".\"body\", \"..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"Cohort\".\"id\", \"public\".\"Cohort\".\"code\", \"public\".\"Cohort\".\"title\", \"public\".\"Cohort\".\"courseId\", \"pu..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"User\".\"id\", \"public\".\"User\".\"status\"::text, \"public\".\"User\".\"isStaff\" FROM \"public\".\"User\" WHERE \"pu..."
+      },
+      {
+        "calls": 1,
+        "query": "SELECT \"public\".\"LessonProgress\".\"id\", \"public\".\"LessonProgress\".\"enrolmentId\", \"public\".\"LessonProgress\".\"lessonId\",..."
+      }
+    ],
+    "beforeFix": {
+      "statements": 39,
+      "note": "first measurement on the final code of plans 15-01 to 15-27, before the plan 15-28 query reductions"
+    }
+  }
+]

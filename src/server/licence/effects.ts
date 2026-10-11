@@ -72,6 +72,10 @@ export const LICENCE_PERMISSION_EFFECT: Readonly<Record<Permission, LicenceEffec
   "assessments.create": "write",
   "assessments.edit": "write",
   "certificates.manage": "write",
+  // Learner privacy tool (NFR-11, D-12). The permission is write: anonymising an
+  // account is blocked in restricted mode. Exporting one person's data (plan
+  // 15-21) overrides this per call site to continuity (LIC-08 data-access route).
+  "privacy.manage": "write",
 };
 
 /** The effect for a permission string; an unknown string is "write" so new resources inherit enforcement (D-09). */
@@ -164,7 +168,7 @@ export const RESTRICTED_CAPABILITIES: {
     {
       id: "settings",
       text: "Settings changes and other administrative edits",
-      permissions: ["certificates.manage"],
+      permissions: ["certificates.manage", "privacy.manage"],
     },
     {
       id: "registration",

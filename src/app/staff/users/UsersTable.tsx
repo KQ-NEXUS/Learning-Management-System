@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDateShort } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
@@ -35,10 +35,6 @@ const STATUS_LABEL: Record<string, string> = {
   PENDING_VERIFICATION: "Pending verification",
 };
 
-function fmtDate(value: Date | string | null): string {
-  if (!value) return "—";
-  return formatDateShort(new Date(value));
-}
 
 const columns: Column<StaffUserRow>[] = [
   {
@@ -66,7 +62,7 @@ const columns: Column<StaffUserRow>[] = [
   {
     key: "createdAt",
     header: "Created",
-    render: (u) => fmtDate(u.createdAt),
+    render: (u) => <LagosTime value={u.createdAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" />,
     mono: true,
     align: "right",
     width: "13%",
@@ -75,7 +71,7 @@ const columns: Column<StaffUserRow>[] = [
   {
     key: "deactivatedAt",
     header: "Deactivated",
-    render: (u) => fmtDate(u.deactivatedAt),
+    render: (u) => <LagosTime value={u.deactivatedAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" />,
     mono: true,
     align: "right",
     width: "13%",

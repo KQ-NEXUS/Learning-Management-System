@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { ResourceTable } from "@/components/primitives/ResourceTable";
 import { ConfirmModal } from "@/components/primitives/ConfirmModal";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import type { PendingIssuanceRow } from "@/server/services/certificate-service";
 import { issueCertificateAction } from "./certificate-actions";
 import { useToast } from "@/components/feedback/Toaster";
@@ -64,7 +64,7 @@ export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertif
             key: "eligibleSince",
             header: "Eligible since",
             mono: true,
-            render: (row) => formatTimestamp(row.eligibleSince),
+            render: (row) => <LagosTime value={row.eligibleSince} className="font-mono text-[13px] whitespace-nowrap" />,
           },
           {
             key: "action",

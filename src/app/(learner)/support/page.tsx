@@ -39,7 +39,7 @@ export default async function SupportIndexPage({
   const hasNext = page * PAGE_SIZE < total;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-primary-content className="flex flex-col gap-6">
       <LearnerPageHeader
         title="Support"
         subtitle="View your requests or ask for help."

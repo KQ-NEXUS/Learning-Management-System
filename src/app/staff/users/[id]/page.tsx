@@ -1,4 +1,4 @@
-import { formatDateShort } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { notFound } from "next/navigation";
 import { staffAccountService, type StaffAccountSummary } from "@/server/services/staff-account-service";
 import { assignmentService, type AssignmentWithRole } from "@/server/services/assignment-service";
@@ -20,10 +20,6 @@ const STATUS_LABEL: Record<string, string> = {
   PENDING_VERIFICATION: "Pending verification",
 };
 
-function fmtDate(value: Date | string | null): string {
-  if (!value) return "—";
-  return formatDateShort(new Date(value));
-}
 
 export default async function StaffUserDetailPage({
   params,
@@ -96,9 +92,9 @@ export default async function StaffUserDetailPage({
                 { label: "Name", value: user.name },
                 { label: "Email", value: user.email, mono: true },
                 { label: "Status", value: <StatusPill label={STATUS_LABEL[user.status] ?? humanizeCode(user.status)} tone={TONE[user.status] ?? "neutral"} /> },
-                { label: "Created", value: fmtDate(user.createdAt) },
+                { label: "Created", value: <LagosTime value={user.createdAt} variant="date" /> },
                 ...(user.deactivatedAt
-                  ? [{ label: "Deactivated", value: fmtDate(user.deactivatedAt) }]
+                  ? [{ label: "Deactivated", value: <LagosTime value={user.deactivatedAt} variant="date" /> }]
                   : []),
               ]}
             />

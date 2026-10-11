@@ -131,32 +131,18 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
   const cohortsIn = (scope: CollectionScopeSnapshot | null) => (scope ? cohortWhereForCollection(scope) : {});
 
   // ---- figures ----
+  // One read for both numbers: the running cohorts, each with its count of active enrolments
+  // (a relation count is part of the same SQL statement). It used to be two separate counts.
   const learnersInDelivery = canEnrolments
-    ? await Promise.all([
-        prisma.enrolment.count({
-          where: { status: "ACTIVE", cohort: { AND: [{ status: "IN_PROGRESS" }, cohortsIn(enrolmentScope)] } },
-        }),
-        prisma.cohort.count({ where: { AND: [{ status: "IN_PROGRESS" }, cohortsIn(enrolmentScope)] } }),
-      ]).then(([learners, cohorts]) => ({ learners, cohorts }))
-    : null;
-
-  const enrolments = canEnrolments
-    ? await Promise.all([
-        prisma.enrolment.count({
-          where: {
-            status: { in: ["ACTIVE", "COMPLETED"] },
-            createdAt: { gte: monthStart },
-            cohort: cohortsIn(enrolmentScope),
-          },
-        }),
-        prisma.enrolment.count({
-          where: {
-            status: { in: ["ACTIVE", "COMPLETED"] },
-            createdAt: { gte: lastMonthStart, lt: monthStart },
-            cohort: cohortsIn(enrolmentScope),
-          },
-        }),
-      ]).then(([thisMonth, lastMonth]) => ({ thisMonth, lastMonth }))
+    ? await prisma.cohort
+        .findMany({
+          where: { AND: [{ status: "IN_PROGRESS" }, cohortsIn(enrolmentScope)] },
+          select: { _count: { select: { enrolments: { where: { status: "ACTIVE" } } } } },
+        })
+        .then((rows) => ({
+          learners: rows.reduce((total, row) => total + row._count.enrolments, 0),
+          cohorts: rows.length,
+        }))
     : null;
 
   const revenue = canPayments
@@ -194,11 +180,17 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
     : null;
 
   // ---- the work queue ----
-  const anyQueueSource = canGrading || canAttendance || canCertificates || canRefunds || canPayments;
-  let queue: OverviewQueueItem[] | null = null;
-  if (anyQueueSource) {
-    queue = [];
+  // Cohort codes (and time zones) are named by three sections below. They are collected as ids
+  // and read once after the sections have run, instead of once per section through a nested read.
+  type CohortInfo = Map<string, { code: string; timezone: string }>;
+  const cohortIdsToName = new Set<string>();
+  const cohortInfoAt = (cohortInfo: CohortInfo, id: string) => cohortInfo.get(id) ?? { code: "", timezone: "UTC" };
 
+  const anyQueueSource = canGrading || canAttendance || canCertificates || canRefunds || canPayments;
+  // Entries that name a cohort are finished after the cohort lookup; the order of the entries is
+  // the order the sections ran in, so ties in the final sort resolve exactly as they did before.
+  const queueEntries: (OverviewQueueItem | ((cohortInfo: CohortInfo) => OverviewQueueItem))[] = [];
+  if (anyQueueSource) {
     if (canGrading) {
       const subs = await prisma.submission.findMany({
         where: {
@@ -207,39 +199,52 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
             gradingScope ? submissionWhereForCollection(gradingScope) : {},
           ],
         },
-        select: {
-          submittedAt: true,
-          assessmentId: true,
-          assessment: { select: { title: true } },
-          enrolment: { select: { cohortId: true, cohort: { select: { code: true } } } },
-        },
+        select: { submittedAt: true, assessmentId: true, enrolmentId: true },
         orderBy: { submittedAt: "asc" },
       });
-      const groups = new Map<string, { title: string; code: string; cohortId: string; assessmentId: string; count: number; oldest: Date }>();
+      const [assessments, enrolmentRows] = subs.length
+        ? await Promise.all([
+            prisma.assessment.findMany({
+              where: { id: { in: [...new Set(subs.map((s) => s.assessmentId))] } },
+              select: { id: true, title: true },
+            }),
+            prisma.enrolment.findMany({
+              where: { id: { in: [...new Set(subs.map((s) => s.enrolmentId))] } },
+              select: { id: true, cohortId: true },
+            }),
+          ])
+        : [[], []];
+      const titleOf = new Map(assessments.map((a) => [a.id, a.title]));
+      const cohortOfEnrolment = new Map(enrolmentRows.map((e) => [e.id, e.cohortId]));
+      const groups = new Map<string, { title: string; cohortId: string; assessmentId: string; count: number; oldest: Date }>();
       for (const s of subs) {
-        const key = `${s.enrolment.cohortId}:${s.assessmentId}`;
+        const cohortId = cohortOfEnrolment.get(s.enrolmentId);
+        if (!cohortId) continue; // the enrolment row is required by the foreign key; defensive only
+        const key = `${cohortId}:${s.assessmentId}`;
         const g = groups.get(key);
         if (g) g.count += 1;
         else
           groups.set(key, {
-            title: s.assessment.title,
-            code: s.enrolment.cohort.code,
-            cohortId: s.enrolment.cohortId,
+            title: titleOf.get(s.assessmentId) ?? "",
+            cohortId,
             assessmentId: s.assessmentId,
             count: 1,
             oldest: s.submittedAt,
           });
       }
       for (const g of groups.values()) {
-        const age = ageDaysOf(g.oldest, now);
-        queue.push({
-          key: `grading:${g.cohortId}:${g.assessmentId}`,
-          kind: "grading",
-          title: "Submissions awaiting grading",
-          detail: `${g.title} · ${g.code} · ${g.count} ${g.count === 1 ? "submission" : "submissions"}`,
-          href: `/staff/cohorts/${g.cohortId}/grading/${g.assessmentId}`,
-          ageDays: age,
-          overdue: age >= OVERDUE_AFTER_DAYS,
+        cohortIdsToName.add(g.cohortId);
+        queueEntries.push((cohortInfo) => {
+          const age = ageDaysOf(g.oldest, now);
+          return {
+            key: `grading:${g.cohortId}:${g.assessmentId}`,
+            kind: "grading",
+            title: "Submissions awaiting grading",
+            detail: `${g.title} · ${cohortInfoAt(cohortInfo, g.cohortId).code} · ${g.count} ${g.count === 1 ? "submission" : "submissions"}`,
+            href: `/staff/cohorts/${g.cohortId}/grading/${g.assessmentId}`,
+            ageDays: age,
+            overdue: age >= OVERDUE_AFTER_DAYS,
+          };
         });
       }
     }
@@ -253,20 +258,23 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
           attendance: { none: { state: { not: "NOT_RECORDED" } } },
           cohort: { AND: [{ enrolments: { some: { status: "ACTIVE" } } }, cohortsIn(attendanceScope)] },
         },
-        select: { id: true, title: true, endsAt: true, cohortId: true, cohort: { select: { code: true } } },
+        select: { id: true, title: true, endsAt: true, cohortId: true },
         orderBy: { endsAt: "asc" },
         take: 5,
       });
       for (const s of sessions) {
-        const age = ageDaysOf(s.endsAt, now);
-        queue.push({
-          key: `attendance:${s.id}`,
-          kind: "attendance",
-          title: "Attendance not marked",
-          detail: `${s.title} · ${s.cohort.code}`,
-          href: `/staff/cohorts/${s.cohortId}/sessions/${s.id}/attendance`,
-          ageDays: age,
-          overdue: age >= OVERDUE_AFTER_DAYS,
+        cohortIdsToName.add(s.cohortId);
+        queueEntries.push((cohortInfo) => {
+          const age = ageDaysOf(s.endsAt, now);
+          return {
+            key: `attendance:${s.id}`,
+            kind: "attendance",
+            title: "Attendance not marked",
+            detail: `${s.title} · ${cohortInfoAt(cohortInfo, s.cohortId).code}`,
+            href: `/staff/cohorts/${s.cohortId}/sessions/${s.id}/attendance`,
+            ageDays: age,
+            overdue: age >= OVERDUE_AFTER_DAYS,
+          };
         });
       }
     }
@@ -279,7 +287,7 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
       });
       if (flagged.length > 0) {
         const age = ageDaysOf(flagged[0].reviewFlaggedAt!, now);
-        queue.push({
+        queueEntries.push({
           key: "certificates:flagged",
           kind: "certificates",
           title: "Certificates flagged for review",
@@ -300,7 +308,7 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
       });
       for (const r of refunds) {
         const age = ageDaysOf(r.createdAt, now);
-        queue.push({
+        queueEntries.push({
           key: `refund:${r.orderId}:${r.createdAt.getTime()}`,
           kind: "refund",
           title: "Refund request",
@@ -320,7 +328,7 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
       });
       if (exceptions.length > 0) {
         const age = ageDaysOf(exceptions[0].updatedAt, now);
-        queue.push({
+        queueEntries.push({
           key: "payments:exception",
           kind: "payment",
           // An ORDER in the EXCEPTION status (for example a payment that arrived after the order
@@ -336,10 +344,13 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
       }
     }
 
-    queue.sort((a, b) => b.ageDays - a.ageDays);
   }
 
-  // ---- enrolments per week ----
+  // ---- enrolments: this month, last month and per week, from one read ----
+  // The month figures and the 12-week trend count the same rows (active or completed, created in
+  // the caller's scope). The trend window starts at least 11 weeks back, which is always before the
+  // start of last month, so one read serves all three numbers.
+  let enrolments: StaffOverview["figures"]["enrolments"] = null;
   let weekly: StaffOverview["weekly"] = null;
   if (canEnrolments) {
     const thisWeek = weekStartOf(now);
@@ -349,57 +360,48 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
       select: { createdAt: true },
     });
     weekly = Array.from({ length: 12 }, (_, i) => ({ weekStart: new Date(first.getTime() + i * 7 * DAY_MS), count: 0 }));
+    let thisMonth = 0;
+    let lastMonth = 0;
     for (const r of rows) {
       const idx = Math.floor((weekStartOf(r.createdAt).getTime() - first.getTime()) / (7 * DAY_MS));
       if (idx >= 0 && idx < 12) weekly[idx].count += 1;
+      if (r.createdAt >= monthStart) thisMonth += 1;
+      else if (r.createdAt >= lastMonthStart) lastMonth += 1;
     }
+    enrolments = { thisMonth, lastMonth };
   }
 
   // ---- next sessions and filling cohorts ----
-  let nextSessions: StaffOverview["nextSessions"] = null;
+  let nextSessionRows:
+    | { id: string; title: string; startsAt: Date; location: string | null; meetingUrl: string | null; cohortId: string }[]
+    | null = null;
   let filling: StaffOverview["filling"] = null;
   if (canCohorts) {
-    const sessions = await prisma.scheduledSession.findMany({
+    nextSessionRows = await prisma.scheduledSession.findMany({
       where: {
         cancelledAt: null,
         startsAt: { gte: now, lte: new Date(now.getTime() + 7 * DAY_MS) },
         cohort: cohortsIn(cohortScope),
       },
-      select: {
-        id: true,
-        title: true,
-        startsAt: true,
-        location: true,
-        meetingUrl: true,
-        cohortId: true,
-        cohort: { select: { code: true, timezone: true } },
-      },
+      select: { id: true, title: true, startsAt: true, location: true, meetingUrl: true, cohortId: true },
       orderBy: { startsAt: "asc" },
       take: 6,
     });
-    nextSessions = sessions.map((s) => ({
-      id: s.id,
-      cohortId: s.cohortId,
-      cohortCode: s.cohort.code,
-      title: s.title,
-      startsAt: s.startsAt,
-      timezone: s.cohort.timezone,
-      location: s.location,
-      virtual: !!s.meetingUrl && !s.location,
-    }));
+    for (const s of nextSessionRows) cohortIdsToName.add(s.cohortId);
 
+    // The count of taken seats rides in the same statement as the cohort row (a filtered relation count).
     const open = await prisma.cohort.findMany({
       where: { AND: [{ status: "PUBLISHED", enrolmentClosesAt: { gt: now } }, cohortsIn(cohortScope)] },
-      select: { id: true, code: true, title: true, startsAt: true, timezone: true, capacity: true },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        startsAt: true,
+        timezone: true,
+        capacity: true,
+        _count: { select: { enrolments: { where: { status: { in: ["ACTIVE", "COMPLETED"] } } } } },
+      },
     });
-    const taken = open.length
-      ? await prisma.enrolment.groupBy({
-          by: ["cohortId"],
-          where: { cohortId: { in: open.map((c) => c.id) }, status: { in: ["ACTIVE", "COMPLETED"] } },
-          _count: { _all: true },
-        })
-      : [];
-    const takenBy = new Map(taken.map((t) => [t.cohortId, t._count._all]));
     filling = open
       .map((c) => ({
         cohortId: c.id,
@@ -407,13 +409,42 @@ export function createStaffOverviewLoader(deps: StaffOverviewDeps) {
         title: c.title,
         startsAt: c.startsAt,
         timezone: c.timezone,
-        taken: takenBy.get(c.id) ?? 0,
+        taken: c._count.enrolments,
         capacity: c.capacity,
       }))
       .filter((c) => c.capacity > 0)
       .sort((a, b) => b.taken / b.capacity - a.taken / a.capacity)
       .slice(0, 3);
   }
+
+  // ---- one lookup for every cohort code and time zone named above ----
+  const cohortInfo: CohortInfo = new Map();
+  if (cohortIdsToName.size > 0) {
+    const named = await prisma.cohort.findMany({
+      where: { id: { in: [...cohortIdsToName] } },
+      select: { id: true, code: true, timezone: true },
+    });
+    for (const c of named) cohortInfo.set(c.id, { code: c.code, timezone: c.timezone });
+  }
+
+  const queue: OverviewQueueItem[] | null = anyQueueSource
+    ? queueEntries
+        .map((entry) => (typeof entry === "function" ? entry(cohortInfo) : entry))
+        .sort((x, y) => y.ageDays - x.ageDays)
+    : null;
+
+  const nextSessions: StaffOverview["nextSessions"] = nextSessionRows
+    ? nextSessionRows.map((s) => ({
+        id: s.id,
+        cohortId: s.cohortId,
+        cohortCode: cohortInfoAt(cohortInfo, s.cohortId).code,
+        title: s.title,
+        startsAt: s.startsAt,
+        timezone: cohortInfoAt(cohortInfo, s.cohortId).timezone,
+        location: s.location,
+        virtual: !!s.meetingUrl && !s.location,
+      }))
+    : null;
 
   return {
     now,

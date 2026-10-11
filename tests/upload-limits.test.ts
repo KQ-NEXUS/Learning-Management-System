@@ -95,10 +95,21 @@ describe("validateUpload — per-LessonType allow-list", () => {
   });
 
   it("rejects any LessonType absent from UPLOAD_LIMITS", () => {
-    expect(Object.keys(UPLOAD_LIMITS).sort()).toEqual(["FILE", "IMAGE", "VIDEO"]);
+    expect(Object.keys(UPLOAD_LIMITS).sort()).toEqual(["CAPTION", "FILE", "IMAGE", "VIDEO"]);
     expect(validateUpload({ lessonType: "QUIZ", mimeType: "application/pdf", sizeBytes: 1 }).ok).toBe(
       false,
     );
+  });
+
+  it("accepts text/vtt for the CAPTION kind only, capped at 1 MB (NFR-09)", () => {
+    expect(UPLOAD_LIMITS.CAPTION.mimeTypes).toEqual(["text/vtt"]);
+    expect(UPLOAD_LIMITS.CAPTION.maxBytes).toBe(1024 * 1024);
+    expect(validateUpload({ lessonType: "CAPTION", mimeType: "text/vtt", sizeBytes: 1024 }).ok).toBe(true);
+    expect(validateUpload({ lessonType: "CAPTION", mimeType: "text/vtt", sizeBytes: 1024 * 1024 + 1 }).ok).toBe(false);
+    for (const kind of ["VIDEO", "FILE", "IMAGE"] as const) {
+      expect(UPLOAD_LIMITS[kind].mimeTypes).not.toContain("text/vtt");
+      expect(validateUpload({ lessonType: kind, mimeType: "text/vtt", sizeBytes: 10 }).ok).toBe(false);
+    }
   });
 
   it("UPLOAD_LIMITS is frozen and never lists image/svg+xml or text/html", () => {

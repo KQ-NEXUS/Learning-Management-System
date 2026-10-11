@@ -77,7 +77,7 @@ describe("integration warning #1 — staff lists follow the caller's scope (real
 
     expect((await l.cohorts.listCohortsForStaff()).map((c) => c.id)).toEqual([mine.cohortId]);
     expect((await l.enrolments.loadStaffEnrolments({})).map((e) => e.id)).toEqual([mine.enrolmentId]);
-    expect((await l.payments.listPaymentsForStaff()).map((p) => p.id)).toEqual([mine.orderId]);
+    expect((await l.payments.listPaymentsForStaff()).rows.map((p) => p.id)).toEqual([mine.orderId]);
   }, TEST_DB_TIMEOUT_MS);
 
   it("a GLOBAL grant sees every cohort, enrolment and payment", async () => {
@@ -89,7 +89,7 @@ describe("integration warning #1 — staff lists follow the caller's scope (real
     expect((await l.enrolments.loadStaffEnrolments({})).map((e) => e.id)).toEqual(
       expect.arrayContaining([mine.enrolmentId, theirs.enrolmentId]),
     );
-    expect((await l.payments.listPaymentsForStaff()).map((p) => p.id)).toEqual(
+    expect((await l.payments.listPaymentsForStaff()).rows.map((p) => p.id)).toEqual(
       expect.arrayContaining([mine.orderId, theirs.orderId]),
     );
   }, TEST_DB_TIMEOUT_MS);

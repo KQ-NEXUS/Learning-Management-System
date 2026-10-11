@@ -33,15 +33,15 @@ const CONTINUITY = [
 const WRITE = [
   "users.manage", "roles.manage", "programmes.manage", "programmes.publish", "courses.create",
   "courses.edit", "courses.publish", "cohorts.manage", "cohorts.publish", "enrolments.manage",
-  "assessments.create", "assessments.edit", "certificates.manage",
+  "assessments.create", "assessments.edit", "certificates.manage", "privacy.manage",
 ].sort();
 
 describe("LICENCE_PERMISSION_EFFECT (D-09)", () => {
-  it("Test 1: keys equal the closed catalogue and the counts are 14 read, 13 write, 10 continuity", () => {
+  it("Test 1: keys equal the closed catalogue and the counts are 14 read, 14 write, 10 continuity", () => {
     expect(Object.keys(LICENCE_PERMISSION_EFFECT).sort()).toEqual([...PERMISSIONS].sort());
     for (const permission of PERMISSIONS) expect(LICENCE_PERMISSION_EFFECT[permission], permission).toBeDefined();
     expect(permissionsWithEffect("read")).toHaveLength(14);
-    expect(permissionsWithEffect("write")).toHaveLength(13);
+    expect(permissionsWithEffect("write")).toHaveLength(14);
     expect(permissionsWithEffect("continuity")).toHaveLength(10);
   });
 
@@ -53,7 +53,7 @@ describe("LICENCE_PERMISSION_EFFECT (D-09)", () => {
     expect(permissionsWithEffect("continuity")).toEqual(CONTINUITY);
   });
 
-  it("Test 4: write is exactly the thirteen write permissions", () => {
+  it("Test 4: write is exactly the fourteen write permissions", () => {
     expect(permissionsWithEffect("write")).toEqual(WRITE);
   });
 

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { createOwnTicket } from "@/server/services/ticket-service";
 import { getCurrentActor } from "@/server/auth/current-actor";
+import { rateLimitService } from "@/server/services/rate-limit-service";
 import {
   parseLearnerContextHint,
   validateLearnerTicketContext,
@@ -55,6 +56,18 @@ export async function createTicketAction(input: CreateTicketInput): Promise<Crea
   }
 
   try {
+    // D-11 — per-learner limit, counted only for a valid submission (an
+    // invalid one returned above and consumed nothing). The form keeps the
+    // category, subject, message and picked files on any ok:false result. A
+    // limiter failure lands in the catch below like any other failure.
+    const limit = await rateLimitService.consume("supportTicket", { ip: null, userId: actor.userId });
+    if (limit.limited) {
+      return {
+        ok: false,
+        message: `You've sent several requests in a short time. Wait ${limit.windowMinutes} minutes, then send this one. What you wrote is still here.`,
+      };
+    }
+
     const context = await validateLearnerTicketContext(
       actor.userId,
       parseLearnerContextHint(parsed.data.contextKind, parsed.data.contextId),

@@ -5,20 +5,33 @@
  * again. The service authorizes `courses.edit` through the resource's parent
  * course, deletes the stored object idempotently, deletes the row, and audits
  * the removal. An authorization failure returns an empty 404.
+ *
+ * NFR-09 (plan 15-24): `?caption=1` removes a caption track through
+ * `removeCaption`, which refuses anything that is not a caption (422), so the
+ * caption control can never delete a lesson's file or video.
  */
 
 import { NextResponse } from "next/server";
 import * as permissions from "@/server/permissions";
 import { LICENCE_REFUSAL_MESSAGE } from "@/server/licence/policy";
-import { removeLessonResource } from "@/server/services/lesson-resource-service";
+import {
+  CaptionAttachmentError,
+  removeCaption,
+  removeLessonResource,
+} from "@/server/services/lesson-resource-service";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function DELETE(_request: Request, context: RouteContext): Promise<Response> {
+export async function DELETE(request: Request, context: RouteContext): Promise<Response> {
   const { id } = await context.params;
+  const captionOnly = new URL(request.url).searchParams.get("caption") === "1";
 
   try {
-    await removeLessonResource(id);
+    if (captionOnly) {
+      await removeCaption(id);
+    } else {
+      await removeLessonResource(id);
+    }
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     // Licence refusal (LIC-05): the caller already passed authorization, so this
@@ -31,6 +44,9 @@ export async function DELETE(_request: Request, context: RouteContext): Promise<
       err instanceof permissions.AuthorizationError
     ) {
       return new NextResponse(null, { status: 404 });
+    }
+    if (captionOnly && err instanceof CaptionAttachmentError) {
+      return NextResponse.json({ error: err.message }, { status: 422 });
     }
     throw err;
   }

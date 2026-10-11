@@ -659,6 +659,9 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
 
     const before = await delegate.findUnique({ where: { id: input.sessionId } });
     if (!before) throw new SessionNotFoundError(input.sessionId);
+    // NFR-05 record state (plan 15-26): a second cancellation would overwrite the original
+    // cancellation time and reason and tell every enrolled learner again.
+    if (before.cancelledAt != null) throw new SessionCancelledError(input.sessionId);
 
     const after = await db.$transaction(async (tx) => {
       // F-04 — a cancelled session can make the cohort unready; serialize

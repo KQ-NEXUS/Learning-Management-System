@@ -304,7 +304,7 @@ describe("/dashboard", () => {
       ],
     });
     const endingHtml = await renderPage();
-    expect(endingHtml).toContain("Your access ends 2026-10-01");
+    expect(endingHtml).toContain('Your access ends <time dateTime="2026-10-01T00:00:00.000Z">1 Oct 2026</time>');
     expect(endingHtml).toContain("border-warning");
     expect(endingHtml).not.toContain("border-danger");
 

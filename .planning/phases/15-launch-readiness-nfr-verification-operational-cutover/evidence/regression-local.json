@@ -1,0 +1,120 @@
+{
+  "ranAt": "2026-10-10T11:46:45.452Z",
+  "gitHead": "9599060 (working tree carries the uncommitted work of plans 15-01 to 15-28)",
+  "label": "LOCAL REHEARSAL regression on the final code, Chromium/Firefox/WebKit per plan; not a staging result",
+  "databases": {
+    "volume": "rehearsal (seed + seed-load --volume: 150 learners, 10 staff, 5,000 orders, 2,000 tickets) used for the k6 load, the probe, and journey on chromium (retry), firefox and webkit",
+    "seedOnly": "regression (prisma db seed only, same rehearsal-pg container port 5441) used for the a11y, responsive, keyboard sweeps and the final chromium journey, because those sweeps are designed for a seed-only database (plan 15-19) and timed out against the volume data"
+  },
+  "results": [
+    {
+      "name": "journey chromium (leg 1 + full journey), seed-only DB",
+      "passed": 2,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "database": "regression"
+    },
+    {
+      "name": "journey chromium (leg 1 + full journey), volume DB, re-run",
+      "passed": 2,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "database": "rehearsal",
+      "note": "the first attempt, immediately after a cold server start, failed both tests (register confirmation heading and sign-in redirect not within 5 s); the immediate re-run and the seed-only run passed"
+    },
+    {
+      "name": "journey firefox",
+      "passed": 2,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "database": "rehearsal"
+    },
+    {
+      "name": "journey webkit",
+      "passed": 2,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "database": "rehearsal"
+    },
+    {
+      "name": "a11y axe sweep chromium (spike + 84 screens)",
+      "passed": 85,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "database": "regression"
+    },
+    {
+      "name": "responsive range chromium",
+      "passed": 36,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "database": "regression",
+      "note": "a previous full run had 2 failures while the Docker database was briefly unreachable (Can not reach database server at localhost:5441); those two screens passed in isolation and the full run was repeated clean"
+    },
+    {
+      "name": "keyboard chromium",
+      "passed": 4,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "database": "regression"
+    },
+    {
+      "name": "export worker integration (--no-file-parallelism)",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "name": "domain event drain integration (--no-file-parallelism)",
+      "passed": 15,
+      "failed": 0
+    }
+  ],
+  "integrity": [
+    {
+      "id": "paid-order-has-successful-payment",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "active-enrolment-has-paid-order",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-live-enrolment-per-learner-cohort",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-open-completion-per-enrolment-course",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-grade-per-submission",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "active-certificate-has-completion",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "cohort-within-capacity",
+      "status": "passed",
+      "violationCount": 0
+    }
+  ],
+  "integrityDatabases": {
+    "regression": "7 of 7 passed, --fail-on-violation exit 0",
+    "rehearsalVolume": "7 of 7 passed"
+  }
+}

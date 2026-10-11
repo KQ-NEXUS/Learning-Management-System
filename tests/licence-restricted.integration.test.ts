@@ -58,7 +58,7 @@ let actorId: string;
 let ungrantedId: string;
 
 const WRITE_PERMISSIONS = PERMISSIONS.filter((p) => LICENCE_PERMISSION_EFFECT[p] === "write");
-const EXPECTED_WRITE = 13;
+const EXPECTED_WRITE = 14;
 const EXPECTED_ALLOWED = 24; // 14 read + 10 continuity
 
 beforeAll(async () => {
@@ -111,8 +111,8 @@ async function callAs(
 }
 
 describe("tracer: the permission matrix across the grace boundary (LIC-05, T-14-21-01)", () => {
-  it("the catalogue holds 37 permissions: 13 write, 14 read, 10 continuity", () => {
-    expect(PERMISSIONS).toHaveLength(37);
+  it("the catalogue holds 38 permissions: 14 write, 14 read, 10 continuity", () => {
+    expect(PERMISSIONS).toHaveLength(38);
     expect(WRITE_PERMISSIONS).toHaveLength(EXPECTED_WRITE);
     expect(PERMISSIONS.filter((p) => LICENCE_PERMISSION_EFFECT[p] === "read")).toHaveLength(14);
     expect(PERMISSIONS.filter((p) => LICENCE_PERMISSION_EFFECT[p] === "continuity")).toHaveLength(10);
@@ -153,7 +153,7 @@ describe("tracer: the permission matrix across the grace boundary (LIC-05, T-14-
     });
   });
 
-  it("on the same stored licence: G minus 1 ms allows all 37, G refuses exactly the 13 write-class permissions", async () => {
+  it("on the same stored licence: G minus 1 ms allows all 38, G refuses exactly the 14 write-class permissions", async () => {
     const { graceEndsAt } = await activateDefault();
     const clock = makeClock(justBefore(graceEndsAt));
     const { withPermission } = guardedWithPermission(testDb, clock, {
@@ -178,7 +178,7 @@ describe("tracer: the permission matrix across the grace boundary (LIC-05, T-14-
 
     const before = await run();
     expect(before.refused).toHaveLength(0);
-    expect(before.allowed).toHaveLength(37);
+    expect(before.allowed).toHaveLength(38);
 
     clock.set(graceEndsAt);
     const at = await run();

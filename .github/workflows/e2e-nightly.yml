@@ -1,0 +1,95 @@
+# Nightly browser checks (Phase 15, plan 15-19; D-13, D-08, NFR-09, NFR-12).
+#
+# Runs the full learner and staff journey and the accessibility sweep (axe,
+# WCAG 2.2 AA rules, 1440 and 390 pixels wide, every page in
+# e2e/screens.manifest.ts) in Chromium against a throwaway Postgres service
+# container seeded with prisma/seed.ts. Like ci.yml it treats the repository as
+# public:
+#   - it triggers on a schedule and on manual dispatch only, never on a pull
+#     request, so no outside code runs here;
+#   - the token is limited to `contents: read`;
+#   - it reads no repository secret: every value below is a local test value
+#     for a container that exists only for this run;
+#   - third-party actions are pinned to full commit SHAs (version in the
+#     trailing comment), the same SHAs as ci.yml.
+# tests/ci-config.test.ts guards these rules for every workflow file.
+
+name: E2E nightly
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # The container below is created for this run and thrown away after it.
+  DATABASE_URL: postgresql://lms:lms-e2e-local-only@localhost:5432/lms_e2e?schema=public
+
+jobs:
+  e2e:
+    name: Journey and accessibility sweep (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lms
+          POSTGRES_PASSWORD: lms-e2e-local-only
+          POSTGRES_DB: lms_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lms -d lms_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      # postinstall runs `prisma generate`.
+      - run: npm ci
+      # Refuses to go on unless the database named above is a local one.
+      - run: npx tsx scripts/ops/assert-local-db.ts
+      - run: npx prisma migrate deploy
+      - run: npx prisma db seed
+      # The journey uploads a file and downloads a certificate PDF, so it needs
+      # object storage. A throwaway MinIO container on the loopback address; the
+      # values match e2e/support/server-env.ts and are local test values.
+      - name: Start local object storage
+        run: >-
+          docker run -d --name journey-minio -p 127.0.0.1:9000:9000
+          -e MINIO_ROOT_USER=journeyminio
+          -e MINIO_ROOT_PASSWORD=journey-minio-secret
+          minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+          server /data
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Full journey
+        run: npx playwright test --config e2e/playwright.config.ts e2e/journey.spec.ts --project=chromium --grep "full journey"
+      - name: Accessibility sweep
+        if: ${{ !cancelled() }}
+        env:
+          A11Y_OUT: test-results/a11y-axe.json
+        run: npx playwright test --config e2e/playwright.config.ts e2e/a11y-screens.spec.ts --project=chromium
+      - name: Upload the Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore

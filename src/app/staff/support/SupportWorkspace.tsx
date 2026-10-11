@@ -15,6 +15,7 @@ import type {
 } from "@/server/services/ticket-staff-queue-service";
 import { QUEUE_OPTIONS, QUEUE_TABS, QUEUE_TAB_LABEL, type QueueTab } from "@/lib/support-queue";
 import { humanizeCode } from "@/lib/humanize";
+import { LagosTime } from "@/components/time/LagosTime";
 
 const EMPTY_COPY: Record<QueueTab, string> = {
   "my-work": "No tickets assigned to you.",
@@ -109,7 +110,7 @@ export function SupportWorkspace({ view, assignees = [], denied = false, error =
         subtitle="Triage, assign, and resolve learner requests."
         band={
           <p className="mt-4 font-mono text-[13px] text-sidebar-soft">
-            Data as of <time dateTime={new Date(view.asOf).toISOString()}>{new Date(view.asOf).toLocaleString("en-GB", { timeZone: "UTC" })} UTC</time>
+            Data as of <LagosTime value={view.asOf} />
           </p>
         }
       />

@@ -37,9 +37,11 @@ const NAV: StaffNavItem[] = [
   { label: "Programmes", href: "/staff/programmes", group: "Catalogue" },
   { label: "Certificates", href: "/staff/certificates", group: "Catalogue" },
   { label: "Support", href: "/staff/support", group: "Operations" },
+  { label: "Operations status", href: "/staff/operations", group: "Operations" },
   { label: "Users", href: "/staff/users", group: "Administration" },
   { label: "Roles", href: "/staff/roles", group: "Administration" },
   { label: "Learner numbers", href: "/staff/learner-numbers", group: "Administration" },
+  { label: "Learner privacy", href: "/staff/privacy", group: "Administration" },
   { label: "Audit", href: "/staff/audit", group: "Administration" },
   { label: "Email log", href: "/staff/email-log", group: "Administration" },
   { label: "Licence", href: "/staff/licence", group: "Administration" },
@@ -60,9 +62,11 @@ const NAV_PERMISSION: Record<string, Parameters<typeof can>[0]> = {
   "/staff/roles": "roles.view",
   "/staff/audit": "audit.view",
   "/staff/email-log": "audit.view",
+  "/staff/operations": "audit.view",
   // licence.view is Global only, so it is deliberately absent from SCOPE_AWARE_SECTIONS.
   "/staff/licence": "licence.view",
   "/staff/learner-numbers": "users.manage",
+  "/staff/privacy": "privacy.manage",
 };
 
 /** Sections whose list pages filter to the caller's scope (integration warning #1). */

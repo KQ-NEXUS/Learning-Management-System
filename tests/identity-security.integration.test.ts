@@ -7,10 +7,55 @@ import { createVerificationService, type VerificationStore } from "@/server/serv
 import { createPasswordResetService, type PasswordResetStore } from "@/server/services/password-reset-service";
 import { createProfileService, type ProfileStore } from "@/server/services/profile-service";
 import { TOKEN_PURPOSE } from "@/lib/identity";
+import { hashPassword } from "@/server/auth/password";
+import { signInAction } from "@/app/(auth)/signin/actions";
+
+// D-16 — the sign-in action runs its module singletons (auth and verification
+// services) against `@/server/db`. Point that module at this file's
+// Testcontainers database, lazily, so the shared `.env` database is never
+// touched.
+const dbHolder = vi.hoisted(() => ({ prisma: null as unknown as object }));
+vi.mock("@/server/db", () => ({
+  prisma: new Proxy({}, {
+    get(_target, key) {
+      const client = dbHolder.prisma as Record<PropertyKey, unknown>;
+      const value = Reflect.get(client, key);
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(client) : value;
+    },
+  }),
+}));
+
+// The action reads the trusted client-IP header and the cookie jar.
+const request = vi.hoisted(() => ({ ip: "198.51.100.1" }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "x-nf-client-connection-ip": request.ip }),
+  cookies: async () => ({ get: () => undefined, set: () => {}, delete: () => {} }),
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (url: string) => { throw new Error("redirect:" + url); },
+}));
+
+// `after()` is recorded, not run, so a test can prove the email is queued
+// only once the action has already returned its state.
+const afterQueue = vi.hoisted(() => [] as Array<() => unknown>);
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (callback: () => unknown) => { afterQueue.push(callback); },
+}));
+
+// Real Postgres plus real scrypt (N=131072) per sign-in: on a loaded machine
+// several cases exceed Vitest's 5 s default without anything being wrong.
+vi.setConfig({ testTimeout: 60_000 });
 
 let db: TestDatabase;
-beforeAll(async () => { db = await startTestDatabase(); }, TEST_DB_TIMEOUT_MS);
-afterAll(async () => { await db?.stop(); }, TEST_DB_TIMEOUT_MS);
+beforeAll(async () => {
+  db = await startTestDatabase();
+  dbHolder.prisma = db.prisma;
+}, TEST_DB_TIMEOUT_MS);
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  await db?.stop();
+}, TEST_DB_TIMEOUT_MS);
 
 function verification() {
   return createVerificationService({
@@ -56,6 +101,10 @@ describe("identity security — real Postgres", () => {
     const session = await db.prisma.session.findFirstOrThrow({ where: { userId: account.id } });
     expect(session.sessionToken).toBe(sha(signedIn.token));
     expect(session.sessionToken).not.toBe(signedIn.token);
+    // NFR-07 — the success is audited through the real sink.
+    expect(await db.prisma.auditEvent.count({
+      where: { action: "auth.sign_in.succeeded", actorId: account.id, targetId: account.id, outcome: "SUCCESS" },
+    })).toBe(1);
 
     const raw = await resetToken(account.email);
     const row = await db.prisma.verificationToken.findFirstOrThrow({ where: { identifier: account.email } });
@@ -196,5 +245,121 @@ describe("identity security — real Postgres", () => {
     await db.prisma.user.update({ where: { id: account.id }, data: { status: "DEACTIVATED" } });
     expect(await v.verifyEmail(token.token)).toEqual({ ok: false });
     expect((await db.prisma.user.findUniqueOrThrow({ where: { id: account.id } })).status).toBe("DEACTIVATED");
+  });
+});
+
+describe("D-16 (U-11) — sign-in for an unverified account, through the action", () => {
+  const RIGHT = "Right-passw0rd!";
+
+  beforeAll(() => {
+    // Stub transport only: no real email leaves the test.
+    vi.stubEnv("EMAIL_TRANSPORT", "stub");
+    vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+    vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+    vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+    vi.stubEnv("APP_BASE_URL", "https://lms.acme.test");
+  });
+
+  function form(email: string, password: string) {
+    const data = new FormData();
+    data.set("email", email);
+    data.set("password", password);
+    return data;
+  }
+
+  async function pendingAccount() {
+    return db.prisma.user.create({
+      data: {
+        email: randomUUID() + "@example.com",
+        name: "Pending fixture",
+        status: "PENDING_VERIFICATION",
+        passwordHash: await hashPassword(RIGHT),
+      },
+    });
+  }
+
+  async function mailFor(email: string) {
+    const [tokens, dispatches] = await Promise.all([
+      db.prisma.verificationToken.count({ where: { identifier: email, purpose: TOKEN_PURPOSE.EMAIL_VERIFICATION } }),
+      db.prisma.emailDispatch.count({ where: { toEmail: email, template: "email-verification" } }),
+    ]);
+    return { tokens, dispatches };
+  }
+
+  async function runQueuedAfterCallbacks() {
+    const queued = afterQueue.splice(0);
+    for (const callback of queued) await callback();
+    return queued.length;
+  }
+
+  it("the right password queues exactly one fresh verification email, and only after the action has returned", async () => {
+    afterQueue.length = 0;
+    request.ip = "198.51.100.61";
+    const account = await pendingAccount();
+
+    const state = await signInAction({ error: null }, form(account.email, RIGHT));
+    expect(state.error).toMatch(/^Those details do not match an account\./);
+    // Nothing has been sent yet: the email is queued for after the response.
+    expect(await mailFor(account.email)).toEqual({ tokens: 0, dispatches: 0 });
+    expect(afterQueue).toHaveLength(1);
+
+    expect(await runQueuedAfterCallbacks()).toBe(1);
+    expect(await mailFor(account.email)).toEqual({ tokens: 1, dispatches: 1 });
+    const dispatch = await db.prisma.emailDispatch.findFirstOrThrow({ where: { toEmail: account.email } });
+    expect(dispatch.status).toBe("SENT");
+    // The account stays unverified and no session was created.
+    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: account.id } })).status).toBe("PENDING_VERIFICATION");
+    expect(await db.prisma.session.count({ where: { userId: account.id } })).toBe(0);
+
+    // NFR-07 — one real audit row, with IP and correlation, and no address.
+    const rows = await db.prisma.auditEvent.findMany({ where: { action: "auth.sign_in.failed", targetId: account.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ actorId: null, actorType: "SYSTEM", targetType: "User", outcome: "DENIED", ipAddress: "198.51.100.61" });
+    expect(rows[0].correlationId).toBeTruthy();
+    expect(JSON.stringify(rows[0])).not.toContain(account.email);
+    expect(JSON.stringify(rows[0])).not.toContain(RIGHT);
+  });
+
+  it("a wrong password for an unverified account queues nothing", async () => {
+    afterQueue.length = 0;
+    request.ip = "198.51.100.62";
+    const account = await pendingAccount();
+
+    await signInAction({ error: null }, form(account.email, "Wrong-passw0rd!"));
+    expect(afterQueue).toHaveLength(0);
+    expect(await mailFor(account.email)).toEqual({ tokens: 0, dispatches: 0 });
+  });
+
+  it("unknown address, wrong password and unverified account return byte-identical states", async () => {
+    afterQueue.length = 0;
+    request.ip = "198.51.100.63";
+    const email = randomUUID() + "@example.com";
+    const prev = { error: null };
+
+    // 1. The address has no account.
+    const unknown = await signInAction(prev, form(email, RIGHT));
+
+    // 2. The address belongs to an unverified account and the password matches.
+    const account = await db.prisma.user.create({
+      data: { email, name: "Same address", status: "PENDING_VERIFICATION", passwordHash: await hashPassword(RIGHT) },
+    });
+    const unverified = await signInAction(prev, form(email, RIGHT));
+    expect(afterQueue).toHaveLength(1);
+    afterQueue.length = 0;
+
+    // 3. The account is active and the password is wrong.
+    await db.prisma.user.update({ where: { id: account.id }, data: { status: "ACTIVE" } });
+    const wrong = await signInAction(prev, form(email, "Wrong-passw0rd!"));
+
+    expect(unverified).toEqual(unknown);
+    expect(wrong).toEqual(unknown);
+    expect(JSON.stringify(unverified)).toBe(JSON.stringify(unknown));
+    expect(JSON.stringify(wrong)).toBe(JSON.stringify(unknown));
+    expect(unknown).toEqual({
+      email,
+      attempt: 1,
+      error:
+        "Those details do not match an account. If you've registered but not verified your email yet, use the link in the verification email we sent you, then sign in.",
+    });
   });
 });

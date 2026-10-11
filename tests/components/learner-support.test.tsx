@@ -323,9 +323,9 @@ describe("resolved, reopen and closed", () => {
   it("shows the prompt, exact auto-close date and no composer", () => {
     render(<LearnerTicketDetail ticket={resolved} banner={null} actions={actionsStub()} />);
     expect(screen.getByText("Did this solve the issue?")).toBeTruthy();
-    expect(
-      screen.getByText("This ticket will close automatically on 28 September 2026 unless you reopen it."),
-    ).toBeTruthy();
+    const autoClose = screen.getByText(/This ticket will close automatically on/);
+    expect(autoClose.textContent).toBe("This ticket will close automatically on 28 Sep 2026 unless you reopen it.");
+    expect(autoClose.querySelector("time")?.getAttribute("datetime")).toBe("2026-09-28T12:00:00.000Z");
     expect(screen.getByRole("button", { name: "Close ticket" })).toBeTruthy();
     expect(screen.queryByLabelText("Message")).toBeNull();
   });

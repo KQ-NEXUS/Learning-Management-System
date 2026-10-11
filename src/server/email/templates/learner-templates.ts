@@ -75,7 +75,8 @@ type Definition<P> = (params: P) => EmailContent;
 function when(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "a time to be confirmed";
-  return `${formatDateTimeShort(date)} UTC`;
+  // Lagos time with its own " WAT" label (D-17); no extra zone suffix here.
+  return formatDateTimeShort(date);
 }
 
 function ticketTemplate(

@@ -100,14 +100,12 @@ import { prisma } from "@/server/db";
 import type { Actor } from "@/server/permissions/with-permission";
 import {
   listOwnDashboardEnrolments,
-  loadLearnerCourseStructure,
   loadLearnerPath,
   loadPinnedCompletionRuleSource,
   assertLessonOpenable,
   isCourseObligationPayload,
   isProgrammeObligationPayload,
   type OwnEnrolmentSnapshot,
-  type LearnerCourseStructure,
   type LearnerPath,
   type PinnedCompletionRuleSource,
   type LessonOpenResult,
@@ -315,7 +313,6 @@ export type EnrolmentDashboardStore = Partial<CompletionAssessmentReader> & {
 export type EnrolmentDashboardLearnerAccess = {
   /** ACTIVE then COMPLETED own enrolments (G-01) — the dashboard's only enrolment source. */
   listOwnDashboardEnrolments(actor: Actor): Promise<OwnEnrolmentSnapshot[]>;
-  loadLearnerCourseStructure(enrolment: OwnEnrolmentSnapshot): Promise<LearnerCourseStructure>;
   loadLearnerPath(
     actor: Actor,
     enrolmentId: string,
@@ -338,8 +335,13 @@ export type EnrolmentDashboardLearnerResults = {
   getOwnAssessmentObligations(
     actor: Actor,
     input: { enrolmentId: string },
+    options?: { path?: LearnerPath },
   ): Promise<AssessmentObligation[]>;
-  getOwnResults(actor: Actor, input: { enrolmentId?: string }): Promise<LearnerResultCard[]>;
+  getOwnResults(
+    actor: Actor,
+    input: { enrolmentId?: string },
+    options?: { path?: LearnerPath },
+  ): Promise<LearnerResultCard[]>;
 };
 
 export type EnrolmentDashboardDeps = {
@@ -742,10 +744,14 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       certificate: DashboardCertificateStoreRow | null;
     },
   ): Promise<EnrolmentCardContext> {
-    const [sessions, records, structure] = await Promise.all([
+    // One path load serves the structure, the rule source's course, the results and the
+    // obligations below. It used to be four loads of the same tree per enrolment (plan 15-28).
+    // `includeCompleted` is what lets a COMPLETED enrolment resolve (G-01: visible, not operable —
+    // this is the ONLY caller that opts in).
+    const [sessions, records, loadedPath] = await Promise.all([
       store.scheduledSession.findMany({ where: { cohortId: enrolment.cohortId } }),
       store.attendanceRecord.findMany({ where: { enrolmentId: enrolment.id } }),
-      learnerAccess.loadLearnerCourseStructure(enrolment),
+      learnerAccess.loadLearnerPath(actor, enrolment.id, { includeCompleted: true }),
     ]);
 
     const attendance = computeAttendanceComponentForCard(enrolment, sessions, records);
@@ -769,32 +775,12 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       hasMoreSessions,
     };
 
-    if (structure.kind === "unpinned") {
-      const nextAction: NextAction = isCompleted
-        ? { kind: "complete" }
-        : deriveNextAction({
-            enrolmentId: enrolment.id,
-            now: nowDate,
-            nearestFutureSession,
-            path: null,
-            verdict: null,
-          });
-      return {
-        card: { ...base, progress: unpinnedProgress(attendance), nextAction },
-        verdict: null,
-        path: null,
-        futureNonCancelled,
-      };
-    }
-
-    // Defensive fallback only — `loadLearnerPath` cannot legitimately return
-    // null here: `enrolment` was just confirmed ACTIVE-or-COMPLETED and owned
-    // by `actor` by `listOwnDashboardEnrolments` itself, and `includeCompleted`
-    // is what lets a COMPLETED one resolve (G-01: visible, not operable — this
-    // is the ONLY caller that opts in). Treated identically to "unpinned"
-    // rather than throwing, since a learner's dashboard must never hard-fail
-    // on one enrolment.
-    const path = await learnerAccess.loadLearnerPath(actor, enrolment.id, { includeCompleted: true });
+    // `loadLearnerPath` returns a path with no courses exactly when the cohort has no resolvable
+    // pin (an unpinned structure); a pinned structure always has at least one course. The same
+    // result is also treated as unpinned if the path is missing — a learner's dashboard must never
+    // hard-fail on one enrolment (it cannot legitimately be null here: `enrolment` was just
+    // confirmed ACTIVE-or-COMPLETED and owned by `actor` by `listOwnDashboardEnrolments`).
+    const path = loadedPath && loadedPath.courses.length > 0 ? loadedPath : null;
     if (!path) {
       const nextAction: NextAction = isCompleted
         ? { kind: "complete" }
@@ -818,12 +804,12 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
 
     // Same evaluator, same evidence shape `completion-service.ts` uses for
     // the persisted `CompletionRecord` — a second, disagreeing calculator is
-    // never written here (T-09-30). `structure.courses[0]` is a valid rule
+    // never written here (T-09-30). `path.courses[0]` is a valid rule
     // source for BOTH a standalone course-cohort (its one course) and a
     // programme-cohort (`courseId` there is only an ownership guard per
     // `learner-access.ts`'s own doc comment, never a per-course pin picker).
     let verdict: CompletionVerdict | null = null;
-    const ruleCourseId = structure.courses[0]?.courseId;
+    const ruleCourseId = path.courses[0]?.courseId;
     if (ruleCourseId) {
       const ruleSource = await learnerAccess.loadPinnedCompletionRuleSource(enrolment, ruleCourseId);
       // `ruleSource.json` is the WHOLE pinned obligation payload (course or
@@ -902,7 +888,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     // deferred constant here showed "No results yet" to a learner who had
     // just passed (audit R3-10).
     if (isCompleted) {
-      const results = await learnerResults.getOwnResults(actor, { enrolmentId: enrolment.id });
+      const results = await learnerResults.getOwnResults(actor, { enrolmentId: enrolment.id }, { path });
       return {
         card: {
           ...base,
@@ -922,8 +908,8 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
     // to `base`'s deferred inhabitants instead (returned by the two earlier
     // branches above, never reaching here).
     const [obligations, results] = await Promise.all([
-      learnerResults.getOwnAssessmentObligations(actor, { enrolmentId: enrolment.id }),
-      learnerResults.getOwnResults(actor, { enrolmentId: enrolment.id }),
+      learnerResults.getOwnAssessmentObligations(actor, { enrolmentId: enrolment.id }, { path }),
+      learnerResults.getOwnResults(actor, { enrolmentId: enrolment.id }, { path }),
     ]);
 
     return {
@@ -1055,7 +1041,6 @@ const built = createEnrolmentDashboardService({
   store: liveStore,
   learnerAccess: {
     listOwnDashboardEnrolments,
-    loadLearnerCourseStructure,
     loadLearnerPath,
     loadPinnedCompletionRuleSource,
     assertLessonOpenable,

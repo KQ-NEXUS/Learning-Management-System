@@ -319,7 +319,7 @@ export function ResourceTable<T>({
               filter.kind === "select" && filter.variant !== "select" && filter.options.length <= 4;
 
             return (
-              <div key={filter.name} className="flex items-center gap-2">
+              <div key={filter.name} className="flex max-w-full items-center gap-2">
                 <label
                   htmlFor={isSegmented ? undefined : filterId}
                   className={filter.kind === "search" ? "sr-only" : "text-[13px] text-muted-foreground"}
@@ -327,7 +327,7 @@ export function ResourceTable<T>({
                   {filter.label}
                 </label>
                 {filter.kind === "search" ? (
-                  <div className="relative flex items-center">
+                  <div className="relative flex min-w-0 items-center">
                     <Search
                       aria-hidden
                       className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground"
@@ -579,8 +579,9 @@ export function ResourceTable<T>({
       )}
 
       {/* Table — hidden below 640px in favour of the stacked row list; scrolls
-          sideways inside its own box rather than the page if it ever overflows. */}
-      <div className="hidden overflow-x-auto sm:block">
+          sideways inside its own box rather than the page if it ever overflows.
+          The box is a labelled, focusable region so a keyboard user can scroll it (WCAG 2.1.1). */}
+      <div role="region" aria-label={`${noun} table`} tabIndex={0} className="hidden overflow-x-auto sm:block">
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">
             {loading ? `Loading ${noun}` : `${rows.length} ${noun}`}

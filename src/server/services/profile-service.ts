@@ -11,6 +11,7 @@
  * imports no authorization wrapper — that is deliberate, not an oversight.
  */
 
+import { cache } from "react";
 import { prisma } from "@/server/db";
 import { verifyPassword } from "@/server/auth/password";
 import type { Actor } from "@/server/permissions/with-permission";
@@ -114,8 +115,14 @@ export function createProfileService(deps: {
   const { store, issueToken, consumeToken, dispatch, audit } = deps;
   const verify = deps.verify ?? verifyPassword;
 
+  // The signed-in shell reads the own user row twice in one render (the profile chip and the
+  // temporary-password hint). React's cache() shares one read between them for the length of that
+  // render only; outside a render it is a pass-through, so nothing is held between requests or
+  // between an update and the read that follows it (plan 15-28, NFR-02 statement budget).
+  const readOwnUserRow = cache((userId: string) => store.user.findUnique({ where: { id: userId } }));
+
   async function getOwnProfile(actor: Actor): Promise<ProfileSnapshot | null> {
-    const user = await store.user.findUnique({ where: { id: actor.userId } });
+    const user = await readOwnUserRow(actor.userId);
     if (!user) return null;
     const marketingOptIn = await readMarketingOptIn(store, user.id);
     return {
@@ -134,7 +141,7 @@ export function createProfileService(deps: {
    * an unknown user.
    */
   async function isUsingTemporaryPassword(actor: Actor): Promise<boolean> {
-    const user = await store.user.findUnique({ where: { id: actor.userId } });
+    const user = await readOwnUserRow(actor.userId);
     return user?.passwordIsTemporary === true;
   }
 

@@ -7,18 +7,41 @@
  */
 
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
 import { createTestCollectionAuthorizer } from "./support/collection-harness";
 import { AuthorizationError } from "@/server/permissions/with-permission";
 import {
   createPaymentReadService,
   derivedSettlementState,
+  PAYMENT_LIST_MAX_PAGE_SIZE,
+  PAYMENT_LIST_PAGE_SIZE,
+  type PaymentListPage,
   type PaymentReadServiceDeps,
   type PaymentListOrderRow,
   type PaymentDetailOrderRow,
   type SettlementActuals,
 } from "@/server/services/payment-read-service";
+
+// Only the live list binding is replaced (for the page cases at the end);
+// createPaymentReadService and everything else stay the real module.
+const pageMocks = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/server/services/payment-read-service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/server/services/payment-read-service")>()),
+  listPaymentsForStaff: pageMocks.list,
+}));
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children?: ReactNode } & Record<string, unknown>) =>
+    createElement("a", { href, ...rest }, children),
+}));
+vi.mock("@/app/staff/payments/PaymentsTable", () => ({
+  PaymentsTable: ({ rows, denied }: { rows?: unknown[]; denied?: unknown }) =>
+    createElement("div", { "data-table": denied ? "denied" : String(rows?.length ?? 0) }),
+}));
+
+import PaymentsPage from "@/app/staff/payments/page";
 
 // ---------------------------------------------------------------------------
 // derivedSettlementState — the three-state table
@@ -118,14 +141,21 @@ function harness(opts?: {
 }) {
   const { withPermission } = createTestWithPermission(opts?.grants ?? [grant("payments.view", "GLOBAL")]);
   const { authorizeCollection } = createTestCollectionAuthorizer(opts?.grants ?? [grant("payments.view", "GLOBAL")]);
-  const listCalls: number[] = [];
+  const listCalls: Array<Parameters<PaymentReadServiceDeps["order"]["findMany"]>[0]> = [];
+  const countCalls: Array<Parameters<PaymentReadServiceDeps["order"]["count"]>[0]> = [];
   const detailCalls: string[] = [];
+  const all = () => opts?.listRows ?? [listRow()];
 
   const deps: PaymentReadServiceDeps = {
     order: {
-      findMany: async () => {
-        listCalls.push(1);
-        return opts?.listRows ?? [listRow()];
+      // Honours skip/take like the database would, so paging is observable.
+      findMany: async (args) => {
+        listCalls.push(args);
+        return all().slice(args.skip, args.skip + args.take);
+      },
+      count: async (args) => {
+        countCalls.push(args);
+        return all().length;
       },
       findUnique: async ({ where }) => {
         detailCalls.push(where.id);
@@ -141,7 +171,7 @@ function harness(opts?: {
     authorizeCollection,
   };
 
-  return { deps, listCalls, detailCalls };
+  return { deps, listCalls, countCalls, detailCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -155,15 +185,71 @@ describe("listPaymentsForStaff — permission gating (RBAC-06)", () => {
 
     await expect(service.listPaymentsForStaff()).rejects.toBeInstanceOf(AuthorizationError);
     expect(h.listCalls).toHaveLength(0);
+    expect(h.countCalls).toHaveLength(0);
   });
 
   it("returns rows scoped to payments.view when the grant is present", async () => {
     const h = harness({ listRows: [listRow()] });
     const service = createPaymentReadService(h.deps);
 
-    const rows = await service.listPaymentsForStaff();
+    const { rows, total } = await service.listPaymentsForStaff();
     expect(rows).toHaveLength(1);
+    expect(total).toBe(1);
     expect(h.listCalls).toHaveLength(1);
+  });
+
+  it("uses the same cohort-scoped where for the rows and the total (T-15-09-03)", async () => {
+    const h = harness({ grants: [grant("payments.view", "COHORT", "cohort-a")] });
+    const service = createPaymentReadService(h.deps);
+    await service.listPaymentsForStaff();
+
+    expect(h.listCalls[0].where).toEqual(h.countCalls[0].where);
+    expect(JSON.stringify(h.listCalls[0].where)).toContain("cohort-a");
+  });
+});
+
+describe("listPaymentsForStaff — bounded pages (NFR-02, T-15-09-04)", () => {
+  const many = Array.from({ length: 120 }, (_, i) => listRow({ id: `order-${i + 1}`, reference: `ORD-${i + 1}` }));
+
+  it("reads at most 50 orders by default, newest first then id, and returns the total", async () => {
+    const h = harness({ listRows: many });
+    const service = createPaymentReadService(h.deps);
+    const result = await service.listPaymentsForStaff();
+
+    expect(result).toMatchObject({ total: 120, page: 1, pageSize: PAYMENT_LIST_PAGE_SIZE });
+    expect(result.rows).toHaveLength(50);
+    expect(h.listCalls[0]).toMatchObject({ skip: 0, take: 50 });
+    expect(h.listCalls[0].orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+  });
+
+  it("skips to the requested page and returns the remainder on the last page", async () => {
+    const h = harness({ listRows: many });
+    const service = createPaymentReadService(h.deps);
+    const third = await service.listPaymentsForStaff({ page: 3 });
+
+    expect(h.listCalls[0]).toMatchObject({ skip: 100, take: 50 });
+    expect(third.rows.map((r) => r.id)).toEqual(many.slice(100).map((r) => r.id));
+    expect(third.total).toBe(120);
+  });
+
+  it("returns an empty page and the correct total beyond the last page", async () => {
+    const h = harness({ listRows: many });
+    const service = createPaymentReadService(h.deps);
+    const beyond = await service.listPaymentsForStaff({ page: 9 });
+
+    expect(beyond).toMatchObject({ rows: [], total: 120, page: 9 });
+  });
+
+  it("clamps the page size to 1..100 and an invalid page to 1", async () => {
+    const h = harness({ listRows: many });
+    const service = createPaymentReadService(h.deps);
+
+    expect((await service.listPaymentsForStaff({ pageSize: 5_000 })).pageSize).toBe(PAYMENT_LIST_MAX_PAGE_SIZE);
+    expect((await service.listPaymentsForStaff({ pageSize: 0 })).pageSize).toBe(1);
+    expect((await service.listPaymentsForStaff({ pageSize: 2.5 })).pageSize).toBe(50);
+    expect((await service.listPaymentsForStaff({ page: -4 })).page).toBe(1);
+    expect((await service.listPaymentsForStaff({ page: Number.NaN })).page).toBe(1);
+    for (const call of h.listCalls) expect(call.take).toBeLessThanOrEqual(100);
   });
 });
 
@@ -181,7 +267,9 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       ],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff();
+    const {
+      rows: [row],
+    } = await service.listPaymentsForStaff();
 
     expect(row).toMatchObject({
       id: "order-1",
@@ -202,7 +290,9 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       listRows: [listRow({ paymentAttempts: [] })],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff();
+    const {
+      rows: [row],
+    } = await service.listPaymentsForStaff();
     expect(row.settlementState).toBe("ESTIMATED_ONLY");
   });
 
@@ -225,7 +315,9 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       ],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff();
+    const {
+      rows: [row],
+    } = await service.listPaymentsForStaff();
     expect(row.settlementState).toBe("RECONCILED");
   });
 
@@ -248,7 +340,9 @@ describe("listPaymentsForStaff — row shape (07-UI-SPEC §7.5)", () => {
       ],
     });
     const service = createPaymentReadService(h.deps);
-    const [row] = await service.listPaymentsForStaff();
+    const {
+      rows: [row],
+    } = await service.listPaymentsForStaff();
     expect(row.settlementState).toBe("EXCEPTION");
   });
 });
@@ -406,6 +500,81 @@ describe("getPaymentDetailForStaff — permission gating and shape (D-14, D-18, 
     const service = createPaymentReadService(h.deps);
     const detail = await service.getPaymentDetailForStaff("order-1");
     expect(detail?.eligibleRefundMinor).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// /staff/payments — the paged page (NFR-02)
+// ---------------------------------------------------------------------------
+
+describe("/staff/payments page — one bounded page with Previous and Next", () => {
+  function pageOf(page: number, total: number, pageSize = 50): PaymentListPage {
+    const count = Math.max(0, Math.min(pageSize, total - (page - 1) * pageSize));
+    return {
+      rows: Array.from({ length: count }, (_, i) => ({ id: `o-${i}` }) as unknown as PaymentListPage["rows"][number]),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  async function render(searchParams: Record<string, string | string[]>) {
+    return renderToStaticMarkup(await PaymentsPage({ searchParams: Promise.resolve(searchParams) }));
+  }
+
+  beforeEach(() => {
+    pageMocks.list.mockReset();
+    pageMocks.list.mockImplementation(async ({ page }: { page: number }) => pageOf(page, 120));
+  });
+
+  it("renders 'Showing {n} of {total}.' and only a Next link on the first page", async () => {
+    const html = await render({});
+    expect(pageMocks.list).toHaveBeenCalledWith({ page: 1 });
+    expect(html).toContain("Showing 50 of 120.");
+    expect(html).toContain('href="/staff/payments?page=2"');
+    expect(html).toContain(">Next<");
+    expect(html).not.toContain(">Previous<");
+  });
+
+  it("renders both links on a middle page and keeps a known status tab in them", async () => {
+    const html = await render({ page: "2", status: "EXCEPTION" });
+    expect(pageMocks.list).toHaveBeenCalledWith({ page: 2 });
+    expect(html).toContain('href="/staff/payments?status=EXCEPTION"');
+    expect(html).toContain('href="/staff/payments?status=EXCEPTION&amp;page=3"');
+  });
+
+  it("renders only a Previous link on the last page", async () => {
+    const html = await render({ page: "3" });
+    expect(html).toContain("Showing 20 of 120.");
+    expect(html).toContain(">Previous<");
+    expect(html).not.toContain(">Next<");
+  });
+
+  it("falls back to page 1 for an invalid page parameter", async () => {
+    for (const page of ["0", "-2", "abc", "1.5", "1e3", "999999", ""]) {
+      pageMocks.list.mockClear();
+      await render({ page });
+      expect(pageMocks.list).toHaveBeenCalledWith({ page: 1 });
+    }
+    pageMocks.list.mockClear();
+    await render({ page: ["2", "3"] });
+    expect(pageMocks.list).toHaveBeenCalledWith({ page: 2 });
+  });
+
+  it("shows the last page instead of an empty table for a page past the end", async () => {
+    const html = await render({ page: "40" });
+    expect(pageMocks.list).toHaveBeenNthCalledWith(1, { page: 40 });
+    expect(pageMocks.list).toHaveBeenNthCalledWith(2, { page: 3 });
+    expect(html).toContain("Showing 20 of 120.");
+  });
+
+  it("renders no paging line when there are no orders, and the denied table on a denial", async () => {
+    pageMocks.list.mockImplementation(async () => pageOf(1, 0));
+    expect(await render({})).not.toContain("Showing");
+    pageMocks.list.mockRejectedValue(new AuthorizationError("payments.view"));
+    const denied = await render({});
+    expect(denied).toContain('data-table="denied"');
+    expect(denied).not.toContain("Showing");
   });
 });
 

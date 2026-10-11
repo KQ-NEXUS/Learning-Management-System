@@ -20,25 +20,41 @@
  * controls are keyboard-accessible and screen-reader-labelled by the browser;
  * a custom player would have to re-earn that and NFR-09 gives no reason to.
  *
- * NO <track> ELEMENT. There is no caption source to point one at: neither
- * `Lesson` nor `LessonResource` carries a captions/WebVTT association, and the
- * VIDEO upload allow-list (`src/lib/upload-limits.ts`) accepts only `video/mp4`
- * and `video/webm`. A `<track>` with no `src` renders a "captions" entry in the
- * native menu that does nothing — it advertises an accessibility feature that
- * does not exist. Removing it is honest markup, NOT closure of CR-11 / NFR-09:
- * real caption delivery needs a new scanned-WebVTT data/upload contract and is
- * recorded, unresolved, in
- * `.planning/phases/04.1-design-system-rollout-modern-ui-across-every-existing-surfac/04.1-CAPTIONS-SCOPE.md`.
+ * TRACK ELEMENTS ONLY FOR REAL CAPTION FILES (NFR-09, plan 15-23). A `<track>`
+ * is rendered for each entry of the `captions` prop and for nothing else: each
+ * entry is a scanned (READY) WebVTT `LessonResource` linked to this video, and
+ * its `src` is the same-origin, authorised, uncached route
+ * `/api/lesson-resources/{id}/captions` (a `<track>` cannot follow a redirect to
+ * object storage without bucket CORS, and a caption file is at most 1 MB). With
+ * no captions the markup has no `<track>` at all, so the native menu never
+ * advertises captions that do not exist (the 04.1 honest-markup rule, CR-11).
+ * Captions are never fabricated from the lesson title or body. The video's own
+ * `src` stays the presigned download redirect and still carries no cross-origin
+ * attribute, because the track is same-origin.
  */
+
+/** One caption track: a READY WebVTT resource linked to this video. */
+export type LessonMediaCaption = {
+  /** The caption resource id (not the video's). */
+  id: string;
+  /** BCP 47 language tag, rendered as `srclang`. */
+  language: string;
+  /** Shown in the native captions menu. */
+  label: string;
+};
 
 export type LessonMediaPlayerProps = {
   /** The authorized download route for the CLEAN video resource. */
   src: string;
   /** For the accessible name of the player. */
   title: string;
+  /** Caption tracks for this video; omit or pass an empty list for none. */
+  captions?: readonly LessonMediaCaption[];
 };
 
-export function LessonMediaPlayer({ src, title }: LessonMediaPlayerProps) {
+const CAPTIONS_ROUTE = (id: string) => `/api/lesson-resources/${id}/captions`;
+
+export function LessonMediaPlayer({ src, title, captions = [] }: LessonMediaPlayerProps) {
   return (
     <div className="aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-surface-2">
       <video
@@ -48,6 +64,16 @@ export function LessonMediaPlayer({ src, title }: LessonMediaPlayerProps) {
         aria-label={title}
         className="h-full w-full bg-foreground"
       >
+        {captions.map((caption, index) => (
+          <track
+            key={caption.id}
+            kind="captions"
+            src={CAPTIONS_ROUTE(caption.id)}
+            srcLang={caption.language}
+            label={caption.label}
+            default={index === 0}
+          />
+        ))}
         Your browser cannot play this video.{" "}
         <a href={src} className="underline">
           Download it instead

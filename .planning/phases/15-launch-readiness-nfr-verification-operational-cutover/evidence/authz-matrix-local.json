@@ -1,0 +1,1817 @@
+{
+  "plan": "15-25",
+  "note": "Local Testcontainers Postgres. No timestamps or ids: the file is identical from run to run.",
+  "entries": 145,
+  "actionEntries": 126,
+  "routeEntries": 19,
+  "cases": 774,
+  "passed": 774,
+  "byClass": {
+    "session-own-record": {
+      "entries": 34,
+      "cases": 138,
+      "passed": 138
+    },
+    "permission": {
+      "entries": 109,
+      "cases": 632,
+      "passed": 632
+    },
+    "public-signature": {
+      "entries": 2,
+      "cases": 4,
+      "passed": 4
+    }
+  },
+  "perEntry": [
+    {
+      "key": "src/app/(auth)/signin/actions.ts#signOutAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(checkout)/actions.ts#enrollAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect",
+        "anonymous-empty-input": "redirect",
+        "global-staff-empty-input": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(checkout)/checkout/[orderId]/actions.ts#payAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect",
+        "learnerOther": "redirect",
+        "staffNone": "redirect",
+        "anonymous-empty-input": "redirect",
+        "global-staff-empty-input": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(learner)/support/[reference]/actions.ts#closeTicketAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(learner)/support/[reference]/actions.ts#reopenTicketAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(learner)/support/[reference]/actions.ts#replyToTicketAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(learner)/support/new/actions.ts#createTicketAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts#markLessonCompleteAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect",
+        "learnerOther": "redirect",
+        "staffNone": "redirect",
+        "anonymous-empty-input": "redirect",
+        "global-staff-empty-input": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts#recordWatchProgressAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "threw:PrismaClientValidationError"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts#undoLessonCompleteAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect",
+        "learnerOther": "redirect",
+        "staffNone": "redirect",
+        "anonymous-empty-input": "redirect",
+        "global-staff-empty-input": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions.ts#saveAttemptAnswersAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions.ts#startAttemptAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions.ts#submitAttemptAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions.ts#beginSubmissionUploadAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions.ts#completeSubmissionUploadAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions.ts#failSubmissionUploadAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions.ts#loadAssignmentSubmissionView",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-null",
+        "learnerOther": "returned-null",
+        "staffNone": "returned-null",
+        "anonymous-empty-input": "returned-null"
+      }
+    },
+    {
+      "key": "src/app/account/actions.ts#requestEmailChangeAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect",
+        "anonymous-empty-input": "redirect",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/account/actions.ts#setMarketingPreferenceAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect",
+        "anonymous-empty-input": "redirect"
+      }
+    },
+    {
+      "key": "src/app/account/actions.ts#updateProfileAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "redirect",
+        "anonymous-empty-input": "redirect",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/notifications/actions.ts#markAllNotificationsReadAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/notifications/actions.ts#openNotificationAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/notifications/actions.ts#saveEmailPreferencesAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/audit/actions.ts#requestAuditExportAction",
+      "class": "permission",
+      "permission": "audit.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/certificate-actions.ts#issueCertificateAction",
+      "class": "permission",
+      "permission": "certificates.issue",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/issued/[id]/certificate-record-actions.ts#confirmFlaggedCertificateAction",
+      "class": "permission",
+      "permission": "certificates.revoke",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/issued/[id]/certificate-record-actions.ts#reissueCertificateAction",
+      "class": "permission",
+      "permission": "certificates.issue",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/issued/[id]/certificate-record-actions.ts#revokeCertificateAction",
+      "class": "permission",
+      "permission": "certificates.revoke",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-actions.ts#archiveTemplateAction",
+      "class": "permission",
+      "permission": "certificates.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-actions.ts#createTemplateAction",
+      "class": "permission",
+      "permission": "certificates.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-actions.ts#saveTemplateLayoutAction",
+      "class": "permission",
+      "permission": "certificates.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-actions.ts#setDefaultTemplateAction",
+      "class": "permission",
+      "permission": "certificates.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-asset-actions.ts#confirmTemplateAssetUploadAction",
+      "class": "permission",
+      "permission": "certificates.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-asset-actions.ts#presignTemplateAssetUploadAction",
+      "class": "permission",
+      "permission": "certificates.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/attendance-actions.ts#correctAttendanceAction",
+      "class": "permission",
+      "permission": "attendance.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/attendance-actions.ts#saveAttendanceAction",
+      "class": "permission",
+      "permission": "attendance.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#addEnrolmentAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#addEnrolmentsAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#approveEnrolmentAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#cancelEnrolmentAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#listEnrolmentCandidatesAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "allowed:staffGlobal": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#transferEnrolmentAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#withdrawEnrolmentAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading-actions.ts#releaseGradesBatchAction",
+      "class": "permission",
+      "permission": "submissions.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/actions.ts#overrideGradeAction",
+      "class": "permission",
+      "permission": "grades.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/actions.ts#releaseGradeAction",
+      "class": "permission",
+      "permission": "grades.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/actions.ts#saveDraftGradeAction",
+      "class": "permission",
+      "permission": "grades.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/instructor-actions.ts#assignInstructorAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/instructor-actions.ts#listInstructorCandidatesAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "allowed:staffGlobal": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/instructor-actions.ts#removeInstructorAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/progress-actions.ts#overrideLessonProgressAction",
+      "class": "permission",
+      "permission": "enrolments.manage",
+      "cases": {
+        "anonymous": "notFound",
+        "learnerOther": "notFound",
+        "staffNone": "notFound",
+        "staffViewOnly": "notFound",
+        "anonymous-empty-input": "notFound",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/publish-actions.ts#cancelCohortAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/publish-actions.ts#publishCohortAction",
+      "class": "permission",
+      "permission": "cohorts.publish",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#cancelSessionAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#createSessionAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#repeatWeeklyAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#updateSessionAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/actions.ts#createCohortAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/actions.ts#updateCohortAction",
+      "class": "permission",
+      "permission": "cohorts.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#createModuleAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#renameModuleAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#restoreItemAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#saveLessonArrangementAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#saveModuleOrderAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#withdrawItemAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#archiveAssessmentAction",
+      "class": "permission",
+      "permission": "assessments.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#createAssessmentAction",
+      "class": "permission",
+      "permission": "assessments.create",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#publishAssessmentAction",
+      "class": "permission",
+      "permission": "assessments.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#updateAssessmentAction",
+      "class": "permission",
+      "permission": "assessments.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/question-actions.ts#saveQuizQuestionsAction",
+      "class": "permission",
+      "permission": "courses.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/lessons/[lessonId]/actions.ts#saveLessonAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/lessons/[lessonId]/actions.ts#withdrawLessonAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#archiveCourseAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#publishCourseAction",
+      "class": "permission",
+      "permission": "courses.publish",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#setListingAction",
+      "class": "permission",
+      "permission": "programmes.publish",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#unarchiveCourseAction",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#unpublishCourseAction",
+      "class": "permission",
+      "permission": "courses.publish",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/actions.ts#createCourseAction",
+      "class": "permission",
+      "permission": "courses.create",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/actions.ts#updateCourseAction",
+      "class": "permission",
+      "permission": "courses.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/email-log/actions.ts#resendEmailAction",
+      "class": "permission",
+      "permission": "users.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/learner-numbers/actions.ts#backfillLearnerNumbersAction",
+      "class": "permission",
+      "permission": "users.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/learner-numbers/actions.ts#saveLearnerNumberPatternAction",
+      "class": "permission",
+      "permission": "users.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/licence/actions.ts#activateLicenceAction",
+      "class": "permission",
+      "permission": "licence.activate",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/licence/actions.ts#inspectLicenceAction",
+      "class": "permission",
+      "permission": "licence.activate",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "allowed:staffGlobal": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/payments/actions.ts#confirmManualPaymentAction",
+      "class": "permission",
+      "permission": "payments.confirm",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/payments/actions.ts#recordRefundAction",
+      "class": "permission",
+      "permission": "refunds.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/privacy/actions.ts#anonymiseLearnerAction",
+      "class": "permission",
+      "permission": "privacy.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/privacy/actions.ts#requestLearnerExportAction",
+      "class": "permission",
+      "permission": "privacy.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/arrange/actions.ts#addCourseAction",
+      "class": "permission",
+      "permission": "programmes.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/arrange/actions.ts#removeCourseAction",
+      "class": "permission",
+      "permission": "programmes.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/arrange/actions.ts#saveProgrammeCourseOrderAction",
+      "class": "permission",
+      "permission": "programmes.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#archiveProgrammeAction",
+      "class": "permission",
+      "permission": "programmes.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#publishProgrammeAction",
+      "class": "permission",
+      "permission": "programmes.publish",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#setProgrammeListingAction",
+      "class": "permission",
+      "permission": "programmes.publish",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#unarchiveProgrammeAction",
+      "class": "permission",
+      "permission": "programmes.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#unpublishProgrammeAction",
+      "class": "permission",
+      "permission": "programmes.publish",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/actions.ts#createProgrammeAction",
+      "class": "permission",
+      "permission": "programmes.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/actions.ts#updateProgrammeAction",
+      "class": "permission",
+      "permission": "programmes.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reconciliation/actions.ts#assignReconciliationCasesAction",
+      "class": "permission",
+      "permission": "payments.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reconciliation/actions.ts#requestReconciliationRefundExportAction",
+      "class": "permission",
+      "permission": "payments.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reconciliation/actions.ts#resolveReconciliationCaseAction",
+      "class": "permission",
+      "permission": "payments.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#permittedSensitiveColumnsAction",
+      "class": "permission",
+      "permission": "reports.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "allowed:staffGlobal": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#requestReportExportAction",
+      "class": "permission",
+      "permission": "reports.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#rerunExportAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#retryExportAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/exports/actions.ts#rerunHistoryExportAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/exports/actions.ts#retryHistoryExportAction",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/roles/actions.ts#createRoleAction",
+      "class": "permission",
+      "permission": "roles.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/roles/actions.ts#setRoleActiveAction",
+      "class": "permission",
+      "permission": "roles.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "threw:AuthenticationError",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/roles/actions.ts#updateRoleAction",
+      "class": "permission",
+      "permission": "roles.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#acceptEscalationAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#addInternalNoteAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#assignTicketAction",
+      "class": "permission",
+      "permission": "tickets.view",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#changePriorityAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#claimTicketAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#escalateTicketAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#moveQueueAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#resolveTicketAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#sendPublicReplyAction",
+      "class": "permission",
+      "permission": "tickets.manage",
+      "cases": {
+        "anonymous": "returned-refusal",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#createAssignmentAction",
+      "class": "permission",
+      "permission": "roles.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#createStaffAccountAction",
+      "class": "permission",
+      "permission": "users.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "returned-refusal",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#deactivateStaffAccountAction",
+      "class": "permission",
+      "permission": "users.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "threw:AuthenticationError",
+        "global-staff-empty-input": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#reactivateStaffAccountAction",
+      "class": "permission",
+      "permission": "users.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "threw:AuthenticationError",
+        "global-staff-empty-input": "threw:Error"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#revokeAssignmentAction",
+      "class": "permission",
+      "permission": "roles.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "returned-refusal",
+        "staffNone": "returned-refusal",
+        "staffViewOnly": "returned-refusal",
+        "anonymous-empty-input": "threw:AuthenticationError",
+        "global-staff-empty-input": "threw:Error"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#searchScopeTargetsAction",
+      "class": "permission",
+      "permission": "roles.manage",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "threw:AuthorizationError",
+        "staffNone": "threw:AuthorizationError",
+        "anonymous-empty-input": "returned-refusal",
+        "allowed:staffGlobal": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#searchStaffUsersAction",
+      "class": "permission",
+      "permission": "users.view",
+      "cases": {
+        "anonymous": "threw:AuthenticationError",
+        "learnerOther": "threw:AuthorizationError",
+        "staffNone": "threw:AuthorizationError",
+        "anonymous-empty-input": "threw:AuthenticationError",
+        "allowed:staffGlobal": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/api/certificates/[id]/download/route.ts#GET",
+      "class": "permission",
+      "permission": "certificates.view",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/captions/route.ts#GET",
+      "class": "permission",
+      "permission": "courses.view",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/complete/route.ts#POST",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "staffViewOnly": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/download/route.ts#GET",
+      "class": "permission",
+      "permission": "courses.view",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "allowed:staffGlobal": "HTTP 302"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/route.ts#DELETE",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "anonymous:route.resourceRemoveCaption": "HTTP 404",
+        "learnerOther:route.resourceRemoveCaption": "HTTP 404",
+        "staffNone:route.resourceRemoveCaption": "HTTP 404",
+        "staffViewOnly": "HTTP 404",
+        "staffViewOnly:route.resourceRemoveCaption": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/route.ts#GET",
+      "class": "permission",
+      "permission": "courses.view",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "anonymous:route.resourceListCaptions": "HTTP 404",
+        "learnerOther:route.resourceListCaptions": "HTTP 404",
+        "staffNone:route.resourceListCaptions": "HTTP 404",
+        "allowed:staffGlobal": "HTTP 200"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/upload-intent/route.ts#POST",
+      "class": "permission",
+      "permission": "courses.edit",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "anonymous:route.resourceUploadIntentCaption": "HTTP 404",
+        "learnerOther:route.resourceUploadIntentCaption": "HTTP 404",
+        "staffNone:route.resourceUploadIntentCaption": "HTTP 404",
+        "staffViewOnly": "HTTP 404",
+        "staffViewOnly:route.resourceUploadIntentCaption": "HTTP 404",
+        "anonymous-empty-input": "HTTP 400",
+        "global-staff-empty-input": "HTTP 400",
+        "allowed:staffGlobal": "HTTP 201"
+      }
+    },
+    {
+      "key": "src/app/api/notifications/preferences/route.ts#GET",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "HTTP 401",
+        "allowed:learnerOwner": "HTTP 200"
+      }
+    },
+    {
+      "key": "src/app/api/notifications/route.ts#GET",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "HTTP 401",
+        "allowed:learnerOwner": "HTTP 200"
+      }
+    },
+    {
+      "key": "src/app/api/notifications/unread/route.ts#GET",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "HTTP 401",
+        "allowed:learnerOwner": "HTTP 200"
+      }
+    },
+    {
+      "key": "src/app/api/staff/licence/diagnostic/route.ts#GET",
+      "class": "permission",
+      "permission": "licence.view",
+      "cases": {
+        "anonymous": "HTTP 401",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "allowed:staffGlobal": "HTTP 200"
+      }
+    },
+    {
+      "key": "src/app/api/staff/reports/exports/[jobId]/download/route.ts#GET",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "allowed:staffGlobal": "HTTP 302"
+      }
+    },
+    {
+      "key": "src/app/api/submissions/[submissionId]/download/route.ts#GET",
+      "class": "permission",
+      "permission": "submissions.view",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "allowed:staffGlobal": "HTTP 302"
+      }
+    },
+    {
+      "key": "src/app/api/ticket-attachments/[attachmentId]/download/route.ts#GET",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "allowed:learnerOwner": "HTTP 302"
+      }
+    },
+    {
+      "key": "src/app/api/ticket-attachments/complete/route.ts#POST",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "anonymous-empty-input": "HTTP 400",
+        "global-staff-empty-input": "HTTP 400"
+      }
+    },
+    {
+      "key": "src/app/api/ticket-attachments/upload-intent/route.ts#POST",
+      "class": "session-own-record",
+      "permission": null,
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "anonymous-empty-input": "HTTP 400",
+        "global-staff-empty-input": "HTTP 400",
+        "allowed:learnerOwner": "HTTP 201"
+      }
+    },
+    {
+      "key": "src/app/api/webhooks/paystack/route.ts#POST",
+      "class": "public-signature",
+      "permission": null,
+      "cases": {
+        "bad-signature": "HTTP 400",
+        "empty-body": "HTTP 400"
+      }
+    },
+    {
+      "key": "src/app/api/webhooks/stripe/route.ts#POST",
+      "class": "public-signature",
+      "permission": null,
+      "cases": {
+        "bad-signature": "HTTP 400",
+        "empty-body": "HTTP 400"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/exceptions/csv/route.ts#GET",
+      "class": "permission",
+      "permission": "attendance.view",
+      "cases": {
+        "anonymous": "HTTP 404",
+        "learnerOther": "HTTP 404",
+        "staffNone": "HTTP 404",
+        "allowed:staffGlobal": "HTTP 200"
+      }
+    }
+  ]
+}

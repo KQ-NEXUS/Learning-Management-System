@@ -1,0 +1,107 @@
+# Continuous integration for every push and pull request to main and develop
+# (Phase 15, D-10). The repository is public, so this workflow treats every
+# pull request as untrusted code:
+#   - it triggers on the plain pull_request event only (never the privileged
+#     "target" variant), so fork pull requests run without repository secrets
+#     and with a read-only token;
+#   - the token is limited to `contents: read`;
+#   - no job reads a repository secret, and no job names a real database host
+#     (integration tests start throwaway Postgres containers via Testcontainers).
+# Third-party actions are pinned to full commit SHAs (version in the trailing
+# comment); Dependabot's github-actions block keeps the pins current.
+# tests/ci-config.test.ts guards these rules.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  EMAIL_TRANSPORT: stub
+
+jobs:
+  static:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      # postinstall runs `prisma generate`.
+      - run: npm ci
+      - run: npm run lint
+      # next-env.d.ts and .next/types are generated files (gitignored), so a
+      # clean checkout must generate them before tsc can check route types.
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+
+  unit:
+    name: Unit and component tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Whole-tree scan tests need the longer timeout.
+      - run: npx vitest run --project node --exclude "**/*.integration.test.ts" --testTimeout=60000
+      - run: npx vitest run --project components
+
+  integration:
+    name: Integration tests (shard ${{ matrix.shard }} of 4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Each integration file starts its own Postgres container through
+      # Testcontainers (Docker is preinstalled on GitHub's Ubuntu runners), so
+      # files run one at a time inside each shard.
+      - run: npx vitest run integration.test --project node --no-file-parallelism --shard=${{ matrix.shard }}/4
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      # Fails on any high or critical advisory in production dependencies.
+      # D-07: critical security findings are fixed, never waived.
+      - run: npm audit --omit=dev --audit-level=high

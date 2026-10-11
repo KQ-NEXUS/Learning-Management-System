@@ -9,13 +9,15 @@
  * Role grants nothing, so those rows are excluded here.
  */
 
+import { cache } from "react";
 import { prisma } from "@/server/db";
 import type { Permission } from "@/server/permissions/catalogue";
 import { isPermission } from "@/server/permissions/catalogue";
 import type { RawGrant } from "@/server/permissions/with-permission";
 import type { ScopeType } from "@/server/permissions/scope";
 
-export async function loadGrantsForUser(userId: string): Promise<RawGrant[]> {
+// Request-scoped only, never across requests: revocation must be immediate (IAM-03, NFR-02).
+export const loadGrantsForUser = cache(async (userId: string): Promise<RawGrant[]> => {
   const assignments = await prisma.assignment.findMany({
     where: {
       userId,
@@ -47,4 +49,4 @@ export async function loadGrantsForUser(userId: string): Promise<RawGrant[]> {
         endsAt: assignment.endsAt,
       })),
   );
-}
+});

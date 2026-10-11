@@ -1237,6 +1237,33 @@ async function main() {
       });
     }
 
+    // 2b. Real issuance refuses to create a certificate without a completion record for the same
+    // enrolment and scope, so every seeded certificate gets one too. Without it the integrity check
+    // "Active certificates have a completion record" (scripts/ops/integrity-checks.ts) fails on a
+    // fresh seed.
+    const seededCertificates = await prisma.certificate.findMany({
+      where: { verificationRef: { startsWith: "CERT-SEED-" } },
+      select: { enrolmentId: true, scope: true, courseId: true, issuedAt: true },
+    });
+    for (const certificate of seededCertificates) {
+      if (
+        await prisma.completionRecord.findFirst({
+          where: { enrolmentId: certificate.enrolmentId, scope: certificate.scope },
+        })
+      ) {
+        continue;
+      }
+      await prisma.completionRecord.create({
+        data: {
+          enrolmentId: certificate.enrolmentId,
+          scope: certificate.scope,
+          courseId: certificate.courseId,
+          ruleVersion: 1,
+          completedAt: certificate.issuedAt,
+        },
+      });
+    }
+
     // 3. A graded, released assignment for the main demo learner.
     if (!(await prisma.submission.findFirst({ where: { assessmentId: asg.id, enrolmentId: activeLearner4.id } }))) {
       const submission = await prisma.submission.create({

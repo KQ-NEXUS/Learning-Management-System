@@ -19,7 +19,7 @@ import Link from "next/link";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "@/app/staff/cohorts/[id]/EnrolmentActionModals";
 import { EnrolmentRowActions } from "@/app/staff/cohorts/[id]/EnrolmentRowActions";
-import { formatDateShort } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { humanizeCode } from "@/lib/humanize";
 
 /** Dates are ISO strings — converted once at the RSC boundary in `page.tsx`,
@@ -66,9 +66,12 @@ const STATUS_OPTIONS = [
   { value: "COMPLETED", label: "Completed" },
 ];
 
-function formatAccessWindow(startsAt: string | null, endsAt: string | null): string {
-  const fmt = (iso: string | null) => (iso ? formatDateShort(new Date(iso)) : "—");
-  return `${fmt(startsAt)} → ${fmt(endsAt)}`;
+function AccessWindow({ startsAt, endsAt }: { startsAt: string | null; endsAt: string | null }) {
+  return (
+    <>
+      <LagosTime value={startsAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" /> → <LagosTime value={endsAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" />
+    </>
+  );
 }
 
 export function EnrolmentsTable({
@@ -159,14 +162,14 @@ export function EnrolmentsTable({
     {
       key: "accessWindow",
       header: "Access window",
-      render: (r) => formatAccessWindow(r.accessStartsAt, r.accessEndsAt),
+      render: (r) => <AccessWindow startsAt={r.accessStartsAt} endsAt={r.accessEndsAt} />,
       mono: true,
       width: "14%",
     },
     {
       key: "createdAt",
       header: "Created",
-      render: (r) => formatDateShort(new Date(r.createdAt)),
+      render: (r) => <LagosTime value={r.createdAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" />,
       mono: true,
       width: "10%",
       hideOnMobile: true,

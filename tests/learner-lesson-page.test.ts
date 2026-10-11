@@ -35,6 +35,7 @@ const { mocks } = vi.hoisted(() => ({
     assertLessonOpenable: vi.fn(),
     getLessonContentForLearner: vi.fn(),
     listLessonResourcesForLearner: vi.fn(),
+    listLessonCaptionsForLearner: vi.fn(),
     countLessonsRelockedBy: vi.fn(),
     getOwnWatchProgress: vi.fn(),
     markLessonCompleteAction: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock("@/server/services/lesson-service", () => ({
 }));
 vi.mock("@/server/services/lesson-resource-service", () => ({
   listLessonResourcesForLearner: mocks.listLessonResourcesForLearner,
+  listLessonCaptionsForLearner: mocks.listLessonCaptionsForLearner,
 }));
 vi.mock("@/server/services/lesson-progress-service", () => ({
   countLessonsRelockedBy: mocks.countLessonsRelockedBy,
@@ -243,6 +245,7 @@ beforeEach(() => {
   mocks.assertLessonOpenable.mockImplementation(defaultAssertLessonOpenable);
   mocks.getLessonContentForLearner.mockResolvedValue(contentFixture());
   mocks.listLessonResourcesForLearner.mockResolvedValue([]);
+  mocks.listLessonCaptionsForLearner.mockResolvedValue([]);
   mocks.countLessonsRelockedBy.mockReturnValue(0);
   mocks.getOwnWatchProgress.mockResolvedValue(null);
 });
@@ -541,6 +544,47 @@ describe("VideoWatchTracker wiring (09-12 Task 3)", () => {
 
     expect(html).toContain('data-testid="video-watch-tracker"');
     expect(html).toContain("Lesson body text for Lesson One");
+  });
+
+  it("passes the lesson's READY caption tracks to the video player (NFR-09), and asks only for a VIDEO lesson", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [moduleFixture({ lessons: [lessonFixture({ type: "VIDEO" })] })],
+          }),
+        ],
+      }),
+    );
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "VIDEO" }));
+    mocks.listLessonResourcesForLearner.mockResolvedValue([
+      {
+        id: "vid-1",
+        title: "Video",
+        filename: "v.mp4",
+        mimeType: "video/mp4",
+        sizeBytes: BigInt(1000),
+        uploadStatus: "READY",
+      },
+    ]);
+    mocks.listLessonCaptionsForLearner.mockResolvedValue([
+      { id: "cap-en", videoResourceId: "vid-1", language: "en", label: "English" },
+    ]);
+
+    const html = await renderPage();
+
+    expect(html).toContain('kind="captions"');
+    expect(html).toContain('src="/api/lesson-resources/cap-en/captions"');
+    expect(html).toContain('srcLang="en"');
+  });
+
+  it("does not look up captions for a TEXT lesson", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(pathFixture());
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "TEXT" }));
+
+    await renderPage();
+
+    expect(mocks.listLessonCaptionsForLearner).not.toHaveBeenCalled();
   });
 
   it("does not render VideoWatchTracker output for a TEXT lesson", async () => {

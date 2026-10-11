@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { BrevoClient, BrevoError, BrevoTimeoutError, Brevo } from "@getbrevo/brevo";
 import {
   EmailConfigError,
+  getBrevoBaseUrl,
   getEmailTransportMode,
   getReplyTo,
   getSenderIdentity,
@@ -119,7 +120,9 @@ export async function sendTransactionalEmail(params: {
     senderAddress: sender.email,
   });
 
-  const client = new BrevoClient({ apiKey });
+  // Loopback-only test seam (15-15): undefined in every real deployment.
+  const baseUrl = getBrevoBaseUrl();
+  const client = new BrevoClient(baseUrl ? { apiKey, baseUrl } : { apiKey });
 
   // A send failure must never let the caller report success. This function
   // never logs the raw error (it could carry the recipient or request body);

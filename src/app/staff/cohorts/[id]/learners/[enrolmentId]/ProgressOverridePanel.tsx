@@ -18,7 +18,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmModal } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { overrideLessonProgressAction } from "../../progress-actions";
 import { humanizeCode } from "@/lib/humanize";
 import { useToast } from "@/components/feedback/Toaster";
@@ -119,11 +119,14 @@ export function ProgressOverridePanel({
                   {lesson.moduleTitle} · {lesson.required ? "Required" : "Optional"}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {lesson.completed
-                    ? `${SOURCE_LABEL[lesson.completedSource ?? ""] ?? humanizeCode(lesson.completedSource)} · ${
-                        lesson.completedAt ? formatTimestamp(new Date(lesson.completedAt)) : "—"
-                      }`
-                    : "Not completed"}
+                  {lesson.completed ? (
+                    <>
+                      {SOURCE_LABEL[lesson.completedSource ?? ""] ?? humanizeCode(lesson.completedSource)} ·{" "}
+                      <LagosTime value={lesson.completedAt} />
+                    </>
+                  ) : (
+                    "Not completed"
+                  )}
                 </span>
               </div>
               {canOverride && (

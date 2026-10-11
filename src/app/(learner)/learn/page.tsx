@@ -25,7 +25,7 @@ export default async function MyLearningPage() {
   const completed = cards.filter((c) => c.enrolmentStatus === "COMPLETED");
 
   return (
-    <div className="flex flex-col gap-10">
+    <div data-primary-content className="flex flex-col gap-10">
       <LearnerPageHeader
         size="hero"
         title="My learning"

@@ -24,8 +24,16 @@ const eslintConfig = defineConfig([
     // Other checkouts contain their own source and generated Next output.
     // Lint each checkout independently, rather than recursively linting copies.
     ".worktrees/**",
+    // Another local tool's checkouts (excluded in .git/info/exclude, not in the repo).
+    ".kilo/**",
     ".planning/**",
     "reference/**",
+
+    // Test and tool output, not source; perf/ holds k6 scripts whose k6/* imports exist only in the k6 runtime.
+    "playwright-report/**",
+    "test-results/**",
+    "perf/**",
+    "dumps/**",
   ]),
 
   // Data access is confined to the service layer.

@@ -42,6 +42,8 @@ export const CONTINUITY_MODAL_FILES: readonly string[] = [
   "src/app/staff/cohorts/[id]/sessions/[sessionId]/attendance/AttendanceMarkClient.tsx",
   // Email-log resend (call-site continuity override, plan 14-17).
   "src/app/staff/email-log/EmailLogTable.tsx",
+  // Learner data export is LIC-08 permitted data access (privacy.manage, plan 15-22): never disabled.
+  "src/app/staff/privacy/[userId]/ExportSection.tsx",
   // Licence activation is the recovery route (licence.activate, T-14-06-03): never disabled.
   "src/app/staff/licence/ActivateLicenceForm.tsx",
   // Unsaved-changes guards only discard local edits: never disabled.
@@ -63,6 +65,8 @@ export const WRITE_MODAL_FILES: readonly string[] = [
   "src/app/staff/cohorts/[id]/SessionsTab.tsx",
   "src/app/staff/courses/[id]/lessons/[lessonId]/LessonEditorClient.tsx",
   "src/app/staff/learner-numbers/LearnerNumberForm.tsx",
+  // Anonymising an account is a licence write (privacy.manage, plan 15-22): disabled with a reason when restricted.
+  "src/app/staff/privacy/[userId]/AnonymiseSection.tsx",
   "src/app/staff/programmes/[id]/ProgrammeDetailClient.tsx",
   "src/app/staff/roles/RoleDetailPanels.tsx",
   "src/components/catalogue/AssessmentFormFields.tsx",

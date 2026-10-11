@@ -35,7 +35,7 @@ function queueLabelFor(queue: unknown): string {
 // order.exception reason -> plain-language label allow-list (T-13-03)
 // ---------------------------------------------------------------------------
 
-const ORDER_EXCEPTION_REASON_LABELS: Record<string, string> = {
+export const ORDER_EXCEPTION_REASON_LABELS: Record<string, string> = {
   amount_or_currency_mismatch: "Amount or currency mismatch",
   payment_attempt_not_found: "Payment attempt not found",
   illegal_payment_transition: "Payment already processed",
@@ -47,7 +47,7 @@ const ORDER_EXCEPTION_REASON_LABELS: Record<string, string> = {
   // restriction or expiry (T-13-03 allow-list pattern, T-14-13-05).
   payment_after_restriction: "Payment received while new enrolments were unavailable",
 };
-const DEFAULT_ORDER_EXCEPTION_REASON_LABEL = "Payment needs review";
+export const DEFAULT_ORDER_EXCEPTION_REASON_LABEL = "Payment needs review";
 
 /** Maps a coded `order.exception` reason to its fixed plain-language label.
  * Any code outside the allow-list — including a genuinely unknown one —

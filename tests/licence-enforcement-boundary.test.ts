@@ -442,6 +442,10 @@ describe("Pitfall 1: the call-site continuity overrides are an exact, reasoned s
     { file: `${SERVICES}lesson-progress-service.ts`, permission: "enrolments.manage" },
     { file: `${SERVICES}staff-account-service.ts`, permission: "users.manage" },
     { file: `${SERVICES}email-delivery-log-service.ts`, permission: "users.manage" },
+    // Plan 15-21 (D-12, ledger P-03): preparing a learner's data file is LIC-08 permitted data access.
+    { file: `${SERVICES}privacy-export-service.ts`, permission: "privacy.manage" },
+    // Plan 15-22 (D-12): finding a learner and opening their record is the way into that same data-access route.
+    { file: `${SERVICES}privacy-read-service.ts`, permission: "privacy.manage" },
   ];
 
   // Overrides that only restate a permission's own default effect are not
@@ -450,7 +454,7 @@ describe("Pitfall 1: the call-site continuity overrides are an exact, reasoned s
   // defence in depth (T-14-06-03).
   const REVIEWED_RESTATEMENTS = [`${SERVICES}licence-staff-service.ts|licence.activate`];
 
-  it("has exactly the three reviewed exceptions in the source, each with a reason", () => {
+  it("has exactly the five reviewed exceptions in the source, each with a reason", () => {
     const found = exceptionOverrides(scanned);
     expect(found.map(pairKey).sort()).toEqual(REVIEWED_OVERRIDES.map(pairKey).sort());
     for (const row of found) {
@@ -508,6 +512,12 @@ describe("Pitfall 1: the call-site continuity overrides are an exact, reasoned s
     expect(effective("ticket-service.ts", "tickets.manage")).toEqual(["continuity"]);
     // D-07: the email-log resend stays available.
     expect(effective("email-delivery-log-service.ts", "users.manage")).toEqual(["continuity"]);
+    // D-12, LIC-08: the learner data export and its status stay available.
+    expect(effective("privacy-export-service.ts", "privacy.manage")).toEqual(["continuity"]);
+    // D-12: the learner lookup and privacy record reads that lead to it stay available too.
+    expect(effective("privacy-read-service.ts", "privacy.manage")).toEqual(["continuity"]);
+    // Anonymisation, the other half of the privacy tool, is a write.
+    expect(effective("privacy-anonymise-service.ts", "privacy.manage")).toEqual(["write"]);
     // Enrolment writes stay blocked.
     expect(new Set(effective("enrolment-service.ts", "enrolments.manage"))).toEqual(new Set(["write"]));
   });

@@ -285,3 +285,13 @@ describe("staff templates", () => {
     expect(out.html + out.text).not.toContain("SECRET-DETAIL");
   });
 });
+
+describe("session email times (D-17, plan 15-05)", () => {
+  it("prints the session time once, in Lagos time with WAT and no UTC suffix", () => {
+    const updated = renderEmail("session-updated", TEMPLATE_SAMPLES["session-updated"]);
+    expect(updated.text).toContain("now runs from 5 Oct 2026, 10:00 WAT to 5 Oct 2026, 12:00 WAT.");
+    const cancelled = renderEmail("session-cancelled", TEMPLATE_SAMPLES["session-cancelled"]);
+    expect(cancelled.text).toContain("planned for 5 Oct 2026, 10:00 WAT, has been cancelled.");
+    expect(updated.html + updated.text + cancelled.html + cancelled.text).not.toContain("UTC");
+  });
+});

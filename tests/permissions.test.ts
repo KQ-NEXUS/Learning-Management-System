@@ -7,8 +7,8 @@ import {
 } from "@/server/permissions/catalogue";
 
 describe("permission catalogue", () => {
-  it("contains exactly 37 identifiers", () => {
-    expect(PERMISSIONS).toHaveLength(37);
+  it("contains exactly 38 identifiers", () => {
+    expect(PERMISSIONS).toHaveLength(38);
   });
 
   it("contains no duplicates", () => {
@@ -31,6 +31,10 @@ describe("permission catalogue", () => {
     expect(PERMISSIONS).toContain("licence.activate");
   });
 
+  it("includes the privacy identifier approved in 15-DECISIONS.md (NFR-11)", () => {
+    expect(PERMISSIONS).toContain("privacy.manage");
+  });
+
   it("is frozen", () => {
     expect(Object.isFrozen(PERMISSIONS)).toBe(true);
   });
@@ -48,7 +52,11 @@ describe("permission catalogue", () => {
   it("marks licence permissions as global-only", () => {
     expect(isGlobalOnly("licence.view")).toBe(true);
     expect(isGlobalOnly("licence.activate")).toBe(true);
-    expect(GLOBAL_ONLY_PERMISSIONS.size).toBe(2);
+    expect(GLOBAL_ONLY_PERMISSIONS.size).toBe(3);
+  });
+
+  it("marks privacy.manage as global-only", () => {
+    expect(isGlobalOnly("privacy.manage")).toBe(true);
   });
 
   it("does not mark scopeable permissions as global-only", () => {

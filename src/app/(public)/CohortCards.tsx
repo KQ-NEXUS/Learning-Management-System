@@ -2,6 +2,7 @@ import { enrollAction } from "@/app/(checkout)/actions";
 import type { PublicCohort } from "@/server/services/public-catalogue-service";
 import { SUPPORT_CONTACT_EMAIL } from "@/server/support-contact";
 import { humanizeCode } from "@/lib/humanize";
+import { LagosTime } from "@/components/time/LagosTime";
 
 /**
  * The "Upcoming cohorts" stack REG-01 needs on a course/programme detail page (06-UI-SPEC.md
@@ -30,13 +31,6 @@ export const DELIVERY_MODE_LABEL: Record<string, string> = {
 
 const BUTTON_CLASS =
   "inline-flex min-h-[50px] w-full items-center justify-center rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
-
-/** "30 November 2026": pinned locale so the server render never differs from a browser's. */
-export function formatStartDate(value: Date): string {
-  return new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(
-    new Date(value),
-  );
-}
 
 /** Whole-unit price ("₦185,000"), no decimals unless the amount has minor units. */
 export function formatPrice(priceMinor: number, currency: string): string {
@@ -79,7 +73,7 @@ export function CohortCards({ cohorts, durationLabel }: { cohorts: PublicCohort[
           >
             <div className="flex min-w-0 flex-col break-words">
               <span className={`text-[16px] font-semibold ${isFull ? "text-muted-foreground" : "text-foreground"}`}>
-                {cohort.hasStarted ? "Started" : "Starts"} {formatStartDate(cohort.startsAt)}
+                {cohort.hasStarted ? "Started" : "Starts"} <LagosTime value={cohort.startsAt} variant="date" />
                 {cohort.hasStarted && <span className="font-normal text-muted-foreground"> · still enrolling</span>}
               </span>
               <span className="text-sm text-muted-foreground">

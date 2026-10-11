@@ -17,8 +17,10 @@ import { StaleOrderError } from "@/server/services/reorder-service";
 import { RunningCohortError, type BlockingCohort } from "@/server/services/catalogue-guards";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import {
+  ArchivedRecordError,
   archiveCatalogueRecord,
   ListingNotReadyError,
+  NotArchivedError,
   publishProgramme,
   ReadinessRefusedError,
   ReasonRequiredError,
@@ -75,6 +77,12 @@ function toFailure(error: unknown): CommonFailure {
   }
   if (error instanceof PublishTargetNotFoundError) {
     return { ok: false, reason: "NOT_FOUND", message: "This programme could not be found." };
+  }
+  if (error instanceof ArchivedRecordError) {
+    return { ok: false, reason: "INVALID", message: "This programme is archived. Restore it first, then publish it." };
+  }
+  if (error instanceof NotArchivedError) {
+    return { ok: false, reason: "INVALID", message: "This programme is not archived, so there is nothing to restore." };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {

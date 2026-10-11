@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FileText, Upload } from "lucide-react";
 import { StatusPill } from "@/components/primitives";
 import { ConfirmModal } from "@/components/primitives/ConfirmModal";
+import { CaptionPanel, type CaptionView } from "./CaptionPanel";
 import {
   UPLOAD_LIMITS,
   validateUpload,
@@ -26,6 +27,8 @@ export type UploadPanelProps = {
   lessonId: string;
   lessonType: UploadableLessonType;
   initialResources?: LessonResourceView[];
+  /** NFR-09: caption tracks of a VIDEO lesson, when the caller already has them. */
+  initialCaptions?: CaptionView[];
 };
 
 const FRIENDLY_LIMIT_MESSAGES: Record<UploadableLessonType, string> = {
@@ -64,36 +67,54 @@ async function responseMessage(response: Response, fallback: string): Promise<st
   }
 }
 
-export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPanelProps) {
+export function UploadPanel({
+  lessonId,
+  lessonType,
+  initialResources,
+  initialCaptions,
+}: UploadPanelProps) {
   const [resources, setResources] = useState<LessonResourceView[]>(initialResources ?? []);
+  const [captions, setCaptions] = useState<CaptionView[]>(initialCaptions ?? []);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   // UX batch D: removal confirms in the app's own dialog, not window.confirm.
-  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  // A caption removal shares the dialog but names itself, so the wording and the
+  // request differ (NFR-09).
+  const [confirmRemove, setConfirmRemove] = useState<{ id: string; caption: boolean } | null>(null);
 
   const loadResources = useCallback(
-    async (signal?: AbortSignal): Promise<LessonResourceView[]> => {
-      const response = await fetch(
-        `/api/lesson-resources?${new URLSearchParams({ lessonId })}`,
-        { signal, cache: "no-store" },
-      );
+    async (
+      signal?: AbortSignal,
+    ): Promise<{ resources: LessonResourceView[]; captions: CaptionView[] }> => {
+      const query = new URLSearchParams({ lessonId });
+      if (lessonType === "VIDEO") query.set("includeCaptions", "1");
+      const response = await fetch(`/api/lesson-resources?${query}`, {
+        signal,
+        cache: "no-store",
+      });
       if (!response.ok) {
         throw new Error(await responseMessage(response, "Could not load resources."));
       }
-      const body = (await response.json()) as { resources: LessonResourceView[] };
-      return body.resources;
+      const body = (await response.json()) as {
+        resources: LessonResourceView[];
+        captions?: CaptionView[];
+      };
+      return { resources: body.resources, captions: body.captions ?? [] };
     },
-    [lessonId],
+    [lessonId, lessonType],
   );
 
   useEffect(() => {
     if (initialResources !== undefined) return;
     const controller = new AbortController();
     void loadResources(controller.signal)
-      .then(setResources)
+      .then((loaded) => {
+        setResources(loaded.resources);
+        setCaptions(loaded.captions);
+      })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           setMessage(error instanceof Error ? error.message : "Could not load resources.");
@@ -101,6 +122,15 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
       });
     return () => controller.abort();
   }, [loadResources, initialResources]);
+
+  // Add a caption track, or replace it when its status changes (same id).
+  function changeCaption(next: CaptionView) {
+    setCaptions((current) =>
+      current.some((row) => row.id === next.id)
+        ? current.map((row) => (row.id === next.id ? next : row))
+        : [...current, next],
+    );
+  }
 
   function chooseFile(file: File | null) {
     setMessage(null);
@@ -191,18 +221,28 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
     }
   }
 
-  async function remove(resourceId: string) {
-    setConfirmRemoveId(null);
+  async function remove(resourceId: string, caption = false) {
+    setConfirmRemove(null);
     setRemovingId(resourceId);
     setMessage(null);
+    const fallback = caption ? "Could not remove these captions." : "Could not remove this resource.";
     try {
-      const response = await fetch(`/api/lesson-resources/${resourceId}`, { method: "DELETE" });
+      const response = await fetch(
+        `/api/lesson-resources/${resourceId}${caption ? "?caption=1" : ""}`,
+        { method: "DELETE" },
+      );
       if (response.status !== 204) {
-        throw new Error(await responseMessage(response, "Could not remove this resource."));
+        throw new Error(await responseMessage(response, fallback));
       }
-      setResources((current) => current.filter((resource) => resource.id !== resourceId));
+      if (caption) {
+        setCaptions((current) => current.filter((row) => row.id !== resourceId));
+      } else {
+        setResources((current) => current.filter((resource) => resource.id !== resourceId));
+        // The database removes a video's captions with it.
+        setCaptions((current) => current.filter((row) => row.videoResourceId !== resourceId));
+      }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not remove this resource.");
+      setMessage(error instanceof Error ? error.message : fallback);
     } finally {
       setRemovingId(null);
     }
@@ -298,26 +338,42 @@ export function UploadPanel({ lessonId, lessonType, initialResources }: UploadPa
                       type="button"
                       aria-label="Remove resource"
                       disabled={removingId === resource.id}
-                      onClick={() => setConfirmRemoveId(resource.id)}
+                      onClick={() => setConfirmRemove({ id: resource.id, caption: false })}
                       className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm font-semibold disabled:opacity-50"
                     >
                       {removingId === resource.id ? "Removing…" : "Remove"}
                     </button>
                   )}
                 </div>
+                {lessonType === "VIDEO" && resource.uploadStatus !== "ERROR" && (
+                  <CaptionPanel
+                    lessonId={lessonId}
+                    videoResourceId={resource.id}
+                    captions={captions.filter((row) => row.videoResourceId === resource.id)}
+                    onCaptionChange={changeCaption}
+                    onRequestRemove={(captionId) => setConfirmRemove({ id: captionId, caption: true })}
+                    removingId={removingId}
+                  />
+                )}
               </li>
             );
           })}
         </ul>
       )}
       <ConfirmModal
-        open={confirmRemoveId !== null}
-        eyebrow="Remove resource"
-        title="Remove this resource?"
-        description="Learners will no longer see this file. This cannot be undone."
-        confirmLabel="Remove resource"
-        onCancel={() => setConfirmRemoveId(null)}
-        onConfirm={() => { if (confirmRemoveId) void remove(confirmRemoveId); }}
+        open={confirmRemove !== null}
+        eyebrow={confirmRemove?.caption ? "Remove captions" : "Remove resource"}
+        title={confirmRemove?.caption ? "Remove these captions?" : "Remove this resource?"}
+        description={
+          confirmRemove?.caption
+            ? "Learners will no longer see this caption track. You can add it again later."
+            : "Learners will no longer see this file. This cannot be undone."
+        }
+        confirmLabel={confirmRemove?.caption ? "Remove captions" : "Remove resource"}
+        onCancel={() => setConfirmRemove(null)}
+        onConfirm={() => {
+          if (confirmRemove) void remove(confirmRemove.id, confirmRemove.caption);
+        }}
       />
     </fieldset>
   );

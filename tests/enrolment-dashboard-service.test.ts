@@ -599,10 +599,12 @@ describe("loadLearnerDashboard", () => {
     const { cards } = await svc.loadLearnerDashboard(actorA);
     expect(cards).toHaveLength(2);
     expect(getOwnAssessmentObligations).toHaveBeenCalledTimes(1);
-    expect(getOwnAssessmentObligations).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" });
+    // Plan 15-28: the card's own path is handed in so it is not loaded a second time.
+    const withPath = { path: expect.objectContaining({ courses: expect.any(Array) }) };
+    expect(getOwnAssessmentObligations).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" }, withPath);
     expect(getOwnResults).toHaveBeenCalledTimes(2);
-    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" });
-    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-done" });
+    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" }, withPath);
+    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-done" }, withPath);
 
     const done = cards.find((card) => card.enrolmentId === "enrolment-done")!;
     // Tracked (possibly empty), never the deferred "No results yet." placeholder.

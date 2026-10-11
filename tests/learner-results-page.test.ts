@@ -209,7 +209,7 @@ describe("/learn/[enrolmentId]/results", () => {
 
     const html = await renderPage();
 
-    expect(html).toContain("01/09/2026, 10:00:00");
+    expect(html).toContain("1 Sep 2026, 11:00 WAT");
     expect(html).toContain("max-h-48");
     expect(html).toContain("overflow-y-auto");
     expect(html).toContain("break-words");

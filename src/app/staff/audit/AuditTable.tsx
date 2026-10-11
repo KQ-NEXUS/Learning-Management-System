@@ -15,7 +15,7 @@ import {
   TEXTAREA,
 } from "@/components/primitives/controls";
 import type { AuditRow, AuditFilterOptions } from "@/server/services/audit-read-service";
-import { formatDateTimeShort, formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { getExportDatasetDefinition } from "@/server/services/report-registry";
 import { requestAuditExportAction } from "./actions";
 
@@ -426,7 +426,7 @@ export function AuditTable({
                                 className={DESKTOP_COLS}
                               >
                                 <span className="self-center font-mono text-[13px] tabular-nums text-foreground">
-                                  {formatDateTimeShort(new Date(row.createdAt))}
+                                  <LagosTime value={row.createdAt} variant="dateTimeSeconds" className="font-mono text-[13px] whitespace-nowrap" />
                                 </span>
                                 <span className="flex min-w-0 flex-col gap-1">
                                   <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
@@ -510,7 +510,7 @@ export function AuditTable({
                           </span>
                         </span>
                         <span className="font-mono text-sm tabular-nums text-muted-foreground">
-                          {formatTimestamp(row.createdAt)}
+                          <LagosTime value={row.createdAt} variant="dateTimeSeconds" className="font-mono text-[13px] whitespace-nowrap" />
                         </span>
                       </button>
                       {expanded && (

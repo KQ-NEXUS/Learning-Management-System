@@ -409,7 +409,7 @@ export function TemplateEditorShell({
               <summary className="cursor-pointer px-0 py-3 text-sm font-semibold text-foreground">Elements</summary>
               {palettePanel()}
             </details>
-            <aside className="hidden w-64 shrink-0 border-r border-border pr-6 lg:block">
+            <aside aria-label="Elements" className="hidden w-64 shrink-0 border-r border-border pr-6 lg:block">
               {palettePanel()}
             </aside>
           </>
@@ -435,7 +435,7 @@ export function TemplateEditorShell({
           <summary className="cursor-pointer px-0 py-3 text-sm font-semibold text-foreground">Properties</summary>
           {propertiesPanel()}
         </details>
-        <aside className="hidden w-64 shrink-0 border-l border-border pl-6 lg:block">
+        <aside aria-label="Properties" className="hidden w-64 shrink-0 border-l border-border pl-6 lg:block">
           {propertiesPanel()}
         </aside>
       </div>

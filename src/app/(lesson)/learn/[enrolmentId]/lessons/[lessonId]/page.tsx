@@ -8,7 +8,10 @@ import {
   type DecoratedLesson,
 } from "@/server/services/learner-access";
 import { getLessonContentForLearner } from "@/server/services/lesson-service";
-import { listLessonResourcesForLearner } from "@/server/services/lesson-resource-service";
+import {
+  listLessonResourcesForLearner,
+  listLessonCaptionsForLearner,
+} from "@/server/services/lesson-resource-service";
 import {
   countLessonsRelockedBy,
   getOwnWatchProgress,
@@ -151,7 +154,7 @@ export default async function LessonReadingPage({
   // The full content body (`body`/`embedUrl`/`linkUrl`) lives on the LIVE
   // Lesson row, not on `learner-access.ts`'s decorated (obligation-focused)
   // lesson — see `getLessonContentForLearner`'s own doc comment for why.
-  const content = await getLessonContentForLearner(actor, lessonId);
+  const content = await getLessonContentForLearner(actor, lessonId, { verifiedPath: path });
   if (!content) notFound();
 
   const flat = flattenPath(path);
@@ -160,7 +163,7 @@ export default async function LessonReadingPage({
   const prev = index > 0 ? flat[index - 1] : null;
   const next = index >= 0 && index < flat.length - 1 ? flat[index + 1] : null;
 
-  const resources = await listLessonResourcesForLearner(actor, lessonId);
+  const resources = await listLessonResourcesForLearner(actor, lessonId, { verifiedPath: path });
   const shapedResources = resources.map((resource) => ({
     id: resource.id,
     title: resource.title,
@@ -171,6 +174,10 @@ export default async function LessonReadingPage({
     sizeBytes: resource.sizeBytes.toString(),
     uploadStatus: resource.uploadStatus,
   }));
+
+  // NFR-09: READY caption tracks only, and only for a VIDEO lesson.
+  const captions =
+    content.type === "VIDEO" ? await listLessonCaptionsForLearner(actor, lessonId, { verifiedPath: path }) : [];
 
   const relockCount = countLessonsRelockedBy(path, lessonId);
   const quiz = content.type === "QUIZ" ? await loadLearnerQuiz(actor, { enrolmentId, lessonId }) : null;
@@ -185,18 +192,21 @@ export default async function LessonReadingPage({
     : 0;
 
   const lessonContent = (
-    <LessonContent
-      lesson={{
-        id: content.id,
-        title: content.title,
-        type: content.type,
-        body: content.body,
-        embedUrl: content.embedUrl,
-        linkUrl: content.linkUrl,
-        withdrawnAt: content.withdrawnAt,
-      }}
-      resources={shapedResources}
-    />
+    <div data-primary-content>
+      <LessonContent
+        lesson={{
+          id: content.id,
+          title: content.title,
+          type: content.type,
+          body: content.body,
+          embedUrl: content.embedUrl,
+          linkUrl: content.linkUrl,
+          withdrawnAt: content.withdrawnAt,
+        }}
+        resources={shapedResources}
+        captions={captions}
+      />
+    </div>
   );
 
   const outlineCourses = path.courses.map((course) => ({

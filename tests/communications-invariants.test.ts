@@ -88,8 +88,10 @@ function findPropertyNamed(sourceFile: ts.SourceFile, name: string): ts.Node[] {
 // ---------------------------------------------------------------------------
 
 describe("phase 13 invariant: the permission catalogue is unchanged (D-06)", () => {
-  it("PERMISSIONS has exactly 37 entries and contains no notification/email identifier", () => {
-    expect(PERMISSIONS.length).toBe(37);
+  it("PERMISSIONS has exactly 38 entries (37 plus privacy.manage, approved in Phase 15) and contains no notification/email identifier", () => {
+    // Phase 15 plan 15-16 added privacy.manage through the PRD 1.3 approval path
+    // (15-DECISIONS.md); Phase 13 itself still added nothing.
+    expect(PERMISSIONS.length).toBe(38);
 
     const forbidden = PERMISSIONS.filter(
       (permission) =>
@@ -191,12 +193,21 @@ describe("phase 13 invariant: Notification, EmailPreference, EmailDispatch and D
   it("no file under src calls .delete( or .deleteMany( on the notification, emailPreference, emailDispatch or domainEvent delegates", () => {
     const DELEGATES = ["notification", "emailPreference", "emailDispatch", "domainEvent"];
     const MUTATING_METHODS = ["delete", "deleteMany"];
+    // Phase 15 plan 15-16 (D-12, 15-DECISIONS.md): staff anonymisation of one
+    // account removes that account's email preferences and in-app notifications.
+    // This is the only reviewed exception, and only for those two delegates.
+    const ANONYMISATION_EXCEPTION = {
+      file: "src/server/services/privacy-anonymise-service.ts",
+      delegates: ["notification", "emailPreference"],
+    };
     const files = walkSourceFiles(SRC_ROOT);
     const offenders: string[] = [];
 
     for (const file of files) {
+      const relative = path.relative(process.cwd(), file).split(path.sep).join("/");
       const lines = stripComments(readFileSync(file, "utf8")).split("\n");
       for (const delegate of DELEGATES) {
+        if (relative === ANONYMISATION_EXCEPTION.file && ANONYMISATION_EXCEPTION.delegates.includes(delegate)) continue;
         for (const method of MUTATING_METHODS) {
           const pattern = new RegExp(`\\b${delegate}\\.${method}\\b`);
           lines.forEach((line, index) => {

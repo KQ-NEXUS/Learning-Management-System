@@ -168,6 +168,18 @@ export const LICENCE_SERVICE_REGISTRY: readonly RegistryEntry[] = [
       "Module authoring runs behind courses.edit, a content change that is blocked once the deployment is restricted (D-06).",
   },
   {
+    file: `${S}privacy-anonymise-service.ts`,
+    kind: "withPermission",
+    reason:
+      "Learner anonymisation runs behind privacy.manage, a write-effect permission, so it is blocked once the deployment is restricted (D-12); the learner data export is a separate service (privacy-export-service.ts) that carries its own reviewed continuity override.",
+  },
+  {
+    file: `${S}privacy-export-service.ts`,
+    kind: "withPermission",
+    reason:
+      "Learner data export runs behind privacy.manage, a write-effect permission, and its single permission call site carries a reviewed continuity override because LIC-08 keeps permitted data access (preparing a person's data file and reading its state) open in restricted mode (D-12, ledger P-03); the file itself is built by the export pipeline.",
+  },
+  {
     file: `${S}programme-service.ts`,
     kind: "withPermission",
     reason:
@@ -344,6 +356,12 @@ export const LICENCE_SERVICE_REGISTRY: readonly RegistryEntry[] = [
     reason: "Password reset stays available in restricted mode (A12, D-07).",
   },
   {
+    file: `${S}rate-limit-service.ts`,
+    kind: "continuity",
+    reason:
+      "Rate-limit counters for public identity and support entry points must keep working in the restricted state (D-11)",
+  },
+  {
     file: `${S}profile-service.ts`,
     kind: "continuity",
     reason: "Self-service profile edits are an ownership-checked identity concern with no permission wrapper and continue in restricted mode (D-07).",
@@ -439,6 +457,16 @@ export const CONTINUITY_TAG_SNAPSHOT: ReadonlyArray<{
     file: `${S}email-delivery-log-service.ts`,
     permission: "users.manage",
     reason: "Transactional email resend stays available (D-07)",
+  },
+  {
+    file: `${S}privacy-export-service.ts`,
+    permission: "privacy.manage",
+    reason: "LIC-08 permitted data access",
+  },
+  {
+    file: `${S}privacy-read-service.ts`,
+    permission: "privacy.manage",
+    reason: "LIC-08 permitted data access (lookup)",
   },
 ];
 

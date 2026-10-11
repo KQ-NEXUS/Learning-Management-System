@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Clock, ListChecks } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
 import { ConfirmModal } from "@/components/primitives/ConfirmModal";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import type { LearnerQuizView, SafeQuizAttempt } from "@/server/services/learner-quiz-service";
 import type { AttemptResultView } from "@/server/services/attempt-service";
 import { startAttemptAction, submitAttemptAction, saveAttemptAnswersAction } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions";
@@ -91,8 +91,8 @@ export function QuizAttemptPanel(props: Props) {
       <div><dt>Attempts</dt><dd>{props.maxAttempts ?? "Unlimited"}</dd></div>
       <div><dt>Remaining</dt><dd>{remaining ?? "Unlimited"}</dd></div>
       <div><dt>Pass mark</dt><dd>{props.passMark ?? "No threshold"}</dd></div>
-      {props.availableFrom && <div><dt>Opens</dt><dd className="font-mono">{formatTimestamp(new Date(props.availableFrom))}</dd></div>}
-      {props.availableUntil && <div><dt className="flex items-center gap-1"><Clock aria-hidden size={16} />Closes</dt><dd className="font-mono">{formatTimestamp(new Date(props.availableUntil))}</dd></div>}
+      {props.availableFrom && <div><dt>Opens</dt><dd className="font-mono"><LagosTime value={props.availableFrom} /></dd></div>}
+      {props.availableUntil && <div><dt className="flex items-center gap-1"><Clock aria-hidden size={16} />Closes</dt><dd className="font-mono"><LagosTime value={props.availableUntil} /></dd></div>}
     </dl>
 
     {active ? <form onSubmit={e => { e.preventDefault(); setConfirmSubmit(true); }} className="flex flex-col gap-6">
@@ -164,7 +164,7 @@ export function QuizAttemptPanel(props: Props) {
     </>}
     {error && <div role="alert" className="flex flex-col gap-2 text-sm text-danger"><p>{error.message}</p>{error.body && <p>{error.body}</p>}{active && <button disabled={pending} onClick={submit} className={BUTTON}>Try again</button>}</div>}
     {history.length > 0 && <div className="flex flex-col gap-2"><h3 className="text-sm font-semibold">Attempt history</h3><ul className="flex flex-col gap-2">{history.map(a => <li key={a.attemptId} className="flex flex-wrap items-center gap-2 text-sm">
-      <span>Attempt {a.attemptNumber}</span><span className="font-mono">{a.submittedAt ? formatTimestamp(new Date(a.submittedAt)) : "—"}</span>
+      <span>Attempt {a.attemptNumber}</span><span className="font-mono"><LagosTime value={a.submittedAt} /></span>
       <StatusPill tone={a.status === "ABANDONED" ? "neutral" : a.passed ? "success" : "warning"} label={a.status === "ABANDONED" ? "Abandoned" : a.passed ? "Passed" : "Not yet passed"} />
       <span className="font-mono">{a.status === "ABANDONED" ? "—" : `${a.score} / ${a.maxScore}`}</span>
     </li>)}</ul></div>}

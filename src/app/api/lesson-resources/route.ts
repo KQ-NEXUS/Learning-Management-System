@@ -1,13 +1,22 @@
-/** Authenticated browser-safe list of a lesson's resources for the authoring panel. */
+/**
+ * Authenticated browser-safe list of a lesson's resources for the authoring panel.
+ *
+ * NFR-09 (plan 15-24): `?includeCaptions=1` also returns the lesson's caption
+ * tracks (every upload state, no storage key) so the video row can list them. The
+ * ordinary `resources` list never contains caption rows.
+ */
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import * as permissions from "@/server/permissions";
 import { LICENCE_REFUSAL_MESSAGE } from "@/server/licence/policy";
-import { listLessonResources } from "@/server/services/lesson-resource-service";
+import { listLessonCaptions, listLessonResources } from "@/server/services/lesson-resource-service";
 import { toLessonResourceView } from "@/server/presenters/lesson-resource-view";
 
-const querySchema = z.object({ lessonId: z.string().min(1) });
+const querySchema = z.object({
+  lessonId: z.string().min(1),
+  includeCaptions: z.literal("1").optional(),
+});
 
 export async function GET(request: Request): Promise<Response> {
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
@@ -17,8 +26,13 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     const resources = await listLessonResources(parsed.data.lessonId);
+    const captions =
+      parsed.data.includeCaptions === "1" ? await listLessonCaptions(parsed.data.lessonId) : undefined;
     return NextResponse.json(
-      { resources: resources.map(toLessonResourceView) },
+      {
+        resources: resources.map(toLessonResourceView),
+        ...(captions ? { captions } : {}),
+      },
       { headers: { "cache-control": "private, no-store" } },
     );
   } catch (error) {

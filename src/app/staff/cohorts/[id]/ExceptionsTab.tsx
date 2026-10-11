@@ -19,9 +19,9 @@
 
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useTransition, type ReactNode } from "react";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 
 export type MissingRegisterExceptionView = {
   category: "missing-register";
@@ -96,7 +96,7 @@ function subject(row: AttendanceExceptionView): string {
   return row.category === "missing-register" ? row.sessionTitle : row.learnerName;
 }
 
-function detail(row: AttendanceExceptionView): string {
+function detail(row: AttendanceExceptionView): ReactNode {
   if (row.category === "missing-register") {
     return `${row.unmarkedLearnerCount} learner${row.unmarkedLearnerCount === 1 ? "" : "s"} unmarked`;
   }
@@ -104,8 +104,12 @@ function detail(row: AttendanceExceptionView): string {
     return `${row.earnedPct}% / ${row.requiredPct}%`;
   }
   const who = row.correctedByName ?? "an unknown corrector";
-  const when = row.correctedAt ? formatTimestamp(new Date(row.correctedAt)) : "an unknown time";
-  return `${row.correctionReason} — corrected by ${who} on ${when}`;
+  return (
+    <>
+      {row.correctionReason} — corrected by {who} on{" "}
+      {row.correctedAt ? <LagosTime value={row.correctedAt} /> : "an unknown time"}
+    </>
+  );
 }
 
 function sessionHref(cohortId: string, row: AttendanceExceptionView): string | null {

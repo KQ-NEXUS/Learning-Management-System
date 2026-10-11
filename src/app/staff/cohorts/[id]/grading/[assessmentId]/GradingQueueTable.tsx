@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { ResourceTable, StatusPill } from "@/components/primitives/ResourceTable";
 import { ConfirmModal } from "@/components/primitives/ConfirmModal";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import type { GradingQueueRow } from "@/server/services/grading-service";
 import { releaseGradesBatchAction } from "../../grading-actions";
 import { useToast } from "@/components/feedback/Toaster";
@@ -36,7 +36,7 @@ export function GradingQueueTable({ cohortId, assessmentId, rows, onRelease = re
   return <>
     <ResourceTable noun="submissions" columns={[
       { key: "learner", header: "Learner", render: row => row.learnerName },
-      { key: "submitted", header: "Submitted", mono: true, render: row => formatTimestamp(new Date(row.submittedAt)) },
+      { key: "submitted", header: "Submitted", mono: true, render: row => <LagosTime value={row.submittedAt} className="font-mono text-[13px] whitespace-nowrap" /> },
       { key: "late", header: "Late", render: row => row.isLate ? <StatusPill tone="warning" label="Late" /> : null },
       { key: "status", header: "Status", render: row => row.gradeStatus ? <StatusPill tone={row.gradeStatus === "RELEASED" ? "success" : "neutral"} label={row.gradeStatus === "RELEASED" ? "Released" : "Draft"} /> : null },
       { key: "score", header: "Score", mono: true, align: "right", render: row => row.score ?? "—" },

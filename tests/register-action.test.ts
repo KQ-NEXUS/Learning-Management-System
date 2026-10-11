@@ -6,10 +6,18 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const m = vi.hoisted(() => ({ registerLearner: vi.fn() }));
+const m = vi.hoisted(() => ({
+  registerLearner: vi.fn(),
+  consume: vi.fn(),
+  headers: new Headers({ "x-nf-client-connection-ip": "203.0.113.9" }),
+}));
 vi.mock("@/server/services/registration-service", () => ({
   registrationService: { registerLearner: m.registerLearner },
 }));
+vi.mock("@/server/services/rate-limit-service", () => ({
+  rateLimitService: { consume: m.consume },
+}));
+vi.mock("next/headers", () => ({ headers: async () => m.headers }));
 
 import { registerAction, type RegisterState } from "@/app/(auth)/register/actions";
 
@@ -32,6 +40,7 @@ const valid = {
 beforeEach(() => {
   vi.clearAllMocks();
   m.registerLearner.mockResolvedValue({ ok: true });
+  m.consume.mockResolvedValue({ limited: false, windowMinutes: 15 });
 });
 
 describe("registerAction", () => {
@@ -64,5 +73,34 @@ describe("registerAction", () => {
 
   it("a successful registration carries no echoed values, only the address the link was sent to", async () => {
     expect(await registerAction(INITIAL, form(valid))).toEqual({ error: null, sent: true, email: "ada@example.test" });
+  });
+});
+
+describe("registerAction — D-11 per-device limit", () => {
+  it("a limited device gets the S5 message with name and email echoed, never the password, and never reaches registration", async () => {
+    m.consume.mockResolvedValueOnce({ limited: true, windowMinutes: 15 });
+
+    const state = await registerAction(INITIAL, form(valid));
+
+    expect(state).toEqual({
+      error: "Too many sign-up attempts from this device. Wait 15 minutes, then try again.",
+      sent: false,
+      values: { name: "Ada Learner", email: "ada@example.test" },
+      attempt: 1,
+    });
+    expect(JSON.stringify(state)).not.toContain(valid.password);
+    expect(m.registerLearner).not.toHaveBeenCalled();
+    expect(m.consume).toHaveBeenCalledWith("register", { ip: "203.0.113.9", email: "ada@example.test" });
+  });
+
+  it("an unlimited device registers exactly once", async () => {
+    await registerAction(INITIAL, form(valid));
+    expect(m.consume).toHaveBeenCalledTimes(1);
+    expect(m.registerLearner).toHaveBeenCalledTimes(1);
+  });
+
+  it("an invalid submission is refused before the limiter, so it consumes nothing", async () => {
+    await registerAction(INITIAL, form({ ...valid, password: "short" }));
+    expect(m.consume).not.toHaveBeenCalled();
   });
 });

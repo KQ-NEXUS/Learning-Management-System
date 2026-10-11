@@ -1,6 +1,9 @@
 "use server";
 
+import { headers } from "next/headers";
 import { registrationService } from "@/server/services/registration-service";
+import { rateLimitService } from "@/server/services/rate-limit-service";
+import { clientIpFrom } from "@/server/auth/sign-in-throttle";
 import { MIN_PASSWORD_LENGTH } from "@/lib/identity";
 import { LEARNER_REFUSAL_MESSAGE } from "@/server/licence/policy";
 
@@ -44,6 +47,21 @@ export async function registerAction(
 
   if (!acceptedTerms || !acceptedPrivacy) {
     return refuse("Accept the terms of service and the privacy notice to continue.");
+  }
+
+  // D-11 — per-device limit, counted only for a submission that would reach
+  // the service. The message names the device, never the address, and is the
+  // same whether or not an account exists for it (P4).
+  let limit;
+  try {
+    limit = await rateLimitService.consume("register", { ip: clientIpFrom(await headers()), email });
+  } catch {
+    return refuse("Something went wrong. Nothing was saved — try again.");
+  }
+  if (limit.limited) {
+    return refuse(
+      `Too many sign-up attempts from this device. Wait ${limit.windowMinutes} minutes, then try again.`,
+    );
   }
 
   // G-03-3: the service call is wrapped in try/catch so a failure below it

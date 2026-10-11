@@ -42,7 +42,7 @@ export default async function SessionsPage({
   const isEmpty = sessions.upcoming.length === 0 && sessions.past.length === 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-primary-content className="flex flex-col gap-6">
       <LearnerPageHeader title="Scheduled sessions" back={{ label: "Back to course", href: `/learn/${enrolmentId}` }} />
 
       {isEmpty ? (

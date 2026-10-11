@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 26
+open_count: 27
 waived_count: 0
 fixed_count: 2
-total_count: 28
-last_updated: 2026-10-02T03:15:25.826Z
+total_count: 29
+last_updated: 2026-10-08T21:01:24.422Z
 ---
 
 # Broken Windows Ledger
@@ -43,6 +43,7 @@ last_updated: 2026-10-02T03:15:25.826Z
 | 26 | 14 | unrun-verify | docs/reference/Professional-Training-LMS-PRD-Revision-3-Multi-Gateway-Payments.docx |  | 14-20: owner must regenerate the .docx twins of the PRD and PXR from the amended .md files (OQ7) and align the commercial contract wording with restricted continuity mode; the PRD and PXR .md edits are local-only (docs/reference is gitignored), see 14-PRD-AMENDMENT.md | open |  | 2026-10-02T02:29:40.534Z |  |
 | 27 | 14 | deviation | tests/licence-wording.test.ts |  | 14-20: banned-wording pattern requires a hyphen or space separator and word boundaries (plan's optional separator matches the TypeScript readonly keyword); three prior-plan wording defects fixed (types.ts comment, four test files, 13 registry reason literals reworded so policy.ts is the only phrase literal) | open |  | 2026-10-02T02:29:47.103Z |  |
 | 28 | 14 | deviation | tests/licence-restricted.integration.test.ts |  | 14-21: no-deletion scan exempts a delete call on a same-file new Map/Set receiver (licence-service.ts:647 enforcementAudited.delete is the in-memory coalescing map); the plan's literal zero-count could not hold on correct code | open |  | 2026-10-02T03:15:25.826Z |  |
+| 29 | 15 | unmet-truth | src/app/staff/payments/page.tsx | 43 | /staff/payments fails to render in a production build: the Server Component calls initialPaymentStatus exported from the use-client PaymentsTable.tsx (found by the 15-14 k6 smoke) | open |  | 2026-10-08T21:01:24.422Z |  |
 
 ````json
 [
@@ -380,6 +381,18 @@ last_updated: 2026-10-02T03:15:25.826Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-02T03:15:25.826Z",
+    "resolved_at": null
+  },
+  {
+    "id": 29,
+    "kind": "unmet-truth",
+    "phase": "15",
+    "file": "src/app/staff/payments/page.tsx",
+    "line": 43,
+    "description": "/staff/payments fails to render in a production build: the Server Component calls initialPaymentStatus exported from the use-client PaymentsTable.tsx (found by the 15-14 k6 smoke)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-08T21:01:24.422Z",
     "resolved_at": null
   }
 ]

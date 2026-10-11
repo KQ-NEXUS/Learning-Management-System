@@ -8,6 +8,7 @@
  */
 
 import type { NotificationDto } from "@/server/communications/notification-text";
+import { LagosTime } from "@/components/time/LagosTime";
 
 const STALE_TITLE = "No longer available";
 const STALE_META = "This item has been removed or you no longer have access.";
@@ -29,8 +30,12 @@ export type NotificationItemProps = {
   onActivate: (id: string) => void;
 };
 
-/** A short, deterministic-enough relative label. Never computed on the server (T-13-22 client-only fetch), so no hydration mismatch risk. */
-function relativeTime(iso: string, nowMs: number): string {
+/**
+ * A short relative label, or `null` once the notification is a week old or more
+ * (the caller then renders the Lagos date, D-17). Never computed on the server
+ * (T-13-22 client-only fetch), so no hydration mismatch risk.
+ */
+function relativeTime(iso: string, nowMs: number): string | null {
   const then = new Date(iso).getTime();
   const diffSeconds = Math.max(0, Math.round((nowMs - then) / 1000));
   if (diffSeconds < 60) return "Just now";
@@ -40,7 +45,7 @@ function relativeTime(iso: string, nowMs: number): string {
   if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.round(diffHours / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return null;
 }
 
 export function NotificationItem({
@@ -83,7 +88,7 @@ export function NotificationItem({
           {openError && <span className="block text-sm text-danger">{OPEN_ERROR}</span>}
         </span>
         <span className="shrink-0 text-sm text-muted-foreground">
-          {now !== null ? relativeTime(createdAt, now) : ""}
+          {now !== null ? (relativeTime(createdAt, now) ?? <LagosTime value={createdAt} variant="date" />) : ""}
         </span>
       </button>
     </li>

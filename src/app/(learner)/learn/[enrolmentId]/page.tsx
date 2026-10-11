@@ -105,7 +105,7 @@ export default async function LessonListPage({
   const resumeLabel = completedCount > 0 ? "Resume lesson" : "Start lesson";
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-primary-content className="flex flex-col gap-6">
       <LearnerPageHeader size="hero" title={heading} />
 
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">

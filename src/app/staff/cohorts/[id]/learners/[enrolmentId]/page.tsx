@@ -6,7 +6,7 @@ import { enrolmentCohortScope } from "@/server/services/cohort-scope";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { ProgressOverridePanel, type ProgressLessonRow } from "./ProgressOverridePanel";
 import { humanizeCode } from "@/lib/humanize";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import {
   loadLearnerResultsForStaff,
   type LearnerResultCard,
@@ -83,7 +83,7 @@ function ResultsSection({ results }: { results: LearnerResultCard[] | null }) {
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <div role="region" aria-label="Released results" tabIndex={0} className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-left text-sm">
         <thead>
           <tr className="border-b border-foreground text-[13px] text-muted-foreground">
@@ -120,7 +120,7 @@ function ResultsSection({ results }: { results: LearnerResultCard[] | null }) {
                     : `${used} used${r.attemptsRemaining === null ? "" : ` · ${r.attemptsRemaining} left`}`}
                 </td>
                 <td className="py-4 font-mono text-[13px] tabular-nums text-muted-foreground">
-                  {latest ? formatTimestamp(new Date(latest.at)) : "—"}
+                  <LagosTime value={latest ? latest.at : null} />
                 </td>
               </tr>
             );

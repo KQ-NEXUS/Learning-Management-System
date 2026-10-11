@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { ResourceTable, StatusPill, type Column } from "@/components/primitives";
 import { ConfirmModal } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import {
   archiveTemplateAction,
   setDefaultTemplateAction,
@@ -96,7 +96,7 @@ export function TemplatesTable({
       key: "updatedAt",
       header: "Last edited",
       mono: true,
-      render: (row) => formatTimestamp(row.updatedAt),
+      render: (row) => <LagosTime value={row.updatedAt} className="font-mono text-[13px] whitespace-nowrap" />,
       width: "18%",
     },
     {

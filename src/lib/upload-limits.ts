@@ -24,6 +24,13 @@ export type LessonType =
 /** LessonType values that carry an uploadable resource. */
 export type UploadableLessonType = "FILE" | "IMAGE" | "VIDEO";
 
+/**
+ * Upload kinds. FILE, IMAGE and VIDEO are LessonType values; CAPTION is not a
+ * lesson type — it is the kind of a WebVTT caption file attached to a VIDEO
+ * resource (NFR-09, plan 15-23). `text/vtt` is accepted for CAPTION only.
+ */
+export type UploadKind = UploadableLessonType | "CAPTION";
+
 export type UploadLimit = {
   readonly maxBytes: number;
   readonly mimeTypes: readonly string[];
@@ -37,7 +44,7 @@ const GB = 1024 * MB;
  * `LINK`, `QUIZ` and `ASSIGNMENT` are deliberately absent — a lookup miss is
  * how `validateUpload` rejects them.
  */
-export const UPLOAD_LIMITS: Readonly<Record<UploadableLessonType, UploadLimit>> = Object.freeze({
+export const UPLOAD_LIMITS: Readonly<Record<UploadKind, UploadLimit>> = Object.freeze({
   IMAGE: Object.freeze({
     maxBytes: 10 * MB,
     // Raster only. image/svg+xml is NOT here — SVG carries <script> and
@@ -68,6 +75,12 @@ export const UPLOAD_LIMITS: Readonly<Record<UploadableLessonType, UploadLimit>> 
     maxBytes: 2 * GB,
     mimeTypes: Object.freeze(["video/mp4", "video/webm"]),
   }),
+  // NFR-09: WebVTT caption files only, small enough to serve same-origin
+  // through the authorised captions route. Never accepted for VIDEO/FILE/IMAGE.
+  CAPTION: Object.freeze({
+    maxBytes: 1 * MB,
+    mimeTypes: Object.freeze(["text/vtt"]),
+  }),
 });
 
 /**
@@ -77,6 +90,31 @@ export const UPLOAD_LIMITS: Readonly<Record<UploadableLessonType, UploadLimit>> 
  * additionally bound to one staged key and one `Content-Type`.
  */
 export const UPLOAD_URL_TTL_SECONDS = 900;
+
+/**
+ * A caption track's language is a BCP 47 language tag (NFR-09): a 2 or 3 letter
+ * primary language, then optional subtags of 2 to 8 letters or digits (en, fr-CA,
+ * zh-Hant-TW). Matched case-insensitively and capped at 35 characters. Used by the
+ * lesson resource service and the authoring form so the rule cannot drift.
+ */
+export const CAPTION_LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+export const CAPTION_LANGUAGE_MAX_LENGTH = 35;
+export const CAPTION_LABEL_MAX_LENGTH = 60;
+
+/**
+ * Plain refusal wording for caption authoring (NFR-09, plan 15-24), shared by the
+ * authoring form (as a courtesy check) and the lesson resource service (the real
+ * gate) so the two cannot say different things.
+ */
+export const CAPTION_FILE_MESSAGE = "Captions must be a WebVTT (.vtt) file of 1 MB or less.";
+export const CAPTION_LANGUAGE_MESSAGE =
+  "Enter the caption language as a language code such as en or fr-CA.";
+export const CAPTION_LABEL_MESSAGE = `Enter a caption label of 1 to ${CAPTION_LABEL_MAX_LENGTH} characters.`;
+export const CAPTION_PARENT_MESSAGE = "Captions can only be added to a video in the same lesson.";
+
+export function isValidCaptionLanguage(value: string): boolean {
+  return value.length <= CAPTION_LANGUAGE_MAX_LENGTH && CAPTION_LANGUAGE_PATTERN.test(value);
+}
 
 export type ValidateUploadInput = {
   lessonType: string;

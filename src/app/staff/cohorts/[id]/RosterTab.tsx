@@ -29,7 +29,7 @@ import type { AttendanceComponent } from "@/server/services/attendance-component
 import type { DeferredColumn, TrackedProgress } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
 import { EnrolmentRowActions } from "./EnrolmentRowActions";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { humanizeCode } from "@/lib/humanize";
 
 export type RosterTransitionView = {
@@ -192,7 +192,7 @@ export function RosterTab({
               {r.latestTransition ? (
                 <span>
                   Latest: {humanizeCode(r.latestTransition.action).toLowerCase()} by {r.latestTransition.actorName ?? "system"} on{" "}
-                  {formatTimestamp(new Date(r.latestTransition.at))}
+                  <LagosTime value={r.latestTransition.at} />
                   {r.latestTransition.reason ? ` — "${r.latestTransition.reason}"` : ""}
                 </span>
               ) : (

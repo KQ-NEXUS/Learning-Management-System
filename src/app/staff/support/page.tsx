@@ -22,5 +22,9 @@ export default async function StaffSupportPage({
     console.error("Support queue failed to load", error);
     return <SupportWorkspace error />;
   }
-  return <SupportWorkspace view={data[0]} assignees={data[1]} />;
+  return (
+    <div data-primary-content>
+      <SupportWorkspace view={data[0]} assignees={data[1]} />
+    </div>
+  );
 }

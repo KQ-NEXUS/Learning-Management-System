@@ -7,7 +7,7 @@ import {
   SubmissionNotFoundError,
 } from "@/server/services/grading-service";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { GradeEntryClient } from "./GradeEntryClient";
 
 /**
@@ -78,7 +78,7 @@ export default async function GradeEntryPage({
     label: `Prior attempt ${s.attemptNumber}`,
     value: (
       <>
-        {formatTimestamp(s.submittedAt)}
+        <LagosTime value={s.submittedAt} />
         {s.isLate ? " · Late" : ""} —{" "}
         <a className="text-accent underline underline-offset-2" href={`/api/submissions/${s.id}/download`}>
           {s.filename}
@@ -108,7 +108,7 @@ export default async function GradeEntryPage({
               <DetailFacts
                 facts={[
                   { label: "Learner", value: detail.learnerName },
-                  { label: "Submitted", value: formatTimestamp(detail.submission.submittedAt), mono: true },
+                  { label: "Submitted", value: <LagosTime value={detail.submission.submittedAt} />, mono: true },
                   ...(detail.isLate ? [{ label: "Late", value: <StatusPill tone="warning" label="Late" /> }] : []),
                   { label: "Attempt", value: String(detail.attemptNumber), mono: true },
                   {

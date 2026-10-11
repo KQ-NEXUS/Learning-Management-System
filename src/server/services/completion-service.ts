@@ -199,6 +199,12 @@ export type CompletionServiceTxClient = DomainEventTxClient & {
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
+  /**
+   * The real transaction client's raw statement, used ONLY for the savepoint
+   * around the open-record insert (`createOpenRecord`). Optional so in-memory
+   * fakes, which have no transaction to protect, still satisfy this type.
+   */
+  $executeRaw?(query: TemplateStringsArray, ...values: unknown[]): PromiseLike<number>;
 };
 
 // ---------------------------------------------------------------------------
@@ -359,6 +365,41 @@ export async function loadAssessmentEvidence(
   });
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
+/**
+ * Inserts the open `CompletionRecord`, returning false when a concurrent
+ * evaluation already opened it (NFR-03 / NFR-14).
+ *
+ * Two evaluations for one enrolment in two transactions can both read "no
+ * open record" and both insert. The partial unique index
+ * "CompletionRecord_open_key" (migration
+ * 20261006120000_grade_completion_uniqueness) refuses the second insert with a
+ * unique violation, Prisma P2002. That refusal means "already completed", not
+ * a failure, but Postgres aborts the whole transaction on any error, and this
+ * insert runs inside the CALLER's transaction (DD-12): a bare catch would leave
+ * every later statement of the caller (the lesson progress write, the
+ * certificate issuance) failing. A savepoint around the insert lets the
+ * violation be rolled back on its own while the caller's transaction carries
+ * on. A test fake without `$executeRaw` has no transaction to protect, so it
+ * only needs the catch.
+ */
+async function createOpenRecord(tx: CompletionServiceTxClient, data: Record<string, unknown>): Promise<boolean> {
+  const raw = tx.$executeRaw?.bind(tx);
+  if (raw) await raw`SAVEPOINT completion_record_create`;
+  try {
+    await tx.completionRecord.create({ data });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    if (raw) await raw`ROLLBACK TO SAVEPOINT completion_record_create`;
+    return false;
+  }
+  if (raw) await raw`RELEASE SAVEPOINT completion_record_create`;
+  return true;
+}
+
 /**
  * Creates, supersedes or leaves alone the ONE open `CompletionRecord` for
  * `(enrolmentId, scope, courseId)`, per the full state table in this plan's
@@ -386,16 +427,17 @@ async function applyVerdict(
 
   if (verdict.satisfied) {
     if (open) return "unchanged"; // idempotent — a second mark-complete never creates a second record
-    await tx.completionRecord.create({
-      data: {
-        enrolmentId,
-        scope,
-        courseId,
-        ruleVersion,
-        completedAt: now,
-        evidence: { schema: 1, items: verdict.items },
-      },
+    const created = await createOpenRecord(tx, {
+      enrolmentId,
+      scope,
+      courseId,
+      ruleVersion,
+      completedAt: now,
+      evidence: { schema: 1, items: verdict.items },
     });
+    // A concurrent evaluation opened the record first: already completed, and
+    // that evaluation emits the completion event, so this one emits nothing.
+    if (!created) return "unchanged";
     await writeDomainEvent(tx, {
       type: scope === "COURSE" ? "course.completed" : "programme.completed",
       payload: { enrolmentId, scope, courseId, ruleVersion },

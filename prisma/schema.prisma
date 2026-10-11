@@ -330,6 +330,13 @@ model User {
   deactivatedAt   DateTime?
   deactivatedById String?
 
+  // D-12 / NFR-11 — set when staff anonymise the account in place. The row is
+  // never deleted; orders, grades, certificates and audit events keep pointing
+  // at it. `anonymisedAt` is also the compare-and-set guard that stops a double
+  // anonymisation (updateMany where anonymisedAt IS NULL).
+  anonymisedAt   DateTime?
+  anonymisedById String?
+
   sessions                    Session[]
   accounts                    Account[]
   assignments                 Assignment[]              @relation("AssignmentSubject")
@@ -848,13 +855,25 @@ model LessonResource {
   // CAT-04 — resources render in order on the lesson.
   position Int @default(0)
 
+  // NFR-09 (plan 15-23) — a WebVTT caption track is a text/vtt LessonResource
+  // linked to the VIDEO resource it captions. All three columns are null for
+  // every ordinary resource; a caption row carries all three. Deleting the
+  // video resource deletes its captions.
+  captionForResourceId String?
+  captionLanguage      String? // BCP 47 language tag, e.g. en or fr-CA
+  captionLabel         String? // shown in the player's captions menu
+
   createdAt DateTime @default(now())
 
   lesson     Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   uploadedBy User?  @relation(fields: [uploadedById], references: [id])
 
+  captionFor LessonResource?  @relation("ResourceCaptions", fields: [captionForResourceId], references: [id], onDelete: Cascade)
+  captions   LessonResource[] @relation("ResourceCaptions")
+
   @@index([lessonId])
   @@index([uploadStatus])
+  @@index([captionForResourceId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1166,6 +1185,16 @@ model LessonWatchProgress {
 
 // LRN-07 — records which rule version was satisfied and what evidence
 // satisfied it, so a later correction can be reasoned about.
+//
+// NFR-03 / NFR-14 — at most one OPEN record per enrolment, scope and course.
+// The unique index "CompletionRecord_open_key" ON ("enrolmentId", "scope",
+// (COALESCE("courseId", ''))) WHERE "supersededAt" IS NULL lives only in
+// migration 20261006120000_grade_completion_uniqueness, because Prisma cannot
+// express a partial expression index here. Superseded records are outside it.
+// completion-service.ts applyVerdict treats the losing concurrent insert
+// (P2002) as "already completed". If `prisma migrate dev` ever proposes
+// dropping this index, delete that line from the generated migration; never
+// use `prisma db push` here.
 model CompletionRecord {
   id           String          @id @default(cuid())
   enrolmentId  String
@@ -1309,6 +1338,14 @@ model Submission {
   @@index([enrolmentId])
 }
 
+// NFR-03 / NFR-14 — one grade per submission. The partial unique index
+// "Grade_submissionId_key" ON ("submissionId") WHERE "submissionId" IS NOT NULL
+// lives only in migration 20261006120000_grade_completion_uniqueness, because
+// Prisma cannot express a partial index here (a plain @unique would be total).
+// Quiz attempt grades (submissionId null) stay outside it. grading-service.ts
+// turns the losing concurrent insert (P2002) into an update of the winner's
+// draft. If `prisma migrate dev` ever proposes dropping this index, delete that
+// line from the generated migration; never use `prisma db push` here.
 model Grade {
   id           String  @id @default(cuid())
   assessmentId String

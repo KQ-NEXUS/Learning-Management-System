@@ -1,17 +1,27 @@
 import type { ReactNode } from "react";
-import { ShieldCheck, ShieldQuestion, ShieldX } from "lucide-react";
+import { headers } from "next/headers";
+import { Clock, ShieldCheck, ShieldQuestion, ShieldX } from "lucide-react";
 import { verifyCertificateByRef } from "@/server/services/certificate-verification-service";
+import { rateLimitService } from "@/server/services/rate-limit-service";
+import { clientIpFrom } from "@/server/auth/sign-in-throttle";
+import { LAGOS_TIME_ZONE } from "@/lib/format-timestamp";
 import { VerifyReferenceForm } from "../VerifyReferenceForm";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 
 /**
  * The public verification result page (CRD-04, UI-SPEC §7.5).
  *
- * Exactly three render branches, one per `CertificateVerificationResult`
- * outcome — never a fourth shape, never a shared structure between "unknown"
- * and "real" (Pitfall 3). The not-found branch renders no `<dl>` at all, not
- * even an empty one: an observer must not be able to distinguish outcomes by
- * DOM shape alone.
+ * Exactly four render branches: one per `CertificateVerificationResult`
+ * outcome, plus the rate-limited branch (D-11, UI-SPEC S5) — never a shared
+ * structure between "unknown" and "real" (Pitfall 3). The not-found branch
+ * renders no `<dl>` at all, not even an empty one: an observer must not be
+ * able to distinguish outcomes by DOM shape alone.
+ *
+ * The rate-limited branch is decided BEFORE the lookup: a device past 60
+ * checks in 15 minutes gets its own icon and heading block, no `<dl>`, and
+ * `verifyCertificateByRef` is never called, so a throttled scraper learns
+ * nothing about the reference (T-15-03-03). Without a trusted client IP no
+ * limit applies and nothing is recorded.
  *
  * The reference is echoed back exactly as received from the URL segment, in
  * mono/break-all text only — never interpolated into markup, a query
@@ -24,13 +34,19 @@ import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
  * valid.
  */
 
+/** The formal long-month issue date ("5 October 2026"), computed in Africa/Lagos (D-17, UI-SPEC S6). */
 function formatIssuedDate(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", {
     year: "numeric",
     month: "long",
-    day: "2-digit",
-    timeZone: "UTC",
+    day: "numeric",
+    timeZone: LAGOS_TIME_ZONE,
   }).format(date);
+}
+
+/** The issue date inside a time element carrying the exact ISO 8601 UTC instant. */
+function IssuedDate({ date }: { date: Date }) {
+  return <time dateTime={date.toISOString()}>{formatIssuedDate(date)}</time>;
 }
 
 /** One label/value row: 180px label column, hairline under it. */
@@ -51,7 +67,8 @@ export default async function VerifyResultPage({
   params: Promise<{ verificationRef: string }>;
 }) {
   const { verificationRef } = await params;
-  const result = await verifyCertificateByRef(verificationRef);
+  const limit = await rateLimitService.consume("certificateCheck", { ip: clientIpFrom(await headers()) });
+  const result = limit.limited ? null : await verifyCertificateByRef(verificationRef);
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,7 +80,21 @@ export default async function VerifyResultPage({
       <div className="flex w-full max-w-[760px] flex-col">
         <VerifyReferenceForm />
         <section aria-label="Result" className="flex flex-col gap-2 border-t border-foreground pt-8">
-          {result.status === "active" && (
+          {limit.limited && (
+            <>
+              <div className="flex items-center gap-4">
+                <Clock aria-hidden className="size-8 shrink-0 text-muted-foreground" />
+                <h2 className="text-[28px] leading-[1.2] font-semibold tracking-[-0.03em] text-foreground">
+                  Too many checks from this device.
+                </h2>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Wait {limit.windowMinutes} minutes, then check the reference again.
+              </p>
+            </>
+          )}
+
+          {result?.status === "active" && (
             <>
               <div className="flex items-center gap-4">
                 <ShieldCheck aria-hidden className="size-8 shrink-0 text-success" />
@@ -75,7 +106,7 @@ export default async function VerifyResultPage({
                 <Row label="Learner name">{result.learnerName}</Row>
                 <Row label="Award title">{result.awardTitle}</Row>
                 <Row label="Issued date" mono>
-                  {formatIssuedDate(result.issuedAt)}
+                  <IssuedDate date={result.issuedAt} />
                 </Row>
               </dl>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -84,7 +115,7 @@ export default async function VerifyResultPage({
             </>
           )}
 
-          {result.status === "revoked" && (
+          {result?.status === "revoked" && (
             <>
               <div className="flex items-center gap-4">
                 <ShieldX aria-hidden className="size-8 shrink-0 text-danger" />
@@ -96,7 +127,7 @@ export default async function VerifyResultPage({
                 <Row label="Learner name">{result.learnerName}</Row>
                 <Row label="Award title">{result.awardTitle}</Row>
                 <Row label="Issued date" mono>
-                  {formatIssuedDate(result.issuedAt)}
+                  <IssuedDate date={result.issuedAt} />
                 </Row>
               </dl>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -105,7 +136,7 @@ export default async function VerifyResultPage({
             </>
           )}
 
-          {result.status === "not_found" && (
+          {result?.status === "not_found" && (
             <>
               <div className="flex items-center gap-4">
                 <ShieldQuestion aria-hidden className="size-8 shrink-0 text-muted-foreground" />

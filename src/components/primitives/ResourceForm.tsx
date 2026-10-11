@@ -588,9 +588,9 @@ export function ResourceForm({
                         >
                           {isFlagged ? "!" : isDone ? <Check className="size-4" /> : index + 1}
                         </span>
-                        {/* On a phone only the current step keeps its name, so the whole bar fits on one line. */}
+                        {/* On a phone only the current step shows its name, so the whole bar fits on one line; the other names stay for screen readers. */}
                         <span
-                          className={`${isCurrent ? "" : "hidden sm:inline"} ${isCurrent ? "font-semibold text-foreground" : isDone ? "text-foreground group-hover:underline" : "text-muted-foreground"}`}
+                          className={`${isCurrent ? "" : "sr-only sm:not-sr-only"} ${isCurrent ? "font-semibold text-foreground" : isDone ? "text-foreground group-hover:underline" : "text-muted-foreground"}`}
                         >
                           {stepTitle}
                         </span>

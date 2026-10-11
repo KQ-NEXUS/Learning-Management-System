@@ -91,6 +91,7 @@ function buildService(
     promote: vi.fn(async () => {}),
     delete: vi.fn(async () => {}),
     finalKey: (key: string) => key.replace(/^lesson-uploads\//, "lessons/"),
+    readBounded: vi.fn(async () => new Uint8Array()),
   };
   // F-01 — learner access is now lesson-level (pinned, unlocked, window open).
   // "Enrolled in c1" means every lesson is openable unless listed as closed.
@@ -429,5 +430,64 @@ describe("F-01 — an enrolled learner still cannot reach files of a lesson they
       closedLessonIds: ["lesson1"],
     });
     await expect(service.listLessonResourcesForLearner(learner, "lesson1")).resolves.toEqual([]);
+  });
+});
+
+describe("learner reads with a path the caller already loaded (plan 15-28, P-09)", () => {
+  const learner = { userId: "learner-1" };
+  // The path is opaque to the service: the injected predicate decides.
+  const somePath = { courses: [] } as never;
+
+  function buildWithPathCheck(opens: boolean, canOpen: boolean) {
+    const { delegate } = makeDelegate([{ id: "res1", lessonId: "lesson1", uploadStatus: "READY" }]);
+    const { withPermission } = createTestWithPermission([], { userId: "staff-1" });
+    const canOpenLesson = vi.fn(async () => canOpen);
+    const lessonOpensInPath = vi.fn(() => opens);
+    const service = createLessonResourceService({
+      delegate,
+      resolveLessonContext: lessonCtx,
+      withPermission,
+      audit: async () => {},
+      storage: {
+        inspect: vi.fn(),
+        promote: vi.fn(),
+        delete: vi.fn(),
+        finalKey: (key: string) => key,
+        readBounded: vi.fn(async () => new Uint8Array()),
+      },
+      canOpenLesson,
+      lessonOpensInPath,
+    });
+    return { service, canOpenLesson, lessonOpensInPath };
+  }
+
+  it("a path that opens the lesson is enough: the full check is not run", async () => {
+    const { service, canOpenLesson, lessonOpensInPath } = buildWithPathCheck(true, false);
+    await expect(
+      service.listLessonResourcesForLearner(learner, "lesson1", { verifiedPath: somePath }),
+    ).resolves.toMatchObject([{ id: "res1" }]);
+    expect(lessonOpensInPath).toHaveBeenCalledWith(somePath, "lesson1");
+    expect(canOpenLesson).not.toHaveBeenCalled();
+  });
+
+  it("a path that does not open the lesson falls back to the full check, which can still refuse", async () => {
+    const { service, canOpenLesson } = buildWithPathCheck(false, false);
+    await expect(
+      service.listLessonResourcesForLearner(learner, "lesson1", { verifiedPath: somePath }),
+    ).resolves.toEqual([]);
+    expect(canOpenLesson).toHaveBeenCalledWith(learner, "lesson1");
+  });
+
+  it("without a path the full check decides, exactly as before", async () => {
+    const { service, canOpenLesson, lessonOpensInPath } = buildWithPathCheck(true, false);
+    await expect(service.listLessonResourcesForLearner(learner, "lesson1")).resolves.toEqual([]);
+    expect(canOpenLesson).toHaveBeenCalledOnce();
+    expect(lessonOpensInPath).not.toHaveBeenCalled();
+  });
+
+  it("captions follow the same rule", async () => {
+    const { service, canOpenLesson } = buildWithPathCheck(true, false);
+    await expect(service.listLessonCaptionsForLearner(learner, "lesson1", { verifiedPath: somePath })).resolves.toEqual([]);
+    expect(canOpenLesson).not.toHaveBeenCalled();
   });
 });

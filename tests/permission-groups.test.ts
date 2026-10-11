@@ -6,8 +6,8 @@ import {
 } from "@/lib/permission-groups";
 
 describe("permission groups", () => {
-  it("has exactly 14 groups", () => {
-    expect(PERMISSION_GROUPS).toHaveLength(14);
+  it("has exactly 15 groups", () => {
+    expect(PERMISSION_GROUPS).toHaveLength(15);
   });
 
   it("covers every catalogue permission exactly once, in both directions", () => {

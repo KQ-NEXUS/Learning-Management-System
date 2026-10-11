@@ -52,7 +52,7 @@ describe("QuizAttemptPanel", () => {
       availableFrom: "2026-01-01T00:00:00.000Z",
       history: [{ attemptId: "a", attemptNumber: 1, status: "SUBMITTED", score: 1, maxScore: 2, passed: false, submittedAt: new Date("2026-01-01T00:00:00.000Z"), perQuestion: [], expired: false }],
     });
-    expect(screen.getAllByText("01/01/2026, 00:00:00")).toHaveLength(2);
+    expect(screen.getAllByText("1 Jan 2026, 01:00 WAT")).toHaveLength(2);
   });
 
   it("offers a first start and a resume without an abandon notice", () => {

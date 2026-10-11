@@ -231,6 +231,32 @@ export async function promoteLessonObject(input: {
   );
 }
 
+/** Thrown by `readLessonObjectBounded` when the stored object is larger than the caller allows. */
+export class StoredObjectTooLargeError extends Error {
+  constructor(message = "The stored object is larger than allowed.") {
+    super(message);
+    this.name = "StoredObjectTooLargeError";
+  }
+}
+
+/**
+ * Reads one small stored object into memory, refusing anything over `maxBytes`
+ * (NFR-09 caption files, 1 MB). The declared length is checked before the body is
+ * read and the received length again afterwards, so a lying header cannot push a
+ * large object through the app. Large objects (video) must never use this; they
+ * are served by presigned redirect.
+ */
+export async function readLessonObjectBounded(key: string, maxBytes: number): Promise<Uint8Array> {
+  const result = await s3.send(new GetObjectCommand({ Bucket: bucketName(), Key: key }));
+  if (!result.Body) throw new Error(`No object body for key ${key}.`);
+  if (result.ContentLength !== undefined && result.ContentLength > maxBytes) {
+    throw new StoredObjectTooLargeError();
+  }
+  const bytes = await result.Body.transformToByteArray();
+  if (bytes.byteLength > maxBytes) throw new StoredObjectTooLargeError();
+  return bytes;
+}
+
 /** Deletes one object. Callers treat a missing object as already deleted. */
 export async function deleteLessonObject(key: string): Promise<void> {
   await s3.send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));

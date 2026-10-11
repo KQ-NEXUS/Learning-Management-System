@@ -16,6 +16,7 @@ import { ProgressMeter } from "@/components/learner/ProgressMeter";
 import { DeferredSlot } from "@/components/learner/DeferredSlot";
 import { CertificateSlot } from "@/components/learner/CertificateSlot";
 import { utcToWallParts } from "@/lib/timezone";
+import { LagosTime } from "@/components/time/LagosTime";
 import { TicketStatusPill, TicketTime } from "@/components/support/ticket-labels";
 import type { Metadata } from "next";
 
@@ -36,12 +37,6 @@ import type { Metadata } from "next";
 
 const ACCESS_ENDING_WARNING =
   "flex flex-col gap-1 border-l-2 border-warning py-1 pl-4 text-sm text-warning";
-
-function formatCohortDate(date: Date, timezone: string): string {
-  const p = utcToWallParts(date, timezone);
-  const pad = (n: number, width = 2) => String(n).padStart(width, "0");
-  return `${pad(p.year, 4)}-${pad(p.month)}-${pad(p.day)}`;
-}
 
 /** "Mon 21 Sep, 09:00" in the cohort's own timezone. */
 function whenLabel(date: Date, timezone: string): string {
@@ -157,7 +152,7 @@ function AccessNoticeBanner({ card }: { card: LearnerDashboardCard }) {
   if (card.accessNotice.kind === "ending") {
     return (
       <div className={ACCESS_ENDING_WARNING}>
-        Your access ends {formatCohortDate(card.accessNotice.endsAt, card.timezone)}
+        Your access ends <LagosTime value={card.accessNotice.endsAt} variant="date" />
       </div>
     );
   }
@@ -283,9 +278,11 @@ function HeroSection({ card }: { card: LearnerDashboardCard }) {
                 )
               }
               sub={
-                firstDue?.dueAt
-                  ? `Due ${whenLabel(new Date(firstDue.dueAt), card.timezone)}`
-                  : undefined
+                firstDue?.dueAt ? (
+                  <>
+                    Due <LagosTime value={firstDue.dueAt} />
+                  </>
+                ) : undefined
               }
             />
           )}
@@ -494,7 +491,7 @@ export default async function DashboardPage() {
   const certificateCards = cards.filter((c) => c.certificate.kind !== "not-applicable");
 
   return (
-    <div className="flex flex-col gap-16">
+    <div data-primary-content className="flex flex-col gap-16">
       <LearnerPageHeader
         size="hero"
         title={greeting}

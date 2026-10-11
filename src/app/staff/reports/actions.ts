@@ -8,7 +8,9 @@ import { getExportDatasetDefinition, isExportDataset } from "@/server/services/r
 import { exportService, ExportRequestError } from "@/server/services/export-service";
 
 const requestSchema = z.object({
-  dataset: z.string().refine(isExportDataset),
+  // learner-subject is requested only through the privacy export service,
+  // which checks the target, the reason and writes the audit row.
+  dataset: z.string().refine(isExportDataset).refine((value) => value !== "learner-subject"),
   filters: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
   columns: z.array(z.string().min(1)).max(32).optional(),
   reason: z.string().max(2000).optional(),
@@ -59,7 +61,7 @@ export async function rerunExportAction(input: unknown): Promise<ExportActionRes
  * grant in its transaction; this response confers no authority. */
 export async function permittedSensitiveColumnsAction(dataset: string): Promise<string[]> {
   if (!isExportDataset(dataset)) return [];
-  if (dataset === "attendance") return [];
+  if (dataset === "attendance" || dataset === "learner-subject") return [];
   try {
     const definition = getExportDatasetDefinition(dataset);
     const [domain, exporting, identity] = await Promise.all([authorizeCollection(definition.permission), authorizeCollection(dataset === "audit" ? "audit.export" : "reports.export"), authorizeCollection("users.view")]);

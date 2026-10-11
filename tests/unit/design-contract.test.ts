@@ -159,6 +159,7 @@ const GROUPS: Record<string, string[]> = {
   "catalogue-controls-expansion": [
     "src/components/catalogue/RichTextEditor.tsx",
     "src/components/catalogue/UploadPanel.tsx",
+    "src/components/catalogue/CaptionPanel.tsx",
   ],
   "catalogue-reading-entry": [
     "src/components/catalogue/ArrangeBoard.tsx",
@@ -250,6 +251,18 @@ const GROUPS: Record<string, string[]> = {
     "src/app/staff/enrolments/EnrolmentsTable.tsx",
     "src/components/catalogue/CohortDetailActions.tsx",
   ],
+  // Phase 15 staff operations and privacy surfaces (plan 15-13 adds the operations
+  // status page; plan 15-22 adds the learner privacy files to this same group).
+  "staff-operations-privacy": [
+    "src/app/staff/operations/page.tsx",
+    "src/app/staff/operations/OperationsSections.tsx",
+    "src/app/staff/privacy/page.tsx",
+    "src/app/staff/privacy/LookupForm.tsx",
+    "src/app/staff/privacy/PrivacyDenied.tsx",
+    "src/app/staff/privacy/[userId]/page.tsx",
+    "src/app/staff/privacy/[userId]/ExportSection.tsx",
+    "src/app/staff/privacy/[userId]/AnonymiseSection.tsx",
+  ],
 };
 
 /** Every manifest group key — asserted deep-equal to `Object.keys(GROUPS)` by the
@@ -270,6 +283,7 @@ const EXPECTED_GROUPS = [
   "staff-shell-access",
   "staff-courses-programmes",
   "staff-cohorts-scheduling",
+  "staff-operations-privacy",
 ];
 
 /** Primitives are strictly the 4-size app scale; catalogue/shell/marketing surfaces

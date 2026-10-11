@@ -90,6 +90,29 @@ export type PaymentListRow = {
   settlementState: SettlementState;
 };
 
+/** NFR-02 — the staff list reads one bounded page, never every order. */
+export const PAYMENT_LIST_PAGE_SIZE = 50;
+export const PAYMENT_LIST_MAX_PAGE_SIZE = 100;
+/** Keeps OFFSET bounded however the page number was reached (T-15-09-04). */
+const PAYMENT_LIST_MAX_PAGE = 100_000;
+
+export type PaymentListOptions = { page?: number; pageSize?: number };
+
+export type PaymentListPage = {
+  rows: PaymentListRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/** Newest first, then id, so a page boundary never repeats or skips an order. */
+export const PAYMENT_LIST_ORDER_BY = [{ createdAt: "desc" }, { id: "desc" }] as const;
+
+function clampInt(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (value === undefined || !Number.isInteger(value)) return fallback;
+  return Math.min(Math.max(value, min), max);
+}
+
 export type PaymentListOrderRow = {
   id: string;
   reference: string;
@@ -192,7 +215,13 @@ export type PaymentDetailOrderRow = {
 
 export type PaymentReadServiceDeps = {
   order: {
-    findMany(args: { where: Readonly<Record<string, unknown>> }): Promise<PaymentListOrderRow[]>;
+    findMany(args: {
+      where: Readonly<Record<string, unknown>>;
+      orderBy: typeof PAYMENT_LIST_ORDER_BY;
+      skip: number;
+      take: number;
+    }): Promise<PaymentListOrderRow[]>;
+    count(args: { where: Readonly<Record<string, unknown>> }): Promise<number>;
     findUnique(args: { where: { id: string } }): Promise<PaymentDetailOrderRow | null>;
   };
   user: {
@@ -207,11 +236,22 @@ export type PaymentReadServiceDeps = {
 export function createPaymentReadService(deps: PaymentReadServiceDeps) {
   // Integration warning #1 — every order for a GLOBAL grant, only orders for
   // in-scope cohorts otherwise; filtered in the query, and no grant at all is
-  // refused.
-  async function listPaymentsForStaff(): Promise<PaymentListRow[]> {
+  // refused. The rows and the total share one where, so a scoped caller's
+  // count never includes another cohort's orders (T-15-09-03).
+  async function listPaymentsForStaff(options: PaymentListOptions = {}): Promise<PaymentListPage> {
     const { cohortWhere } = await deps.authorizeCollection("payments.view");
-    const rows = await deps.order.findMany({ where: { cohort: cohortWhere } });
-    return rows.map((row) => ({
+    const pageSize = clampInt(options.pageSize, 1, PAYMENT_LIST_MAX_PAGE_SIZE, PAYMENT_LIST_PAGE_SIZE);
+    const page = clampInt(options.page, 1, PAYMENT_LIST_MAX_PAGE, 1);
+    const where = { cohort: cohortWhere };
+    const [rows, total] = await Promise.all([
+      deps.order.findMany({ where, orderBy: PAYMENT_LIST_ORDER_BY, skip: (page - 1) * pageSize, take: pageSize }),
+      deps.order.count({ where }),
+    ]);
+    return { rows: rows.map(toListRow), total, page, pageSize };
+  }
+
+  function toListRow(row: PaymentListOrderRow): PaymentListRow {
+    return {
       id: row.id,
       reference: row.reference,
       cohortTitle: row.cohort.title,
@@ -222,7 +262,7 @@ export function createPaymentReadService(deps: PaymentReadServiceDeps) {
       provider: row.selectedProvider,
       status: row.status,
       settlementState: derivedSettlementState(latestSucceeded(row.paymentAttempts)),
-    }));
+    };
   }
 
   const getPaymentDetailForStaff = deps.withPermission<string>(
@@ -321,6 +361,9 @@ export function createPrismaBackedPaymentReadService(
       findMany: (args) =>
         client.order.findMany({
           where: args.where,
+          orderBy: [...args.orderBy],
+          skip: args.skip,
+          take: args.take,
           select: {
             id: true,
             reference: true,
@@ -332,8 +375,8 @@ export function createPrismaBackedPaymentReadService(
             user: { select: { name: true, email: true } },
             paymentAttempts: { select: ATTEMPT_ACTUALS_SELECT },
           },
-          orderBy: { createdAt: "desc" },
         }),
+      count: (args) => client.order.count({ where: args.where }),
       findUnique: ({ where }) =>
         client.order.findUnique({
           where,
@@ -384,5 +427,5 @@ export function createPrismaBackedPaymentReadService(
 
 const built = createPrismaBackedPaymentReadService(prisma, liveWithPermission);
 
-export const listPaymentsForStaff = () => built.listPaymentsForStaff();
+export const listPaymentsForStaff = (options?: PaymentListOptions) => built.listPaymentsForStaff(options);
 export const getPaymentDetailForStaff = (orderId: string) => built.getPaymentDetailForStaff(orderId);

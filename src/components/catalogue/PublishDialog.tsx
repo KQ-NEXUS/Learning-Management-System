@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReadinessItem } from "@/server/services/readiness-service";
+import { LagosTime } from "@/components/time/LagosTime";
 import { ReadinessSummary } from "./ReadinessPanel";
 
 /**
@@ -47,13 +48,6 @@ export type PublishDialogProps = {
 };
 
 const MIN_REASON = 10;
-
-function formatEndDate(value: Date | string): string {
-  const date = typeof value === "string" ? new Date(value) : value;
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
 
 export function PublishDialog(props: PublishDialogProps) {
   if (!props.open) return null;
@@ -257,7 +251,9 @@ function PublishDialogBody({
                           <span className="block break-words text-sm text-muted-foreground">{cohort.title}</span>
                         </td>
                         <td className="py-2 pr-2 tabular-nums">{cohort.enrolmentCount}</td>
-                        <td className="py-2 tabular-nums">{formatEndDate(cohort.endsAt)}</td>
+                        <td className="py-2 tabular-nums">
+                          <LagosTime value={cohort.endsAt} variant="date" />
+                        </td>
                       </tr>
                     );
                   })}

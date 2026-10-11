@@ -10,7 +10,7 @@ import {
 } from "@/components/primitives/ResourceTable";
 import { ConfirmModal } from "@/components/primitives/ConfirmModal";
 import { BTN, NOTE_SUCCESS } from "@/components/primitives/controls";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { TEMPLATE_IDS } from "@/server/communications/contracts";
 import type { EmailDeliveryLogRow } from "@/server/services/email-delivery-log-service";
 import { resendEmailAction } from "./actions";
@@ -175,7 +175,7 @@ export function EmailLogTable({
       key: "nextAttempt",
       header: "Next attempt",
       mono: true,
-      render: (row) => (row.nextAttemptAt ? formatTimestamp(row.nextAttemptAt) : "—"),
+      render: (row) => <LagosTime value={row.nextAttemptAt} className="font-mono text-[13px] whitespace-nowrap" />,
     },
     {
       key: "error",
@@ -193,7 +193,7 @@ export function EmailLogTable({
       key: "created",
       header: "Created",
       mono: true,
-      render: (row) => formatTimestamp(row.createdAt),
+      render: (row) => <LagosTime value={row.createdAt} className="font-mono text-[13px] whitespace-nowrap" />,
     },
     {
       key: "action",

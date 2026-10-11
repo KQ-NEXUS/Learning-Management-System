@@ -621,6 +621,12 @@ vi.mock("@/server/services/registration-service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/server/services/registration-service")>();
   return { ...actual, registrationService: { registerLearner: registerActionMock.registerLearner } };
 });
+// D-11 (plan 15-03): the action now consults the per-device limiter first;
+// it is mocked here so this file never reaches a database.
+vi.mock("@/server/services/rate-limit-service", () => ({
+  rateLimitService: { consume: async () => ({ limited: false, windowMinutes: 15 }) },
+}));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { registerAction } from "@/app/(auth)/register/actions";
 

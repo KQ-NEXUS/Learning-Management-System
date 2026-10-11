@@ -115,3 +115,34 @@ export function getEmailTransportMode(): EmailTransportMode {
   if (raw === "stub") return "stub";
   throw new EmailConfigError("EMAIL_TRANSPORT has an unsupported value.");
 }
+
+/**
+ * Test seam for the browser journey (Phase 15, plan 15-15; T-15-15-01).
+ *
+ * `BREVO_API_BASE_URL`, when set, replaces the Brevo API address so a local
+ * capture server can record outgoing mail. It is accepted for a loopback host
+ * only (localhost or 127.0.0.1): any other value throws, so no configuration
+ * mistake or injected variable can ever send real email to another host.
+ * Unset or blank means the SDK's own default, so production is unchanged.
+ */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1"]);
+
+export function getBrevoBaseUrl(): string | undefined {
+  const raw = (process.env.BREVO_API_BASE_URL ?? "").trim();
+  if (!raw) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new EmailConfigError("BREVO_API_BASE_URL must point at localhost.");
+  }
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    !LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase()) ||
+    parsed.username !== "" ||
+    parsed.password !== ""
+  ) {
+    throw new EmailConfigError("BREVO_API_BASE_URL must point at localhost.");
+  }
+  return raw.replace(/\/+$/, "");
+}

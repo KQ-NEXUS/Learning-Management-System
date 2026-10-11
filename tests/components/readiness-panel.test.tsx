@@ -4,7 +4,7 @@ import {
   ReadinessPanel,
   ReadinessSummary,
 } from "@/components/catalogue/ReadinessPanel";
-import type { ReadinessItem } from "@/server/services/readiness-service";
+import { evaluateCourseReadiness, type ReadinessItem } from "@/server/services/readiness-service";
 
 afterEach(cleanup);
 
@@ -165,5 +165,37 @@ describe("ReadinessPanel", () => {
     ];
     render(<ReadinessSummary items={items} />);
     expect(screen.getByText(/2 blocking, 1 warning, 3 not yet checked/i)).toBeTruthy();
+  });
+
+  it("draws the video captions item as a non-blocking warning from the real evaluator (NFR-09)", () => {
+    const items = evaluateCourseReadiness({
+      title: "Course",
+      summary: "Summary",
+      outcomes: "Outcomes",
+      durationHours: 2,
+      prerequisites: "None",
+      status: "PUBLISHED",
+      upcomingCohortCount: 1,
+      modules: [
+        {
+          withdrawnAt: null,
+          lessons: [
+            { type: "VIDEO", withdrawnAt: null, hasCleanCaptions: true },
+            { type: "VIDEO", withdrawnAt: null, hasCleanCaptions: false },
+          ],
+        },
+      ],
+    });
+    render(
+      <>
+        <ReadinessPanel items={items} />
+        <ReadinessSummary items={items} />
+      </>,
+    );
+    const row = screen.getByTestId("readiness-item-video-captions");
+    expect(row.getAttribute("data-state")).toBe("WARN");
+    expect(row.textContent).toContain("1 video lesson has no captions.");
+    expect(row.textContent).toMatch(/warning/i);
+    expect(row.textContent).not.toMatch(/blocks public listing/i);
   });
 });

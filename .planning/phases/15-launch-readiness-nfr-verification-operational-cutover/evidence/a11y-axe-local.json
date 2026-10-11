@@ -1,0 +1,1796 @@
+{
+  "generatedAt": "2026-10-10T10:40:22.576Z",
+  "runId": "mv28xh9d",
+  "partial": false,
+  "tags": [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22aa"
+  ],
+  "landmarkRules": [
+    "region",
+    "landmark-one-main",
+    "landmark-unique",
+    "landmark-no-duplicate-banner",
+    "landmark-no-duplicate-contentinfo",
+    "landmark-no-duplicate-main",
+    "landmark-banner-is-top-level",
+    "landmark-contentinfo-is-top-level",
+    "landmark-main-is-top-level",
+    "landmark-complementary-is-top-level"
+  ],
+  "widths": [
+    1440,
+    390
+  ],
+  "screens": 84,
+  "states": 109,
+  "visits": 218,
+  "excludedPages": 0,
+  "openViolations": 0,
+  "waiverCandidates": 0,
+  "spike": {
+    "rule": "target-size",
+    "flagged": true,
+    "contrastFlagged": true,
+    "landmarkFlagged": true,
+    "tags": [
+      "wcag2a",
+      "wcag2aa",
+      "wcag21a",
+      "wcag21aa",
+      "wcag22aa"
+    ],
+    "fixture": "two buttons of 10 by 10 CSS pixels, 4 pixels apart, plus pale text outside any landmark",
+    "axeVersion": "4.13.0"
+  },
+  "violations": [],
+  "visitLog": [
+    {
+      "screen": "home",
+      "state": "catalogue-redirect",
+      "width": 1440,
+      "path": "/courses",
+      "status": 200,
+      "heading": "Courses"
+    },
+    {
+      "screen": "home",
+      "state": "catalogue-redirect",
+      "width": 390,
+      "path": "/courses",
+      "status": 200,
+      "heading": "Courses"
+    },
+    {
+      "screen": "public-courses",
+      "state": "default",
+      "width": 1440,
+      "path": "/courses",
+      "status": 200,
+      "heading": "Courses"
+    },
+    {
+      "screen": "public-courses",
+      "state": "default",
+      "width": 390,
+      "path": "/courses",
+      "status": 200,
+      "heading": "Courses"
+    },
+    {
+      "screen": "public-course",
+      "state": "default",
+      "width": 1440,
+      "path": "/courses/workplace-safety-essentials",
+      "status": 200,
+      "heading": "Workplace Safety Essentials"
+    },
+    {
+      "screen": "public-course",
+      "state": "default",
+      "width": 390,
+      "path": "/courses/workplace-safety-essentials",
+      "status": 200,
+      "heading": "Workplace Safety Essentials"
+    },
+    {
+      "screen": "public-programmes",
+      "state": "default",
+      "width": 1440,
+      "path": "/programmes",
+      "status": 200,
+      "heading": "Programmes"
+    },
+    {
+      "screen": "public-programmes",
+      "state": "default",
+      "width": 390,
+      "path": "/programmes",
+      "status": 200,
+      "heading": "Programmes"
+    },
+    {
+      "screen": "public-programme",
+      "state": "default",
+      "width": 1440,
+      "path": "/programmes/safety-leadership-programme",
+      "status": 200,
+      "heading": "Safety Leadership Programme"
+    },
+    {
+      "screen": "public-programme",
+      "state": "default",
+      "width": 390,
+      "path": "/programmes/safety-leadership-programme",
+      "status": 200,
+      "heading": "Safety Leadership Programme"
+    },
+    {
+      "screen": "policy",
+      "state": "default",
+      "width": 1440,
+      "path": "/policies/terms",
+      "status": 200,
+      "heading": "Terms of Service"
+    },
+    {
+      "screen": "policy",
+      "state": "default",
+      "width": 390,
+      "path": "/policies/terms",
+      "status": 200,
+      "heading": "Terms of Service"
+    },
+    {
+      "screen": "verify-certificate",
+      "state": "default",
+      "width": 1440,
+      "path": "/verify-certificate",
+      "status": 200,
+      "heading": "Verify a certificate"
+    },
+    {
+      "screen": "verify-certificate",
+      "state": "default",
+      "width": 390,
+      "path": "/verify-certificate",
+      "status": 200,
+      "heading": "Verify a certificate"
+    },
+    {
+      "screen": "verify-certificate-ref",
+      "state": "default",
+      "width": 1440,
+      "path": "/verify/CERT-SEED-0002",
+      "status": 200,
+      "heading": "Verify a certificate"
+    },
+    {
+      "screen": "verify-certificate-ref",
+      "state": "default",
+      "width": 390,
+      "path": "/verify/CERT-SEED-0002",
+      "status": 200,
+      "heading": "Verify a certificate"
+    },
+    {
+      "screen": "verify-certificate-ref",
+      "state": "limited",
+      "width": 1440,
+      "path": "/verify/CERT-SEED-0002",
+      "status": 200,
+      "heading": "Verify a certificate"
+    },
+    {
+      "screen": "verify-certificate-ref",
+      "state": "limited",
+      "width": 390,
+      "path": "/verify/CERT-SEED-0002",
+      "status": 200,
+      "heading": "Verify a certificate"
+    },
+    {
+      "screen": "signin",
+      "state": "default",
+      "width": 1440,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "signin",
+      "state": "default",
+      "width": 390,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "signin",
+      "state": "failed",
+      "width": 1440,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "signin",
+      "state": "failed",
+      "width": 390,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "signin",
+      "state": "empty",
+      "width": 1440,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "signin",
+      "state": "empty",
+      "width": 390,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "signin",
+      "state": "throttled",
+      "width": 1440,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "signin",
+      "state": "throttled",
+      "width": 390,
+      "path": "/signin",
+      "status": 200,
+      "heading": "Sign in"
+    },
+    {
+      "screen": "register",
+      "state": "default",
+      "width": 1440,
+      "path": "/register",
+      "status": 200,
+      "heading": "Create account"
+    },
+    {
+      "screen": "register",
+      "state": "default",
+      "width": 390,
+      "path": "/register",
+      "status": 200,
+      "heading": "Create account"
+    },
+    {
+      "screen": "register",
+      "state": "invalid",
+      "width": 1440,
+      "path": "/register",
+      "status": 200,
+      "heading": "Create account"
+    },
+    {
+      "screen": "register",
+      "state": "invalid",
+      "width": 390,
+      "path": "/register",
+      "status": 200,
+      "heading": "Create account"
+    },
+    {
+      "screen": "register",
+      "state": "limited",
+      "width": 1440,
+      "path": "/register",
+      "status": 200,
+      "heading": "Create account"
+    },
+    {
+      "screen": "register",
+      "state": "limited",
+      "width": 390,
+      "path": "/register",
+      "status": 200,
+      "heading": "Create account"
+    },
+    {
+      "screen": "forgot-password",
+      "state": "default",
+      "width": 1440,
+      "path": "/forgot-password",
+      "status": 200,
+      "heading": "Forgot your password?"
+    },
+    {
+      "screen": "forgot-password",
+      "state": "default",
+      "width": 390,
+      "path": "/forgot-password",
+      "status": 200,
+      "heading": "Forgot your password?"
+    },
+    {
+      "screen": "forgot-password",
+      "state": "limited",
+      "width": 1440,
+      "path": "/forgot-password",
+      "status": 200,
+      "heading": "Forgot your password?"
+    },
+    {
+      "screen": "forgot-password",
+      "state": "limited",
+      "width": 390,
+      "path": "/forgot-password",
+      "status": 200,
+      "heading": "Forgot your password?"
+    },
+    {
+      "screen": "verify",
+      "state": "default",
+      "width": 1440,
+      "path": "/verify",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "verify",
+      "state": "default",
+      "width": 390,
+      "path": "/verify",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "verify",
+      "state": "resend-limited",
+      "width": 1440,
+      "path": "/verify",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "verify",
+      "state": "resend-limited",
+      "width": 390,
+      "path": "/verify",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "reset-password",
+      "state": "default",
+      "width": 1440,
+      "path": "/reset-password",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "reset-password",
+      "state": "default",
+      "width": 390,
+      "path": "/reset-password",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "reset-password",
+      "state": "invalid-link",
+      "width": 1440,
+      "path": "/reset-password",
+      "status": 200,
+      "heading": "Choose a new password"
+    },
+    {
+      "screen": "reset-password",
+      "state": "invalid-link",
+      "width": 390,
+      "path": "/reset-password",
+      "status": 200,
+      "heading": "Choose a new password"
+    },
+    {
+      "screen": "confirm-email-change",
+      "state": "default",
+      "width": 1440,
+      "path": "/confirm-email-change",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "confirm-email-change",
+      "state": "default",
+      "width": 390,
+      "path": "/confirm-email-change",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "confirm-email-change",
+      "state": "invalid-link",
+      "width": 1440,
+      "path": "/confirm-email-change",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "confirm-email-change",
+      "state": "invalid-link",
+      "width": 390,
+      "path": "/confirm-email-change",
+      "status": 200,
+      "heading": "This link is no longer valid"
+    },
+    {
+      "screen": "checkout",
+      "state": "default",
+      "width": 1440,
+      "path": "/checkout/cmv28xr390005s5wcwhmj0t7m",
+      "status": 200,
+      "heading": "Review your order"
+    },
+    {
+      "screen": "checkout",
+      "state": "default",
+      "width": 390,
+      "path": "/checkout/cmv28xr390005s5wcwhmj0t7m",
+      "status": 200,
+      "heading": "Review your order"
+    },
+    {
+      "screen": "checkout-confirming",
+      "state": "default",
+      "width": 1440,
+      "path": "/checkout/cmv28xr390005s5wcwhmj0t7m/confirming",
+      "status": 200,
+      "heading": "Confirming your payment"
+    },
+    {
+      "screen": "checkout-confirming",
+      "state": "default",
+      "width": 390,
+      "path": "/checkout/cmv28xr390005s5wcwhmj0t7m/confirming",
+      "status": 200,
+      "heading": "Confirming your payment"
+    },
+    {
+      "screen": "enrol",
+      "state": "cross-site",
+      "width": 1440,
+      "path": "/enrol/cmv28w6ch000gs5ts8u90yoo0",
+      "status": 200,
+      "heading": "Continue to checkout"
+    },
+    {
+      "screen": "enrol",
+      "state": "cross-site",
+      "width": 390,
+      "path": "/enrol/cmv28w6ch000gs5ts8u90yoo0",
+      "status": 200,
+      "heading": "Continue to checkout"
+    },
+    {
+      "screen": "dashboard",
+      "state": "default",
+      "width": 1440,
+      "path": "/dashboard",
+      "status": 200,
+      "heading": "Good morning, Bisi."
+    },
+    {
+      "screen": "dashboard",
+      "state": "default",
+      "width": 390,
+      "path": "/dashboard",
+      "status": 200,
+      "heading": "Good morning, Bisi."
+    },
+    {
+      "screen": "learn",
+      "state": "default",
+      "width": 1440,
+      "path": "/learn",
+      "status": 200,
+      "heading": "My learning"
+    },
+    {
+      "screen": "learn",
+      "state": "default",
+      "width": 390,
+      "path": "/learn",
+      "status": 200,
+      "heading": "My learning"
+    },
+    {
+      "screen": "learn-calendar",
+      "state": "default",
+      "width": 1440,
+      "path": "/learn/calendar",
+      "status": 200,
+      "heading": "Calendar"
+    },
+    {
+      "screen": "learn-calendar",
+      "state": "default",
+      "width": 390,
+      "path": "/learn/calendar",
+      "status": 200,
+      "heading": "Calendar"
+    },
+    {
+      "screen": "course-home",
+      "state": "default",
+      "width": 1440,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "course-home",
+      "state": "default",
+      "width": 390,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "course-results",
+      "state": "default",
+      "width": 1440,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3/results",
+      "status": 200,
+      "heading": "Your results"
+    },
+    {
+      "screen": "course-results",
+      "state": "default",
+      "width": 390,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3/results",
+      "status": 200,
+      "heading": "Your results"
+    },
+    {
+      "screen": "course-sessions",
+      "state": "default",
+      "width": 1440,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3/sessions",
+      "status": 200,
+      "heading": "Scheduled sessions"
+    },
+    {
+      "screen": "course-sessions",
+      "state": "default",
+      "width": 390,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3/sessions",
+      "status": 200,
+      "heading": "Scheduled sessions"
+    },
+    {
+      "screen": "lesson",
+      "state": "default",
+      "width": 1440,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3/lessons/cmv28vg5s001hs5pkbh0eh45r",
+      "status": 200,
+      "heading": "Lesson 1.1"
+    },
+    {
+      "screen": "lesson",
+      "state": "default",
+      "width": 390,
+      "path": "/learn/cmv28vgfq003ss5pkueejjdd3/lessons/cmv28vg5s001hs5pkbh0eh45r",
+      "status": 200,
+      "heading": "Lesson 1.1"
+    },
+    {
+      "screen": "support",
+      "state": "default",
+      "width": 1440,
+      "path": "/support",
+      "status": 200,
+      "heading": "Support"
+    },
+    {
+      "screen": "support",
+      "state": "default",
+      "width": 390,
+      "path": "/support",
+      "status": 200,
+      "heading": "Support"
+    },
+    {
+      "screen": "support-new",
+      "state": "default",
+      "width": 1440,
+      "path": "/support/new",
+      "status": 200,
+      "heading": "Tell us what you need help with"
+    },
+    {
+      "screen": "support-new",
+      "state": "default",
+      "width": 390,
+      "path": "/support/new",
+      "status": 200,
+      "heading": "Tell us what you need help with"
+    },
+    {
+      "screen": "support-new",
+      "state": "invalid",
+      "width": 1440,
+      "path": "/support/new",
+      "status": 200,
+      "heading": "Tell us what you need help with"
+    },
+    {
+      "screen": "support-new",
+      "state": "invalid",
+      "width": 390,
+      "path": "/support/new",
+      "status": 200,
+      "heading": "Tell us what you need help with"
+    },
+    {
+      "screen": "support-new",
+      "state": "limited",
+      "width": 1440,
+      "path": "/support/new",
+      "status": 200,
+      "heading": "Tell us what you need help with"
+    },
+    {
+      "screen": "support-new",
+      "state": "limited",
+      "width": 390,
+      "path": "/support/new",
+      "status": 200,
+      "heading": "Tell us what you need help with"
+    },
+    {
+      "screen": "support-ticket",
+      "state": "default",
+      "width": 1440,
+      "path": "/support/KQT-20261010-CE420B73",
+      "status": 200,
+      "heading": "Accessibility sweep ticket"
+    },
+    {
+      "screen": "support-ticket",
+      "state": "default",
+      "width": 390,
+      "path": "/support/KQT-20261010-CE420B73",
+      "status": 200,
+      "heading": "Accessibility sweep ticket"
+    },
+    {
+      "screen": "account",
+      "state": "default",
+      "width": 1440,
+      "path": "/account",
+      "status": 200,
+      "heading": "Your account"
+    },
+    {
+      "screen": "account",
+      "state": "default",
+      "width": 390,
+      "path": "/account",
+      "status": 200,
+      "heading": "Your account"
+    },
+    {
+      "screen": "order-receipt",
+      "state": "default",
+      "width": 1440,
+      "path": "/orders/ORD-SEED-0001",
+      "status": 200,
+      "heading": "Payment received — finishing up"
+    },
+    {
+      "screen": "order-receipt",
+      "state": "default",
+      "width": 390,
+      "path": "/orders/ORD-SEED-0001",
+      "status": 200,
+      "heading": "Payment received — finishing up"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "default",
+      "width": 390,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "instructor",
+      "width": 1440,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "instructor",
+      "width": 390,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "finance",
+      "width": 1440,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "finance",
+      "width": 390,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "programme-manager",
+      "width": 1440,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-overview",
+      "state": "programme-manager",
+      "width": 390,
+      "path": "/staff",
+      "status": 200,
+      "heading": "Overview"
+    },
+    {
+      "screen": "staff-audit",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/audit",
+      "status": 200,
+      "heading": "Audit"
+    },
+    {
+      "screen": "staff-audit",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/audit",
+      "status": 200,
+      "heading": "Audit"
+    },
+    {
+      "screen": "staff-certificates",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/certificates",
+      "status": 200,
+      "heading": "Certificates"
+    },
+    {
+      "screen": "staff-certificates",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/certificates",
+      "status": 200,
+      "heading": "Certificates"
+    },
+    {
+      "screen": "staff-certificates-issued",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/certificates/issued",
+      "status": 200,
+      "heading": "All certificates"
+    },
+    {
+      "screen": "staff-certificates-issued",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/certificates/issued",
+      "status": 200,
+      "heading": "All certificates"
+    },
+    {
+      "screen": "staff-certificate-issued",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/certificates/issued/cmv28vh5e0067s5pkmm8s2uqg",
+      "status": 200,
+      "heading": "Chidi Okafor's certificate"
+    },
+    {
+      "screen": "staff-certificate-issued",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/certificates/issued/cmv28vh5e0067s5pkmm8s2uqg",
+      "status": 200,
+      "heading": "Chidi Okafor's certificate"
+    },
+    {
+      "screen": "staff-certificate-templates",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/certificates/templates",
+      "status": 200,
+      "heading": "Certificate templates"
+    },
+    {
+      "screen": "staff-certificate-templates",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/certificates/templates",
+      "status": 200,
+      "heading": "Certificate templates"
+    },
+    {
+      "screen": "staff-certificate-template",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/certificates/templates/cmv28vg52001cs5pkk2rssp0a",
+      "status": 200,
+      "heading": "Default certificate"
+    },
+    {
+      "screen": "staff-certificate-template",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/certificates/templates/cmv28vg52001cs5pkk2rssp0a",
+      "status": 200,
+      "heading": "Default certificate"
+    },
+    {
+      "screen": "staff-certificate-template-new",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/certificates/templates/new",
+      "status": 200,
+      "heading": "New template"
+    },
+    {
+      "screen": "staff-certificate-template-new",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/certificates/templates/new",
+      "status": 200,
+      "heading": "New template"
+    },
+    {
+      "screen": "staff-certificate-template-from-design",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/certificates/templates/from-design",
+      "status": 200,
+      "heading": "Upload existing design"
+    },
+    {
+      "screen": "staff-certificate-template-from-design",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/certificates/templates/from-design",
+      "status": 200,
+      "heading": "Upload existing design"
+    },
+    {
+      "screen": "staff-cohorts",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/cohorts",
+      "status": 200,
+      "heading": "Cohorts"
+    },
+    {
+      "screen": "staff-cohorts",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/cohorts",
+      "status": 200,
+      "heading": "Cohorts"
+    },
+    {
+      "screen": "staff-cohorts-new",
+      "state": "empty",
+      "width": 1440,
+      "path": "/staff/cohorts/new",
+      "status": 200,
+      "heading": "New cohort"
+    },
+    {
+      "screen": "staff-cohorts-new",
+      "state": "empty",
+      "width": 390,
+      "path": "/staff/cohorts/new",
+      "status": 200,
+      "heading": "New cohort"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "overview",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "overview",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "sessions",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "sessions",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "roster",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "roster",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "exceptions",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "exceptions",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "grading",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort",
+      "state": "grading",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1",
+      "status": 200,
+      "heading": "Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort-edit",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/edit",
+      "status": 200,
+      "heading": "Edit Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-cohort-edit",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/edit",
+      "status": 200,
+      "heading": "Edit Safety Leadership Programme — January 2026"
+    },
+    {
+      "screen": "staff-grading-queue",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/grading/cmv28vgm9004rs5pkb50aypn8",
+      "status": 200,
+      "heading": "Site hazard report"
+    },
+    {
+      "screen": "staff-grading-queue",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/grading/cmv28vgm9004rs5pkb50aypn8",
+      "status": 200,
+      "heading": "Site hazard report"
+    },
+    {
+      "screen": "staff-grading-entry",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/grading/cmv28vgm9004rs5pkb50aypn8/cmv28vh7k006is5pkddvds8yd",
+      "status": 200,
+      "heading": "Bisi Adewale"
+    },
+    {
+      "screen": "staff-grading-entry",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/grading/cmv28vgm9004rs5pkb50aypn8/cmv28vh7k006is5pkddvds8yd",
+      "status": 200,
+      "heading": "Bisi Adewale"
+    },
+    {
+      "screen": "staff-cohort-learner",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/learners/cmv28vgfq003ss5pkueejjdd3",
+      "status": 200,
+      "heading": "Bisi Adewale"
+    },
+    {
+      "screen": "staff-cohort-learner",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/learners/cmv28vgfq003ss5pkueejjdd3",
+      "status": 200,
+      "heading": "Bisi Adewale"
+    },
+    {
+      "screen": "staff-attendance",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/sessions/cmv28vh17005xs5pk3ocm63ju/attendance",
+      "status": 200,
+      "heading": "Toolbox briefing"
+    },
+    {
+      "screen": "staff-attendance",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/cohorts/cmv28vg9c002ms5pkj78vgvq1/sessions/cmv28vh17005xs5pk3ocm63ju/attendance",
+      "status": 200,
+      "heading": "Toolbox briefing"
+    },
+    {
+      "screen": "staff-courses",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses",
+      "status": 200,
+      "heading": "Courses"
+    },
+    {
+      "screen": "staff-courses",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses",
+      "status": 200,
+      "heading": "Courses"
+    },
+    {
+      "screen": "staff-courses-new",
+      "state": "empty",
+      "width": 1440,
+      "path": "/staff/courses/new",
+      "status": 200,
+      "heading": "New course"
+    },
+    {
+      "screen": "staff-courses-new",
+      "state": "empty",
+      "width": 390,
+      "path": "/staff/courses/new",
+      "status": 200,
+      "heading": "New course"
+    },
+    {
+      "screen": "staff-course",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my",
+      "status": 200,
+      "heading": "Workplace Safety Essentials"
+    },
+    {
+      "screen": "staff-course",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my",
+      "status": 200,
+      "heading": "Workplace Safety Essentials"
+    },
+    {
+      "screen": "staff-course-edit",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/edit",
+      "status": 200,
+      "heading": "Edit course"
+    },
+    {
+      "screen": "staff-course-edit",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/edit",
+      "status": 200,
+      "heading": "Edit course"
+    },
+    {
+      "screen": "staff-course-arrange",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/arrange",
+      "status": 200,
+      "heading": "Arrange"
+    },
+    {
+      "screen": "staff-course-arrange",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/arrange",
+      "status": 200,
+      "heading": "Arrange"
+    },
+    {
+      "screen": "staff-course-assessments",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/assessments",
+      "status": 200,
+      "heading": "Assessments"
+    },
+    {
+      "screen": "staff-course-assessments",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/assessments",
+      "status": 200,
+      "heading": "Assessments"
+    },
+    {
+      "screen": "staff-course-assessments-new",
+      "state": "empty",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/assessments/new",
+      "status": 200,
+      "heading": "New assessment"
+    },
+    {
+      "screen": "staff-course-assessments-new",
+      "state": "empty",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/assessments/new",
+      "status": 200,
+      "heading": "New assessment"
+    },
+    {
+      "screen": "staff-course-assessment",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/assessments/cmv28vgm9004rs5pkb50aypn8",
+      "status": 200,
+      "heading": "Edit assessment"
+    },
+    {
+      "screen": "staff-course-assessment",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/assessments/cmv28vgm9004rs5pkb50aypn8",
+      "status": 200,
+      "heading": "Edit assessment"
+    },
+    {
+      "screen": "staff-course-lessons-new",
+      "state": "empty",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/lessons/new",
+      "status": 200,
+      "heading": "New lesson"
+    },
+    {
+      "screen": "staff-course-lessons-new",
+      "state": "empty",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/lessons/new",
+      "status": 200,
+      "heading": "New lesson"
+    },
+    {
+      "screen": "staff-course-lesson",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/lessons/cmv28vg5s001hs5pkbh0eh45r",
+      "status": 200,
+      "heading": "Edit lesson"
+    },
+    {
+      "screen": "staff-course-lesson",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/lessons/cmv28vg5s001hs5pkbh0eh45r",
+      "status": 200,
+      "heading": "Edit lesson"
+    },
+    {
+      "screen": "staff-course-preview",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/preview",
+      "status": 200,
+      "heading": "Workplace Safety Essentials"
+    },
+    {
+      "screen": "staff-course-preview",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/preview",
+      "status": 200,
+      "heading": "Workplace Safety Essentials"
+    },
+    {
+      "screen": "staff-course-preview-lesson",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/preview/lessons/cmv28vg5s001hs5pkbh0eh45r",
+      "status": 200,
+      "heading": "Lesson 1.1"
+    },
+    {
+      "screen": "staff-course-preview-lesson",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/courses/cmv28vg57001ds5pkanjpw7my/preview/lessons/cmv28vg5s001hs5pkbh0eh45r",
+      "status": 200,
+      "heading": "Lesson 1.1"
+    },
+    {
+      "screen": "staff-email-log",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/email-log",
+      "status": 200,
+      "heading": "Email log"
+    },
+    {
+      "screen": "staff-email-log",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/email-log",
+      "status": 200,
+      "heading": "Email log"
+    },
+    {
+      "screen": "staff-enrolments",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/enrolments",
+      "status": 200,
+      "heading": "Enrolments"
+    },
+    {
+      "screen": "staff-enrolments",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/enrolments",
+      "status": 200,
+      "heading": "Enrolments"
+    },
+    {
+      "screen": "staff-learner-numbers",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/learner-numbers",
+      "status": 200,
+      "heading": "Learner numbers"
+    },
+    {
+      "screen": "staff-learner-numbers",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/learner-numbers",
+      "status": 200,
+      "heading": "Learner numbers"
+    },
+    {
+      "screen": "staff-licence",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/licence",
+      "status": 200,
+      "heading": "Licence & System Status"
+    },
+    {
+      "screen": "staff-licence",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/licence",
+      "status": 200,
+      "heading": "Licence & System Status"
+    },
+    {
+      "screen": "staff-operations",
+      "state": "all-clear",
+      "width": 1440,
+      "path": "/staff/operations",
+      "status": 200,
+      "heading": "Operations status"
+    },
+    {
+      "screen": "staff-operations",
+      "state": "all-clear",
+      "width": 390,
+      "path": "/staff/operations",
+      "status": 200,
+      "heading": "Operations status"
+    },
+    {
+      "screen": "staff-operations",
+      "state": "with-failures",
+      "width": 1440,
+      "path": "/staff/operations",
+      "status": 200,
+      "heading": "Operations status"
+    },
+    {
+      "screen": "staff-operations",
+      "state": "with-failures",
+      "width": 390,
+      "path": "/staff/operations",
+      "status": 200,
+      "heading": "Operations status"
+    },
+    {
+      "screen": "staff-operations",
+      "state": "denied-instructor",
+      "width": 1440,
+      "path": "/staff/operations",
+      "status": 200,
+      "heading": ""
+    },
+    {
+      "screen": "staff-operations",
+      "state": "denied-instructor",
+      "width": 390,
+      "path": "/staff/operations",
+      "status": 200,
+      "heading": ""
+    },
+    {
+      "screen": "staff-payments",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/payments",
+      "status": 200,
+      "heading": "Payments"
+    },
+    {
+      "screen": "staff-payments",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/payments",
+      "status": 200,
+      "heading": "Payments"
+    },
+    {
+      "screen": "staff-payment",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/payments/cmv28vgyl005ps5pk5tb0fpcl",
+      "status": 200,
+      "heading": "ORD-SEED-0001"
+    },
+    {
+      "screen": "staff-payment",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/payments/cmv28vgyl005ps5pk5tb0fpcl",
+      "status": 200,
+      "heading": "ORD-SEED-0001"
+    },
+    {
+      "screen": "staff-privacy",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/privacy",
+      "status": 200,
+      "heading": "Learner privacy"
+    },
+    {
+      "screen": "staff-privacy",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/privacy",
+      "status": 200,
+      "heading": "Learner privacy"
+    },
+    {
+      "screen": "staff-privacy",
+      "state": "denied-instructor",
+      "width": 1440,
+      "path": "/staff/privacy",
+      "status": 200,
+      "heading": ""
+    },
+    {
+      "screen": "staff-privacy",
+      "state": "denied-instructor",
+      "width": 390,
+      "path": "/staff/privacy",
+      "status": 200,
+      "heading": ""
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "before",
+      "width": 1440,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "Accessibility Subject mv28xigxur6"
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "before",
+      "width": 390,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "Accessibility Subject mv28xigxur6"
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "modal",
+      "width": 1440,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "Accessibility Subject mv28xigxur6"
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "modal",
+      "width": 390,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "Accessibility Subject mv28xigxur6"
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "after",
+      "width": 1440,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "Anonymised learner"
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "after",
+      "width": 390,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "Anonymised learner"
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "denied-instructor",
+      "width": 1440,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "We can't find that page"
+    },
+    {
+      "screen": "staff-privacy-record",
+      "state": "denied-instructor",
+      "width": 390,
+      "path": "/staff/privacy/cmv28xk9j000bs57kjkroaw7m",
+      "status": 200,
+      "heading": "We can't find that page"
+    },
+    {
+      "screen": "staff-programmes",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/programmes",
+      "status": 200,
+      "heading": "Programmes"
+    },
+    {
+      "screen": "staff-programmes",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/programmes",
+      "status": 200,
+      "heading": "Programmes"
+    },
+    {
+      "screen": "staff-programmes-new",
+      "state": "empty",
+      "width": 1440,
+      "path": "/staff/programmes/new",
+      "status": 200,
+      "heading": "New programme"
+    },
+    {
+      "screen": "staff-programmes-new",
+      "state": "empty",
+      "width": 390,
+      "path": "/staff/programmes/new",
+      "status": 200,
+      "heading": "New programme"
+    },
+    {
+      "screen": "staff-programme",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/programmes/cmv28vg8m002gs5pk9v1bbb3r",
+      "status": 200,
+      "heading": "Safety Leadership Programme"
+    },
+    {
+      "screen": "staff-programme",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/programmes/cmv28vg8m002gs5pk9v1bbb3r",
+      "status": 200,
+      "heading": "Safety Leadership Programme"
+    },
+    {
+      "screen": "staff-programme-arrange",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/programmes/cmv28vg8m002gs5pk9v1bbb3r/arrange",
+      "status": 200,
+      "heading": "Safety Leadership Programme — courses"
+    },
+    {
+      "screen": "staff-programme-arrange",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/programmes/cmv28vg8m002gs5pk9v1bbb3r/arrange",
+      "status": 200,
+      "heading": "Safety Leadership Programme — courses"
+    },
+    {
+      "screen": "staff-reconciliation",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/reconciliation",
+      "status": 200,
+      "heading": "Reconciliation"
+    },
+    {
+      "screen": "staff-reconciliation",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/reconciliation",
+      "status": 200,
+      "heading": "Reconciliation"
+    },
+    {
+      "screen": "staff-reconciliation-case",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/reconciliation/cmv28xk7z0001s57k3qzpskdu",
+      "status": 200,
+      "heading": "Reconciliation case"
+    },
+    {
+      "screen": "staff-reconciliation-case",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/reconciliation/cmv28xk7z0001s57k3qzpskdu",
+      "status": 200,
+      "heading": "Reconciliation case"
+    },
+    {
+      "screen": "staff-reports",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/reports",
+      "status": 200,
+      "heading": "Reports"
+    },
+    {
+      "screen": "staff-reports",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/reports",
+      "status": 200,
+      "heading": "Reports"
+    },
+    {
+      "screen": "staff-report-exports",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/reports/exports",
+      "status": 200,
+      "heading": "Export History"
+    },
+    {
+      "screen": "staff-report-exports",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/reports/exports",
+      "status": 200,
+      "heading": "Export History"
+    },
+    {
+      "screen": "staff-report",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/reports/registrations",
+      "status": 200,
+      "heading": "Registrations"
+    },
+    {
+      "screen": "staff-report",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/reports/registrations",
+      "status": 200,
+      "heading": "Registrations"
+    },
+    {
+      "screen": "staff-roles",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/roles",
+      "status": 200,
+      "heading": "Roles"
+    },
+    {
+      "screen": "staff-roles",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/roles",
+      "status": 200,
+      "heading": "Roles"
+    },
+    {
+      "screen": "staff-roles-new",
+      "state": "empty",
+      "width": 1440,
+      "path": "/staff/roles/new",
+      "status": 200,
+      "heading": "New role"
+    },
+    {
+      "screen": "staff-roles-new",
+      "state": "empty",
+      "width": 390,
+      "path": "/staff/roles/new",
+      "status": 200,
+      "heading": "New role"
+    },
+    {
+      "screen": "staff-role",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/roles/cmv28vg0t0006s5pk6ie6wm0m",
+      "status": 200,
+      "heading": "Instructor"
+    },
+    {
+      "screen": "staff-role",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/roles/cmv28vg0t0006s5pk6ie6wm0m",
+      "status": 200,
+      "heading": "Instructor"
+    },
+    {
+      "screen": "staff-support",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/support",
+      "status": 200,
+      "heading": "Support"
+    },
+    {
+      "screen": "staff-support",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/support",
+      "status": 200,
+      "heading": "Support"
+    },
+    {
+      "screen": "staff-support-ticket",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/support/KQT-20261010-CE420B73",
+      "status": 200,
+      "heading": "Accessibility sweep ticket"
+    },
+    {
+      "screen": "staff-support-ticket",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/support/KQT-20261010-CE420B73",
+      "status": 200,
+      "heading": "Accessibility sweep ticket"
+    },
+    {
+      "screen": "staff-users",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/users",
+      "status": 200,
+      "heading": "Users"
+    },
+    {
+      "screen": "staff-users",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/users",
+      "status": 200,
+      "heading": "Users"
+    },
+    {
+      "screen": "staff-users-new",
+      "state": "empty",
+      "width": 1440,
+      "path": "/staff/users/new",
+      "status": 200,
+      "heading": "New staff account"
+    },
+    {
+      "screen": "staff-users-new",
+      "state": "empty",
+      "width": 390,
+      "path": "/staff/users/new",
+      "status": 200,
+      "heading": "New staff account"
+    },
+    {
+      "screen": "staff-user",
+      "state": "default",
+      "width": 1440,
+      "path": "/staff/users/cmv28vg3y0010s5pkimdsp6k0",
+      "status": 200,
+      "heading": "Bisi Adewale"
+    },
+    {
+      "screen": "staff-user",
+      "state": "default",
+      "width": 390,
+      "path": "/staff/users/cmv28vg3y0010s5pkimdsp6k0",
+      "status": 200,
+      "heading": "Bisi Adewale"
+    }
+  ]
+}

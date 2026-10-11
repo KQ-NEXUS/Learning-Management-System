@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { notFound } from "next/navigation";
 import { AlertCircle, ChevronLeft } from "lucide-react";
@@ -12,6 +13,7 @@ import { payAction } from "@/app/(checkout)/checkout/[orderId]/actions";
 import { PolicyConsentForm } from "@/app/(checkout)/checkout/[orderId]/PolicyConsentForm";
 import { HoldCountdown } from "@/app/(checkout)/checkout/[orderId]/HoldCountdown";
 import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
+import { LagosTime } from "@/components/time/LagosTime";
 
 // Rendered per request, never prerendered — matches the public course-detail
 // page's own reasoning, and this page reads a real Order.
@@ -23,10 +25,13 @@ const DELIVERY_MODE_LABEL: Record<string, string> = {
   BLENDED: "Blended",
 };
 
-function formatDateRange(startsAt: Date, endsAt: Date): string {
-  const fmt = (value: Date) =>
-    new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-  return `${fmt(startsAt)}–${fmt(endsAt)}`;
+/** The cohort's start and end as Lagos days (D-17), each in a time element. */
+function DateRange({ startsAt, endsAt }: { startsAt: Date; endsAt: Date }) {
+  return (
+    <>
+      <LagosTime value={startsAt} variant="date" />–<LagosTime value={endsAt} variant="date" />
+    </>
+  );
 }
 
 function formatAmount(amountMinor: number, currency: string): string {
@@ -121,9 +126,9 @@ export default async function CheckoutOrderPage({
     throw new Error(`Order ${order.id} has no commercial snapshot to render a breakdown from.`);
   }
 
-  const facts: [string, string][] = [
+  const facts: [string, ReactNode][] = [
     ["Cohort", order.cohort.title],
-    ["Dates", formatDateRange(order.cohort.startsAt, order.cohort.endsAt)],
+    ["Dates", <DateRange key="dates" startsAt={order.cohort.startsAt} endsAt={order.cohort.endsAt} />],
     ["Mode", DELIVERY_MODE_LABEL[order.cohort.deliveryMode] ?? order.cohort.deliveryMode],
   ];
 

@@ -252,6 +252,7 @@ export function ArrangeBoard({
                         >
                           <span
                             {...drag.dragHandleProps}
+                            tabIndex={-1}
                             aria-hidden
                             className="cursor-grab select-none text-muted-foreground"
                           >

@@ -65,5 +65,9 @@ export default async function CohortsPage() {
 
   // Only offer "create" to staff who can actually use it; the destination page 404s otherwise.
   const canCreate = await can("cohorts.manage", {});
-  return <CohortsTable rows={rows} canCreate={canCreate} />;
+  return (
+    <div data-primary-content>
+      <CohortsTable rows={rows} canCreate={canCreate} />
+    </div>
+  );
 }
