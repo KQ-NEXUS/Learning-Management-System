@@ -1,0 +1,1003 @@
+{
+  "label": "STAGING PILOT at about one tenth of the agreed load (plan 15-30 Task 1). NOT the signed NFR-02 number; the signed numbers come from the full run after the owner's approval.",
+  "target": {
+    "previewUrl": "https://deploy-preview-16--kqnexuslms.netlify.app",
+    "previewCommit": "9a68b7a (head of pull request 16, branch LAUNCH, read from GitHub on 2026-10-11)",
+    "neonBranch": "staging-phase 15 (br-icy-river-axqpwts7)",
+    "hostsCheckedThroughNeonApi": true,
+    "ownerConfirmation": {
+      "date": "2026-10-11",
+      "verbatim": [
+        "They are test keys",
+        "Every thing is for test remember the client will set by them selfs most likely"
+      ]
+    }
+  },
+  "k6": {
+    "image": "grafana/k6:2.3.0",
+    "mode": "PILOT=1: learners ramp to 15 over 30 s, hold 3 min, ramp down 15 s; 1 staff; think time 5 to 15 s; documents only",
+    "startedAt": "2026-10-11T05:08:34.681426325Z",
+    "endedAt": "2026-10-11T05:12:41.010825827Z",
+    "exitCode": 0,
+    "requests": 342,
+    "dataReceivedBytes": 12736147,
+    "p75ByPage": {
+      "course-home": {
+        "p75Ms": 1490,
+        "passed": true,
+        "requests": 44,
+        "maxMs": 6723
+      },
+      "dashboard": {
+        "p75Ms": 1030,
+        "passed": true,
+        "requests": 44,
+        "maxMs": 7865
+      },
+      "learn": {
+        "p75Ms": 1230,
+        "passed": true,
+        "requests": 44,
+        "maxMs": 7677
+      },
+      "lesson": {
+        "p75Ms": 928,
+        "passed": true,
+        "requests": 85,
+        "maxMs": 5788
+      },
+      "results": {
+        "p75Ms": 701,
+        "passed": true,
+        "requests": 37,
+        "maxMs": 2449
+      },
+      "sessions": {
+        "p75Ms": 735,
+        "passed": true,
+        "requests": 35,
+        "maxMs": 4427
+      },
+      "staff-cohort": {
+        "p75Ms": 1080,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 1562
+      },
+      "staff-cohorts": {
+        "p75Ms": 1550,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 3944
+      },
+      "staff-grading": {
+        "p75Ms": 1710,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 2680
+      },
+      "staff-overview": {
+        "p75Ms": 2300,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 6654
+      },
+      "staff-payments": {
+        "p75Ms": 1980,
+        "passed": true,
+        "requests": 3,
+        "maxMs": 2177
+      },
+      "staff-support": {
+        "p75Ms": 2120,
+        "passed": true,
+        "requests": 3,
+        "maxMs": 3182
+      },
+      "support": {
+        "p75Ms": 692,
+        "passed": true,
+        "requests": 31,
+        "maxMs": 1889
+      }
+    },
+    "note": "p75 values are the ones k6 printed for its thresholds. The staff pages have 3 or 4 requests each (one staff virtual user), so their percentiles are indicative only.",
+    "metrics": {
+      "http_req_receiving": {
+        "max": 5832.91331,
+        "p(90)": 739.7507693000007,
+        "p(95)": 1428.1608735499995,
+        "avg": 371.70259305847947,
+        "min": 2.374755,
+        "med": 206.821058
+      },
+      "http_req_duration{page:support}": {
+        "p(90)": 1537.955781,
+        "p(95)": 1764.031433,
+        "avg": 710.5976651612904,
+        "min": 420.375477,
+        "med": 514.561481,
+        "max": 1889.248072,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_blocked": {
+        "avg": 69.69608816374266,
+        "min": 0.0003,
+        "med": 0.000901,
+        "max": 6187.719715,
+        "p(90)": 0.0012,
+        "p(95)": 0.0026699999999999936
+      },
+      "http_req_duration": {
+        "avg": 1073.3282875204684,
+        "min": 402.00019,
+        "med": 587.0813415,
+        "max": 7865.21473,
+        "p(90)": 2171.4966692000016,
+        "p(95)": 3180.5197055
+      },
+      "http_req_waiting": {
+        "avg": 701.0182771315793,
+        "min": 285.245586,
+        "med": 370.8547,
+        "max": 7578.078236,
+        "p(90)": 1230.0197596000005,
+        "p(95)": 2343.4736637499996
+      },
+      "data_received": {
+        "count": 12736147,
+        "rate": 49950.48280478636
+      },
+      "http_req_duration{page:staff-payments}": {
+        "avg": 1591.16723,
+        "min": 807.996984,
+        "med": 1788.904001,
+        "max": 2176.600705,
+        "p(90)": 2099.0613642,
+        "p(95)": 2137.8310346,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:staff-cohort}": {
+        "med": 825.668717,
+        "max": 1562.18349,
+        "p(90)": 1371.417027,
+        "p(95)": 1466.8002584999997,
+        "avg": 976.7712314999999,
+        "min": 693.564002,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_failed": {
+        "passes": 0,
+        "fails": 342,
+        "thresholds": {
+          "rate<0.01": false
+        },
+        "value": 0
+      },
+      "http_req_tls_handshaking": {
+        "avg": 23.912768181286545,
+        "min": 0,
+        "med": 0,
+        "max": 3664.383671,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "vus": {
+        "max": 16,
+        "value": 2,
+        "min": 1
+      },
+      "http_reqs": {
+        "count": 342,
+        "rate": 1.341305586315621
+      },
+      "http_req_duration{page:learn}": {
+        "avg": 1190.7235535,
+        "min": 409.482634,
+        "med": 525.382353,
+        "max": 7677.009776,
+        "p(90)": 2684.721178800001,
+        "p(95)": 3614.2143720000013,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:results}": {
+        "p(90)": 1338.925641,
+        "p(95)": 2036.6526729999998,
+        "avg": 762.0347543513511,
+        "min": 427.306836,
+        "med": 556.890035,
+        "max": 2449.301116,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:sessions}": {
+        "avg": 898.9403204857144,
+        "min": 425.446586,
+        "med": 565.103238,
+        "max": 4427.485015,
+        "p(90)": 1956.9803602000006,
+        "p(95)": 2378.8329851999983,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:dashboard}": {
+        "p(90)": 1792.9513690000006,
+        "p(95)": 6417.795352400004,
+        "avg": 1302.7955066818183,
+        "min": 438.940089,
+        "med": 688.5993945,
+        "max": 7865.21473,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:course-home}": {
+        "max": 6723.437823,
+        "p(90)": 2390.9433095000018,
+        "p(95)": 4780.930971500002,
+        "avg": 1335.4734672272727,
+        "min": 528.022752,
+        "med": 687.0617179999999,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "iteration_duration": {
+        "avg": 87547.63804245454,
+        "min": 60455.963538,
+        "med": 89216.623999,
+        "max": 104464.018159,
+        "p(90)": 96958.7248592,
+        "p(95)": 100064.0688516
+      },
+      "iterations": {
+        "rate": 0.12942422324098096,
+        "count": 33
+      },
+      "data_sent": {
+        "count": 91776,
+        "rate": 359.9405306716445
+      },
+      "http_req_duration{page:staff-overview}": {
+        "avg": 2210.6954985,
+        "min": 566.102093,
+        "med": 811.5437425,
+        "max": 6653.592416,
+        "p(90)": 4913.411588900001,
+        "p(95)": 5783.502002449998,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_connecting": {
+        "avg": 35.053736692982454,
+        "min": 0,
+        "med": 0,
+        "max": 3232.2126,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "http_req_sending": {
+        "avg": 0.6074173304093562,
+        "min": 0.083408,
+        "med": 0.294637,
+        "max": 56.373627,
+        "p(90)": 0.39156100000000005,
+        "p(95)": 0.44403869999999995
+      },
+      "vus_max": {
+        "value": 16,
+        "min": 16,
+        "max": 16
+      },
+      "http_req_duration{page:lesson}": {
+        "avg": 977.8170050823521,
+        "min": 402.00019,
+        "med": 556.213894,
+        "max": 5787.913439,
+        "p(90)": 2529.579815,
+        "p(95)": 2984.8749563999995,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "checks": {
+        "fails": 0,
+        "passes": 1026,
+        "thresholds": {
+          "rate>0.999": false
+        },
+        "value": 1
+      },
+      "http_req_duration{page:staff-cohorts}": {
+        "avg": 1489.5438884999999,
+        "min": 585.735192,
+        "med": 714.005187,
+        "max": 3944.429988,
+        "p(90)": 2987.2793859000003,
+        "p(95)": 3465.8546869499987,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:staff-support}": {
+        "avg": 1603.304403666667,
+        "min": 568.976558,
+        "med": 1058.600105,
+        "max": 3182.336548,
+        "p(90)": 2757.5892594,
+        "p(95)": 2969.9629037,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:staff-grading}": {
+        "min": 635.798369,
+        "med": 1097.1887785,
+        "max": 2679.799645,
+        "p(90)": 2294.1941341,
+        "p(95)": 2486.9968895499997,
+        "avg": 1377.49389275,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{expected_response:true}": {
+        "p(90)": 2171.4966692000016,
+        "p(95)": 3180.5197055,
+        "avg": 1073.3282875204684,
+        "min": 402.00019,
+        "med": 587.0813415,
+        "max": 7865.21473
+      }
+    },
+    "root_group": {
+      "checks": {
+        "status is 200": {
+          "path": "::status is 200",
+          "id": "6210a8cd14cd70477eba5c5e4cb3fb5f",
+          "passes": 342,
+          "fails": 0,
+          "name": "status is 200"
+        },
+        "stayed signed in": {
+          "passes": 342,
+          "fails": 0,
+          "name": "stayed signed in",
+          "path": "::stayed signed in",
+          "id": "06f3b0e87108349ee2ba68741aa5ac8a"
+        },
+        "rendered without an error": {
+          "name": "rendered without an error",
+          "path": "::rendered without an error",
+          "id": "24dd248f2986594a98d74e5f82c77b6a",
+          "passes": 342,
+          "fails": 0
+        }
+      },
+      "name": "",
+      "path": "",
+      "id": "d41d8cd98f00b204e9800998ecf8427e",
+      "groups": {}
+    }
+  },
+  "probe": {
+    "note": "5 samples per view (1 cold, 4 warm), Regular 4G emulation, run after the k6 pilot with no background load",
+    "generatedAt": "2026-10-11T05:25:34.454Z",
+    "baseUrl": "https://deploy-preview-16--kqnexuslms.netlify.app",
+    "network": {
+      "name": "Regular 4G",
+      "downloadMbps": 4,
+      "uploadMbps": 3,
+      "latencyMs": 20
+    },
+    "samplesRequested": 5,
+    "method": "Chromium, CDP network emulation, navigation waitUntil commit, performance.now() when [data-primary-content] is visible; first sample per view is cold (fresh context), the rest are warm; nearest-rank percentiles over warm samples.",
+    "seed": 1416934983,
+    "budgetMs": 2500,
+    "views": [
+      {
+        "name": "staff-cohort",
+        "persona": "staff",
+        "path": "/staff/cohorts/:id",
+        "runOrder": 1,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 6542,
+        "p50": 892,
+        "p75": 2109,
+        "p95": 2695,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 940,
+          "p75": 2168,
+          "p95": 2768
+        },
+        "allMs": [
+          6542,
+          823,
+          892,
+          2695,
+          2109
+        ]
+      },
+      {
+        "name": "dashboard",
+        "persona": "learner",
+        "path": "/dashboard",
+        "runOrder": 2,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 3307,
+        "p50": 832,
+        "p75": 861,
+        "p95": 1008,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 880,
+          "p75": 944,
+          "p95": 1064
+        },
+        "allMs": [
+          3307,
+          832,
+          1008,
+          763,
+          861
+        ]
+      },
+      {
+        "name": "staff-cohorts",
+        "persona": "staff",
+        "path": "/staff/cohorts",
+        "runOrder": 3,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2261,
+        "p50": 979,
+        "p75": 1025,
+        "p95": 1318,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 1036,
+          "p75": 1076,
+          "p95": 1384
+        },
+        "allMs": [
+          2261,
+          1025,
+          979,
+          1318,
+          741
+        ]
+      },
+      {
+        "name": "staff-payments",
+        "persona": "staff",
+        "path": "/staff/payments",
+        "runOrder": 4,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1835,
+        "p50": 949,
+        "p75": 1075,
+        "p95": 1177,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 1048,
+          "p75": 1168,
+          "p95": 1256
+        },
+        "allMs": [
+          1835,
+          1075,
+          949,
+          850,
+          1177
+        ]
+      },
+      {
+        "name": "staff-support",
+        "persona": "staff",
+        "path": "/staff/support",
+        "runOrder": 5,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2146,
+        "p50": 599,
+        "p75": 633,
+        "p95": 681,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 636,
+          "p75": 652,
+          "p95": 744
+        },
+        "allMs": [
+          2146,
+          633,
+          476,
+          599,
+          681
+        ]
+      },
+      {
+        "name": "results",
+        "persona": "learner",
+        "path": "/learn/:id/results",
+        "runOrder": 6,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1416,
+        "p50": 716,
+        "p75": 753,
+        "p95": 921,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 776,
+          "p75": 796,
+          "p95": 988
+        },
+        "allMs": [
+          1416,
+          921,
+          716,
+          753,
+          491
+        ]
+      },
+      {
+        "name": "staff-overview",
+        "persona": "staff",
+        "path": "/staff",
+        "runOrder": 7,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1818,
+        "p50": 772,
+        "p75": 818,
+        "p95": 891,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 820,
+          "p75": 892,
+          "p95": 956
+        },
+        "allMs": [
+          1818,
+          818,
+          524,
+          891,
+          772
+        ]
+      },
+      {
+        "name": "staff-grading",
+        "persona": "staff",
+        "path": "/staff/cohorts/:id/grading/:id",
+        "runOrder": 8,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2203,
+        "p50": 626,
+        "p75": 684,
+        "p95": 914,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 560,
+          "p75": 720,
+          "p95": 972
+        },
+        "allMs": [
+          2203,
+          684,
+          914,
+          626,
+          606
+        ]
+      },
+      {
+        "name": "learn",
+        "persona": "learner",
+        "path": "/learn",
+        "runOrder": 9,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1407,
+        "p50": 547,
+        "p75": 735,
+        "p95": 773,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 584,
+          "p75": 800,
+          "p95": 840
+        },
+        "allMs": [
+          1407,
+          735,
+          773,
+          452,
+          547
+        ]
+      },
+      {
+        "name": "course-home",
+        "persona": "learner",
+        "path": "/learn/:id",
+        "runOrder": 10,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2169,
+        "p50": 544,
+        "p75": 589,
+        "p95": 760,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 580,
+          "p75": 640,
+          "p95": 820
+        },
+        "allMs": [
+          2169,
+          544,
+          589,
+          435,
+          760
+        ]
+      },
+      {
+        "name": "lesson",
+        "persona": "learner",
+        "path": "/learn/:id/lessons/:id",
+        "runOrder": 11,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1962,
+        "p50": 596,
+        "p75": 747,
+        "p95": 998,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 604,
+          "p75": 776,
+          "p95": 1064
+        },
+        "allMs": [
+          1962,
+          596,
+          747,
+          998,
+          553
+        ]
+      },
+      {
+        "name": "support",
+        "persona": "learner",
+        "path": "/support",
+        "runOrder": 12,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2276,
+        "p50": 558,
+        "p75": 565,
+        "p95": 647,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 600,
+          "p75": 608,
+          "p95": 672
+        },
+        "allMs": [
+          2276,
+          565,
+          647,
+          558,
+          485
+        ]
+      },
+      {
+        "name": "sessions",
+        "persona": "learner",
+        "path": "/learn/:id/sessions",
+        "runOrder": 13,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1892,
+        "p50": 484,
+        "p75": 505,
+        "p95": 834,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 520,
+          "p75": 548,
+          "p95": 856
+        },
+        "allMs": [
+          1892,
+          834,
+          484,
+          465,
+          505
+        ]
+      }
+    ]
+  },
+  "journeyPassed": false,
+  "journey": {
+    "test": "e2e/journey.spec.ts \"staging journey\", chromium, headed",
+    "attempts": [
+      {
+        "at": "2026-10-11T05:26:55Z",
+        "result": "failed",
+        "reason": "The test's own first assertion looked for the heading \"Your dashboard\"; a learner who already has a course is greeted by name. Test corrected; the product was not at fault. No enrolment was made."
+      },
+      {
+        "at": "2026-10-11T05:29:10Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 150",
+        "reason": "The browser's direct upload (PUT to a presigned link) was blocked by the storage bucket's CORS policy: the preflight for the preview's origin answers 403 with no Access-Control-Allow-Origin. The same preflight answers 204 for the production site's origin and for http://localhost:3000."
+      },
+      {
+        "at": "2026-10-11T07:49:11Z",
+        "endedAt": "2026-10-11T07:50:58Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 149",
+        "headed": true,
+        "after": "The owner reported the bucket CORS change as done (\"Done\", 2026-10-11).",
+        "preflightBeforeRun": {
+          "at": "2026-10-11T07:48:30Z",
+          "request": "OPTIONS to the bucket with Access-Control-Request-Method PUT and Access-Control-Request-Headers content-type",
+          "previewOrigin": {
+            "status": 204,
+            "allowOrigin": "https://deploy-preview-16--kqnexuslms.netlify.app",
+            "allowMethods": "PUT",
+            "allowHeaders": "content-type"
+          },
+          "productionOrigin": {
+            "status": 204
+          },
+          "localhost3000": {
+            "status": 204
+          }
+        },
+        "reason": "The CORS setting is now right: the browser's preflight passed. The upload itself (PUT to the presigned link) still failed. The browser reports that the PUT's answer carries no Access-Control-Allow-Origin, and no longer says the preflight failed (the 05:29 attempt did). The page showed \"Your file couldn't be uploaded\".",
+        "probableCause": "Not confirmed. The presigned link carries x-amz-checksum-crc32=AAAAAA== (the CRC32 of an EMPTY body) and x-amz-sdk-checksum-algorithm=CRC32; the 05:29 link carried the same. The AWS SDK in use (client-s3 and s3-request-presigner 3.1125.0) adds these by default and src/server/services/storage-service.ts does not turn that off. The uploaded file is not empty, so the storage service most likely rejects the PUT for a checksum mismatch, and its error answers carry no CORS headers (a PUT with no signature answers 400 with no Access-Control-Allow-Origin for the preview, the production and the localhost origins alike), which the browser shows as a CORS block. Local MinIO accepts the same kind of link (the local full journey passed).",
+        "notConfirmedBecause": "The storage service's real answer to the PUT could not be read: the browser hides it, and replaying the request outside the browser was not permitted in this session.",
+        "scope": "A product fault in the upload link, not a test fault and not the CORS setting. It would affect uploads from the production address too. Not fixed here: a fix changes src/server/services/storage-service.ts and reaches the preview only through a push and a rebuild."
+      }
+    ],
+    "stepsPassed": [
+      "sign in through the form",
+      "enrol: choose the cohort and reach the order page",
+      "pay: staff confirm the manual payment, drain-domain-events --target staging",
+      "learn: open the course",
+      "learn: complete both reading lessons",
+      "attend: staff mark the learner present"
+    ],
+    "stepsNotReached": [
+      "submit (failed)",
+      "grade and release",
+      "complete and certificate issued",
+      "certificate download",
+      "public verification"
+    ],
+    "blocker": "The storage service refuses the browser's upload. Probable cause: the presigned link carries the checksum of an empty body (AWS SDK default). Needs a code fix in storage-service.ts, a rebuilt preview, and then one more run with another load learner (STAGING_JOURNEY_LEARNER=148; learners 149 and 150 are part-way through the journey course).",
+    "stepsPassedNote": "The same six steps passed in the 05:29 attempt (learner 150) and in the 07:49 attempt (learner 149).",
+    "localFullJourney": {
+      "note": "The LOCAL \"full journey\" (same shared steps, refactored in this plan), run once after the refactor. Local Docker Postgres (licence_test) and a throwaway local MinIO; not the staging target.",
+      "at": "2026-10-11T07:53:25Z",
+      "result": "passed",
+      "project": "chromium, headed",
+      "durationSeconds": 34.3
+    }
+  },
+  "quietResend": {
+    "before": 1,
+    "after": 2,
+    "neutralMessageShown": true,
+    "secondsBetweenRegistrationAndSignIn": 68,
+    "note": "A fresh account was registered through the preview; the sign-in with the right password came 68 s later (the resend has a 60 s per-address cooldown), showed the neutral message and stayed on /signin; 10 s after the response a second verification token existed. after() runs on Netlify (ledger A15).",
+    "ranAt": "2026-10-11T05:34:31.807Z"
+  },
+  "connections": {
+    "duringPilot": {
+      "startedAt": "2026-10-11T05:08:43.635Z",
+      "everySeconds": 15,
+      "samples": 19,
+      "peakTotal": 16,
+      "peakClient": 9,
+      "peakActive": 1,
+      "list": [
+        {
+          "at": "2026-10-11T05:08:46.647Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:08:58.905Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:14.104Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:28.899Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:44.104Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:58.869Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:14.072Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:28.894Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:44.110Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:58.896Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:14.054Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:28.883Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:44.058Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:58.858Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:14.053Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:28.860Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:44.053Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:58.852Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:13:14.094Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        }
+      ]
+    },
+    "idleAfterwards": {
+      "samples": 3,
+      "peakTotal": 15,
+      "peakClient": 8
+    },
+    "maxConnections": 901,
+    "note": "Counts are rows of pg_stat_activity on the staging branch and include the sampler's own connection and Neon's internal sessions. Idle: 8 client backends (4 held by the pooler, 3 Neon internal, 1 sampler). Pilot peak: 9, so the pooler held at most 5 Postgres connections for 16 virtual users. The pooled URL carries no connection_limit or pool_timeout setting (ledger P-10)."
+  },
+  "usage": {
+    "neon": {
+      "before": {
+        "at": "2026-10-11T05:06:37.964Z",
+        "branch": {
+          "compute_time_seconds": 689,
+          "active_time_seconds": 2712
+        },
+        "project": {
+          "compute_time_seconds": 240544,
+          "active_time_seconds": 881060,
+          "consumption_period_start": "2026-10-01T00:00:00Z"
+        }
+      },
+      "after": {
+        "at": "2026-10-11T05:34:52.182Z",
+        "branch": {
+          "compute_time_seconds": 689,
+          "active_time_seconds": 2712
+        },
+        "project": {
+          "compute_time_seconds": 240544,
+          "active_time_seconds": 881060,
+          "consumption_period_start": "2026-10-01T00:00:00Z"
+        }
+      },
+      "note": "The Neon API counters did not move in the 28 minutes between the two reads (they are updated with a delay), so the pilot's compute cannot be read yet. Bound: the staging endpoint scales between 0.25 and 2 compute units."
+    },
+    "netlify": "Not readable from this machine (no Netlify CLI and no Netlify token). The owner reads Team usage in the Netlify dashboard."
+  },
+  "ranAt": "2026-10-11T05:35:48.810Z"
+}

@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 15
 current_phase_name: Launch Readiness — NFR Verification & Operational Cutover
 status: executing
-stopped_at: Completed 15-28-PLAN.md
-last_updated: "2026-10-10T11:49:44.475Z"
+stopped_at: "15-30 Task 3 full staging run done (k6 passed, probe 12 of 13 views); open: staging journey re-run after CORS, lesson view gap for 15-31, manual journey"
+last_updated: "2026-10-11T07:46:46.621Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 15 execution started
-state_head: 95990608db5bec5c8b2e43a12015c9cc7898c3aa
+state_head: 9a68b7ae4fa8fd87746ee25c7151c5e02e95e3b6
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 259
-  completed_plans: 256
+  completed_plans: 257
 milestone_name: milestone
 ---
 
@@ -163,6 +163,7 @@ Progress: [██████████] 99%
 | Phase 15 P26 | 75min | 3 tasks | 11 files |
 | Phase 15 P27 | 35min | 3 tasks | 7 files |
 | Phase 15 P28 | about 9h wall (two executors, long waits on 13-minute load runs and 30-minute sweeps) | 3 tasks | 20 files |
+| Phase 15 P29 | 60min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -360,6 +361,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 15]: 15-26: restoring a record that is not archived, publishing an archived record, cancelling a cancelled session and writing to a closed ticket are refused on the server (found by the record-state matrix); grant end instant is inclusive (isGrantActive: ended only when endsAt < now)
 - [Phase 15]: 15-27: attendance exceptions CSV route denies with an empty 404 and private, no-store (ledger P-07); export object keys stay exports/<jobId>/<version>.csv (cuid job id, not UUID v4) pending owner decision
 - [Phase 15]: 15-28: local rehearsal runs use Prisma connection_limit=25 and next start --keepAliveTimeout 70000; default pool of 9 timed out at 160 users; staging pool tuning stays P-10 in plan 15-30. Local numbers are relative, not the signed NFR-02.
+- [Phase 15]: 15-29: schema-only staging branch baselined (18 migrations resolved as applied, 12 deployed) rather than dropped; staging branch expiration left for the owner to remove
+- [Phase 15]: 15-29: Neon point-in-time restore to a new branch rehearsed on staging (RPO 300 s, RTO 37 s to checked data, 8 of 8 row counts equal, 7 of 7 integrity checks passed, rehearsal branch deleted); staging branch expiration removed with the owner's authorisation; RPO 24h still needs a paid Neon plan or a daily external dump
+- [Phase 15]: 15-30: staging pilot (15 learners, 1 staff) passed k6 and probe; after() proven on Netlify; staging journey blocked at upload by storage CORS for the preview origin, not worked around
 
 ### Pending Todos
 
@@ -415,6 +419,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-10T11:49:40.876Z
-Stopped at: Completed 15-28-PLAN.md
-Resume file: None
+Last session: 2026-10-11T07:46:42.475Z
+Stopped at: 15-30 Task 3 full staging run done (k6 passed, probe 12 of 13 views); open: staging journey re-run after CORS, lesson view gap for 15-31, manual journey
+Resume file: .planning/phases/15-launch-readiness-nfr-verification-operational-cutover/15-30-SUMMARY.md

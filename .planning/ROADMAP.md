@@ -804,7 +804,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
   4. Security/business events remain auditable and observable, and a backup/restore rehearsal meets RPO 24h / RTO 8h. (NFR-07, NFR-08)
   5. Core public/learner/staff journeys meet WCAG 2.2 AA, work responsively across the agreed viewport range, follow the approved privacy/data-lifecycle policy, and support the agreed browser matrix. (NFR-09, NFR-10, NFR-11, NFR-12)
 
-**Plans**: 30/33 plans executed
+**Plans**: 31/33 plans executed
 
 Plans:
 **Wave 1**
@@ -863,7 +863,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 15-29-PLAN.md — Staging setup, seeding and Neon point-in-time restore rehearsal (D-01, D-04)
+- [x] 15-29-PLAN.md — Staging setup, seeding and Neon point-in-time restore rehearsal (D-01, D-04)
 
 **Wave 10** *(blocked on Wave 9 completion)*
 
@@ -900,4 +900,4 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 12. Support Tickets | 9/9 | Complete    | 2026-09-25 |
 | 13. Transactional Communications & Notifications | 13/13 | In Progress|  |
 | 14. Software Licence & Deployment Control | 21/21 | In Progress|  |
-| 15. Launch Readiness — NFR Verification & Operational Cutover | 30/33 | In Progress|  |
+| 15. Launch Readiness — NFR Verification & Operational Cutover | 31/33 | In Progress|  |

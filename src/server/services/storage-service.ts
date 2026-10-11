@@ -43,6 +43,12 @@ function makeClient(endpoint: string | undefined): S3Client {
     // Environment-driven, never hardcoded (D-35). MinIO needs `true` or the
     // SDK issues bucket-as-subdomain requests it rejects; R2 wants `false`.
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+    // The SDK's default adds a CRC32 checksum to every request. For a
+    // presigned `PUT` it signs the checksum of an EMPTY body into the URL, so
+    // R2 refuses the browser's real upload (MinIO lets it through). Only add
+    // checksums where the operation requires one.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
       accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",

@@ -11,6 +11,10 @@
 // SMOKE=1 swaps in 5 learner and 1 staff virtual users for one minute with
 // short think time, to prove the harness cheaply.
 //
+// PILOT=1 runs one tenth of the load (plan 15-30): learners ramp to 15 over 30
+// seconds, hold 3 minutes, ramp down 15 seconds, with 1 staff virtual user and
+// the full run's think time. Staging starts with this, never with the full run.
+//
 // k6 cannot easily call server actions, so this loads pages (documents only).
 // Writes are exercised by the Playwright journey (plan 15-16 onward).
 //
@@ -21,6 +25,7 @@
 import { sleep } from "k6";
 import {
   ALL_PAGE_TAGS,
+  PILOT,
   SMOKE,
   baseUrl,
   buildThresholds,
@@ -34,6 +39,25 @@ const BASE = baseUrl();
 const tokens = loadTokens();
 
 const FULL_SPAN = "12m30s"; // 2m ramp + 10m hold + 30s ramp down
+const PILOT_SPAN = "3m45s"; // 30s ramp + 3m hold + 15s ramp down
+
+if (SMOKE && PILOT) {
+  throw new Error("Set SMOKE=1 or PILOT=1, not both.");
+}
+
+function rampingLearners(target, ramp, hold, down) {
+  return {
+    executor: "ramping-vus",
+    exec: "learner",
+    startVUs: 0,
+    stages: [
+      { duration: ramp, target },
+      { duration: hold, target },
+      { duration: down, target: 0 },
+    ],
+    gracefulRampDown: "30s",
+  };
+}
 
 export const options = {
   scenarios: SMOKE
@@ -41,20 +65,15 @@ export const options = {
         learners: { executor: "constant-vus", exec: "learner", vus: 5, duration: "1m" },
         staff: { executor: "constant-vus", exec: "staff", vus: 1, duration: "1m" },
       }
-    : {
-        learners: {
-          executor: "ramping-vus",
-          exec: "learner",
-          startVUs: 0,
-          stages: [
-            { duration: "2m", target: 150 },
-            { duration: "10m", target: 150 },
-            { duration: "30s", target: 0 },
-          ],
-          gracefulRampDown: "30s",
+    : PILOT
+      ? {
+          learners: rampingLearners(15, "30s", "3m", "15s"),
+          staff: { executor: "constant-vus", exec: "staff", vus: 1, duration: PILOT_SPAN },
+        }
+      : {
+          learners: rampingLearners(150, "2m", "10m", "30s"),
+          staff: { executor: "constant-vus", exec: "staff", vus: 10, duration: FULL_SPAN },
         },
-        staff: { executor: "constant-vus", exec: "staff", vus: 10, duration: FULL_SPAN },
-      },
   thresholds: buildThresholds(ALL_PAGE_TAGS),
 };
 

@@ -1,0 +1,136 @@
+{
+  "route": "neon-pitr",
+  "project": {
+    "plan": "Free",
+    "postgresMajor": 18,
+    "region": "aws-us-east-2"
+  },
+  "parentBranch": {
+    "id": "br-icy-river-axqpwts7",
+    "name": "staging-phase 15"
+  },
+  "rehearsalBranch": {
+    "id": "br-plain-star-axua7evk",
+    "name": "restore-rehearsal-20261011-044948"
+  },
+  "seedFinishedAt": "2026-10-11T04:26:53Z",
+  "incidentAt": "2026-10-11T04:49:48Z",
+  "restorePoint": "2026-10-11T04:44:48Z",
+  "branchCreateRequestedAt": "2026-10-11T04:49:58Z",
+  "branchReadyAt": "2026-10-11T04:50:03Z",
+  "firstQueryAt": "2026-10-11T04:50:14Z",
+  "integrityFinishedAt": "2026-10-11T04:50:25Z",
+  "branchReadySeconds": 5,
+  "rpoSeconds": 300,
+  "rtoSeconds": 37,
+  "rpoTargetSeconds": 86400,
+  "rtoTargetSeconds": 28800,
+  "withinRtoTarget": true,
+  "historyWindow": {
+    "text": "6 hours",
+    "seconds": 21600,
+    "source": "15-STAGING.md (Neon API history_retention_seconds)"
+  },
+  "rpoMetByHistoryWindowAlone": false,
+  "rowCountBasis": {
+    "User": "createdAt <= restorePoint",
+    "Enrolment": "createdAt <= restorePoint",
+    "Order": "createdAt <= restorePoint",
+    "PaymentAttempt": "all rows",
+    "Grade": "all rows",
+    "CompletionRecord": "all rows",
+    "Certificate": "issuedAt <= restorePoint",
+    "AuditEvent": "createdAt <= restorePoint"
+  },
+  "rowCountsMatch": true,
+  "rowCounts": {
+    "User": {
+      "source": 171,
+      "restored": 171
+    },
+    "Enrolment": {
+      "source": 159,
+      "restored": 159
+    },
+    "Order": {
+      "source": 5003,
+      "restored": 5003
+    },
+    "PaymentAttempt": {
+      "source": 5002,
+      "restored": 5002
+    },
+    "Grade": {
+      "source": 2,
+      "restored": 2
+    },
+    "CompletionRecord": {
+      "source": 3,
+      "restored": 3
+    },
+    "Certificate": {
+      "source": 3,
+      "restored": 3
+    },
+    "AuditEvent": {
+      "source": 6,
+      "restored": 6
+    }
+  },
+  "integrityPassed": true,
+  "integrity": [
+    {
+      "id": "paid-order-has-successful-payment",
+      "label": "Paid orders have a successful payment",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "active-enrolment-has-paid-order",
+      "label": "Active enrolments have a paid order",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-live-enrolment-per-learner-cohort",
+      "label": "One live enrolment per learner and cohort",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-open-completion-per-enrolment-course",
+      "label": "One open completion record per enrolment and course",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-grade-per-submission",
+      "label": "One grade per submission",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "active-certificate-has-completion",
+      "label": "Active certificates have a completion record",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "cohort-within-capacity",
+      "label": "Cohorts are within capacity",
+      "status": "passed",
+      "violationCount": 0
+    }
+  ],
+  "passed": true,
+  "rehearsalBranchDeleted": true,
+  "rehearsalBranchDeletedAt": "2026-10-11T04:50:26Z",
+  "notes": [
+    "incidentAt stands in for the incident start; rpoSeconds = incidentAt - restorePoint; rtoSeconds = integrityFinishedAt - incidentAt.",
+    "The restore was a NEW branch created from the staging branch at restorePoint. No in-place restore endpoint was called and the parent branch was not changed.",
+    "rtoSeconds does not include pointing the app at the restored branch and redeploying (restore runbook, Route A step 4); that step was not rehearsed here.",
+    "The source counts are rows on the staging branch dated at or before restorePoint (column named in rowCountBasis); the restored counts are all rows on the rehearsal branch.",
+    "A 6-hour history window cannot meet RPO 24h by itself: production needs a paid Neon plan or a daily external dump (blocking owner item on the launch checklist).",
+    "No host name, connection string or key is recorded here."
+  ]
+}

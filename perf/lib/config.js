@@ -28,6 +28,14 @@ export function baseUrl() {
 /** SMOKE=1 runs 5 learner and 1 staff virtual users for one minute with short think time. */
 export const SMOKE = __ENV.SMOKE === "1";
 
+/**
+ * PILOT=1 runs one tenth of the agreed load (plan 15-30; ledger A5, A6): 15
+ * learner and 1 staff virtual users, a 3-minute hold, the same think time as
+ * the full run. It goes first on staging, so the owner can check hosting usage
+ * before the full run is approved.
+ */
+export const PILOT = __ENV.PILOT === "1";
+
 export const TOKENS_PATH = __ENV.TOKENS || "/perf/results/tokens.json";
 
 /** Reads the tokens file seed-load wrote. Call it in the init context (open() is init-only). */

@@ -19,7 +19,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CreateBucketCommand, HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Prisma } from "@prisma/client";
-import { assertSafeDatabaseUrl } from "../../scripts/ops/db-target-guard";
+import { assertSafeDatabaseUrl, type DatabaseTarget } from "../../scripts/ops/db-target-guard";
 import { buildCourseObligationTree } from "../../src/server/services/publication";
 import {
   DEFAULT_CERTIFICATE_TEMPLATE_NAME,
@@ -61,6 +61,20 @@ export const STAFF_LOGINS = {
 } as const;
 
 const FIXTURE_FILE = path.resolve(__dirname, "../../test-results/journey-fixtures.json");
+/** The staging ids live in their own file, so a staging run never overwrites the local ids (plan 15-30). */
+const STAGING_FIXTURE_FILE = path.resolve(__dirname, "../../test-results/journey-fixtures-staging.json");
+
+function fixtureFile(target: DatabaseTarget): string {
+  return target === "staging" ? STAGING_FIXTURE_FILE : FIXTURE_FILE;
+}
+
+export type JourneyFixtureOptions = {
+  /**
+   * "staging" makes the same course on the staging branch (plan 15-30). The guard
+   * then needs the host in STAGING_DATABASE_HOSTS and ALLOW_STAGING_DATABASE=1.
+   */
+  target?: DatabaseTarget;
+};
 
 async function ensureBucket(): Promise<void> {
   const client = new S3Client({
@@ -86,11 +100,13 @@ async function ensureBucket(): Promise<void> {
   }
 }
 
-export async function ensureJourneyFixtures(): Promise<JourneyIds> {
-  // Guard first. Throws (naming the host only) unless the shell URL is local.
-  assertSafeDatabaseUrl(process.env.DATABASE_URL);
+export async function ensureJourneyFixtures(options: JourneyFixtureOptions = {}): Promise<JourneyIds> {
+  const target = options.target ?? "local";
+  // Guard first. Throws (naming the host only) unless the shell URL is local, or allow-listed staging when asked for.
+  assertSafeDatabaseUrl(process.env.DATABASE_URL, { target });
 
-  await ensureBucket();
+  // The local MinIO bucket belongs to the local server only: the deploy preview has its own storage.
+  if (target === "local") await ensureBucket();
 
   // Construct the client only after the guard has passed.
   const { PrismaClient } = await import("@prisma/client");
@@ -271,8 +287,8 @@ export async function ensureJourneyFixtures(): Promise<JourneyIds> {
       assessmentId: assessment.id,
       lessonIds: [lessonOne.id, lessonTwo.id, lessonThree.id],
     };
-    mkdirSync(path.dirname(FIXTURE_FILE), { recursive: true });
-    writeFileSync(FIXTURE_FILE, `${JSON.stringify(ids, null, 2)}\n`, "utf8");
+    mkdirSync(path.dirname(fixtureFile(target)), { recursive: true });
+    writeFileSync(fixtureFile(target),`${JSON.stringify(ids, null, 2)}\n`, "utf8");
     return ids;
   } finally {
     await prisma.$disconnect();
@@ -280,8 +296,8 @@ export async function ensureJourneyFixtures(): Promise<JourneyIds> {
 }
 
 /** Reads the ids written by the last setup. Throws if setup has not run. */
-export function loadJourneyIds(): JourneyIds {
-  return JSON.parse(readFileSync(FIXTURE_FILE, "utf8")) as JourneyIds;
+export function loadJourneyIds(target: DatabaseTarget = "local"): JourneyIds {
+  return JSON.parse(readFileSync(fixtureFile(target), "utf8")) as JourneyIds;
 }
 
 /** Playwright `globalSetup` entry point. */
