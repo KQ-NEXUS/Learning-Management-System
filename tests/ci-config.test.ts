@@ -213,14 +213,14 @@ function objectStoreProblems(workflowText: string): string[] {
   const tests = integration.indexOf("npx vitest run integration.test");
   if (start === -1) return ["integration job does not start an object store"];
   if (tests === -1 || start > tests) problems.push("integration job starts the object store after the tests");
-  if (!/minio\/minio@sha256:[0-9a-f]{64}\b/.test(integration)) {
+  if (!/minio@sha256:[0-9a-f]{64}\b/.test(integration)) {
     problems.push("the object store image is not pinned by sha256 digest");
   }
-  if (/minio\/minio:[\w.-]+/.test(integration)) problems.push("the object store image uses a tag");
+  if (/minio:[\w.-]+\s/.test(integration)) problems.push("the object store image uses a tag");
   if (!integration.includes("-p 127.0.0.1:9000:9000")) {
     problems.push("the object store is not published on the loopback address at port 9000");
   }
-  if (!integration.includes("/data/lms-private")) problems.push("the lms-private bucket is not created");
+  if (!integration.includes("minio-data/lms-private")) problems.push("the lms-private bucket is not created");
   const wait = integration.indexOf("/minio/health/live");
   if (wait === -1 || wait > tests) problems.push("integration job does not wait for the object store before the tests");
   return problems;
@@ -318,7 +318,7 @@ describe("workflow guard (D-10), every file in .github/workflows", () => {
       expect(text, file).toContain('process.env.TEST_MINIO_ENDPOINT ?? "http://localhost:9000"');
       expect(integration, file).toContain(`-e MINIO_ROOT_USER=${value("S3_ACCESS_KEY_ID")}`);
       expect(integration, file).toContain(`-e MINIO_ROOT_PASSWORD=${value("S3_SECRET_ACCESS_KEY")}`);
-      expect(integration, file).toContain(`/data/${value("S3_BUCKET")}`);
+      expect(integration, file).toContain(`minio-data/${value("S3_BUCKET")}`);
     }
   });
 });
@@ -411,7 +411,7 @@ describe("the guard catches regressions in an in-memory copy", () => {
     const dropped = workflow.replace(/^\s+- name: Start local object storage[\s\S]*?(?=^\s+- name: Wait for object storage)/m, "");
     expect(dropped).not.toBe(workflow);
     expect(objectStoreProblems(dropped)).toEqual(["integration job does not start an object store"]);
-    const tagged = workflow.replace(/minio\/minio@sha256:[0-9a-f]{64}/, "minio/minio:latest");
+    const tagged = workflow.replace(/minio@sha256:[0-9a-f]{64}/, "minio:latest");
     expect(tagged).not.toBe(workflow);
     expect(objectStoreProblems(tagged)).toEqual([
       "the object store image is not pinned by sha256 digest",
@@ -419,7 +419,7 @@ describe("the guard catches regressions in an in-memory copy", () => {
     ]);
     const exposed = workflow.replace("-p 127.0.0.1:9000:9000", "-p 9000:9000");
     expect(objectStoreProblems(exposed)).toEqual(["the object store is not published on the loopback address at port 9000"]);
-    const noBucket = workflow.replace("mkdir -p /data/lms-private && ", "");
+    const noBucket = workflow.replace("minio-data/lms-private", "minio-data/other");
     expect(objectStoreProblems(noBucket)).toEqual(["the lms-private bucket is not created"]);
   });
 

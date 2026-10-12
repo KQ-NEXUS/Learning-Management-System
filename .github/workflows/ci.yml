@@ -98,16 +98,21 @@ jobs:
       # the placeholder key and secret those test files set for themselves:
       # local test values for a container that exists only for this run, not
       # secrets. The image is pinned by digest (the same one as e2e-nightly.yml).
-      # A folder that exists under /data when the server starts is a bucket, so
-      # the bucket is there, and private, before any test runs.
+      # The official minio/minio image was withdrawn from Docker Hub in
+      # September 2026 (pulls answer "pull access denied"), so this uses
+      # Chainguard's build of the same server, which pulls without an account.
+      # It has no shell, so the bucket folder is made on the runner and mounted:
+      # a folder that exists under /data when the server starts is a bucket.
+      # It runs as root so it can write to that mounted folder.
       - name: Start local object storage
-        run: >-
-          docker run -d --name ci-minio -p 127.0.0.1:9000:9000
-          -e MINIO_ROOT_USER=lms-minio
-          -e MINIO_ROOT_PASSWORD=change-me-minio
-          --entrypoint sh
-          minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-          -c "mkdir -p /data/lms-private && exec minio server /data"
+        run: |
+          mkdir -p "$RUNNER_TEMP/minio-data/lms-private"
+          docker run -d --name ci-minio -p 127.0.0.1:9000:9000 \
+            -e MINIO_ROOT_USER=lms-minio \
+            -e MINIO_ROOT_PASSWORD=change-me-minio \
+            --user 0 -v "$RUNNER_TEMP/minio-data:/data" \
+            cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56 \
+            server /data
       - name: Wait for object storage
         run: |
           for attempt in $(seq 1 30); do

@@ -67,14 +67,16 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npx prisma db seed
       # The journey uploads a file and downloads a certificate PDF, so it needs
-      # object storage. A throwaway MinIO container on the loopback address; the
-      # values match e2e/support/server-env.ts and are local test values.
+      # object storage. A throwaway MinIO container on the loopback address (the
+      # Chainguard build: the official image left Docker Hub in September 2026);
+      # the values match e2e/support/server-env.ts and are local test values.
       - name: Start local object storage
         run: >-
           docker run -d --name journey-minio -p 127.0.0.1:9000:9000
           -e MINIO_ROOT_USER=journeyminio
           -e MINIO_ROOT_PASSWORD=journey-minio-secret
-          minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+          --user 0
+          cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56
           server /data
       - run: npm run build
       - run: npx playwright install --with-deps chromium
