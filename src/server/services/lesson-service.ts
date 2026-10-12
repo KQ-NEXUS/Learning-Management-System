@@ -21,6 +21,7 @@ import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission, Actor } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   assertLessonOpenable,
   hasActiveEnrolmentCoveringCourse,
@@ -141,6 +142,17 @@ export function createLessonService(deps: CreateLessonServiceDeps) {
     withPermission: deps.withPermission,
     audit: deps.audit,
     runInTransaction: deps.runInTransaction,
+    // W-14: a withdrawal is not repeated (it would move the parked slot and overwrite the
+    // withdrawal time), a live lesson is not "restored" (it would jump to the end of the order),
+    // and a withdrawn lesson is restored before it is changed.
+    assertWritable: (operation, before) => {
+      const withdrawn = before.withdrawnAt !== null;
+      if (operation === "archive" && withdrawn) throw new RecordStateError("This lesson is already withdrawn.");
+      if (operation === "restore" && !withdrawn) throw new RecordStateError("Only a withdrawn lesson can be restored.");
+      if (operation === "update" && withdrawn) {
+        throw new RecordStateError("This lesson is withdrawn. Restore it before you change it.");
+      }
+    },
     // Exact mirror of Module's archive/restore asymmetry — see
     // module-service.ts's inline comment for why the two qualifiers differ.
     archiveData: async (id) => {

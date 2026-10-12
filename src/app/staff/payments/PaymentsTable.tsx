@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ResourceTable, StatusPill, type Column, type SortState } from "@/components/primitives";
 import type { PaymentListRow } from "@/server/services/payment-read-service";
 import { humanizeCode } from "@/lib/humanize";
-import { STATUS_TABS } from "./payment-status";
+import { PROVIDER_OPTIONS, STATUS_TABS, paymentsListHref } from "./payment-status";
 
 /**
  * The Finance payments list (07-UI-SPEC §7.5). `PaymentRow` mirrors
@@ -127,52 +128,88 @@ const columns: Column<PaymentRow>[] = [
   },
 ];
 
-// Status tabs, with counts; a tab only shows once at least one order is in that status.
-// Exactly 4 options (including "All") — `ResourceTable`'s own `isSegmented`
-// threshold (`options.length <= 4`) applies automatically; no new
-// segmented-vs-select logic is written here.
-const PROVIDER_OPTIONS = [
-  { value: "", label: "All providers" },
-  { value: "PAYSTACK", label: "Paystack" },
-  { value: "STRIPE", label: "Stripe" },
-  { value: "MANUAL", label: "Manual" },
-];
+/** How long the search box waits after the last key before it asks the server. */
+const SEARCH_DELAY_MS = 300;
 
+/**
+ * The list is paged on the server, so the status tab, the provider and the
+ * search are NOT applied here: they are in the page address, the server reads
+ * the matching orders, and this table shows the rows it is given. The tab
+ * counts and the totals are props for the same reason: they count every order
+ * the staff member may see, not the rows of the page on screen (checklist
+ * W-12). Only the column sort still works on the rows of the current page.
+ */
 export function PaymentsTable({
   rows,
   denied,
   initialStatus = "",
+  provider = "",
+  search = "",
+  matchingCount,
+  totalAll,
+  statusCounts,
 }: {
   rows?: PaymentRow[];
   denied?: { permission: string };
+  /** The status tab in the address (`?status=`). */
   initialStatus?: string;
+  /** The provider in the address (`?provider=`). */
+  provider?: string;
+  /** The search in the address (`?q=`). */
+  search?: string;
+  /** Orders that match the filters, over every page. */
+  matchingCount?: number;
+  /** Every order the staff member may see. */
+  totalAll?: number;
+  /** Orders per status over everything the staff member may see. */
+  statusCounts?: Record<string, number>;
 }) {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState(initialStatus);
-  const [provider, setProvider] = useState("");
+  const router = useRouter();
+  const status = initialStatus;
+  // What the box shows while the staff member types; the address follows after a short pause.
+  const [searchText, setSearchText] = useState(search);
+  // The search this table last asked the server for. Until the server answers, the `search`
+  // prop is still the old one, so the two are kept apart.
+  const [sentSearch, setSentSearch] = useState(search);
+  const [seenSearch, setSeenSearch] = useState(search);
   const [sort, setSort] = useState<SortState>({ key: "order", direction: "asc" });
+
+  // The address changed and not because of this box (a link to the list with other filters):
+  // show what the address says.
+  if (seenSearch !== search) {
+    setSeenSearch(search);
+    if (search !== sentSearch) {
+      setSentSearch(search);
+      setSearchText(search);
+    }
+  }
+
+  const typed = searchText.trim();
+  useEffect(() => {
+    if (typed === sentSearch) return;
+    const timer = setTimeout(() => {
+      setSentSearch(typed);
+      router.replace(paymentsListHref({ status, provider, search: typed }));
+    }, SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [typed, sentSearch, status, provider, router]);
+
+  /** Go to the list for these filters now, carrying whatever is in the search box. */
+  function go(next: { status: string; provider: string }) {
+    setSentSearch(typed);
+    router.replace(paymentsListHref({ ...next, search: typed }));
+  }
 
   const visible = useMemo(() => {
     if (!rows) return [];
-    const needle = search.trim().toLowerCase();
-    const filtered = rows.filter(
-      (row) =>
-        (!needle ||
-          row.reference.toLowerCase().includes(needle) ||
-          row.learnerName.toLowerCase().includes(needle) ||
-          row.learnerEmail.toLowerCase().includes(needle)) &&
-        (!status || row.status === status) &&
-        (!provider || row.provider === provider),
-    );
-
-    return [...filtered].sort((a, b) => {
+    return [...rows].sort((a, b) => {
       const dir = sort.direction === "asc" ? 1 : -1;
       if (sort.key === "amount") return (a.amountMinor - b.amountMinor) * dir;
       return a.reference.localeCompare(b.reference) * dir;
     });
-  }, [rows, search, status, provider, sort]);
+  }, [rows, sort]);
 
-  const activeFilterCount = (search ? 1 : 0) + (status ? 1 : 0) + (provider ? 1 : 0);
+  const activeFilterCount = (search || typed ? 1 : 0) + (status ? 1 : 0) + (provider ? 1 : 0);
   const query = [
     search ? `search=${search}` : null,
     status ? `status=${status}` : null,
@@ -183,10 +220,13 @@ export function PaymentsTable({
     .join("&");
 
   function clearFilters() {
-    setSearch("");
-    setStatus("");
-    setProvider("");
+    setSearchText("");
+    setSentSearch("");
+    router.replace(paymentsListHref({}));
   }
+
+  const total = totalAll ?? rows?.length ?? 0;
+  const matching = matchingCount ?? visible.length;
 
   // RBAC-06: the denied panel renders identical copy whether or not any
   // payment exists — no order reference, learner name, or amount leaks.
@@ -197,7 +237,7 @@ export function PaymentsTable({
       : ({
           status: "empty",
           activeFilterCount,
-          totalWithoutFilters: rows?.length,
+          totalWithoutFilters: total,
         } as const);
 
   return (
@@ -211,8 +251,8 @@ export function PaymentsTable({
       getRowLabel={(r) => r.reference}
       getRowHref={(r) => `/staff/payments/${r.id}`}
       primaryColumnKey="order"
-      shownCount={denied ? undefined : visible.length}
-      totalCount={denied ? undefined : rows?.length}
+      shownCount={denied ? undefined : matching}
+      totalCount={denied ? undefined : total}
       // §6 — every row originates from checkout or a manual confirmation;
       // there is no blank-slate payment to create, so no `onCreate` is passed
       // and the default "Create one to get started" copy is overridden.
@@ -223,19 +263,21 @@ export function PaymentsTable({
           name: "status",
           label: "Status",
           value: status,
+          // Counts of every order in scope. A status nobody has is left out,
+          // except the tab that is open, so the open tab never disappears.
           options: [
-            { value: "", label: "All", count: rows?.length ?? 0 },
+            { value: "", label: "All", count: total },
             ...STATUS_TABS.map((tab) => ({
               ...tab,
-              count: rows?.filter((r) => r.status === tab.value).length ?? 0,
-            })).filter((tab) => tab.count > 0),
+              count: statusCounts?.[tab.value] ?? 0,
+            })).filter((tab) => tab.count > 0 || tab.value === status),
           ],
         },
         {
           kind: "search",
           name: "search",
           label: "Search",
-          value: search,
+          value: searchText,
           placeholder: "Search by reference or learner",
         },
         {
@@ -248,9 +290,10 @@ export function PaymentsTable({
         },
       ]}
       onFilterChange={(name, value) => {
-        if (name === "search") setSearch(value);
-        else if (name === "status") setStatus(value);
-        else setProvider(value);
+        // A new tab or provider starts again at page 1 (the address carries no page).
+        if (name === "search") setSearchText(value);
+        else if (name === "status") go({ status: value, provider });
+        else go({ status, provider: value });
       }}
       activeQuery={activeFilterCount > 0 ? `?${query}` : undefined}
       onClearFilters={activeFilterCount > 0 ? clearFilters : undefined}

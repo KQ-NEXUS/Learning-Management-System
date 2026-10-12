@@ -25,6 +25,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { FieldError } from "@/components/primitives";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
 import { AssessmentLinkError, createLesson, lessonService, updateLesson } from "@/server/services/lesson-service";
 import { withFlash } from "@/lib/flash-notices";
@@ -97,6 +98,10 @@ function toFailure(error: unknown): SaveLessonState {
   // The assessment link was refused (another course, wrong type, archived).
   if (error instanceof AssessmentLinkError) {
     return { ok: false, errors: [{ name: "assessmentId", message: error.message }], message: null };
+  }
+  // W-14: a withdrawn lesson is restored before it is changed.
+  if (error instanceof RecordStateError) {
+    return { ok: false, errors: [], message: error.message };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
@@ -206,6 +211,10 @@ export async function withdrawLessonAction(
   try {
     await lessonService.archive(parsed.data.lessonId, parsed.data.reason);
   } catch (error) {
+    // W-14: a withdrawn lesson is not withdrawn again.
+    if (error instanceof RecordStateError) {
+      return { ok: false, message: error.message };
+    }
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
       return { ok: false, message: refusalMessage(error, "This lesson could not be withdrawn.") };
     }

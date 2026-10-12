@@ -68,6 +68,8 @@ async function seedPayment(args: {
   actualGatewayFeeMinor?: number | null;
   actualSchoolSettlementMinor?: number | null;
   withEnrolment?: boolean;
+  /** `null` seeds an order with no correlation id (seeded and legacy orders). */
+  correlationId?: string | null;
 } = {}) {
   const provider = args.provider ?? "PAYSTACK";
   const currency = args.currency ?? "NGN";
@@ -90,7 +92,7 @@ async function seedPayment(args: {
       gatewayFeeEstimateMinor: provider === "MANUAL" ? 0 : 1_500,
       schoolSettlementExpectedMinor: 100_000,
       idempotencyKey: unique("ORDER-IDEM"),
-      correlationId: unique("CORRELATION"),
+      correlationId: args.correlationId === undefined ? unique("CORRELATION") : args.correlationId,
       paidAt: new Date("2026-09-15T10:00:00.000Z"),
     },
   });
@@ -340,5 +342,48 @@ describe("reconciliation case tracer against real PostgreSQL", () => {
     ]).getCaseDetail(manualCase.caseId);
     expect(manualDetail?.amounts.gatewayFeeActual).toEqual({ kind: "NOT_APPLICABLE" });
     expect(manualDetail?.amounts.schoolSettlementActual).toEqual({ kind: "NOT_APPLICABLE" });
+  });
+
+  // G-01 (found in plan 15-19): an order made by checkout carries a correlation
+  // id, a seeded or legacy order does not. The audit-history query sent that
+  // null as an untyped parameter and Postgres refused it (42P18), so the staff
+  // case page showed "Something went wrong".
+  it("opens a case whose order has no correlation id and matches its history by target only", async () => {
+    const legacy = await seedPayment({ correlationId: null });
+    expect(legacy.order.correlationId).toBeNull();
+    const service = serviceFor([
+      { permission: "payments.view", scopeType: "COHORT", scopeId: legacy.cohortId },
+    ]);
+    const opened = await service.syncEvidenceAsSystem({
+      subject: "PAYMENT",
+      paymentAttemptId: legacy.attempt.id,
+      risk: "CAPTURED_MONEY",
+      evidence: { safeSummary: "Captured payment has no active enrolment" },
+    });
+    const own = await testDb.prisma.auditEvent.create({
+      data: {
+        actorType: "SYSTEM",
+        action: "payment.reconciliation_exception",
+        targetType: "PaymentAttempt",
+        targetId: legacy.attempt.id,
+        outcome: "SUCCESS",
+      },
+    });
+    // Unrelated row that also has no correlation id: "no id" must never be
+    // read as "the same id".
+    await testDb.prisma.auditEvent.create({
+      data: {
+        actorType: "SYSTEM",
+        action: "payment.reconciliation_exception",
+        targetType: "PaymentAttempt",
+        targetId: "some-other-attempt",
+        outcome: "SUCCESS",
+      },
+    });
+
+    const detail = await service.getCaseDetail(opened.caseId);
+    expect(detail?.order.id).toBe(legacy.order.id);
+    expect(detail?.operationalHistory.map((entry) => entry.id)).toEqual([own.id]);
+    expect(detail?.paymentTimeline.map((entry) => entry.correlationId)).toEqual([null]);
   });
 });

@@ -36,6 +36,7 @@ import { prisma } from "@/server/db";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createResourceService,
   type Delegate,
@@ -317,6 +318,12 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     audit: deps.audit,
     // Default `{ status: "ARCHIVED" }` is correct — `Assessment.status` is
     // `PublicationStatus`, same as Course (D-16 precedent, no `restoreData`).
+    // W-14: a second archive would add a second `assessment.archived` audit row for no change.
+    assertWritable: (operation, before) => {
+      if (operation === "archive" && before.status === "ARCHIVED") {
+        throw new RecordStateError("This assessment is already archived.");
+      }
+    },
   });
 
   // A-07: runs behind the same permission and scope as the update itself, so
@@ -449,6 +456,9 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
   )(async (input, ctx) => {
     const row = await deps.aggregate.findUnique({ where: { id: input.assessmentId } });
     if (!row) throw new AssessmentNotFoundError(input.assessmentId);
+    // W-13: an archived assessment went straight back to PUBLISHED here. Archiving is how an
+    // assessment is retired, so publishing is refused rather than used as a silent restore.
+    if (row.status === "ARCHIVED") throw new RecordStateError("An archived assessment cannot be published.");
 
     const failures = blockingFailures(evaluateAssessmentReadiness(toReadinessInput(row)));
     if (failures.length > 0) {

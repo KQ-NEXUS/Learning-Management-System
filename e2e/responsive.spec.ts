@@ -29,6 +29,7 @@ import {
   clearThrottles,
   contextFor,
   disconnectPrisma,
+  ensureExportHistoryRow,
   ensurePendingOrder,
   getPrisma,
   prepareAction,
@@ -57,6 +58,38 @@ const STAMP = Date.now().toString(36);
  * entry was seen in the evidence file.
  */
 const SCROLL_ALLOW_LIST: ScrollAllowance[] = [
+  // The five entries below were added when the staff screens with their own scrolling boxes joined the sweep
+  // (launch checklist W-07). They come first: the first matching entry gives a box its reason.
+  {
+    selector: 'div[role="region"][aria-label="Audit log table"]',
+    kind: "region",
+    reason:
+      "Audit log table (/staff/audit): the four columns (When, Who, Action, Target) hold a timestamp, an action name and a record identifier that each stay on one line, about 690 px in all, which is wider than the page column between 640 px and roughly 1040 px. There the table scrolls inside its own labelled, keyboard-focusable region. Below 640 px the same events are a stacked card list.",
+  },
+  {
+    selector: 'div[role="region"][aria-label="Reconciliation cases table"]',
+    kind: "region",
+    reason:
+      "Reconciliation case queue (/staff/reconciliation): eight columns (select, risk, case, learner and offer, provider, difference, owner, age) do not fit between 640 px and roughly 1100 px, so the table scrolls inside its own labelled, keyboard-focusable region. Below 640 px the same cases are a stacked card list.",
+  },
+  {
+    selector: 'div[role="region"][aria-label="Export history table"]',
+    kind: "region",
+    reason:
+      "Export history table (/staff/reports/exports): four fixed-width columns need 720 px, and around 1024 px the side navigation leaves the page column narrower than that, so there the table scrolls inside its own labelled, keyboard-focusable region. Below 768 px the same exports are a stacked card list.",
+  },
+  {
+    selector: 'div[role="region"][aria-label="Scrollable matching rows"]',
+    kind: "region",
+    reason:
+      "Matching rows of a report (/staff/reports/[dataset]): the columns are the dataset's export columns (eight or more) and each keeps its content on one line, so the table is wider than the page column at most sizes and scrolls inside its own labelled, keyboard-focusable region. Below 640 px the same rows are a stacked list.",
+  },
+  {
+    selector: 'div[role="region"][aria-label="Released results"]',
+    kind: "region",
+    reason:
+      "Released results of one learner (/staff/cohorts/[id]/learners/[enrolmentId]): five columns need 640 px. On a phone the page column is narrower than that, and from 1024 px the record layout gives 400 px to the side column, so the table scrolls inside its own labelled, keyboard-focusable region. This table has no stacked form.",
+  },
   {
     selector: 'div[role="region"][aria-label$=" table"]',
     kind: "region",
@@ -286,6 +319,8 @@ test.describe("responsive range", () => {
       test.setTimeout(180_000);
       if (PRIMARY.length === 0) return;
       fixtures = await resolveFixtures();
+      // The export history table is drawn only when the signed-in person has an export; a seeded database has none.
+      if (PRIMARY.some((screen) => screen.id === "staff-report-exports")) await ensureExportHistoryRow();
       if (PRIMARY.some((screen) => Object.values(screen.params ?? {}).includes("pendingOrderId"))) {
         await ensurePendingOrder(browser, baseURL ?? "http://localhost:3010", fixtures, JOURNEY.courseSlug);
       }

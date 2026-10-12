@@ -32,6 +32,7 @@ import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createResourceService,
   type Delegate,
@@ -544,6 +545,9 @@ export function createCohortService(deps: CohortServiceDeps) {
   }>("cohorts.manage", (input) => deps.toScope(input.id))(async (input, ctx) => {
     const current = await deps.delegate.findUnique({ where: { id: input.id } });
     if (!current) throw new CohortNotFoundError(input.id);
+    // W-13: cancelling withdrew the roster and released the seats; its title, dates and price
+    // are a record of what was offered and are no longer edited.
+    if (current.status === "CANCELLED") throw new RecordStateError("A cancelled cohort cannot be edited.");
     const expectedUpdatedAt = input.expectedUpdatedAt ?? current.updatedAt;
     if (current.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new StaleOrderError();
     const changesCourse = "courseId" in input.data;

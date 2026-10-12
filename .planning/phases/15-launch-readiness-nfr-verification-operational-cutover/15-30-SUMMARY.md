@@ -3,7 +3,7 @@ phase: 15-launch-readiness-nfr-verification-operational-cutover
 plan: 30
 subsystem: staging-run-nfr-02
 tags: [nfr-01, nfr-02, nfr-03, nfr-08, k6, playwright-probe, staging, netlify, neon, cors]
-status: in-progress
+status: complete
 
 requires:
   - "15-29 (staging branch, preview, seeded load, rotated passwords), 15-14 (k6 scripts, seed-load), 15-18 (probe), 15-17 (journey)"
@@ -11,7 +11,8 @@ provides:
   - "scripts/ops/staging-checks.ts: guarded read-only staging probes (verification-token count, connection sampling), 13 unit tests"
   - "PILOT=1 mode in the k6 pilot-load script (one tenth of the agreed load)"
   - "e2e/playwright.staging.config.ts and the tests \"staging journey\" and \"staging quiet resend\""
-  - "evidence/staging-pilot.json: k6 pilot, probe, quiet-resend, connection samples, journey result"
+  - "evidence/staging-pilot.json: k6 pilot, probe, quiet-resend, connection samples, journey result (passed on the eighth attempt, seven failed attempts kept as history)"
+  - "e2e/support/upload-diagnostic.ts: a gated reader of the storage service's answer to the journey's upload, off unless STAGING_UPLOAD_DIAG=1"
   - "evidence/staging-load.json: the signed k6 run at 150 learners and 10 staff, with connection samples, slowest requests and the owner's decision"
   - "evidence/staging-probe.json: browser time-to-usable for 12 of 13 views under the full load, with cold samples; the lesson view is a recorded gap"
 affects: ["15-31"]
@@ -22,6 +23,7 @@ key-files:
     - tests/staging-checks.test.ts
     - e2e/playwright.staging.config.ts
     - e2e/support/staging-setup.ts
+    - e2e/support/upload-diagnostic.ts
     - .planning/phases/15-launch-readiness-nfr-verification-operational-cutover/evidence/staging-pilot.json
     - .planning/phases/15-launch-readiness-nfr-verification-operational-cutover/evidence/staging-load.json
     - .planning/phases/15-launch-readiness-nfr-verification-operational-cutover/evidence/staging-probe.json
@@ -34,31 +36,58 @@ key-files:
 decisions:
   - "The pilot's k6 p75 values are taken from k6's own threshold output; the summary export does not carry p75"
   - "The staging journey reuses the local journey's steps through one shared function, so both prove the same steps"
-  - "The upload failure on the preview was not worked around in the test: the browser's direct upload is the real path, and the fix is a storage CORS setting the owner controls"
+  - "The upload failure on the preview was never worked around in the test: the browser's direct upload is the real path. It had two causes, both in settings the owner controls: the bucket's CORS rule, then an empty S3_ACCESS_KEY_ID on the preview"
   - "The full run's probe used two browser processes side by side (learner views, staff views) so that every sample fell inside the 10-minute hold; one serial pass was estimated at about 12.5 minutes on the preview"
   - "The lesson view's missing browser measurement under load is left as a gap in the evidence (12 views listed, the plan's check fails) instead of being filled with the no-load measurement"
   - "The full run was done once and not repeated; the lesson gap goes to plan 15-31"
-  - "After the CORS change the staging journey still fails at the upload; the plan stays in-progress and the upload fault is reported, not worked around in the test and not fixed in product code inside this plan"
+  - "Each time the staging journey failed at the upload (after the CORS change, after the checksum fix in the owner's commit 9be7af3, after the owner's first Netlify change) the run stopped, the trace was read and the fault was reported; nothing was worked around in the test and no product code was changed inside this plan"
+  - "The empty-body checksum in the upload link (fixed in 9be7af3) was a real defect but not the cause of the refused upload; the cause was an empty S3_ACCESS_KEY_ID on the preview, read from the storage service's own answer"
+  - "The storage service's answer was read with a gated diagnostic in the test files (off by default); a run with it on is never counted as a pass"
+  - "journeyPassed was set to true only after a real, un-routed browser upload passed with the diagnostic off (eighth attempt, learner 144)"
+  - "The plan is marked complete with open items carried to plan 15-31: the lesson view's browser number under load (Task 3's automated check still exits 1) and the unassisted manual journey by a person (D-08)"
 
 requirements-completed: []
 
 actuals:
-  tokens: 30100
-  tasks: 0
+  tokens: 35700
+  tasks: 3
   commits: 0
 
 metrics:
-  duration: "about 75 min for Task 1, about 45 min for Task 3 and about 15 min for the close-out session; the staging journey and the human check are still open"
-  completed: null
+  duration: "about 75 min for Task 1, about 45 min for Task 3, about 15 min for the first close-out session, about 15 min for the second, about 10 min for the upload diagnostic, about 15 min for the third and about 20 min for the fourth; about 3 h 15 min in all"
+  completed: 2026-10-11
 ---
 
-# Phase 15 Plan 30: Staging run for NFR-02 (NOT complete: the staging journey still fails at the upload)
+# Phase 15 Plan 30: Staging run for NFR-02 Summary
 
-**Status: in-progress. The plan is not complete, for three reasons: (1) the staging journey still fails at the assignment upload, after the bucket's CORS setting was corrected, so Task 1's check exits 1; (2) the lesson view has no browser measurement under load, so Task 3's check exits 1; (3) the unassisted manual journey (D-08) has not been done by a person.**
+**One staging run at 150 learners and 10 staff with no failed request and every k6 threshold passed, 12 of 13 views measured in the browser under that load and all within 2,500 ms, `after()` proven on Netlify, and the staging journey passed end to end on the deploy preview at the eighth attempt, once the storage keys reached the preview.**
+
+**Status: complete, with open items that plan 15-31 must close. Read these before treating any requirement as signed (`requirements-completed` is empty on purpose):**
+
+| | Open item | Goes to |
+| --- | --- | --- |
+| a | **The lesson view has no browser measurement under load.** Task 3's automated check still exits 1 (12 views listed, not 13). Not re-measured; no load was run after the full run. | Plan 15-31: a recorded waiver, or one more loaded measurement with a new owner approval |
+| b | **The unassisted manual journey (D-08) has not been done by a person.** The test passing is not a substitute. | A person who has not used the product, on the preview |
+| c | **Owner checks not reported back:** Netlify Team usage after the full run, the Neon compute allowance (68.0 compute-unit hours used by 11 October, 07:11 UTC), the UptimeRobot log for 07:26 to 07:39 UTC. | Owner |
+| d | **Two slow spells in the full run have no established cause** (07:28:22 to 07:28:32 and 07:37:51 to 07:37:53 UTC). | Plan 15-31, Netlify function log |
+| e | **The signed load numbers were measured on `9a68b7a`; the preview now serves `9be7af3`.** The storage fix does not touch page rendering, so no difference is expected. That is reasoning, not a measurement. | Plan 15-31 to accept or re-measure |
+| f | **Whether the Production context in Netlify has the storage keys is not verified.** The fault that blocked the preview all morning could be on the live site too. | Owner, launch checklist |
+| g | **Suggested hardening, not done (product code):** `makeClient` in `src/server/services/storage-service.ts` should throw a named error when `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is missing or empty, instead of signing with an empty key. | Owner of storage-service |
+| h | **CI is red on `9be7af3`** ("Integration tests" shards 2 and 4, "Unit and component tests"). As read by the orchestrator from the CI logs, not by this executor: the workflow starts no MinIO, so storage tests cannot connect; the unit job's `--exclude` does not keep integration files out; and the known `ticket-phase-invariants` nav test fails. The same failures existed on `9a68b7a`. | Owner of the CI workflow |
+
+**Latest (fourth close-out session, 2026-10-11, 09:26 to 09:33 UTC): the staging journey passed.** The owner reported that the earlier Netlify change "did not save before"; `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` were then saved for the preview, the cache cleared and the site redeployed ("Published"). GitHub shows a new "Deploy Preview ready!" at 09:24:07 UTC, still on commit `9be7af3`. The eighth attempt (headed Chromium, learner 144, diagnostic off, a real un-routed upload) passed all eleven steps in 2.3 minutes: **the upload link now carries a 32-character access key id and the storage service answered the browser's PUT with 200;** grading, completion, the certificate download and the public verification passed. No retry was needed, nothing was worked around and no product code was changed. Task 1's check now exits 0. See "Fourth close-out session" below.
+
+**The sections from here to "Fourth close-out session" are the record of the earlier sessions, kept as written at the time. Where they say "in-progress", "still fails" or "cause not established", read them as history: the cause was an empty `S3_ACCESS_KEY_ID` on the preview and it is fixed there.**
+
+**Earlier (third close-out session, 2026-10-11, 09:01 to 09:08 UTC): the owner's Netlify change has not reached the preview; the upload still fails for the same reason.** The owner reported setting `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` for the Deploy Previews context and retrying the deploy, and GitHub shows a new "Deploy Preview ready!" at 09:00:47 UTC. The staging journey (sixth attempt, headed Chromium, learner 146, diagnostic off, a real un-routed upload) failed at the upload again: **the link the preview issued at 09:04:57 UTC is still signed with an access key id of length 0.** One diagnostic run (seventh attempt, learner 145) read the storage answer: **400 `InvalidArgument`, "Credential access key has length 0, should be 32"**, the same as before the change. Nothing was worked around and no product code was changed. See "Third close-out session" below.
+
+**Earlier (second close-out session, 08:34 to 08:39 UTC): the checksum fix did not make the upload work.** The preview serves the owner's commit `9be7af3`, and the upload link it issues no longer carries a checksum parameter, so the fix is deployed and does what it was meant to do. The fourth attempt (learner 148) still failed at the same step. The cause was not established in that session; it was read in the "Upload diagnostic" session that followed (an empty access key id).
+
+**Status as it stood at 09:08 UTC (superseded by the top of this file): in-progress. The plan is not complete, for three reasons: (1) the staging journey still fails at the assignment upload, after the bucket's CORS setting was corrected, after the checksum fix was deployed and after the owner's change to the Netlify variables, so Task 1's check exits 1; (2) the lesson view has no browser measurement under load, so Task 3's check exits 1; (3) the unassisted manual journey (D-08) has not been done by a person.**
 
 **What does hold: the full staging run (Task 3) was done once on 2026-10-11, 07:26 to 07:39 UTC, at 150 learners and 10 staff: 10,599 requests, none failed, every k6 threshold passed (highest page p75 1,313 ms against 2,500 ms). The browser probe measured 12 of the 13 core views under that load and all 12 passed (highest warm p75 928 ms). In Task 1 the load pilot, the browser probe and the quiet-resend check passed. The local "full journey" passed after the refactor.**
 
-**New finding from the close-out session (07:48 to 07:56 UTC), more important than the journey result itself: uploads to the hosted storage bucket fail for a reason that is not CORS.** The CORS setting is now right (the preflight answers 204 for the preview's address), yet the browser's upload is still refused. The probable cause is in the product's upload link (it carries the checksum of an empty file), which would affect uploads from the production address in the same way. It is not confirmed, and it is not fixed here. See "Close-out session" below.
+**New finding from the close-out session (07:48 to 07:56 UTC), more important than the journey result itself: uploads to the hosted storage bucket fail for a reason that is not CORS.** The CORS setting is now right (the preflight answers 204 for the preview's address), yet the browser's upload is still refused. The probable cause named then was the product's upload link (it carried the checksum of an empty file). **That was tested in the second close-out session and did not hold up:** with the checksum gone from the link, the upload is still refused. See "Close-out session" and "Second close-out session" below.
 
 Nothing is committed (owner rule). No connection string, host name, key, token or password is in this file or in the evidence file.
 
@@ -66,7 +95,7 @@ Nothing is committed (owner rule). No connection string, host name, key, token o
 
 | Task | Result |
 | --- | --- |
-| 1. Pilot at one tenth, probe, staging journey, quiet resend | Run. k6 pilot passed, probe passed, quiet resend passed. **Journey failed at "submit" three times out of three: once on the test's own first assertion, once on the bucket's CORS setting (since corrected), and once, after the correction, on the upload itself (probable product fault in the upload link).** Verify command exits 1 because `journeyPassed` is false. |
+| 1. Pilot at one tenth, probe, staging journey, quiet resend | **Done.** k6 pilot passed, probe passed, quiet resend passed. **Journey passed on the eighth attempt (09:27 to 09:30 UTC, learner 144, a real un-routed upload).** The seven before it failed: once on the test's own first assertion, then six times at "submit": once on the bucket's CORS setting and five times because the upload link was signed with an empty access key id (the preview's functions had no `S3_ACCESS_KEY_ID`). Verify command exits 0. |
 | 2. Owner decision on the full run | **Given: proceed** ("Run the full test"). Recorded verbatim below. |
 | 3. Full run | **Run once.** k6: all 15 thresholds passed, 0 failures. Probe: 12 of 13 views measured under load, all 12 within 2,500 ms. **Lesson view not measured in the browser under load (harness fault).** Verify command exits 1 because 12 views are listed, not 13. Human check not done. |
 
@@ -227,6 +256,235 @@ Visible (headed) Chromium, `STAGING_JOURNEY_LEARNER=149`, same command and confi
 ### Local "full journey" after the refactor (07:53:25 to 07:54:41 UTC): passed
 
 `e2e/journey.spec.ts` "full journey", Chromium, headed, once: **1 passed, 34.3 s** (register, verify by emailed link, sign in, enrol, pay, learn, attend, upload, grade, complete, certificate download, public verification). Local Docker Postgres database `licence_test` (30 of 30 migrations; `assert-local-db` answered "database target is local" before the run), a throwaway local MinIO container, the existing production build (no file under `src` or `prisma` is newer than it), the local email capture server. Neon was not used. This closes deviation 7's open point: the shared function the two journeys use works end to end where storage accepts the upload.
+
+## Second close-out session: checksum fix deployed, upload still refused (08:34 to 08:39 UTC)
+
+Between the sessions the orchestrator changed `makeClient` in `src/server/services/storage-service.ts` (it now sets `requestChecksumCalculation` and `responseChecksumValidation` to `"WHEN_REQUIRED"`) and added `tests/storage-presign-checksum.test.ts`. The owner committed and pushed it as `9be7af3` "fix(storage): stop signing an empty-body checksum into upload links". None of that is this executor's work or commit.
+
+### Which build the preview served
+
+| Check (08:34:59 UTC) | Result |
+| --- | --- |
+| Head of pull request 16 on GitHub | `9be7af331a431e9c75b34e912ee4c19744d59f00`, the same as the local `LAUNCH` head |
+| Netlify checks for that commit | `netlify/kqnexuslms/deploy-preview` pass ("Deploy Preview ready!"), "Header rules" pass, "Redirect rules" pass |
+| `/api/health` on the preview | 200 |
+| Upload link issued by the preview at 08:37:31 UTC (read from the browser trace) | **no checksum parameter** |
+
+The deployed commit was not read from Netlify itself (no CLI, no token). The last row is the direct sign: only the new build issues a link without the checksum. The link's query parameter names were `X-Amz-Algorithm`, `X-Amz-Content-Sha256` (value `UNSIGNED-PAYLOAD`), `X-Amz-Credential`, `X-Amz-Date`, `X-Amz-Expires` (900), `X-Amz-Signature`, `X-Amz-SignedHeaders` (`host`) and `x-id`. The link itself was not printed or written anywhere by this session.
+
+Not part of this plan, but seen in the same check: on `9be7af3` the GitHub checks "Integration tests (shard 2 of 4)" and "(shard 4 of 4)" had failed and "Unit and component tests" was still running. The cause was not read.
+
+Before the journey the Neon API again confirmed that the pooled URL, the direct URL and both allow-listed hosts belong to branch `br-icy-river-axqpwts7`, which is not the default branch.
+
+### Staging journey, fourth attempt (08:35:58 to 08:37:56 UTC): failed at the upload
+
+Visible (headed) Chromium, `STAGING_JOURNEY_LEARNER=148`, same command and configuration as before with one addition (`--trace on`, so that the link's parameters could be read had the run passed), 1.3 minutes.
+
+| Step | Result |
+| --- | --- |
+| Sign in through the form (Load Learner 148) | passed |
+| Enrol: choose the cohort, reach the order page | passed |
+| Pay: staff confirm the manual payment; `run-task drain-domain-events --target staging` | passed |
+| Learn: open the course, complete both reading lessons | passed |
+| Attend: staff mark the learner present | passed |
+| **Submit: upload the assignment** | **failed**: the receipt "Submitted — receipt" never appeared (the test waited 20 s) |
+| Grade and release | not reached |
+| Complete, certificate issued | not reached |
+| Certificate download | not reached |
+| Public verification | not reached |
+
+### What the trace shows
+
+- One `PUT` from the page to the storage service at 08:37:31.599 UTC, request header `content-type: text/plain`. The browser recorded `net::ERR_FAILED` with no status and no response headers.
+- Browser console: "Access to fetch ... has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource." The same wording as the third attempt: the preflight passed and the answer to the PUT itself has no CORS header.
+- The link is a plain presigned `PutObject` (SigV4, only the `host` header signed, unsigned payload, bucket name in the host name). There is no checksum parameter of any kind.
+- A preflight sent after the run (08:38:44 UTC) to the same object address, for the preview's origin, answered **204** with the preview's origin, method PUT and header content-type. So the CORS setting is still right.
+
+### What this means
+
+- **The fix in `9be7af3` is deployed and does what it says, and it did not make the upload work.** The "probable cause" of the first close-out session is therefore wrong or incomplete. That session's sentences about the checksum stay in this file as history; read them with this correction.
+- **The cause is not established.** The storage service's answer to the PUT (its status and error code) has still not been read by anyone: the browser hides it because the answer has no CORS header, and this session did not replay the request outside the browser (not permitted in the earlier session, and not attempted here).
+- Candidates that fit what was seen, **none of them tested**: the storage credentials set on the preview being refused (a wrong secret, or an API token without write permission on this bucket); a bucket or endpoint value on the preview that does not match the bucket whose CORS setting was corrected. A storage service that refuses a request for any of these reasons answers without CORS headers (shown in the first close-out session with an unsigned PUT), so all of them look identical in the browser.
+- **How to find out:** open the preview in a browser with the developer tools' Network tab, try one upload, and read the status code of the refused PUT (the tab normally shows the status even when the page may not read the answer); or make one server-side storage call with the preview's credentials and read the error. Nothing server-side that writes to storage has been reached on the preview either (the certificate step comes after the upload).
+- Whether uploads from the production address fail is **not known**. The earlier statement that they would fail "in the same way" rested on the checksum explanation.
+- The checksum fix is still worth keeping: a link that carries the checksum of an empty file is wrong for any non-empty upload on a storage service that checks it.
+- The next staging journey needs another learner: `STAGING_JOURNEY_LEARNER=147` (learners 148, 149 and 150 are part-way through the journey course).
+
+Per the instruction for this session, the run stopped here: no retry, no change to the test, no change to product code, no load.
+
+## Upload diagnostic: the storage service's answer was read (08:46 to 08:49 UTC)
+
+**Cause found: the upload link is signed with an EMPTY access key id.** The storage service answers the PUT with **400 `InvalidArgument`, "Credential access key has length 0, should be 32"**. The preview's server has no value in `S3_ACCESS_KEY_ID`.
+
+### How it was read
+
+The owner, through the orchestrator, authorised reading the answer from Playwright's Node side. A small diagnostic was added to the test files, off by default (`STAGING_UPLOAD_DIAG=1` turns it on): `e2e/support/upload-diagnostic.ts`, called once from the "staging journey" test in `e2e/journey.spec.ts`. With the switch on, the journey's own PUT to the storage host is sent from Node (`route.fetch()`, where CORS does not apply) and handed back to the page unchanged. It records the status, header names, whether `Access-Control-Allow-Origin` is present, the content type, and only `<Code>` and `<Message>` of an error body, masked. It never records the link, its values, the host or the key path. Without the switch the journey is unchanged. No file under `src/` was touched.
+
+Before the run: pull request 16 head and local `LAUNCH` head both `9be7af3`; `/api/health` 200; the Neon API confirmed the pooled URL, the direct URL and both allow-listed hosts are on `br-icy-river-axqpwts7`, not the default branch.
+
+### Staging journey, fifth attempt (08:46:34 to 08:49:23 UTC, learner 147, headed Chromium, diagnostic on): failed at the upload
+
+The six steps before the upload passed again (sign in, enrol, pay, open the course, both reading lessons, attendance). One run, no retry, no load.
+
+| Fact about the PUT (08:48:54 UTC) | Value |
+| --- | --- |
+| Status | **400** |
+| Error code | **`InvalidArgument`** |
+| Error message | **"Credential access key has length 0, should be 32"** |
+| Answer content type, size | `application/xml`, 148 bytes |
+| Answer header names | `cf-ray`, `connection`, `content-length`, `content-type`, `date`, `server` |
+| `Access-Control-Allow-Origin` on the answer | absent (which is why the browser hid all of the above) |
+| Request header names the browser sent | `accept`, `accept-language`, `content-type` (`text/plain`), `origin`, `referer`, `sec-ch-ua`, `sec-ch-ua-mobile`, `sec-ch-ua-platform`, `user-agent` |
+| Request body | 42 bytes |
+| Link query parameter names | `X-Amz-Algorithm`, `X-Amz-Content-Sha256`, `X-Amz-Credential`, `X-Amz-Date`, `X-Amz-Expires`, `X-Amz-Signature`, `X-Amz-SignedHeaders` (`host`), `x-id`; no checksum parameter |
+
+### What it means
+
+- The access key id part of `X-Amz-Credential` in the link is empty. `makeClient` in `src/server/services/storage-service.ts` reads `process.env.S3_ACCESS_KEY_ID ?? ""`, so a missing or empty variable signs links with an empty key instead of failing. The storage service refuses at that first check, before it looks at the signature, the bucket or the token's permissions.
+- **It is a configuration fault on the deploy preview, not the CORS setting and not the checksum.** The bucket name and the endpoint are set on the preview (the link has the right host shape, and `S3_BUCKET` missing would have thrown). `S3_ACCESS_KEY_ID` is not reaching the preview's functions: it is missing, empty, saved under another name, or not scoped to Deploy Previews or to Functions in Netlify.
+- **Not known:** whether `S3_SECRET_ACCESS_KEY` is right on the preview, and whether the token may write to the bucket. The storage service stops at the empty key, so neither was tested. Whether the production context has the same gap is not known either; a variable set only for Production would explain a preview-only fault.
+- The CORS setting is fine and needs no change: the browser's request carries only `content-type` beyond the standard headers, which the rule allows.
+- A weakness in repository code, **not changed here**: the `?? ""` fallbacks for the access key and the secret in `makeClient` hide a missing variable. Suggested fix for the owner of storage-service: throw a clear error ("S3_ACCESS_KEY_ID is not configured.") when either is missing or empty, as `S3_BUCKET` already does, so the learner's request for an upload link fails on the server with a named cause.
+- This run does not prove an upload works. `journeyPassed` stays false.
+
+### What the owner must change
+
+1. In Netlify, Site configuration, Environment variables: open `S3_ACCESS_KEY_ID`. It must hold the storage API token's Access Key ID (32 characters), have the scope **Functions** (and Builds), and have a value for the **Deploy Previews** context (or "same value for all deploy contexts"). Check `S3_SECRET_ACCESS_KEY` the same way, and that both come from the same token, which has object read and write on the bucket named in `S3_BUCKET`.
+2. Check the Production context has both values too.
+3. Trigger a new deploy of the preview (environment variable changes only reach a new deploy).
+4. Then one staging journey with `STAGING_JOURNEY_LEARNER=146`, diagnostic off (learners 147 to 150 are part-way through the journey course).
+
+## Third close-out session: owner's Netlify change made, key still empty (09:01 to 09:08 UTC)
+
+The owner reported ("Done", 2026-10-11) that `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` were set for the Deploy Previews context in Netlify and that the deploy was retried.
+
+### Checks before the run
+
+| Check | Result |
+| --- | --- |
+| Head of pull request 16 on GitHub, and local `LAUNCH` head | `9be7af3` |
+| Netlify status on that commit (GitHub) | `netlify/kqnexuslms/deploy-preview` success, "Deploy Preview ready!", **reported at 09:00:47 UTC** (the one before it at 08:33:07 UTC). So a new deploy did finish after the owner's change. |
+| `/api/health` on the preview | 200 |
+| Neon API host check | pooled URL, direct URL and both allow-listed hosts on `br-icy-river-axqpwts7`, not the default branch |
+
+Which variables the new deploy carried cannot be read from this machine (no Netlify CLI, no token).
+
+### Staging journey, sixth attempt (09:03:25 to 09:05:22 UTC, learner 146, headed Chromium, diagnostic OFF): failed at the upload
+
+A real, un-routed browser upload. Same command and configuration as before, with `--trace on`. 1.4 minutes.
+
+| Step | Result |
+| --- | --- |
+| Sign in through the form (Load Learner 146) | passed |
+| Enrol: choose the cohort, reach the order page | passed |
+| Pay: staff confirm the manual payment; `run-task drain-domain-events --target staging` | passed |
+| Learn: open the course, complete both reading lessons | passed |
+| Attend: staff mark the learner present | passed |
+| **Submit: upload the assignment** | **failed**: the receipt "Submitted — receipt" never appeared (the test waited 20 s) |
+| Grade and release | not reached |
+| Complete, certificate issued | not reached |
+| Certificate download | not reached |
+| Public verification | not reached |
+
+From the trace (the link was not printed or written; only the length of one part of it was read):
+
+- One `PUT` to the storage service at 09:04:57.543 UTC; the browser recorded `net::ERR_FAILED` and the console showed the CORS wording of the earlier attempts.
+- **The access key id part of `X-Amz-Credential` in the link has length 0.** The rest of the credential scope is present (`.../auto/s3/aws4_request`), and the parameter names are the same eight as before, with no checksum.
+
+So the link was signed by a server that still has no `S3_ACCESS_KEY_ID`.
+
+### Staging journey, seventh attempt (09:06:13 to 09:08:00 UTC, learner 145, headed Chromium, `STAGING_UPLOAD_DIAG=1`): failed at the upload
+
+The one diagnostic run the instruction for this session allowed. The six steps before the upload passed. 1.4 minutes.
+
+| Fact about the PUT (09:07:34 UTC) | Value |
+| --- | --- |
+| Status | **400** |
+| Error code | **`InvalidArgument`** |
+| Error message | **"Credential access key has length 0, should be 32"** |
+| Answer content type, size | `application/xml`, 148 bytes |
+| Answer header names | `cf-ray`, `connection`, `content-length`, `content-type`, `date`, `server` |
+| `Access-Control-Allow-Origin` on the answer | absent |
+| Request | `content-type: text/plain`, 42 bytes, signed headers `host` |
+
+This is the same answer as the fifth attempt, field for field.
+
+### What it means
+
+- **The cause is unchanged: `S3_ACCESS_KEY_ID` does not reach the functions of the deploy preview.** The owner's change and the new deploy did not alter what the server signs with.
+- Why the change did not take effect is **not known** from here. Things that fit, none of them checked (they are all inside Netlify): the variable was saved under a slightly different name (the code reads exactly `S3_ACCESS_KEY_ID`); its scopes do not include Functions; the value was entered for another context, or the Deploy Previews value was left empty; the retried deploy reused the settings of the old deploy instead of reading the new ones.
+- **Still not tested:** whether `S3_SECRET_ACCESS_KEY` is right, whether the token may write to the bucket, and whether the Production context has the keys. The storage service stops at the empty key, so none of these has ever been reached.
+- Upload, grade, completion, certificate download and public verification have still never been reached on the preview.
+- `journeyPassed` stays false. Per the instruction for this session the run stopped here: no further retry, no change to the test, no change to product code, no load.
+
+### What the owner must change
+
+1. In Netlify, open the site `kqnexuslms`, then Site configuration, Environment variables. Find the storage key variable and check three things:
+   - **Name:** exactly `S3_ACCESS_KEY_ID` (capital letters, underscores, no space at the end). The same for `S3_SECRET_ACCESS_KEY`.
+   - **Scopes:** "All scopes", or a list that includes **Functions**. A variable scoped only to Builds is not visible to the running site.
+   - **Values:** either "Same value for all deploy contexts", or a value in the **Deploy Previews** row. The Access Key ID is 32 characters long; paste it with no spaces or quotes.
+2. Do the same check for `S3_SECRET_ACCESS_KEY`, and make sure both come from the same storage API token, one that can read and write objects in the bucket named in `S3_BUCKET`.
+3. Start a **new build**, not a retry of the old one: Deploys, open the latest Deploy Preview for pull request 16, "Retry deploy", **"Clear cache and deploy site"**. Or push any commit to `LAUNCH`.
+4. Tell the orchestrator. The next run is one staging journey with `STAGING_JOURNEY_LEARNER=144`, diagnostic off (learners 145 to 150 are part-way through the journey course).
+
+A quicker way for the owner to see the result without a full journey: after the new deploy, open the preview, sign in as a learner with an assignment, try one upload with the browser's Network tab open, and look at the status of the request to the storage host. 200 means the key is there.
+
+## Fourth close-out session: keys saved, new deploy, journey passed (09:26 to 09:33 UTC)
+
+The owner reported (2026-10-11) that the earlier Netlify change "did not save before", and that `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` are now saved for the preview, the cache was cleared and the site redeployed ("Published").
+
+### Checks before the run (09:26 UTC)
+
+| Check | Result |
+| --- | --- |
+| Head of pull request 16 on GitHub, and local `LAUNCH` head | `9be7af3` |
+| Netlify status on that commit (GitHub) | `netlify/kqnexuslms/deploy-preview` success, "Deploy Preview ready!", **reported at 09:24:07 UTC** (the ones before it at 09:00:47 and 08:33:07 UTC). Header rules and Redirect rules pass. |
+| `/api/health` on the preview | 200 |
+| Neon API host check | pooled URL, direct URL and both allow-listed hosts on `br-icy-river-axqpwts7` (`staging-phase 15`), not the default branch |
+| Other GitHub checks on `9be7af3` (not part of this plan) | "Integration tests" shards 2 and 4 and "Unit and component tests" fail; shards 1 and 3, "Lint and type check" and "Dependency audit" pass. See open item h. |
+
+Which variables the new deploy carries cannot be read from this machine (no Netlify CLI, no token); the run below is the evidence.
+
+### Staging journey, eighth attempt (09:27:26 to 09:30:31 UTC, learner 144, headed Chromium, diagnostic OFF): passed
+
+A real, un-routed browser upload: `STAGING_UPLOAD_DIAG` was not set, so the journey's PUT went from the page straight to the storage service. Same command and configuration as the sixth attempt (`--trace on`). Playwright: **1 passed**, the test 2.3 minutes, the whole command 2.8 minutes, exit 0, no retry.
+
+| Step | Result | Time |
+| --- | --- | --- |
+| Sign in through the form (Load Learner 144) | passed | 8 s |
+| Enrol: choose the cohort, reach the order page | passed | 3 s |
+| Pay: staff confirm the manual payment; `run-task drain-domain-events --target staging` | passed | 42 s |
+| Learn: open the course | passed | 6 s |
+| Learn: complete both reading lessons | passed | 4 s |
+| Attend: staff mark the learner present | passed | 4 s |
+| **Submit: upload the assignment** | **passed**: the receipt "Submitted — receipt" appeared | 7 s |
+| Grade and release | passed | 6 s |
+| Complete: background work drained until the certificate is on the dashboard | passed | 45 s |
+| Certificate download through a short-lived link | passed | 6 s |
+| Public verification ("This certificate is valid.") | passed | 3 s |
+
+From the trace (no link was printed or written; only names, statuses and the length of one part were read):
+
+| Fact | Value |
+| --- | --- |
+| Upload: `PUT` to the storage service at 09:29:19.470 UTC | **status 200**, request `content-type: text/plain`, `Access-Control-Allow-Origin` present on the answer |
+| Access key id part of `X-Amz-Credential` in the upload link | **length 32** (it was 0 in the sixth attempt); scope `.../auto/s3/aws4_request` |
+| Upload link parameter names | the same eight as before, no checksum parameter |
+| Certificate download route at 09:30:16.570 UTC | 302 to a presigned link |
+| Presigned `GET` at 09:30:20.115 UTC | 200; the test asserted `application/pdf` and the `%PDF-` file header; access key id length 32 |
+
+One oddity, not looked into: the trace's entry for the upload carries status 200 and also the failure text `net::ERR_ABORTED`. The step is counted as passed on the page's own evidence: the receipt appears only after the server has verified the stored file, and grading and completion depend on that submission.
+
+### What it means
+
+- **The storage keys now reach the preview's functions, belong together and may read and write the bucket.** That closes the three things the third session listed as "still not tested" for the preview: the secret matches the key (a wrong one would have answered `SignatureDoesNotMatch`), and the token can write (the upload) and read (the server's check of the stored file, the certificate download).
+- **Upload, grade, completion, certificate download and public verification have now each been reached and passed on the preview, once.**
+- Which request wrote the certificate PDF to storage was not traced. The task runner on this machine had no `S3_*` variables in its environment (names checked, values not read), so the write is taken to have been made by the preview's own functions. That is an inference.
+- The cause of the fault is confirmed by the fix: nothing changed between the seventh attempt (09:06 UTC, failed) and the eighth (09:27 UTC, passed) except the owner's Netlify settings and a new deploy of the same commit. No code change was needed.
+- **Not shown by this run:** anything about the Production context (open item f), and it is one run by a test, not a person's unassisted journey (open item b).
+- The diagnostic was not needed and was not run in this session. It stays in `e2e/support/upload-diagnostic.ts`, off by default.
+
+No load was run and nothing was re-measured in this session.
 
 ## Task 3: the full run (07:26 to 07:39 UTC)
 
@@ -414,9 +672,64 @@ No file outside the plan's list was changed in Task 3. Scratch scripts for the r
 
 No repository file other than this summary, `evidence/staging-pilot.json` and `deferred-items.md` was changed in the close-out session.
 
+### Deviations in the second close-out session
+
+**24. `15-STAGING.md` and `deferred-items.md` (both outside the plan's file list) were edited:** the Preview section now names the commit served (`9be7af3`) against the commit the load run measured (`9a68b7a`) and notes the open upload fault; the upload row in `deferred-items.md` carries the fix and its result.
+
+**25. The journey ran with `--trace on`** (the configuration keeps a trace only on failure), so that the upload link's parameter names could be read on a passing run. The run failed, so a trace would have been kept anyway. The trace is in the git-ignored `test-results/` folder and contains the upload link, which expired 15 minutes after it was issued.
+
+**26. One diagnostic request beyond the journey was sent to the bucket:** a CORS preflight (OPTIONS, no credentials, writes nothing) to the address of the failed upload. It answered 204.
+
+**27. The upload request was not replayed outside the browser,** so the storage service's real answer is still unread.
+
+**28. No state command was run** (`state.record-metric`, `state.add-decision`, `state.record-session`, `roadmap.update-plan-progress`): they were allowed only if the plan were marked complete, and it is not. `.planning/WINDOWS.md` was not updated, as in deviation 23.
+
+**29. `actuals.tokens` in the front matter was not recomputed;** this session changed four planning files and no code.
+
+No repository file other than this summary, `evidence/staging-pilot.json`, `deferred-items.md` and `15-STAGING.md` was changed in the second close-out session. Nothing was committed.
+
+### Deviations in the upload diagnostic session
+
+**30. A diagnostic was added to the test files:** `e2e/support/upload-diagnostic.ts` (new, outside the plan's file list) and one call in `e2e/journey.spec.ts`. Off unless `STAGING_UPLOAD_DIAG=1`. Authorised by the owner through the orchestrator.
+
+### Deviations in the third close-out session
+
+**31. `15-STAGING.md` and `deferred-items.md` (outside the plan's file list) were edited again** with the outcome of the two runs.
+
+**32. The sixth attempt ran with `--trace on`,** as the fourth did. The trace is in the git-ignored `test-results/` folder; the seventh attempt's trace has since replaced it there. It held the upload link, which expired 15 minutes after it was issued.
+
+**33. One fact was read from the link in the trace: the length of the access key id** (0). No value from the link was printed or written.
+
+**34. No state command was run** and `.planning/WINDOWS.md` was not updated: the plan is not complete. `actuals.tokens` was not recomputed.
+
+**35. The plan was not finalised,** so the older decisions in the front matter were kept as history; the one that said "cause not established" now carries a note that it is superseded.
+
+No repository file other than this summary, `evidence/staging-pilot.json`, `deferred-items.md` and `15-STAGING.md` was changed in the third close-out session. Nothing was committed.
+
+### Deviations in the fourth close-out session
+
+**36. `15-STAGING.md` and `deferred-items.md` (outside the plan's file list) were edited again** with the passing run. In `15-STAGING.md` the old "open owner item" about test keys also got a note that the owner's confirmation cleared it.
+
+**37. The eighth attempt ran with `--trace on`,** as the fourth and sixth did. The trace is in the git-ignored `test-results/` folder and holds the upload link and the certificate link, both expired 15 minutes after they were issued. A copy extracted to the session's temporary folder was deleted.
+
+**38. Facts read from the links in the trace:** the length of the access key id (32), the parameter names and the statuses. No value from a link was printed or written.
+
+**39. The plan is marked complete although Task 3's automated check exits 1 and the Task 3 human check is not done.** This follows the orchestrator's instruction for this session: complete once the journey passes, with the gaps listed at the top as open items for plan 15-31. `requirements-completed` stays empty.
+
+**40. State commands:** see "State updates" under "Verification run" for which were run. `state.advance-plan`, `state.update-progress` and `requirements.mark-complete` were not run (not permitted in this session). `.planning/WINDOWS.md` was not updated, as in deviation 23; the unrun human check and the failing Task 3 check are recorded here instead.
+
+**41. `actuals.tokens` is an approximation:** the earlier figure (30,100) plus a quarter of the characters added since (the diagnostic file, the one call in the journey test, and the growth of `evidence/staging-pilot.json`). Most of this plan's files were already in the owner's commits, so the realized diff could not be measured in one piece. `actuals.tasks: 3` counts Task 1 (done), Task 2 (decided) and Task 3 (run, with the lesson gap and without the human check).
+
+**42. `requirements-completed` is empty** by instruction: NFR-02 has the lesson gap, D-08 has no manual journey, and NFR-01 and NFR-08 are signed in plan 15-31.
+
+No repository file other than this summary, `evidence/staging-pilot.json`, `deferred-items.md`, `15-STAGING.md` and the planning state files named under "State updates" was changed in the fourth close-out session. No file under `src/` or `e2e/` was touched. Nothing was committed.
+
 ## Data left on the staging branch by this run
 
 - The journey course, cohort, session and assignment.
+- Load Learner 144 (fourth close-out session): a paid order, an active enrolment on the journey cohort that is now complete, two lessons complete, attendance marked, one submission with a stored file, a released grade of 80, a completion record and an issued certificate with its PDF in the storage bucket. The staging counts in `15-STAGING.md` (Grade 2, CompletionRecord 3, Certificate 3) are therefore each one higher now.
+- Load Learners 145 and 146 (third close-out session) and 147 (upload diagnostic session): each a paid order and an active enrolment on the journey cohort, two lessons complete, attendance marked, no submission. Possibly an upload record each that was started and never completed.
+- Load Learner 148 (second close-out session): a paid order and an active enrolment on the journey cohort, two lessons complete, attendance marked, no submission. Possibly an upload record that was started and never completed.
 - Load Learner 149 (close-out session): a paid order and an active enrolment on the journey cohort, two lessons complete, attendance marked, no submission. Possibly an upload record that was started and never completed.
 - Load Learner 150: a paid order and an active enrolment on the journey cohort, two lessons complete, attendance marked. This learner's dashboard now shows two courses, which is a small change for one of the 150 virtual users in the full run.
 - One unverified account `quiet-resend-...@journey.test` with two verification tokens.
@@ -456,7 +769,87 @@ Close-out session (2026-10-11, 07:48 to 07:56 UTC):
 | Plan's Task 3 node check on `staging-load.json` and `staging-probe.json` | **exit 1** ("staging evidence incomplete"): still 12 views, lesson missing. Nothing was re-measured and no load was run in this session. |
 | Secret scan of `evidence/staging-pilot.json` after the edit (Neon host, storage host, signed-link parts, connection string) | no match |
 
+Second close-out session (2026-10-11, 08:34 to 08:39 UTC):
+
+| Command | Result |
+| --- | --- |
+| `gh pr view 16 --json headRefOid` | `9be7af3...`, branch `LAUNCH` |
+| `gh pr checks 16` | Netlify deploy-preview, Header rules and Redirect rules pass; Integration tests shards 2 and 4 failed (not read) |
+| `/api/health` on the preview | 200 |
+| Neon API host check | pooled URL, direct URL and both allow-listed hosts on `br-icy-river-axqpwts7`, not the default branch |
+| Staging journey, headed Chromium, learner 148 | **1 failed** at "submit: the learner uploads the assignment" (1.3 min) |
+| Upload link in the trace | no checksum parameter (fix deployed) |
+| CORS preflight to the failed upload's address, preview origin | 204, PUT, content-type |
+| `npx vitest run tests/staging-checks.test.ts` | 1 file, 13 tests passed |
+| Plan's Task 1 node check on `evidence/staging-pilot.json` | **exit 1** ("staging pilot failing"): `journeyPassed` is still false |
+| Plan's Task 3 node check on `staging-load.json` and `staging-probe.json` | **exit 1** ("staging evidence incomplete"): still 12 views, lesson missing. No load was run and nothing was re-measured in this session. |
+| Secret scan of `evidence/staging-pilot.json`, `deferred-items.md`, `15-STAGING.md` and this file after the edits (Neon host, storage host, signed-link values, connection string) | no match |
+
+Upload diagnostic session (2026-10-11, 08:46 to 08:49 UTC):
+
+| Command | Result |
+| --- | --- |
+| `gh pr view 16`, `/api/health`, Neon API host check | head `9be7af3`; 200; all hosts on `br-icy-river-axqpwts7`, not the default branch |
+| `npx tsc --noEmit` after adding the diagnostic | clean |
+| Staging journey, headed Chromium, learner 147, `STAGING_UPLOAD_DIAG=1` | **1 failed** at "submit: the learner uploads the assignment" (1.8 min); PUT answered 400 `InvalidArgument` |
+| ESLint on `e2e/support/upload-diagnostic.ts` and `e2e/journey.spec.ts` | clean |
+| `evidence/staging-pilot.json` parses; 5 attempts; `journeyPassed` | false |
+| Secret scan of the diagnostic's output file, the two e2e files, `deferred-items.md`, `evidence/staging-pilot.json` and this file (storage host, Neon host, connection string, signed-link values, 32-character hex strings) | no secret; the only 32-character hex matches are the commit hash `9be7af3...` and k6's own check ids, both there before |
+
+Third close-out session (2026-10-11, 09:01 to 09:08 UTC):
+
+| Command | Result |
+| --- | --- |
+| `gh pr view 16`, `gh pr checks 16`, commit statuses | head `9be7af3`; Netlify deploy-preview pass, new "Deploy Preview ready!" at 09:00:47 UTC. Not part of this plan: "Integration tests" shards 2 and 4 and "Unit and component tests" show as failed on that commit (not read). |
+| `/api/health`; Neon API host check | 200; all hosts on `br-icy-river-axqpwts7`, not the default branch |
+| Staging journey, headed Chromium, learner 146, diagnostic off | **1 failed** at "submit: the learner uploads the assignment" (1.4 min); access key id in the link has length 0 |
+| Staging journey, headed Chromium, learner 145, `STAGING_UPLOAD_DIAG=1` | **1 failed** at the same step (1.4 min); PUT answered 400 `InvalidArgument`, "Credential access key has length 0, should be 32" |
+| `npx vitest run tests/staging-checks.test.ts` | 1 file, 13 tests passed |
+| Plan's Task 1 node check on `evidence/staging-pilot.json` | **exit 1** ("staging pilot failing"): `journeyPassed` is still false |
+| Plan's Task 3 node check on `staging-load.json` and `staging-probe.json` | **exit 1** ("staging evidence incomplete"): still 12 views, lesson missing. No load was run and nothing was re-measured. |
+| `evidence/staging-pilot.json` parses; 7 attempts; `journeyPassed` | false |
+| Secret scan of this file, `15-STAGING.md`, `deferred-items.md`, `evidence/staging-pilot.json`, the two e2e files and the diagnostic's output (the staging host names, the Neon key and project id as literals; connection string, Neon host, storage host and signed-link patterns) | no match |
+
+Fourth close-out session (2026-10-11, 09:26 to 09:33 UTC):
+
+| Command | Result |
+| --- | --- |
+| `gh pr view 16`, `gh pr checks 16`, commit statuses | head `9be7af3`; Netlify deploy-preview pass, new "Deploy Preview ready!" at 09:24:07 UTC. Not part of this plan: "Integration tests" shards 2 and 4 and "Unit and component tests" fail on that commit. |
+| `/api/health`; Neon API host check | 200; all hosts on `br-icy-river-axqpwts7`, not the default branch |
+| Staging journey, headed Chromium, learner 144, diagnostic off | **1 passed** (2.3 min); upload PUT 200, access key id in the link has length 32; certificate download 302 then 200 |
+| `npx vitest run tests/staging-checks.test.ts` | 1 file, 13 tests passed |
+| Plan's Task 1 node check on `evidence/staging-pilot.json` | **exit 0**: `journeyPassed` true, `quietResend` 1 to 2, k6 failure rate 0 |
+| `evidence/staging-pilot.json` parses; 8 attempts; `journeyPassed` | true |
+| Plan's Task 3 node check on `staging-load.json` and `staging-probe.json` | **exit 1** ("staging evidence incomplete"): still 12 views, lesson missing. No load was run and nothing was re-measured. Open item a. |
+| Task 3 human check (unassisted manual journey, D-08) | **not done.** Open item b. |
+| Secret scan after the edits | no match (details under "State updates" below) |
+
+### State updates
+
+Run because the plan is marked complete, and only these four:
+
+| Command | Result |
+| --- | --- |
+| `state.record-metric` (phase 15, plan 30, 195 min, 3 tasks, 12 files) | recorded |
+| `state.add-decision`, three decisions | all three recorded. The third failed once with a Windows file error (`EPERM` on renaming the temporary state file) and was recorded on a second try; no temporary file was left behind. |
+| `state.record-session` | recorded: stopped at "Completed 15-30-PLAN.md ...", resume file none |
+| `roadmap.update-plan-progress 15` | Phase 15 now 32 of 33 plans, still "In Progress"; the 15-30 line in `ROADMAP.md` is ticked |
+
+Side effects seen in `STATE.md`, compared with a copy taken before: `completed_plans` went from 257 to 258 (of 259) and `state_head` moved to `9be7af3`. The count was left as it is: it matches this plan being marked complete, with only 15-31 left. If the orchestrator would rather not count 15-30 until its open items close, set it back to 257 and untick the line in `ROADMAP.md`.
+
+Not run: `state.advance-plan`, `state.update-progress`, `state.begin-phase`, `requirements.mark-complete`, `gsd_run query commit`.
+
+Secret scan of this file, `15-STAGING.md`, `deferred-items.md`, `evidence/staging-pilot.json`, `STATE.md` and `ROADMAP.md` after the edits (the staging host names, the Neon key and project id and the load password as literals; connection string, Neon host, storage host and signed-link patterns): no match.
+
 ## Cleanup
+
+Fourth close-out session: no container and no server was started; Playwright closed its browsers; `learning-management-system-postgres-1` is still running and was not touched. The extracted copy of the eighth attempt's trace in the session's temporary folder was deleted; Playwright's own `trace.zip` remains in the git-ignored `test-results/`. `perf/results/upload-diag-staging.json` still holds the seventh attempt's record (the diagnostic did not run in this session).
+
+Third close-out session: no container and no server was started; Playwright closed its browsers; `learning-management-system-postgres-1` is still running and was not touched. The extracted copy of the sixth attempt's trace in the session's temporary folder was deleted. The diagnostic's record of the seventh attempt is in the git-ignored `perf/results/upload-diag-staging.json`.
+
+Upload diagnostic session: no container and no server was started; Playwright closed its browsers; `learning-management-system-postgres-1` was not touched. The diagnostic's record is in the git-ignored `perf/results/upload-diag-staging.json` (names, status, code and message only). Playwright's `trace.zip` for the failed run remains in the git-ignored `test-results/`. The diagnostic stays in `e2e/`, off by default.
+
+Second close-out session: no container and no server was started; Playwright closed its browsers. `learning-management-system-postgres-1` was not touched. The extracted copy of the trace in the session's temporary folder was deleted; Playwright's own `trace.zip` remains in the git-ignored `test-results/`.
 
 Close-out session: the MinIO container `journey-minio` was removed; Playwright stopped the local server (3010) and the capture server (4010) itself and neither port is listening; the browsers are closed. `learning-management-system-postgres-1` is still running. The local run added one learner with an order, enrolment, submission, grade and certificate to the local `licence_test` database.
 
@@ -468,16 +861,30 @@ Task 1: the k6 container removed itself; no local server was started; the browse
 
 1. Task 2 is decided: "Run the full test".
 2. The bucket's CORS setting is done and checked (preflight 204 for the preview's address). Thank you; nothing more to do there.
-3. **Uploads to hosted storage are refused (new, launch blocker).** Decide who fixes the upload link in `src/server/services/storage-service.ts` and when the preview is rebuilt. First step: read the storage service's real answer to the upload (browser network tab on the preview, or try one upload on the production site).
-4. **Check the Neon compute allowance now** (68.0 compute-unit hours used by 11 October, 07:11 UTC).
-5. **Read Netlify Team usage now, after the full run;** it cannot be read from here, and it was not read before the run.
-6. Read the UptimeRobot log for 07:26 to 07:39 UTC on 2026-10-11.
+3. **Uploads on the preview work now.** Your saved storage keys and the new deploy fixed it: the upload answered 200 at 09:29 UTC and the whole journey passed. Nothing more to do for the preview.
+4. **Check that the Production context in Netlify has `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` too** (scope Functions), and try one upload on the live site after its next deploy. This has not been verified from here.
+5. **Check the Neon compute allowance now** (68.0 compute-unit hours used by 11 October, 07:11 UTC).
+6. **Read Netlify Team usage now, after the full run;** it cannot be read from here, and it was not read before the run.
+7. Read the UptimeRobot log for 07:26 to 07:39 UTC on 2026-10-11.
+8. Ask a person who has not used the product to do the unassisted manual journey on the preview (`e2e/MANUAL-CHECKS.md`, "Unassisted manual journey (D-08)") and fill in its results table.
 
-## Still open in this plan
+## Open items carried out of this plan
 
-1. **Staging journey (Task 1): still failing at the upload.** Needs the upload fix deployed to the preview, then one run with `STAGING_JOURNEY_LEARNER=148`. Upload, grade, completion, certificate download and public verification have never been reached on the preview. Task 1's check stays at exit 1 until it passes.
-2. **Lesson view, browser number under load** (Task 3): gap, item for plan 15-31 (waiver, or one more loaded measurement with a new owner approval). Not re-measured, and no load was run, in the close-out session. **Task 3's automated check still exits 1 because of it.**
-3. **Unassisted manual journey (D-08)** on the preview by a person who has not used the product: not done. That person will meet the same upload failure until item 1 is fixed.
-4. The two slow spells (07:28:22 to 07:28:32 and 07:37:51 to 07:37:53) have no established cause; plan 15-31 can look at the Netlify function log for those seconds.
+The same items as the table at the top of this file, with their detail.
 
-Closed in the close-out session: the local "full journey" was re-run after the refactor and passed.
+1. **(a) Lesson view, browser number under load** (Task 3): gap, item for plan 15-31 (a recorded waiver resting on the three figures in "Task 3", or one more loaded measurement with a new owner approval). Not re-measured, and no load was run, in any close-out session. **Task 3's automated check still exits 1 because of it.**
+2. **(b) Unassisted manual journey (D-08)** on the preview by a person who has not used the product: not done. The upload no longer stands in that person's way.
+3. **(c) Owner checks not yet reported back:** Netlify Team usage after the full run, the Neon compute allowance, and the UptimeRobot log for 07:26 to 07:39 UTC (items 5 to 7 in the list above).
+4. **(d) The two slow spells** (07:28:22 to 07:28:32 and 07:37:51 to 07:37:53 UTC) have no established cause; plan 15-31 can look at the Netlify function log for those seconds.
+5. **(e) The signed load numbers were measured on `9a68b7a`; the preview now serves `9be7af3`.** The storage fix changes only how the S3 client signs requests and does not touch page rendering, so no difference is expected. That is reasoning, not a measurement. The preview has also been redeployed three times since the run (08:33, 09:00 and 09:24 UTC), the last with a cleared cache and new environment variables.
+6. **(f) Whether the Production context in Netlify has the storage keys is not verified.** If it does not, uploads and certificate files fail on the live site in the way they failed on the preview.
+7. **(g) Suggested hardening, not done here (product code):** `makeClient` in `src/server/services/storage-service.ts` should throw a named error when `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is missing or empty, instead of signing with an empty key. This fault would then have shown on the server as one clear message instead of taking five journey attempts to find.
+8. **(h) CI failures on `9be7af3`:** "Integration tests" shards 2 and 4 and "Unit and component tests" fail (seen by this executor in `gh pr checks 16`). The causes below were read from the CI logs by the orchestrator, not by this executor: the workflow starts no MinIO, so the storage tests cannot connect; the unit job's `--exclude` does not keep integration files out; and the known `ticket-phase-invariants` nav test fails (already in `deferred-items.md`, row 15-21). The same failures existed on `9a68b7a`, so they do not come from the storage fix.
+
+Closed: the staging journey (fourth close-out session, eighth attempt); the local "full journey" after the refactor (first close-out session); the bucket's CORS setting; the storage keys on the deploy preview.
+
+## Self-Check: PASSED
+
+- All eight files named under `key-files.created` (the three evidence files among them) exist on disk (checked at the end of the fourth close-out session).
+- No commit was made by this plan's executor (owner rule), so there is no commit hash to check; `actuals.commits` is 0. The working tree holds the uncommitted changes.
+- Task 1's check exits 0. Task 3's check exits 1 and the human check is not done: both are open items a and b above, not hidden by this "passed".

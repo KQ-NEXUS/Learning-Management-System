@@ -227,13 +227,13 @@ describe("licence issuer tracer: generate, issue, verify (D-02, D-03)", () => {
     const verify = run([
       "verify", quote(licencePath),
       "--kid", "kqn-cli-a",
-      "--public-x", x as string,
+      `--public-x=${x as string}`,
       "--deployment-id", DEPLOYMENT_ID,
     ]);
     expect(verify.stdout).toContain("OK");
 
     const wrong = run(
-      ["verify", quote(licencePath), "--kid", "kqn-cli-a", "--public-x", x as string, "--deployment-id", "elsewhere"],
+      ["verify", quote(licencePath), "--kid", "kqn-cli-a", `--public-x=${x as string}`, "--deployment-id", "elsewhere"],
       1,
     );
     expect(wrong.stdout).toContain("REJECTED: WRONG_DEPLOYMENT");

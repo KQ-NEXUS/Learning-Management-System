@@ -23,6 +23,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { RunningCohortError, type BlockingCohort } from "@/server/services/catalogue-guards";
 import type { ReadinessItem } from "@/server/services/readiness-service";
@@ -101,6 +102,10 @@ function toFailure(error: unknown): CommonFailure {
   }
   if (error instanceof ArchivedRecordError) {
     return { ok: false, reason: "INVALID", message: "This course is archived. Restore it first, then publish it." };
+  }
+  // W-14: an archived record is not archived again.
+  if (error instanceof RecordStateError) {
+    return { ok: false, reason: "INVALID", message: error.message };
   }
   if (error instanceof NotArchivedError) {
     return { ok: false, reason: "INVALID", message: "This course is not archived, so there is nothing to restore." };

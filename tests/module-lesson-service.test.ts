@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { grant, createTestWithPermission } from "./support/harness";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createModuleService,
   type ModuleDelegate,
@@ -679,5 +680,133 @@ describe("linking a Quiz/Assignment lesson to its assessment (UX batch A — the
     // No link at all still works without the lookup.
     const plain = await createLesson({ moduleId: "m1", title: "Q", type: "QUIZ", assessmentId: null });
     expect(plain.assessmentId).toBeNull();
+  });
+});
+
+describe("withdraw and restore are not repeated, and a withdrawn item is not changed (launch checklist W-14)", () => {
+  const WITHDRAWN_AT = new Date("2026-01-01T00:00:00.000Z");
+  type Restore = { restore: (id: string, reason: string) => Promise<unknown> };
+
+  function modules() {
+    const { delegate, rows } = makeModuleDelegate([
+      { id: "m1", courseId: "c1", title: "Live", summary: null, position: 0, withdrawnAt: null },
+      { id: "m2", courseId: "c1", title: "Also live", summary: null, position: 1, withdrawnAt: null },
+      { id: "m3", courseId: "c1", title: "Gone", summary: null, position: -1_000_001, withdrawnAt: WITHDRAWN_AT },
+    ]);
+    const audits: unknown[] = [];
+    const { withPermission } = createTestWithPermission([grant("courses.edit")]);
+    const { moduleService } = createModuleService({
+      delegate,
+      withPermission,
+      audit: async (entry) => {
+        audits.push(entry);
+      },
+    });
+    return { moduleService, delegate, audits, row: (id: string) => rows().find((r) => r.id === id)! };
+  }
+
+  function lessons() {
+    const base = {
+      moduleId: "m1",
+      title: "Welcome",
+      type: "TEXT" as const,
+      body: null,
+      embedUrl: null,
+      linkUrl: null,
+      required: true,
+      allowManualComplete: true,
+      assessmentId: null,
+    };
+    const { delegate, rows } = makeLessonDelegate([
+      { ...base, id: "l1", position: 0, withdrawnAt: null },
+      { ...base, id: "l2", position: 1, withdrawnAt: null },
+      { ...base, id: "l3", position: -1_000_001, withdrawnAt: WITHDRAWN_AT },
+    ]);
+    const audits: unknown[] = [];
+    const { withPermission } = createTestWithPermission([grant("courses.edit")]);
+    const built = createLessonService({
+      delegate,
+      resolveCourseIdForModule: async () => "c1",
+      withPermission,
+      audit: async (entry) => {
+        audits.push(entry);
+      },
+    });
+    return { ...built, delegate, audits, row: (id: string) => rows().find((r) => r.id === id)! };
+  }
+
+  it("refuses withdrawing a withdrawn module: its withdrawal time and parked slot stay", async () => {
+    const { moduleService, delegate, audits, row } = modules();
+    const attempt = moduleService.archive("m3", "Withdrawing it once more");
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This module is already withdrawn.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(row("m3")).toMatchObject({ withdrawnAt: WITHDRAWN_AT, position: -1_000_001 });
+    expect(audits).toHaveLength(0);
+  });
+
+  it("refuses restoring a module that is not withdrawn: it keeps its place in the order", async () => {
+    const { moduleService, delegate, audits, row } = modules();
+    const attempt = (moduleService as unknown as Restore).restore("m1", "Restoring a live module");
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("Only a withdrawn module can be restored.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(row("m1").position).toBe(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("refuses renaming a withdrawn module", async () => {
+    const { moduleService, delegate, audits, row } = modules();
+    const attempt = moduleService.update("m3", { title: "Renamed" });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This module is withdrawn. Restore it before you change it.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(row("m3").title).toBe("Gone");
+    expect(audits).toHaveLength(0);
+  });
+
+  it("still renames a live module, withdraws it once and restores it once", async () => {
+    const { moduleService, audits, row } = modules();
+    await moduleService.update("m1", { title: "Renamed" });
+    await moduleService.archive("m1", "No longer taught");
+    expect(row("m1").withdrawnAt).toBeInstanceOf(Date);
+    await (moduleService as unknown as Restore).restore("m1", "Taught again");
+    expect(row("m1")).toMatchObject({ title: "Renamed", withdrawnAt: null });
+    expect(audits).toHaveLength(3);
+  });
+
+  it("refuses withdrawing a withdrawn lesson: its withdrawal time and parked slot stay", async () => {
+    const { lessonService, delegate, audits, row } = lessons();
+    const attempt = lessonService.archive("l3", "Withdrawing it once more");
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This lesson is already withdrawn.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(row("l3")).toMatchObject({ withdrawnAt: WITHDRAWN_AT, position: -1_000_001 });
+    expect(audits).toHaveLength(0);
+  });
+
+  it("refuses restoring a lesson that is not withdrawn", async () => {
+    const { lessonService, delegate, row } = lessons();
+    const attempt = (lessonService as unknown as Restore).restore("l1", "Restoring a live lesson");
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("Only a withdrawn lesson can be restored.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(row("l1").position).toBe(0);
+  });
+
+  it("refuses saving a withdrawn lesson through the editor's path", async () => {
+    const { updateLesson, delegate, audits, row } = lessons();
+    const attempt = updateLesson("l3", { title: "Edited", type: "TEXT", body: "New words" }, "Edited from the lesson editor.");
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This lesson is withdrawn. Restore it before you change it.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(row("l3").title).toBe("Welcome");
+    expect(audits).toHaveLength(0);
+  });
+
+  it("still saves a live lesson", async () => {
+    const { updateLesson, row } = lessons();
+    await updateLesson("l1", { title: "Edited", type: "TEXT", body: "New words" }, "Edited from the lesson editor.");
+    expect(row("l1").title).toBe("Edited");
   });
 });

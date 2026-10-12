@@ -108,12 +108,16 @@ export function hasPermission(
  *
  * Checked separately from scope so an expired grant is never even considered
  * for matching.
+ *
+ * The window is `[startsAt, endsAt)`: a grant holds from its start instant and
+ * has ended AT its end instant (G-06). `staff-recipient-service.ts` repeats
+ * this rule in SQL and must be changed together with it.
  */
 export function isGrantActive(window: GrantWindow, now: Date = new Date()): boolean {
   if (!window.active) return false;
   if (window.revokedAt !== null) return false;
   if (window.startsAt !== null && window.startsAt > now) return false;
-  if (window.endsAt !== null && window.endsAt < now) return false;
+  if (window.endsAt !== null && window.endsAt <= now) return false;
   return true;
 }
 

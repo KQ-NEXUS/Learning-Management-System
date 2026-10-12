@@ -27,6 +27,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import {
   createSessionFromWallTime,
@@ -72,6 +73,10 @@ function toFailure(error: unknown): Extract<SessionActionResult, { ok: false }> 
     return { ok: false, message: "A reason is required to cancel a session." };
   }
   if (error instanceof SessionCancelledError) {
+    return { ok: false, message: error.message };
+  }
+  // W-13: a cancelled or completed cohort takes no new sessions.
+  if (error instanceof RecordStateError) {
     return { ok: false, message: error.message };
   }
   if (error instanceof SessionFacilitatorNotStaffError) {

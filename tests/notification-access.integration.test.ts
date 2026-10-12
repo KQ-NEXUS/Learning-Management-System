@@ -138,6 +138,7 @@ function buildPaymentDetailLookup(actorId: string, hasPaymentsView: boolean) {
     order: {
       findMany: () => Promise.resolve([] as PaymentListOrderRow[]),
       count: () => Promise.resolve(0),
+      countByStatus: () => Promise.resolve([]),
       findUnique: ({ where }) =>
         testDb.prisma.order
           .findUnique({

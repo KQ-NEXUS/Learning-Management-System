@@ -359,7 +359,9 @@ export const SCREENS: Screen[] = [
       state("programme-manager", "Signed in as a programme manager", { persona: "pm" }),
     ],
   },
-  { id: "staff-audit", route: "/staff/audit", page: "staff/audit/page.tsx", persona: "admin", states: [DEFAULT] },
+  // W-07: this and the five screens below marked the same way hold a wide table or strip that scrolls
+  // inside itself, so the narrow-screen sweep (plan 15-20) visits them too.
+  { id: "staff-audit", route: "/staff/audit", page: "staff/audit/page.tsx", persona: "admin", primary: true, states: [DEFAULT] },
   { id: "staff-certificates", route: "/staff/certificates", page: "staff/certificates/page.tsx", persona: "admin", states: [DEFAULT] },
   { id: "staff-certificates-issued", route: "/staff/certificates/issued", page: "staff/certificates/issued/page.tsx", persona: "admin", states: [DEFAULT] },
   {
@@ -442,6 +444,7 @@ export const SCREENS: Screen[] = [
     page: "staff/cohorts/[id]/learners/[enrolmentId]/page.tsx",
     persona: "admin",
     params: { id: "gradingCohortId", enrolmentId: "gradingEnrolmentId" },
+    primary: true, // W-07
     states: [DEFAULT],
   },
   {
@@ -606,7 +609,7 @@ export const SCREENS: Screen[] = [
     params: { id: "programmeId" },
     states: [DEFAULT],
   },
-  { id: "staff-reconciliation", route: "/staff/reconciliation", page: "staff/reconciliation/page.tsx", persona: "admin", states: [DEFAULT] },
+  { id: "staff-reconciliation", route: "/staff/reconciliation", page: "staff/reconciliation/page.tsx", persona: "admin", primary: true, states: [DEFAULT] }, // W-07
   {
     id: "staff-reconciliation-case",
     route: "/staff/reconciliation/[caseId]",
@@ -615,14 +618,15 @@ export const SCREENS: Screen[] = [
     params: { caseId: "caseId" },
     states: [DEFAULT],
   },
-  { id: "staff-reports", route: "/staff/reports", page: "staff/reports/page.tsx", persona: "admin", states: [DEFAULT] },
-  { id: "staff-report-exports", route: "/staff/reports/exports", page: "staff/reports/exports/page.tsx", persona: "admin", states: [DEFAULT] },
+  { id: "staff-reports", route: "/staff/reports", page: "staff/reports/page.tsx", persona: "admin", primary: true, states: [DEFAULT] }, // W-07
+  { id: "staff-report-exports", route: "/staff/reports/exports", page: "staff/reports/exports/page.tsx", persona: "admin", primary: true, states: [DEFAULT] }, // W-07
   {
     id: "staff-report",
     route: "/staff/reports/[dataset]",
     page: "staff/reports/[dataset]/page.tsx",
     persona: "admin",
     params: { dataset: "=registrations" },
+    primary: true, // W-07
     states: [DEFAULT],
   },
   { id: "staff-roles", route: "/staff/roles", page: "staff/roles/page.tsx", persona: "admin", states: [DEFAULT] },

@@ -12,9 +12,9 @@
  * The behaviours, each in its own `it`:
  *   1. a grant ended between two requests is refused on the second;
  *   2. a session revoked between two requests is refused on the second, as unauthenticated;
- *   3. the end instant rule at the boundary, asserted as the code actually defines it
- *      (`isGrantActive`: a grant is still in force AT its end instant and ended one
- *      millisecond later; the start instant is likewise inclusive), with a fake clock;
+ *   3. the end instant rule at the boundary, as the plan wrote it and as the code now
+ *      defines it (G-06, `isGrantActive`: a grant holds until one millisecond before its
+ *      end instant and has ended AT it; the start instant is inclusive), with a fake clock;
  *   4. concurrency: calls started after the end are all refused, and when a burst races a
  *      revocation, no call that STARTS after the revocation committed succeeds and no row
  *      is written for one.
@@ -245,19 +245,19 @@ describe("3. the end instant of a grant, at the boundary", () => {
     }
   }
 
-  it("is still in force AT its end instant and ended one millisecond later (the rule `isGrantActive` defines)", async () => {
+  it("holds until its end instant and has ended AT it (the written rule: a grant whose end equals the request instant is treated as ended)", async () => {
     await freshWorld();
     const end = new Date("2027-03-01T12:00:00.000Z");
     await prismaClient.assignment.updateMany({ ...staffAssignments(), data: { endsAt: end } });
 
     expect(await probeAt(new Date(end.getTime() - 1)), "one millisecond before the end").toBe("ran");
-    // The rule, as the code defines it: `endsAt < now` ends a grant, so AT the end instant it still holds.
-    expect(await probeAt(end), "at the end instant").toBe("ran");
+    // G-06: the end is exclusive. `endsAt <= now` ends a grant, so AT the end instant it is refused.
+    expect(await probeAt(end), "at the end instant").toBe("refused");
     expect(await probeAt(new Date(end.getTime() + 1)), "one millisecond after the end").toBe("refused");
     expect(await probeAt(new Date(end.getTime() + 86_400_000)), "a day after the end").toBe("refused");
   }, CASE_TIMEOUT_MS);
 
-  it("does not begin before its start instant and holds from it (the start is inclusive too)", async () => {
+  it("does not begin before its start instant and holds from it (the start is inclusive)", async () => {
     await freshWorld();
     const start = new Date("2027-03-01T12:00:00.000Z");
     await prismaClient.assignment.updateMany({ ...staffAssignments(), data: { startsAt: start } });

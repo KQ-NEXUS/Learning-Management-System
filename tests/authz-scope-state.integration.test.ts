@@ -776,12 +776,12 @@ describe("4. record state: a fully authorised caller is refused on a record in a
           // The caller is fully authorised and named the record, so the id may appear in the answer.
           expectRefusedWithoutWrites(entry, who, observation, { leak: false });
         }
-        if (!stateCase.staffProbeDenial) {
-          expect(
-            observation.denials.filter((row) => row.actorId === persona.userId),
-            "the caller was fully authorised: the refusal must not be an authorization denial",
-          ).toEqual([]);
-        }
+        // No exception: W-15 removed the one case (the owner of a revoked certificate) that
+        // used to leave a denial row here.
+        expect(
+          observation.denials.filter((row) => row.actorId === persona.userId),
+          "the caller was fully authorised: the refusal must not be an authorization denial",
+        ).toEqual([]);
         if (stateCase.message) {
           expect(JSON.stringify(observation.outcome), "the refusal was not the domain one").toMatch(stateCase.message);
         }

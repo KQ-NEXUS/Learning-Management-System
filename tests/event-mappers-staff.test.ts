@@ -5,7 +5,7 @@
  * `resolveStaffHolders`'s own `$queryRaw` call, so the fake `tx` fakes
  * `$queryRaw` directly rather than a Prisma delegate; the real-Postgres
  * proof that this SQL actually resolves the right holders (parity with
- * `hasPermission`) lives in `tests/staff-recipient-service.test.ts`, and the
+ * `hasPermission`) lives in `tests/staff-recipient-service.integration.test.ts`, and the
  * proof the drain persists these intents correctly lives in
  * `tests/staff-drain.integration.test.ts`.
  *

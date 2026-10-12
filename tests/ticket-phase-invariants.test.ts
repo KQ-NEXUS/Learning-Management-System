@@ -101,7 +101,15 @@ describe("route and navigation wiring", () => {
     ]) {
       expect(existsSync(join(ROOT, p)), p).toBe(true);
     }
-    expect(read("src/app/(learner)/layout.tsx")).toContain('href: "/support"');
+    // The learner header links moved out of the layout into one shared list
+    // (src/components/shell/learner-nav.ts) that every learner layout mounts.
+    // The Support link must be in that list, and each layout must use the list.
+    expect(read("src/components/shell/learner-nav.ts")).toContain('href: "/support"');
+    for (const layout of ["src/app/(learner)/layout.tsx", "src/app/account/layout.tsx", "src/app/(checkout)/layout.tsx"]) {
+      const source = read(layout);
+      expect(source, layout).toContain('import { LEARNER_NAV } from "@/components/shell/learner-nav"');
+      expect(source, layout).toContain("nav={LEARNER_NAV}");
+    }
     const staff = read("src/app/staff/layout.tsx");
     expect(staff).toContain('href: "/staff/support"');
     expect(staff).toContain('"/staff/support": "tickets.view"');

@@ -313,6 +313,37 @@ async function ensureReconciliationCase(prisma: PrismaClient): Promise<string> {
   return created.id;
 }
 
+/**
+ * Makes sure the administrator has one export in Export history, so that screen draws its table and not its
+ * empty state (launch checklist W-07; the responsive sweep calls this). The row is an EXPIRED registrations
+ * export: it has no file, offers no download, is not failed or queued work and is never picked up by a worker.
+ * History lists a job only when its stored scope is still covered by the viewer's grants, so the row carries
+ * the Global scope the seeded administrator holds. Found again by its idempotency key, so it is made once.
+ */
+export async function ensureExportHistoryRow(): Promise<void> {
+  const prisma = await getPrisma();
+  const admin = need(await prisma.user.findUnique({ where: { email: PERSONA_EMAIL.admin } }), "the seeded administrator");
+  const idempotencyKey = "sweep-export-history-row";
+  if (await prisma.exportJob.findUnique({ where: { idempotencyKey }, select: { id: true } })) return;
+  const at = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  await prisma.exportJob.create({
+    data: {
+      requestedById: admin.id,
+      idempotencyKey,
+      dataset: "registrations",
+      status: "EXPIRED",
+      scopeSnapshot: { kind: "GLOBAL", programmeIds: [], courseIds: [], cohortIds: [] },
+      columnSnapshot: [{ label: "Registration" }, { label: "Status" }, { label: "Registered at" }],
+      rowCount: 3,
+      asOf: at,
+      createdAt: at,
+      startedAt: at,
+      completedAt: at,
+      expiresAt: new Date(at.getTime() + 24 * 60 * 60 * 1000),
+    },
+  });
+}
+
 /** Looks up (and where a screen needs one, creates) the records the manifest's route parameters name. */
 export async function resolveFixtures(): Promise<Fixtures> {
   const prisma = await getPrisma();

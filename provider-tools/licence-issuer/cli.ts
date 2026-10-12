@@ -35,7 +35,7 @@ Commands:
            [--issued <ISO instant, default now>] [--not-before <ISO instant, default issued>]
            [--grace-days <whole days, default ${DEFAULT_GRACE_DAYS}>] [--time-zone <IANA, default Africa/Lagos>]
            [--phone <text>] [--hours <text>]
-  verify   <file> --kid <id> --public-x <base64url x> --deployment-id <id> [--client-id <id>]
+  verify   <file> --kid <id> --public-x=<base64url x> --deployment-id <id> [--client-id <id>]
   inspect  <file>
 `;
 

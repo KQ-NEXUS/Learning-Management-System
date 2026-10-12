@@ -424,6 +424,33 @@ describe("getOwnCertificateForDownload", () => {
   });
 });
 
+describe("resolveOwnCertificateForDownload (W-15): who is asking, in one lookup", () => {
+  it("serves the owner of an ACTIVE certificate, flagged or not", async () => {
+    const h = harness({
+      certs: [cert({ id: "cert-1", userId: "user-1", status: "ACTIVE", reviewFlaggedAt: new Date() })],
+    });
+    const result = await h.service.resolveOwnCertificateForDownload({ userId: "user-1" }, "cert-1");
+    expect(result).toMatchObject({ kind: "served", certificate: { id: "cert-1" } });
+  });
+
+  it.each(["REVOKED", "SUPERSEDED"] as const)("says owner-refused, with no certificate, for the owner of a %s one", async (status) => {
+    const h = harness({ certs: [cert({ id: "cert-1", userId: "user-1", status })] });
+    expect(await h.service.resolveOwnCertificateForDownload({ userId: "user-1" }, "cert-1")).toEqual({ kind: "owner-refused" });
+  });
+
+  it("says not-owner for someone else's certificate in any status, and for an unknown id", async () => {
+    const h = harness({
+      certs: [
+        cert({ id: "cert-1", userId: "user-1", status: "ACTIVE" }),
+        cert({ id: "cert-2", userId: "user-1", status: "REVOKED" }),
+      ],
+    });
+    for (const id of ["cert-1", "cert-2", "does-not-exist"]) {
+      expect(await h.service.resolveOwnCertificateForDownload({ userId: "user-2" }, id), id).toEqual({ kind: "not-owner" });
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // certificateDisplayStatus (UI-SPEC §5)
 // ---------------------------------------------------------------------------

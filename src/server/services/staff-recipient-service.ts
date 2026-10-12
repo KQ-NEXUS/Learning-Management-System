@@ -15,7 +15,7 @@
  * This file imports the permission layer's TYPES ONLY (`Permission`,
  * `ResourceScope`) via `import type` — never a value from
  * `@/server/permissions` or its submodules, so the boundary rule holds.
- * `tests/staff-recipient-service.test.ts` is the real-Postgres parity test
+ * `tests/staff-recipient-service.integration.test.ts` is the real-Postgres parity test
  * proving this SQL agrees with `hasPermission` over `loadGrantsForUser`
  * across the full grant matrix (global, cohort, programme, course, wrong
  * scope id, inactive role, revoked, expired, not-yet-started, deactivated,
@@ -72,7 +72,7 @@ async function queryStaffHolders(
       AND a.active = TRUE
       AND a."revokedAt" IS NULL
       AND (a."startsAt" IS NULL OR a."startsAt" <= ${at})
-      AND (a."endsAt" IS NULL OR a."endsAt" >= ${at})
+      AND (a."endsAt" IS NULL OR a."endsAt" > ${at})
       AND r.active = TRUE
       AND ${params.permission} = ANY(r.permissions)
       AND (${Prisma.join(scopeBranches, " OR ")})

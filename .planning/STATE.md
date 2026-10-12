@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 15
 current_phase_name: Launch Readiness — NFR Verification & Operational Cutover
 status: executing
-stopped_at: "15-30 Task 3 full staging run done (k6 passed, probe 12 of 13 views); open: staging journey re-run after CORS, lesson view gap for 15-31, manual journey"
-last_updated: "2026-10-11T07:46:46.621Z"
+stopped_at: 15-31 Task 1 done (checklist skeleton and guard test, 28 tests pass); stopped at the Task 2 owner checkpoint (names, waiver decisions, manual results)
+last_updated: "2026-10-11T10:04:50.759Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 15 execution started
-state_head: 9a68b7ae4fa8fd87746ee25c7151c5e02e95e3b6
+state_head: 9be7af331a431e9c75b34e912ee4c19744d59f00
 progress:
   total_phases: 16
   completed_phases: 9
   total_plans: 259
-  completed_plans: 257
+  completed_plans: 258
 milestone_name: milestone
 ---
 
@@ -164,6 +164,8 @@ Progress: [██████████] 99%
 | Phase 15 P27 | 35min | 3 tasks | 7 files |
 | Phase 15 P28 | about 9h wall (two executors, long waits on 13-minute load runs and 30-minute sweeps) | 3 tasks | 20 files |
 | Phase 15 P29 | 60min | 3 tasks | 5 files |
+| Phase 15 P30 | 195min | 3 tasks | 12 files |
+| Phase 15 P31 | 25 min (Task 1 only) | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -364,6 +366,11 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 15]: 15-29: schema-only staging branch baselined (18 migrations resolved as applied, 12 deployed) rather than dropped; staging branch expiration left for the owner to remove
 - [Phase 15]: 15-29: Neon point-in-time restore to a new branch rehearsed on staging (RPO 300 s, RTO 37 s to checked data, 8 of 8 row counts equal, 7 of 7 integrity checks passed, rehearsal branch deleted); staging branch expiration removed with the owner's authorisation; RPO 24h still needs a paid Neon plan or a daily external dump
 - [Phase 15]: 15-30: staging pilot (15 learners, 1 staff) passed k6 and probe; after() proven on Netlify; staging journey blocked at upload by storage CORS for the preview origin, not worked around
+- [Phase 15]: 15-30: the staging journey counts as passed only for a real, un-routed browser upload with the diagnostic off (eighth attempt, learner 144, 2026-10-11 09:27 to 09:30 UTC)
+- [Phase 15]: 15-30: uploads on the deploy preview failed because S3_ACCESS_KEY_ID was empty there (Netlify setting), not because of CORS or the checksum; fixed by the owner's saved keys and a new deploy, no code change
+- [Phase 15]: 15-30: marked complete with open items for 15-31: lesson view browser number under load (Task 3 check exits 1), D-08 manual journey by a person, owner usage checks, Production storage keys unverified
+- [Phase 15]: [Phase 15-31]: The launch checklist's Neon migration list holds 12 folders from 20260927015627_communications_notifications onward (not the 7 after video_watch_pacing), because the staging schema copied from production lacked the five 20260927 migrations too; tests/launch-checklist.test.ts guards that range against prisma/migrations
+- [Phase 15]: [Phase 15-31]: Findings touching payment, authorization, private files or security are owner items (fix or decide the rule) in checklist group G, never waiver candidates; the guard refuses those categories in both waiver tables (D-07)
 
 ### Pending Todos
 
@@ -419,6 +426,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-11T07:46:42.475Z
-Stopped at: 15-30 Task 3 full staging run done (k6 passed, probe 12 of 13 views); open: staging journey re-run after CORS, lesson view gap for 15-31, manual journey
-Resume file: .planning/phases/15-launch-readiness-nfr-verification-operational-cutover/15-30-SUMMARY.md
+Last session: 2026-10-11T10:04:29.901Z
+Stopped at: 15-31 Task 1 done (checklist skeleton and guard test, 28 tests pass); stopped at the Task 2 owner checkpoint (names, waiver decisions, manual results)
+Resume file: .planning/phases/15-launch-readiness-nfr-verification-operational-cutover/15-31-PLAN.md

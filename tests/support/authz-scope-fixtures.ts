@@ -331,12 +331,6 @@ export type StateCase = {
   idempotent?: string;
   /** For a route: the statuses that are the domain refusal (default: the entry's denied statuses). */
   statuses?: readonly number[];
-  /**
-   * A learner calling a route that first probes the staff permission leaves an
-   * `authorization.denied` row for that probe before the learner path answers. The reason
-   * says so; the "no denial row for a fully authorised caller" check is skipped for it.
-   */
-  staffProbeDenial?: string;
   arrange: (scope: ScopeWorld, prisma: PrismaClient) => Promise<void>;
 };
 
@@ -446,6 +440,27 @@ const caseResolved: Arrange = async (scope, prisma) => {
   });
 };
 
+const assessmentArchived: Arrange = async (scope, prisma) => {
+  await prisma.assessment.update({ where: { id: scope.world.quizId }, data: { status: "ARCHIVED" } });
+};
+
+/** The first slot of the withdrawn band (`src/lib/positions.ts`): where a withdrawal parks a row. */
+const WITHDRAWN_SLOT = -1_000_001;
+
+const lessonWithdrawn: Arrange = async (scope, prisma) => {
+  await prisma.lesson.update({
+    where: { id: scope.world.lessonId },
+    data: { withdrawnAt: new Date("2026-01-01T00:00:00.000Z"), position: WITHDRAWN_SLOT },
+  });
+};
+
+const moduleWithdrawn: Arrange = async (scope, prisma) => {
+  await prisma.module.update({
+    where: { id: scope.world.moduleId },
+    data: { withdrawnAt: new Date("2026-01-01T00:00:00.000Z"), position: WITHDRAWN_SLOT },
+  });
+};
+
 const iso = (date: Date) => date.toISOString();
 
 const E = "src/app/staff/cohorts/[id]/enrolment-actions.ts";
@@ -461,6 +476,10 @@ const COURSE_PUBLISH = "src/app/staff/courses/[id]/publish-actions.ts";
 const PROGRAMME_PUBLISH = "src/app/staff/programmes/[id]/publish-actions.ts";
 const GRADE_ACTIONS = "src/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/actions.ts";
 const TEMPLATES = "src/app/staff/certificates/templates/template-actions.ts";
+const COHORT_ACTIONS = "src/app/staff/cohorts/actions.ts";
+const ARRANGE = "src/app/staff/courses/[id]/arrange/actions.ts";
+const ASSESSMENTS = "src/app/staff/courses/[id]/assessments/actions.ts";
+const LESSON_EDITOR = "src/app/staff/courses/[id]/lessons/[lessonId]/actions.ts";
 const PAYMENTS = "src/app/staff/payments/actions.ts";
 const LESSON = "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]";
 const REPORT_ACTIONS = "src/app/staff/reports/actions.ts";
@@ -596,6 +615,19 @@ export const STATE_CASES: readonly StateCase[] = [
       },
     ],
   },
+  // A closed cohort takes no new sessions, and a cancelled one is not edited (checklist W-13).
+  ...(["CANCELLED", "COMPLETED"] as const).flatMap((status) =>
+    ["createSessionAction", "repeatWeeklyAction"].map(
+      (name): StateCase => ({ entryKey: `${SESSIONS}#${name}`, state: `cohort:${status}`, caller: "staff", message: /sessions cannot be added/i, arrange: cohortIs(status) }),
+    ),
+  ),
+  {
+    entryKey: `${COHORT_ACTIONS}#updateCohortAction`,
+    state: "cohort:CANCELLED",
+    caller: "staff",
+    message: /cancelled cohort cannot be edited/i,
+    arrange: cohortIs("CANCELLED"),
+  },
   { entryKey: `${SESSIONS}#cancelSessionAction`, state: "session:CANCELLED", caller: "staff", message: /cancelled session cannot be changed/i, arrange: sessionCancelled },
   { entryKey: `${SESSIONS}#updateSessionAction`, state: "session:CANCELLED", caller: "staff", message: /cancelled session cannot be changed/i, arrange: sessionCancelled },
   { entryKey: `${ATTENDANCE}#saveAttendanceAction`, state: "session:CANCELLED", caller: "staff", arrange: sessionCancelled },
@@ -678,6 +710,35 @@ export const STATE_CASES: readonly StateCase[] = [
   { entryKey: `${PROGRAMME_PUBLISH}#unarchiveProgrammeAction`, state: "programme:PUBLISHED", caller: "staff", message: /not archived/i, arrange: programmeIs("PUBLISHED") },
   { entryKey: `${PROGRAMME_PUBLISH}#unarchiveProgrammeAction`, state: "programme:DRAFT", caller: "staff", message: /not archived/i, arrange: async () => {} },
 
+  // ---- archive and withdraw are not repeated; a withdrawn item is restored before it is changed (W-13, W-14) ----
+  { entryKey: `${ASSESSMENTS}#publishAssessmentAction`, state: "assessment:ARCHIVED", caller: "staff", message: /archived assessment cannot be published/i, arrange: assessmentArchived },
+  { entryKey: `${ASSESSMENTS}#archiveAssessmentAction`, state: "assessment:ARCHIVED", caller: "staff", message: /already archived/i, arrange: assessmentArchived },
+  { entryKey: `${COURSE_PUBLISH}#archiveCourseAction`, state: "course:ARCHIVED", caller: "staff", message: /already archived/i, arrange: courseIs("ARCHIVED") },
+  { entryKey: `${PROGRAMME_PUBLISH}#archiveProgrammeAction`, state: "programme:ARCHIVED", caller: "staff", message: /already archived/i, arrange: programmeIs("ARCHIVED") },
+  { entryKey: `${TEMPLATES}#archiveTemplateAction`, state: "template:ARCHIVED", caller: "staff", message: /already archived/i, arrange: templateArchived },
+  { entryKey: `${LESSON_EDITOR}#withdrawLessonAction`, state: "lesson:WITHDRAWN", caller: "staff", message: /already withdrawn/i, arrange: lessonWithdrawn },
+  { entryKey: `${LESSON_EDITOR}#saveLessonAction`, state: "lesson:WITHDRAWN", caller: "staff", message: /withdrawn\. Restore it before/i, arrange: lessonWithdrawn },
+  { entryKey: `${ARRANGE}#renameModuleAction`, state: "module:WITHDRAWN", caller: "staff", message: /withdrawn\. Restore it before/i, arrange: moduleWithdrawn },
+  { entryKey: `${ARRANGE}#withdrawItemAction`, state: "lesson:WITHDRAWN", caller: "staff", message: /already withdrawn/i, arrange: lessonWithdrawn },
+  {
+    entryKey: `${ARRANGE}#withdrawItemAction`,
+    state: "module:WITHDRAWN",
+    caller: "staff",
+    message: /already withdrawn/i,
+    arrange: moduleWithdrawn,
+    args: async (scope) => [{ courseId: scope.world.courseAId, kind: "module", id: scope.world.moduleId, reason: "Withdrawing a withdrawn module." }],
+  },
+  // The world's module and lesson are live: restoring one would move it to the end of the order.
+  { entryKey: `${ARRANGE}#restoreItemAction`, state: "module:LIVE", caller: "staff", message: /only a withdrawn module can be restored/i, arrange: async () => {} },
+  {
+    entryKey: `${ARRANGE}#restoreItemAction`,
+    state: "lesson:LIVE",
+    caller: "staff",
+    message: /only a withdrawn lesson can be restored/i,
+    arrange: async () => {},
+    args: async (scope) => [{ courseId: scope.world.courseAId, kind: "lesson", id: scope.world.lessonId }],
+  },
+
   // ---- grading ----
   { entryKey: `${GRADE_ACTIONS}#releaseGradeAction`, state: "grade:RELEASED", caller: "staff", idempotent: "Releasing a released grade returns the existing grade and writes nothing.", arrange: gradeIs("draft", "RELEASED") },
   { entryKey: `${GRADE_ACTIONS}#saveDraftGradeAction`, state: "grade:RELEASED", caller: "staff", arrange: gradeIs("draft", "RELEASED") },
@@ -704,7 +765,7 @@ export const STATE_CASES: readonly StateCase[] = [
   { entryKey: "src/app/api/lesson-resources/[id]/download/route.ts#GET", state: "resource:UPLOADING", caller: "staff", statuses: [409], arrange: resourceUploading },
   { entryKey: "src/app/api/ticket-attachments/[attachmentId]/download/route.ts#GET", state: "attachment:UPLOADING", caller: "owner", arrange: ticketAttachmentUploading },
   { entryKey: "src/app/api/submissions/[submissionId]/download/route.ts#GET", state: "submission:UPLOADING", caller: "staff", statuses: [409], arrange: submissionUploading },
-  { entryKey: "src/app/api/certificates/[id]/download/route.ts#GET", state: "certificate:REVOKED", caller: "owner", staffProbeDenial: "The route tries the staff permission first and records that denial before the learner path answers.", arrange: certificateIs("REVOKED") },
+  { entryKey: "src/app/api/certificates/[id]/download/route.ts#GET", state: "certificate:REVOKED", caller: "owner", arrange: certificateIs("REVOKED") },
 
   // ---- accounts ----
   { entryKey: `${USERS}#deactivateStaffAccountAction`, state: "user:DEACTIVATED", caller: "staff", idempotent: "Deactivating a deactivated account returns without writing.", arrange: staffTargetDeactivated },

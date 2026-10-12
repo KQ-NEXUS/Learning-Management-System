@@ -142,9 +142,9 @@
     },
     {
       "builder": "buildExportStorageKey",
-      "shape": "exports/<export job id>/<dataset version>.csv",
-      "randomSegment": "job-id",
-      "endsInUuidV4": false
+      "shape": "exports/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
     }
   ]
 }

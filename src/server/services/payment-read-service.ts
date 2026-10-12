@@ -96,14 +96,60 @@ export const PAYMENT_LIST_MAX_PAGE_SIZE = 100;
 /** Keeps OFFSET bounded however the page number was reached (T-15-09-04). */
 const PAYMENT_LIST_MAX_PAGE = 100_000;
 
-export type PaymentListOptions = { page?: number; pageSize?: number };
+/** A search longer than this is cut, so the query text stays bounded. */
+export const PAYMENT_LIST_MAX_SEARCH_LENGTH = 100;
+
+/** The order statuses and providers the list can be narrowed to; anything else is ignored. */
+const PAYMENT_LIST_STATUSES: readonly string[] = [
+  "PENDING",
+  "PAID",
+  "FAILED",
+  "CANCELLED",
+  "REFUNDED",
+  "PARTIALLY_REFUNDED",
+  "EXCEPTION",
+];
+const PAYMENT_LIST_PROVIDERS: readonly string[] = ["PAYSTACK", "STRIPE", "MANUAL"];
+
+export type PaymentListOptions = {
+  page?: number;
+  pageSize?: number;
+  /** One order status; a value that is not a known status is ignored. */
+  status?: string;
+  /** One provider; a value that is not a known provider is ignored. */
+  provider?: string;
+  /** Matched against the order reference and the learner's name and email, in any letter case. */
+  search?: string;
+};
+
+export type PaymentListFilters = { status: string; provider: string; search: string };
 
 export type PaymentListPage = {
   rows: PaymentListRow[];
+  /** Orders in the caller's scope that match the filters (all pages). */
   total: number;
   page: number;
   pageSize: number;
+  /** Every order in the caller's scope, whatever the filters. */
+  totalAll: number;
+  /** Orders per status over the caller's whole scope, whatever the filters. */
+  statusCounts: Record<string, number>;
+  /** The filters that were applied, after unknown values were dropped. */
+  filters: PaymentListFilters;
 };
+
+function knownOrEmpty(value: string | undefined, known: readonly string[]): string {
+  return typeof value === "string" && known.includes(value) ? value : "";
+}
+
+export function normalisePaymentListFilters(options: PaymentListOptions): PaymentListFilters {
+  return {
+    status: knownOrEmpty(options.status, PAYMENT_LIST_STATUSES),
+    provider: knownOrEmpty(options.provider, PAYMENT_LIST_PROVIDERS),
+    search:
+      typeof options.search === "string" ? options.search.trim().slice(0, PAYMENT_LIST_MAX_SEARCH_LENGTH).trim() : "",
+  };
+}
 
 /** Newest first, then id, so a page boundary never repeats or skips an order. */
 export const PAYMENT_LIST_ORDER_BY = [{ createdAt: "desc" }, { id: "desc" }] as const;
@@ -222,6 +268,9 @@ export type PaymentReadServiceDeps = {
       take: number;
     }): Promise<PaymentListOrderRow[]>;
     count(args: { where: Readonly<Record<string, unknown>> }): Promise<number>;
+    countByStatus(args: {
+      where: Readonly<Record<string, unknown>>;
+    }): Promise<Array<{ status: string; count: number }>>;
     findUnique(args: { where: { id: string } }): Promise<PaymentDetailOrderRow | null>;
   };
   user: {
@@ -238,16 +287,48 @@ export function createPaymentReadService(deps: PaymentReadServiceDeps) {
   // in-scope cohorts otherwise; filtered in the query, and no grant at all is
   // refused. The rows and the total share one where, so a scoped caller's
   // count never includes another cohort's orders (T-15-09-03).
+  //
+  // Status, provider and search are applied in the same query (checklist
+  // W-12), so they cover every order in the caller's scope and not only the
+  // rows of one page. They are added BESIDE the `cohort` condition, never in
+  // place of it, so a filter or a search can only narrow what the scope
+  // allows. The per-status counts use the scope alone: they say how many
+  // orders the caller may see in each status, whichever tab is open.
   async function listPaymentsForStaff(options: PaymentListOptions = {}): Promise<PaymentListPage> {
     const { cohortWhere } = await deps.authorizeCollection("payments.view");
     const pageSize = clampInt(options.pageSize, 1, PAYMENT_LIST_MAX_PAGE_SIZE, PAYMENT_LIST_PAGE_SIZE);
     const page = clampInt(options.page, 1, PAYMENT_LIST_MAX_PAGE, 1);
-    const where = { cohort: cohortWhere };
-    const [rows, total] = await Promise.all([
+    const filters = normalisePaymentListFilters(options);
+    const scopeWhere = { cohort: cohortWhere };
+    // `contains` becomes a LIKE pattern, where % and _ are wildcards: "%" alone would match every
+    // order. They are escaped so the text is searched for as it was typed.
+    const needle = filters.search.replace(/[\\%_]/g, "\\$&");
+    const where = {
+      ...scopeWhere,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.provider ? { selectedProvider: filters.provider } : {}),
+      ...(needle
+        ? {
+            OR: [
+              { reference: { contains: needle, mode: "insensitive" } },
+              { user: { name: { contains: needle, mode: "insensitive" } } },
+              { user: { email: { contains: needle, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    };
+    const [rows, total, byStatus] = await Promise.all([
       deps.order.findMany({ where, orderBy: PAYMENT_LIST_ORDER_BY, skip: (page - 1) * pageSize, take: pageSize }),
       deps.order.count({ where }),
+      deps.order.countByStatus({ where: scopeWhere }),
     ]);
-    return { rows: rows.map(toListRow), total, page, pageSize };
+    const statusCounts: Record<string, number> = {};
+    let totalAll = 0;
+    for (const { status, count } of byStatus) {
+      statusCounts[status] = count;
+      totalAll += count;
+    }
+    return { rows: rows.map(toListRow), total, page, pageSize, totalAll, statusCounts, filters };
   }
 
   function toListRow(row: PaymentListOrderRow): PaymentListRow {
@@ -377,6 +458,14 @@ export function createPrismaBackedPaymentReadService(
           },
         }),
       count: (args) => client.order.count({ where: args.where }),
+      countByStatus: async (args) => {
+        const groups: Array<{ status: string; _count: { _all: number } }> = await client.order.groupBy({
+          by: ["status"],
+          where: args.where,
+          _count: { _all: true },
+        });
+        return groups.map((group) => ({ status: group.status, count: group._count._all }));
+      },
       findUnique: ({ where }) =>
         client.order.findUnique({
           where,

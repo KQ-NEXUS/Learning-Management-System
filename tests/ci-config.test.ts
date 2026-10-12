@@ -18,6 +18,7 @@ const workflows = workflowFiles.map((file) => ({ file, text: readFileSync(join(w
 const workflow = readFileSync(join(workflowDir, "ci.yml"), "utf8");
 const nightly = readFileSync(join(workflowDir, "e2e-nightly.yml"), "utf8");
 const dependabot = readFileSync(resolve(".github/dependabot.yml"), "utf8");
+const vitestConfig = readFileSync(resolve("vitest.config.mts"), "utf8");
 const manifest = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -123,6 +124,108 @@ function jobProblems(text: string): string[] {
   return problems;
 }
 
+const SKIP_INTEGRATION_VARIABLE = "VITEST_SKIP_INTEGRATION";
+const INTEGRATION_GLOB = "tests/**/*.integration.test.ts";
+
+/**
+ * Test 6 (checklist D-07): the unit job runs no *.integration.test.ts file.
+ * The command line's --exclude does not reach a vitest project's own file
+ * selection, so the job sets a variable and vitest.config.mts adds the exclude.
+ * Both ends are checked: the switch in the workflow and the reader in the config.
+ */
+function unitSelectionProblems(workflowText: string, vitestConfigText: string): string[] {
+  const problems: string[] = [];
+  const unit = jobBlocks(workflowText).get("unit") ?? "";
+  if (!new RegExp(`^\\s+${SKIP_INTEGRATION_VARIABLE}:\\s*"1"\\s*$`, "m").test(unit)) {
+    problems.push(`unit job does not set ${SKIP_INTEGRATION_VARIABLE} to "1"`);
+  }
+  if (/--exclude\b/.test(unit)) {
+    problems.push("unit job relies on a command-line --exclude, which does not apply to a vitest project");
+  }
+  const integration = jobBlocks(workflowText).get("integration") ?? "";
+  if (integration.includes(SKIP_INTEGRATION_VARIABLE)) {
+    problems.push(`integration job sets ${SKIP_INTEGRATION_VARIABLE}, so it would run nothing`);
+  }
+  if (!vitestConfigText.includes(`process.env.${SKIP_INTEGRATION_VARIABLE} === "1"`)) {
+    problems.push(`vitest.config.mts does not read ${SKIP_INTEGRATION_VARIABLE}`);
+  }
+  if (!vitestConfigText.includes(`"${INTEGRATION_GLOB}"`)) {
+    problems.push(`vitest.config.mts does not exclude ${INTEGRATION_GLOB}`);
+  }
+  return problems;
+}
+
+const LIVE_SMOKE_FILE = "brevo-live.smoke.test.ts";
+const SMOKE_GLOB = "tests/**/*.smoke.test.ts";
+
+/**
+ * Test 6b: a test file that starts a throwaway Postgres (it imports tests/support/pg.ts)
+ * needs Docker and must not run in the parallel unit job. The name is what keeps it out,
+ * so every such file is named *.integration.test.ts (the sharded job) or *.perf.test.ts
+ * (its own script). The one exception is the manual live email smoke, checked by Test 6c.
+ */
+function databaseBackedFilesOutsideIntegration(): string[] {
+  return readdirSync(resolve("tests"))
+    .filter((file) => file.endsWith(".test.ts"))
+    .filter((file) => !file.endsWith(".integration.test.ts") && !file.endsWith(".perf.test.ts"))
+    .filter((file) => /from\s+"\.\/support\/pg"/.test(readFileSync(join(resolve("tests"), file), "utf8")))
+    .sort();
+}
+
+/**
+ * Test 6c: the live email smoke sends a real email. It must never run in CI unless a
+ * person opts in: the unit job does not select it, every case in it is skipped unless
+ * BREVO_LIVE is set, and no workflow sets BREVO_LIVE or names the file.
+ */
+function liveSmokeProblems(
+  allWorkflows: ReadonlyArray<{ file: string; text: string }>,
+  vitestConfigText: string,
+  smokeText: string,
+): string[] {
+  const problems: string[] = [];
+  if (!vitestConfigText.includes(`"${SMOKE_GLOB}"`)) {
+    problems.push(`vitest.config.mts does not exclude ${SMOKE_GLOB} from the unit job`);
+  }
+  if (!smokeText.includes("const LIVE = !!process.env.BREVO_LIVE;")) {
+    problems.push("the live smoke does not read BREVO_LIVE");
+  }
+  const cases = smokeText.match(/^\s*(?:it|test)[.(].*$/gm) ?? [];
+  if (cases.length === 0 || cases.some((line) => !line.trim().startsWith("it.skipIf(!LIVE)("))) {
+    problems.push("the live smoke has a case that is not skipped without BREVO_LIVE");
+  }
+  for (const { file, text } of allWorkflows) {
+    if (/BREVO_LIVE|brevo-live|smoke\.test/.test(text)) problems.push(`${file} opts in to, or names, the live email smoke`);
+  }
+  return problems;
+}
+
+/**
+ * Test 7 (checklist D-07): the integration job starts an object store before
+ * the tests run. The storage integration tests expect one on the loopback
+ * address at port 9000 with the bucket `lms-private`; without it they fail to
+ * connect. The image is pinned by digest and nothing but the loopback address
+ * is published.
+ */
+function objectStoreProblems(workflowText: string): string[] {
+  const problems: string[] = [];
+  const integration = jobBlocks(workflowText).get("integration") ?? "";
+  const start = integration.indexOf("docker run");
+  const tests = integration.indexOf("npx vitest run integration.test");
+  if (start === -1) return ["integration job does not start an object store"];
+  if (tests === -1 || start > tests) problems.push("integration job starts the object store after the tests");
+  if (!/minio\/minio@sha256:[0-9a-f]{64}\b/.test(integration)) {
+    problems.push("the object store image is not pinned by sha256 digest");
+  }
+  if (/minio\/minio:[\w.-]+/.test(integration)) problems.push("the object store image uses a tag");
+  if (!integration.includes("-p 127.0.0.1:9000:9000")) {
+    problems.push("the object store is not published on the loopback address at port 9000");
+  }
+  if (!integration.includes("/data/lms-private")) problems.push("the lms-private bucket is not created");
+  const wait = integration.indexOf("/minio/health/live");
+  if (wait === -1 || wait > tests) problems.push("integration job does not wait for the object store before the tests");
+  return problems;
+}
+
 function exactPins(pkg: typeof manifest): string[] {
   return Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })
     .filter(([, version]) => /^\d/.test(version))
@@ -186,6 +289,38 @@ describe("workflow guard (D-10), every file in .github/workflows", () => {
   it("Test 3: has the static, unit, integration and audit jobs with the audit gate and sharded serial integration", () => {
     expect(jobProblems(workflow)).toEqual([]);
   });
+
+  it("Test 6: the unit job keeps integration files out through the switch vitest.config.mts reads", () => {
+    expect(unitSelectionProblems(workflow, vitestConfig)).toEqual([]);
+  });
+
+  it("Test 6b: every test file that starts a database is an integration file, so the unit job runs none", () => {
+    expect(databaseBackedFilesOutsideIntegration()).toEqual([LIVE_SMOKE_FILE]);
+  });
+
+  it("Test 6c: the live email smoke is out of the unit job, opt-in case by case, and no workflow opts in", () => {
+    expect(liveSmokeProblems(workflows, vitestConfig, readFileSync(join(resolve("tests"), LIVE_SMOKE_FILE), "utf8"))).toEqual([]);
+  });
+
+  it("Test 7: the integration job starts a digest-pinned object store on the loopback address before the tests", () => {
+    expect(objectStoreProblems(workflow)).toEqual([]);
+  });
+
+  it("Test 7b: the object store values in ci.yml are the ones the storage integration tests set for themselves", () => {
+    const integration = jobBlocks(workflow).get("integration") ?? "";
+    const storageTests = readdirSync(resolve("tests"))
+      .filter((file) => file.endsWith(".integration.test.ts"))
+      .map((file) => ({ file, text: readFileSync(join(resolve("tests"), file), "utf8") }))
+      .filter(({ text }) => /^process\.env\.S3_ENDPOINT\s*=/m.test(text));
+    expect(storageTests.length).toBeGreaterThanOrEqual(4);
+    for (const { file, text } of storageTests) {
+      const value = (name: string) => new RegExp(`^process\\.env\\.${name}\\s*=\\s*"([^"]+)";`, "m").exec(text)?.[1];
+      expect(text, file).toContain('process.env.TEST_MINIO_ENDPOINT ?? "http://localhost:9000"');
+      expect(integration, file).toContain(`-e MINIO_ROOT_USER=${value("S3_ACCESS_KEY_ID")}`);
+      expect(integration, file).toContain(`-e MINIO_ROOT_PASSWORD=${value("S3_SECRET_ACCESS_KEY")}`);
+      expect(integration, file).toContain(`/data/${value("S3_BUCKET")}`);
+    }
+  });
 });
 
 describe("Dependabot guard (D-10)", () => {
@@ -246,6 +381,46 @@ describe("the guard catches regressions in an in-memory copy", () => {
     expect(jobProblems(noAudit)).toContain("missing job audit");
     const parallel = workflow.replace("--no-file-parallelism", "");
     expect(jobProblems(parallel)).toContain("integration job runs files in parallel");
+  });
+
+  it("fails when the unit job loses the switch, goes back to --exclude, or the config stops reading it", () => {
+    const noSwitch = workflow.replace(/^\s+VITEST_SKIP_INTEGRATION:.*\r?\n/m, "");
+    expect(noSwitch).not.toBe(workflow);
+    expect(unitSelectionProblems(noSwitch, vitestConfig)).toEqual(['unit job does not set VITEST_SKIP_INTEGRATION to "1"']);
+    const cliExclude = workflow.replace("--project node --testTimeout", '--project node --exclude "**/*.integration.test.ts" --testTimeout');
+    expect(cliExclude).not.toBe(workflow);
+    expect(unitSelectionProblems(cliExclude, vitestConfig).join("\n")).toContain("--exclude");
+    const deafConfig = vitestConfig.replace('process.env.VITEST_SKIP_INTEGRATION === "1"', "false");
+    expect(deafConfig).not.toBe(vitestConfig);
+    expect(unitSelectionProblems(workflow, deafConfig)).toEqual(["vitest.config.mts does not read VITEST_SKIP_INTEGRATION"]);
+  });
+
+  it("fails when the live email smoke can reach CI: not excluded, a case without the opt-in, or a workflow that opts in", () => {
+    const smoke = readFileSync(join(resolve("tests"), LIVE_SMOKE_FILE), "utf8");
+    const selected = vitestConfig.replace(`"${SMOKE_GLOB}"`, '"tests/**/*.none.test.ts"');
+    expect(selected).not.toBe(vitestConfig);
+    expect(liveSmokeProblems(workflows, selected, smoke)).toEqual([`vitest.config.mts does not exclude ${SMOKE_GLOB} from the unit job`]);
+    const ungated = smoke.replace("it.skipIf(!LIVE)(", "it(");
+    expect(ungated).not.toBe(smoke);
+    expect(liveSmokeProblems(workflows, vitestConfig, ungated)).toEqual(["the live smoke has a case that is not skipped without BREVO_LIVE"]);
+    const optedIn = [{ file: "ci.yml", text: workflow.replace('VITEST_SKIP_INTEGRATION: "1"', 'BREVO_LIVE: "1"') }];
+    expect(liveSmokeProblems(optedIn, vitestConfig, smoke)).toEqual(["ci.yml opts in to, or names, the live email smoke"]);
+  });
+
+  it("fails when the object store is dropped, unpinned, started late or exposed beyond the loopback address", () => {
+    const dropped = workflow.replace(/^\s+- name: Start local object storage[\s\S]*?(?=^\s+- name: Wait for object storage)/m, "");
+    expect(dropped).not.toBe(workflow);
+    expect(objectStoreProblems(dropped)).toEqual(["integration job does not start an object store"]);
+    const tagged = workflow.replace(/minio\/minio@sha256:[0-9a-f]{64}/, "minio/minio:latest");
+    expect(tagged).not.toBe(workflow);
+    expect(objectStoreProblems(tagged)).toEqual([
+      "the object store image is not pinned by sha256 digest",
+      "the object store image uses a tag",
+    ]);
+    const exposed = workflow.replace("-p 127.0.0.1:9000:9000", "-p 9000:9000");
+    expect(objectStoreProblems(exposed)).toEqual(["the object store is not published on the loopback address at port 9000"]);
+    const noBucket = workflow.replace("mkdir -p /data/lms-private && ", "");
+    expect(objectStoreProblems(noBucket)).toEqual(["the lms-private bucket is not created"]);
   });
 
   it("fails when a new exact pin has no ignore entry", () => {

@@ -4,11 +4,11 @@
   "scopedEntries": 74,
   "recordScopedEntries": 69,
   "collectionScopedEntries": 5,
-  "statefulEntries": 56,
-  "stateCases": 77,
-  "entries": 101,
-  "cases": 416,
-  "passed": 416,
+  "statefulEntries": 69,
+  "stateCases": 94,
+  "entries": 102,
+  "cases": 433,
+  "passed": 433,
   "byKind": {
     "tracer": {
       "cases": 3,
@@ -35,8 +35,8 @@
       "passed": 30
     },
     "record-state": {
-      "cases": 77,
-      "passed": 77
+      "cases": 94,
+      "passed": 94
     }
   },
   "perEntry": [
@@ -300,6 +300,14 @@
       }
     },
     {
+      "key": "src/app/staff/certificates/templates/template-actions.ts#archiveTemplateAction",
+      "permission": "certificates.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "template:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
       "key": "src/app/staff/certificates/templates/template-actions.ts#setDefaultTemplateAction",
       "permission": "certificates.manage",
       "scope": "GLOBAL",
@@ -435,9 +443,9 @@
       "permission": "attendance.view",
       "scope": "RECORD",
       "cases": {
-        "staffCohortB": "HTTP 403",
-        "staffCourseB": "HTTP 403",
-        "staffProgrammeZ": "HTTP 403",
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
         "right-cohort": "HTTP 200"
       }
     },
@@ -583,7 +591,9 @@
         "staffCohortB": "returned-refusal",
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
-        "right-cohort": "returned-refusal"
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
       }
     },
     {
@@ -594,7 +604,9 @@
         "staffCohortB": "returned-refusal",
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
-        "right-cohort": "returned-refusal"
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
       }
     },
     {
@@ -617,7 +629,8 @@
         "staffCohortB": "returned-refusal",
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
-        "right-cohort": "returned-refusal"
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal"
       }
     },
     {
@@ -640,7 +653,8 @@
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
         "staffCourseB:claims-courseId": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "module:WITHDRAWN": "returned-refusal"
       }
     },
     {
@@ -652,7 +666,9 @@
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
         "staffCourseB:claims-courseId": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "module:LIVE": "returned-refusal",
+        "lesson:LIVE": "returned-refusal"
       }
     },
     {
@@ -688,7 +704,9 @@
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
         "staffCourseB:claims-courseId": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "lesson:WITHDRAWN": "returned-refusal",
+        "module:WITHDRAWN": "returned-refusal"
       }
     },
     {
@@ -700,7 +718,8 @@
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
         "staffCourseB:claims-courseId": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "assessment:ARCHIVED": "returned-refusal"
       }
     },
     {
@@ -722,7 +741,8 @@
         "staffCohortB": "returned-refusal",
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "assessment:ARCHIVED": "returned-refusal"
       }
     },
     {
@@ -757,7 +777,8 @@
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
         "staffCourseB:claims-courseId": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "lesson:WITHDRAWN": "returned-refusal"
       }
     },
     {
@@ -769,7 +790,8 @@
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
         "staffCourseB:claims-courseId": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "lesson:WITHDRAWN": "returned-refusal"
       }
     },
     {
@@ -780,7 +802,8 @@
         "staffCohortB": "returned-refusal",
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
-        "right-course": "returned-refusal"
+        "right-course": "returned-refusal",
+        "course:ARCHIVED": "returned-refusal"
       }
     },
     {
@@ -917,7 +940,8 @@
         "staffCohortB": "returned-refusal",
         "staffCourseB": "returned-refusal",
         "staffProgrammeZ": "returned-refusal",
-        "right-programme": "returned-refusal"
+        "right-programme": "returned-refusal",
+        "programme:ARCHIVED": "returned-refusal"
       }
     },
     {

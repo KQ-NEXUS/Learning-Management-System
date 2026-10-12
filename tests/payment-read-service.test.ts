@@ -37,8 +37,11 @@ vi.mock("next/link", () => ({
     createElement("a", { href, ...rest }, children),
 }));
 vi.mock("@/app/staff/payments/PaymentsTable", () => ({
-  PaymentsTable: ({ rows, denied }: { rows?: unknown[]; denied?: unknown }) =>
-    createElement("div", { "data-table": denied ? "denied" : String(rows?.length ?? 0) }),
+  PaymentsTable: ({ rows, denied, ...rest }: { rows?: unknown[]; denied?: unknown } & Record<string, unknown>) =>
+    createElement("div", {
+      "data-table": denied ? "denied" : String(rows?.length ?? 0),
+      "data-props": JSON.stringify(rest),
+    }),
 }));
 
 import PaymentsPage from "@/app/staff/payments/page";
@@ -143,6 +146,7 @@ function harness(opts?: {
   const { authorizeCollection } = createTestCollectionAuthorizer(opts?.grants ?? [grant("payments.view", "GLOBAL")]);
   const listCalls: Array<Parameters<PaymentReadServiceDeps["order"]["findMany"]>[0]> = [];
   const countCalls: Array<Parameters<PaymentReadServiceDeps["order"]["count"]>[0]> = [];
+  const statusCountCalls: Array<Parameters<PaymentReadServiceDeps["order"]["countByStatus"]>[0]> = [];
   const detailCalls: string[] = [];
   const all = () => opts?.listRows ?? [listRow()];
 
@@ -156,6 +160,14 @@ function harness(opts?: {
       count: async (args) => {
         countCalls.push(args);
         return all().length;
+      },
+      // Counts every row the fake holds: the fake does not apply a where, so a
+      // case reads `statusCountCalls` to see which where the service sent.
+      countByStatus: async (args) => {
+        statusCountCalls.push(args);
+        const counts = new Map<string, number>();
+        for (const row of all()) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+        return [...counts].map(([status, count]) => ({ status, count }));
       },
       findUnique: async ({ where }) => {
         detailCalls.push(where.id);
@@ -171,7 +183,7 @@ function harness(opts?: {
     authorizeCollection,
   };
 
-  return { deps, listCalls, countCalls, detailCalls };
+  return { deps, listCalls, countCalls, statusCountCalls, detailCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +262,96 @@ describe("listPaymentsForStaff — bounded pages (NFR-02, T-15-09-04)", () => {
     expect((await service.listPaymentsForStaff({ page: -4 })).page).toBe(1);
     expect((await service.listPaymentsForStaff({ page: Number.NaN })).page).toBe(1);
     for (const call of h.listCalls) expect(call.take).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("listPaymentsForStaff — filters, search and counts cover every in-scope order (W-12)", () => {
+  const mixed = [
+    listRow({ id: "o-1", status: "PAID" }),
+    listRow({ id: "o-2", status: "PAID" }),
+    listRow({ id: "o-3", status: "EXCEPTION" }),
+    listRow({ id: "o-4", status: "PENDING" }),
+  ];
+  const scoped = [grant("payments.view", "COHORT", "cohort-a")];
+
+  it("sends status, provider and search to the database for the rows and the total, inside the caller's scope", async () => {
+    const h = harness({ grants: scoped, listRows: mixed });
+    const service = createPaymentReadService(h.deps);
+    await service.listPaymentsForStaff({ status: "EXCEPTION", provider: "STRIPE", search: "  Ada  " });
+
+    const where = h.listCalls[0].where as Record<string, unknown>;
+    expect(where).toEqual(h.countCalls[0].where);
+    expect(where.status).toBe("EXCEPTION");
+    expect(where.selectedProvider).toBe("STRIPE");
+    expect(where.OR).toEqual([
+      { reference: { contains: "Ada", mode: "insensitive" } },
+      { user: { name: { contains: "Ada", mode: "insensitive" } } },
+      { user: { email: { contains: "Ada", mode: "insensitive" } } },
+    ]);
+    // The scope is never replaced by a filter: it is the same `cohort` condition an unfiltered list sends.
+    const plain = harness({ grants: scoped });
+    await createPaymentReadService(plain.deps).listPaymentsForStaff();
+    expect(where.cohort).toEqual((plain.listCalls[0].where as Record<string, unknown>).cohort);
+    expect(JSON.stringify(where.cohort)).toContain("cohort-a");
+  });
+
+  it("counts each status over the caller's whole scope, whatever tab, provider or search is active", async () => {
+    const h = harness({ grants: scoped, listRows: mixed });
+    const service = createPaymentReadService(h.deps);
+    const result = await service.listPaymentsForStaff({ status: "EXCEPTION", provider: "STRIPE", search: "ada" });
+
+    expect(h.statusCountCalls).toHaveLength(1);
+    const countWhere = h.statusCountCalls[0].where as Record<string, unknown>;
+    expect(Object.keys(countWhere)).toEqual(["cohort"]);
+    expect(JSON.stringify(countWhere.cohort)).toContain("cohort-a");
+    expect(result.statusCounts).toEqual({ PAID: 2, EXCEPTION: 1, PENDING: 1 });
+    expect(result.totalAll).toBe(4);
+  });
+
+  it("reports the filters it applied", async () => {
+    const h = harness({ listRows: mixed });
+    const result = await createPaymentReadService(h.deps).listPaymentsForStaff({
+      status: "PAID",
+      provider: "MANUAL",
+      search: " ORD-1 ",
+    });
+    expect(result.filters).toEqual({ status: "PAID", provider: "MANUAL", search: "ORD-1" });
+  });
+
+  it("ignores a status or provider that is not a known one, and a blank search", async () => {
+    const h = harness({ listRows: mixed });
+    const service = createPaymentReadService(h.deps);
+    for (const value of ["paid", "NOPE", "toString", "constructor", "__proto__", ""]) {
+      const result = await service.listPaymentsForStaff({ status: value, provider: value, search: "   " });
+      expect(result.filters).toEqual({ status: "", provider: "", search: "" });
+    }
+    for (const call of h.listCalls) expect(Object.keys(call.where)).toEqual(["cohort"]);
+    for (const call of h.countCalls) expect(Object.keys(call.where)).toEqual(["cohort"]);
+  });
+
+  it("escapes the pattern characters % _ and \\ so they are searched for as typed", async () => {
+    const h = harness({ listRows: mixed });
+    const result = await createPaymentReadService(h.deps).listPaymentsForStaff({ search: "50%_a\\b" });
+    const where = h.listCalls[0].where as { OR: Array<{ reference?: { contains: string } }> };
+    expect(where.OR[0].reference?.contains).toBe("50\\%\\_a\\\\b");
+    // What is reported back (and shown in the box) is what was typed.
+    expect(result.filters.search).toBe("50%_a\\b");
+  });
+
+  it("cuts a very long search to 100 characters", async () => {
+    const h = harness({ listRows: mixed });
+    const result = await createPaymentReadService(h.deps).listPaymentsForStaff({ search: "x".repeat(5_000) });
+    expect(result.filters.search).toHaveLength(100);
+  });
+
+  it("a caller without payments.view is refused before any filter is read", async () => {
+    const h = harness({ grants: [] });
+    await expect(
+      createPaymentReadService(h.deps).listPaymentsForStaff({ status: "PAID", search: "ada" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    expect(h.listCalls).toHaveLength(0);
+    expect(h.countCalls).toHaveLength(0);
+    expect(h.statusCountCalls).toHaveLength(0);
   });
 });
 
@@ -515,7 +617,15 @@ describe("/staff/payments page — one bounded page with Previous and Next", () 
       total,
       page,
       pageSize,
+      totalAll: 300,
+      statusCounts: { PAID: 280, EXCEPTION: 20 },
+      filters: { status: "", provider: "", search: "" },
     };
+  }
+
+  function tableProps(html: string): Record<string, unknown> {
+    const raw = /data-props="([^"]*)"/.exec(html)?.[1] ?? "{}";
+    return JSON.parse(raw.replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
   }
 
   async function render(searchParams: Record<string, string | string[]>) {
@@ -538,7 +648,7 @@ describe("/staff/payments page — one bounded page with Previous and Next", () 
 
   it("renders both links on a middle page and keeps a known status tab in them", async () => {
     const html = await render({ page: "2", status: "EXCEPTION" });
-    expect(pageMocks.list).toHaveBeenCalledWith({ page: 2 });
+    expect(pageMocks.list).toHaveBeenCalledWith({ page: 2, status: "EXCEPTION" });
     expect(html).toContain('href="/staff/payments?status=EXCEPTION"');
     expect(html).toContain('href="/staff/payments?status=EXCEPTION&amp;page=3"');
   });
@@ -575,6 +685,41 @@ describe("/staff/payments page — one bounded page with Previous and Next", () 
     const denied = await render({});
     expect(denied).toContain('data-table="denied"');
     expect(denied).not.toContain("Showing");
+  });
+
+  it("asks the service for the status, provider and search in the address (W-12)", async () => {
+    await render({ status: "PAID", provider: "STRIPE", q: " ada " });
+    expect(pageMocks.list).toHaveBeenCalledWith({ page: 1, status: "PAID", provider: "STRIPE", search: "ada" });
+  });
+
+  it("drops a status or provider that is not a known one and never sends it to the service", async () => {
+    await render({ status: "NOPE", provider: "constructor", q: ["a", "b"] });
+    expect(pageMocks.list).toHaveBeenCalledWith({ page: 1 });
+  });
+
+  it("keeps the status, provider and search in the Previous and Next links", async () => {
+    const html = await render({ page: "2", status: "PAID", provider: "STRIPE", q: "ada" });
+    expect(html).toContain('href="/staff/payments?status=PAID&amp;provider=STRIPE&amp;q=ada"');
+    expect(html).toContain('href="/staff/payments?status=PAID&amp;provider=STRIPE&amp;q=ada&amp;page=3"');
+  });
+
+  it("gives the table the counts for every order in scope, not for the rows on the page", async () => {
+    const props = tableProps(await render({ status: "EXCEPTION", q: "ada" }));
+    expect(props).toMatchObject({
+      initialStatus: "EXCEPTION",
+      provider: "",
+      search: "ada",
+      matchingCount: 120,
+      totalAll: 300,
+      statusCounts: { PAID: 280, EXCEPTION: 20 },
+    });
+  });
+
+  it("shows the last page when a filter leaves fewer pages than the address asks for", async () => {
+    pageMocks.list.mockImplementation(async ({ page }: { page: number }) => pageOf(page, 60));
+    const html = await render({ page: "5", status: "PAID" });
+    expect(pageMocks.list).toHaveBeenLastCalledWith({ page: 2, status: "PAID" });
+    expect(html).toContain("Showing 10 of 60.");
   });
 });
 

@@ -36,7 +36,21 @@ import {
   validateUpload,
 } from "@/lib/upload-limits";
 
+/**
+ * The storage key id or secret. A missing or empty value stops the call with an
+ * error that names the variable: signing with an empty string produces a link
+ * that looks normal and that the storage service then refuses in the learner's
+ * browser, where nobody can see why (G-02, found on staging in plan 15-30).
+ */
+function requiredCredential(name: "S3_ACCESS_KEY_ID" | "S3_SECRET_ACCESS_KEY"): string {
+  const value = process.env[name];
+  if (!value || value.trim() === "") throw new Error(`${name} is not configured.`);
+  return value;
+}
+
 function makeClient(endpoint: string | undefined): S3Client {
+  const accessKeyId = requiredCredential("S3_ACCESS_KEY_ID");
+  const secretAccessKey = requiredCredential("S3_SECRET_ACCESS_KEY");
   return new S3Client({
     endpoint,
     region: "auto",
@@ -49,15 +63,22 @@ function makeClient(endpoint: string | undefined): S3Client {
     // checksums where the operation requires one.
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
-    credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
-    },
+    credentials: { accessKeyId, secretAccessKey },
   });
 }
 
+// Both clients are built on first use, not when this module is imported: builds
+// and most tests import it with no storage variables set, and a missing key
+// must fail the call that needs storage, not the import. A client that was
+// built is kept; a refused attempt is not, so the next call checks again.
+let serverClient: S3Client | undefined;
+let publicClient: S3Client | undefined;
+
 /** Reaches storage from the server (inside Compose this is `http://minio:9000`). */
-const s3 = makeClient(process.env.S3_ENDPOINT);
+function s3(): S3Client {
+  serverClient ??= makeClient(process.env.S3_ENDPOINT);
+  return serverClient;
+}
 
 /**
  * The client used to presign URLs. A presigned URL is only valid for the host
@@ -65,9 +86,11 @@ const s3 = makeClient(process.env.S3_ENDPOINT);
  * not the internal one the server uses to reach storage. When
  * `S3_PUBLIC_ENDPOINT` is set, presign against a client bound to it.
  */
-const presignClient = process.env.S3_PUBLIC_ENDPOINT
-  ? makeClient(process.env.S3_PUBLIC_ENDPOINT)
-  : s3;
+function presignClient(): S3Client {
+  if (!process.env.S3_PUBLIC_ENDPOINT) return s3();
+  publicClient ??= makeClient(process.env.S3_PUBLIC_ENDPOINT);
+  return publicClient;
+}
 
 function bucketName(): string {
   const bucket = process.env.S3_BUCKET;
@@ -185,7 +208,7 @@ export async function presignLessonUploadUrl(input: {
   contentType: string;
 }): Promise<string> {
   return getSignedUrl(
-    presignClient,
+    presignClient(),
     new PutObjectCommand({
       Bucket: bucketName(),
       Key: input.key,
@@ -202,7 +225,7 @@ export async function presignLessonUploadUrl(input: {
 export async function inspectLessonObject(
   key: string,
 ): Promise<{ sizeBytes: bigint; contentType: string | null }> {
-  const result = await s3.send(
+  const result = await s3().send(
     new HeadObjectCommand({ Bucket: bucketName(), Key: key }),
   );
   if (result.ContentLength === undefined) {
@@ -228,7 +251,7 @@ export async function promoteLessonObject(input: {
   finalKey: string;
 }): Promise<void> {
   const bucket = bucketName();
-  await s3.send(
+  await s3().send(
     new CopyObjectCommand({
       Bucket: bucket,
       CopySource: encodedCopySource(bucket, input.stagedKey),
@@ -253,7 +276,7 @@ export class StoredObjectTooLargeError extends Error {
  * are served by presigned redirect.
  */
 export async function readLessonObjectBounded(key: string, maxBytes: number): Promise<Uint8Array> {
-  const result = await s3.send(new GetObjectCommand({ Bucket: bucketName(), Key: key }));
+  const result = await s3().send(new GetObjectCommand({ Bucket: bucketName(), Key: key }));
   if (!result.Body) throw new Error(`No object body for key ${key}.`);
   if (result.ContentLength !== undefined && result.ContentLength > maxBytes) {
     throw new StoredObjectTooLargeError();
@@ -265,7 +288,7 @@ export async function readLessonObjectBounded(key: string, maxBytes: number): Pr
 
 /** Deletes one object. Callers treat a missing object as already deleted. */
 export async function deleteLessonObject(key: string): Promise<void> {
-  await s3.send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));
+  await s3().send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));
 }
 
 export type PresignLessonObjectInput = {
@@ -293,7 +316,7 @@ export async function presignLessonObjectUrl(
     ResponseContentType: input.contentType ?? "application/octet-stream",
   });
 
-  return getSignedUrl(presignClient, command, {
+  return getSignedUrl(presignClient(), command, {
     expiresIn: downloadTtlFor(input.lessonType),
   });
 }
@@ -353,7 +376,7 @@ export async function putGeneratedCertificateObject(input: {
     throw new Error("Generated certificate objects must use application/pdf.");
   }
 
-  await s3.send(
+  await s3().send(
     new PutObjectCommand({
       Bucket: bucketName(),
       Key: input.key,
@@ -374,7 +397,7 @@ export async function presignCertificateObjectUrl(input: {
     ResponseContentType: "application/pdf",
   });
 
-  return getSignedUrl(presignClient, command, {
+  return getSignedUrl(presignClient(), command, {
     expiresIn: downloadTtlFor("FILE"),
   });
 }
@@ -390,7 +413,7 @@ export async function presignCertificateObjectUrl(input: {
  * presigned URL (`presignTemplateAssetUploadUrl`, `presignLessonObjectUrl`).
  */
 export async function getObjectBytes(key: string): Promise<Uint8Array> {
-  const result = await s3.send(
+  const result = await s3().send(
     new GetObjectCommand({ Bucket: bucketName(), Key: key }),
   );
   if (!result.Body) {
@@ -424,7 +447,7 @@ export async function presignTemplateAssetViewUrl(input: { key: string }): Promi
     ResponseContentDisposition: "inline",
   });
 
-  return getSignedUrl(presignClient, command, { expiresIn: TEMPLATE_ASSET_VIEW_TTL_SECONDS });
+  return getSignedUrl(presignClient(), command, { expiresIn: TEMPLATE_ASSET_VIEW_TTL_SECONDS });
 }
 
 /**
@@ -445,7 +468,7 @@ export async function presignTemplateAssetUploadUrl(input: {
   if (!validation.ok) throw new Error(validation.message);
 
   return getSignedUrl(
-    presignClient,
+    presignClient(),
     new PutObjectCommand({
       Bucket: bucketName(),
       Key: input.key,
@@ -456,11 +479,20 @@ export async function presignTemplateAssetUploadUrl(input: {
   );
 }
 
-const EXPORT_KEY_PATTERN = /^exports\/[A-Za-z0-9_-]{8,128}\/[A-Za-z0-9._-]{1,32}\.csv$/;
+// Two shapes are accepted. `exports/<job id>/<uuid v4>` is what is minted now.
+// `exports/<job id>/<dataset version>.csv` is the shape used before G-03: files
+// made before the change stay downloadable and deletable until they expire.
+const EXPORT_KEY_PATTERN =
+  /^exports\/[A-Za-z0-9_-]{8,128}\/(?:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[A-Za-z0-9._-]{1,32}\.csv)$/;
 
-/** Stable across background retries, with no learner or original filename data. */
-export function buildExportStorageKey(jobId: string, datasetVersion: string): string {
-  const key = `exports/${jobId}/${datasetVersion}.csv`;
+/**
+ * `exports/<jobId>/<randomUUID()>`, with no learner, dataset or filename data.
+ * NOT stable between calls: the export worker mints it once when it claims the
+ * job and stores it in `ExportJob.storageKey`, and a background retry reuses the
+ * stored key (G-03; NFR-06: no predictable object paths).
+ */
+export function buildExportStorageKey(jobId: string): string {
+  const key = `exports/${jobId}/${randomUUID()}`;
   if (!EXPORT_KEY_PATTERN.test(key)) throw new Error("Invalid export storage identity.");
   return key;
 }
@@ -472,7 +504,7 @@ function assertExportKey(key: string): void {
 export async function uploadExportObject(input: { key: string; body: Readable }): Promise<void> {
   assertExportKey(input.key);
   const upload = new Upload({
-    client: s3,
+    client: s3(),
     params: {
       Bucket: bucketName(),
       Key: input.key,
@@ -488,7 +520,7 @@ export async function uploadExportObject(input: { key: string; body: Readable })
 
 export async function deleteExportObject(key: string): Promise<void> {
   assertExportKey(key);
-  await s3.send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));
+  await s3().send(new DeleteObjectCommand({ Bucket: bucketName(), Key: key }));
 }
 
 function exportDownloadTtl(): number {
@@ -506,5 +538,5 @@ export async function presignExportObjectUrl(input: { key: string; filename: str
     ResponseContentDisposition: `attachment; filename="${safeName}"`,
     ResponseContentType: "text/csv; charset=utf-8",
   });
-  return getSignedUrl(presignClient, command, { expiresIn: exportDownloadTtl() });
+  return getSignedUrl(presignClient(), command, { expiresIn: exportDownloadTtl() });
 }

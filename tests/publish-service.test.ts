@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createPublishService,
   PublishTargetNotFoundError,
@@ -553,5 +554,41 @@ describe("unpublishContent (D-12)", () => {
     await expect(
       svc.unpublishContent({ kind: "Course", id: "course-1", reason: "  " }),
     ).rejects.toBeInstanceOf(ReasonRequiredError);
+  });
+});
+
+describe("archive is not repeated (launch checklist W-14)", () => {
+  it("refuses a second archive of a Course without a write or a second course.archived audit row", async () => {
+    const h = makeHarness({ courseOverrides: { status: "ARCHIVED" } });
+    const svc = h.buildService([grant("courses.edit")]);
+    const attempt = svc.archiveCatalogueRecord({ kind: "Course", id: "course-1", reason: "Archiving it once more" });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This course is already archived.");
+    expect(h.audits).toHaveLength(0);
+  });
+
+  it("refuses a second archive of a Programme the same way", async () => {
+    const h = makeHarness({ programmeOverrides: { status: "ARCHIVED" } });
+    const svc = h.buildService([grant("programmes.manage")]);
+    const attempt = svc.archiveCatalogueRecord({ kind: "Programme", id: "programme-1", reason: "Archiving it once more" });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This programme is already archived.");
+    expect(h.audits).toHaveLength(0);
+  });
+
+  it("still archives a published Course, once", async () => {
+    const h = makeHarness({ courseOverrides: { status: "PUBLISHED" } });
+    const svc = h.buildService([grant("courses.edit")]);
+    await svc.archiveCatalogueRecord({ kind: "Course", id: "course-1", reason: "Retired this course" });
+    expect(h.state.courses.get("course-1")!.status).toBe("ARCHIVED");
+    expect(h.audits).toHaveLength(1);
+  });
+
+  it("answers a caller without courses.edit with the authorization refusal, not the record's state", async () => {
+    const h = makeHarness({ courseOverrides: { status: "ARCHIVED" } });
+    const svc = h.buildService([grant("courses.view")]);
+    await expect(
+      svc.archiveCatalogueRecord({ kind: "Course", id: "course-1", reason: "Archiving it once more" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
   });
 });

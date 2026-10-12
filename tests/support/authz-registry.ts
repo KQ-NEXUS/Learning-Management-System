@@ -331,7 +331,7 @@ export const ACTION_REGISTRY: readonly ActionRegistryEntry[] = [
     ...open, domain: "certificates", writes: [], inputId: "certificates.validateRevoke", reason: "Pure validator.",
   }),
   act("src/app/staff/certificates/templates/template-actions.ts", "archiveTemplateAction", {
-    ...perm("certificates.manage", "GLOBAL"), domain: "certificates", writes: ["CertificateTemplate", AUDIT], inputId: "templates.archive",
+    ...perm("certificates.manage", "GLOBAL"), domain: "certificates", writes: ["CertificateTemplate", AUDIT], inputId: "templates.archive", recordStates: ["template:ARCHIVED"],
   }),
   act("src/app/staff/certificates/templates/template-actions.ts", "createTemplateAction", {
     ...perm("certificates.manage", "GLOBAL"), domain: "certificates", writes: ["CertificateTemplate", AUDIT], inputId: "templates.create",
@@ -411,10 +411,10 @@ export const ACTION_REGISTRY: readonly ActionRegistryEntry[] = [
     ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["ScheduledSession", EVENT, AUDIT], inputId: "sessions.cancel", recordStates: ["session:CANCELLED"],
   }),
   act("src/app/staff/cohorts/[id]/session-actions.ts", "createSessionAction", {
-    ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["ScheduledSession", EVENT, AUDIT], inputId: "sessions.create",
+    ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["ScheduledSession", EVENT, AUDIT], inputId: "sessions.create", recordStates: ["cohort:CANCELLED", "cohort:COMPLETED"],
   }),
   act("src/app/staff/cohorts/[id]/session-actions.ts", "repeatWeeklyAction", {
-    ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["ScheduledSession", EVENT, AUDIT], inputId: "sessions.repeatWeekly",
+    ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["ScheduledSession", EVENT, AUDIT], inputId: "sessions.repeatWeekly", recordStates: ["cohort:CANCELLED", "cohort:COMPLETED"],
   }),
   act("src/app/staff/cohorts/[id]/session-actions.ts", "updateSessionAction", {
     ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["ScheduledSession", EVENT, AUDIT], inputId: "sessions.update", recordStates: ["session:CANCELLED"],
@@ -423,7 +423,7 @@ export const ACTION_REGISTRY: readonly ActionRegistryEntry[] = [
     ...perm("cohorts.manage", "GLOBAL"), domain: "cohorts", writes: ["Cohort", AUDIT], inputId: "cohorts.create",
   }),
   act("src/app/staff/cohorts/actions.ts", "updateCohortAction", {
-    ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["Cohort", AUDIT], inputId: "cohorts.update",
+    ...perm("cohorts.manage", "RECORD"), domain: "cohorts", writes: ["Cohort", AUDIT], inputId: "cohorts.update", recordStates: ["cohort:CANCELLED"],
   }),
 
   // ---- staff: courses ----
@@ -431,10 +431,10 @@ export const ACTION_REGISTRY: readonly ActionRegistryEntry[] = [
     ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", AUDIT], inputId: "arrange.createModule",
   }),
   act("src/app/staff/courses/[id]/arrange/actions.ts", "renameModuleAction", {
-    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", AUDIT], inputId: "arrange.renameModule",
+    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", AUDIT], inputId: "arrange.renameModule", recordStates: ["module:WITHDRAWN"],
   }),
   act("src/app/staff/courses/[id]/arrange/actions.ts", "restoreItemAction", {
-    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", "Lesson", AUDIT], inputId: "arrange.restoreItem",
+    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", "Lesson", AUDIT], inputId: "arrange.restoreItem", recordStates: ["module:LIVE", "lesson:LIVE"],
   }),
   act("src/app/staff/courses/[id]/arrange/actions.ts", "saveLessonArrangementAction", {
     ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Lesson", "Course", AUDIT], inputId: "arrange.saveLessons",
@@ -443,16 +443,16 @@ export const ACTION_REGISTRY: readonly ActionRegistryEntry[] = [
     ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", "Course", AUDIT], inputId: "arrange.saveModules",
   }),
   act("src/app/staff/courses/[id]/arrange/actions.ts", "withdrawItemAction", {
-    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", "Lesson", AUDIT], inputId: "arrange.withdrawItem",
+    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Module", "Lesson", AUDIT], inputId: "arrange.withdrawItem", recordStates: ["lesson:WITHDRAWN", "module:WITHDRAWN"],
   }),
   act("src/app/staff/courses/[id]/assessments/actions.ts", "archiveAssessmentAction", {
-    ...perm("assessments.edit", "RECORD"), domain: "assessments", writes: ["Assessment", AUDIT], inputId: "assessments.archive",
+    ...perm("assessments.edit", "RECORD"), domain: "assessments", writes: ["Assessment", AUDIT], inputId: "assessments.archive", recordStates: ["assessment:ARCHIVED"],
   }),
   act("src/app/staff/courses/[id]/assessments/actions.ts", "createAssessmentAction", {
     ...perm("assessments.create", "RECORD"), domain: "assessments", writes: ["Assessment", AUDIT], inputId: "assessments.create",
   }),
   act("src/app/staff/courses/[id]/assessments/actions.ts", "publishAssessmentAction", {
-    ...perm("assessments.edit", "RECORD"), domain: "assessments", writes: ["Assessment", AUDIT], inputId: "assessments.publish",
+    ...perm("assessments.edit", "RECORD"), domain: "assessments", writes: ["Assessment", AUDIT], inputId: "assessments.publish", recordStates: ["assessment:ARCHIVED"],
   }),
   act("src/app/staff/courses/[id]/assessments/actions.ts", "updateAssessmentAction", {
     ...perm("assessments.edit", "RECORD"), domain: "assessments", writes: ["Assessment", AUDIT], inputId: "assessments.update",
@@ -461,13 +461,13 @@ export const ACTION_REGISTRY: readonly ActionRegistryEntry[] = [
     ...perm("courses.view", "RECORD"), domain: "assessments", writes: ["QuizQuestion", "QuizOption", "Assessment", AUDIT], inputId: "assessments.saveQuestions",
   }),
   act("src/app/staff/courses/[id]/lessons/[lessonId]/actions.ts", "saveLessonAction", {
-    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Lesson", AUDIT], inputId: "lessons.save",
+    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Lesson", AUDIT], inputId: "lessons.save", recordStates: ["lesson:WITHDRAWN"],
   }),
   act("src/app/staff/courses/[id]/lessons/[lessonId]/actions.ts", "withdrawLessonAction", {
-    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Lesson", AUDIT], inputId: "lessons.withdraw",
+    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Lesson", AUDIT], inputId: "lessons.withdraw", recordStates: ["lesson:WITHDRAWN"],
   }),
   act("src/app/staff/courses/[id]/publish-actions.ts", "archiveCourseAction", {
-    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Course", AUDIT], inputId: "coursePublish.archive",
+    ...perm("courses.edit", "RECORD"), domain: "courses", writes: ["Course", AUDIT], inputId: "coursePublish.archive", recordStates: ["course:ARCHIVED"],
   }),
   act("src/app/staff/courses/[id]/publish-actions.ts", "publishCourseAction", {
     ...perm("courses.publish", "RECORD"), domain: "courses", writes: ["Course", "CoursePublication", "Cohort", EVENT, AUDIT], inputId: "coursePublish.publish", recordStates: ["course:ARCHIVED"],
@@ -531,7 +531,7 @@ export const ACTION_REGISTRY: readonly ActionRegistryEntry[] = [
     ...perm("programmes.manage", "RECORD"), domain: "programmes", writes: ["ProgrammeCourse", "Programme", AUDIT], inputId: "programmeArrange.saveOrder",
   }),
   act("src/app/staff/programmes/[id]/publish-actions.ts", "archiveProgrammeAction", {
-    ...perm("programmes.manage", "RECORD"), domain: "programmes", writes: ["Programme", AUDIT], inputId: "programmePublish.archive",
+    ...perm("programmes.manage", "RECORD"), domain: "programmes", writes: ["Programme", AUDIT], inputId: "programmePublish.archive", recordStates: ["programme:ARCHIVED"],
   }),
   act("src/app/staff/programmes/[id]/publish-actions.ts", "publishProgrammeAction", {
     ...perm("programmes.publish", "RECORD"), domain: "programmes", writes: ["Programme", "ProgrammePublication", "Cohort", EVENT, AUDIT], inputId: "programmePublish.publish", recordStates: ["programme:ARCHIVED"],

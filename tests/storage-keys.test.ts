@@ -32,11 +32,12 @@ import {
  *   3. a scan of the source fails when a new key builder is added without being
  *      classified here, so a predictable builder cannot slip in unseen.
  *
- * The export key is the one deliberate exception, asserted for what it is: it is
- * `exports/<job id>/<dataset version>.csv`, stable across background retries (the
- * worker may run twice for one job). Its only random part is the export job id
- * (a database-generated cuid), not a UUID v4. See the plan 15-27 summary for the
- * owner decision this raises.
+ * The export key used to be the one exception (`exports/<job id>/<dataset
+ * version>.csv`, plan 15-27 finding 1, checklist G-03). It is now minted like
+ * every other key, `exports/<job id>/<uuid v4>`: the worker mints it once when it
+ * claims the job and stores it on the job, so a background retry reuses the
+ * stored key and never has to derive it. tests/export-worker.integration.test.ts
+ * proves the reuse.
  *
  * No network, no storage and no database: the builders are pure.
  */
@@ -67,6 +68,7 @@ const MINTING: ReadonlyArray<readonly [string, () => string, string]> = [
     () => buildStagedTemplateAssetStorageKey({ templateId: "tpl-1" }),
     "certificate-template-asset-uploads/tpl-1/",
   ],
+  ["buildExportStorageKey", () => buildExportStorageKey("cmexamplejobid0001abcd"), "exports/cmexamplejobid0001abcd/"],
 ];
 
 /** Builders that derive a final key from a staged key: [name, call, staged prefix, final prefix]. */
@@ -76,8 +78,6 @@ const PROMOTING: ReadonlyArray<readonly [string, (staged: string) => string, str
   ["finalTicketAttachmentKeyFor", finalTicketAttachmentKeyFor, "ticket-uploads/", "ticket-attachments/"],
   ["finalTemplateAssetKeyFor", finalTemplateAssetKeyFor, "certificate-template-asset-uploads/", "certificate-template-assets/"],
 ];
-
-const EXPORT_BUILDERS = ["buildExportStorageKey"] as const;
 
 describe("minting key builders end in a random UUID v4 segment", () => {
   it.each(MINTING)("%s", (_name, build, prefix) => {
@@ -131,23 +131,22 @@ describe("promoting key builders keep the random segment and stay inside their o
   });
 });
 
-describe("the export key (the one deterministic builder)", () => {
-  it("is exports/<job id>/<version>.csv and carries nothing but the job id", () => {
-    const key = buildExportStorageKey("cmexamplejobid0001abcd", "1.0");
-    expect(key).toBe("exports/cmexamplejobid0001abcd/1.0.csv");
+describe("the export key (G-03: random, no longer derived from the job alone)", () => {
+  it("cannot be worked out from the job id and the dataset version", () => {
+    const key = buildExportStorageKey("cmexamplejobid0001abcd");
+    expect(key).not.toBe("exports/cmexamplejobid0001abcd/1.0.csv");
+    expect(key).not.toMatch(/\.csv$/);
+    expect(lastSegment(key)).toMatch(UUID_V4);
   });
 
-  it("is stable for one job (a background retry must find the same object)", () => {
-    expect(buildExportStorageKey("cmexamplejobid0001abcd", "1.0")).toBe(buildExportStorageKey("cmexamplejobid0001abcd", "1.0"));
-  });
-
-  it("differs between jobs", () => {
-    expect(buildExportStorageKey("cmexamplejobid0001abcd", "1.0")).not.toBe(buildExportStorageKey("cmexamplejobid0002abcd", "1.0"));
+  it("takes the job id only: no dataset, version or name can reach the key", () => {
+    expect(buildExportStorageKey.length).toBe(1);
   });
 
   it("refuses an id that could climb out of the exports folder", () => {
-    expect(() => buildExportStorageKey("../leak", "1.0")).toThrow();
-    expect(() => buildExportStorageKey("a/b/c/d/e/f/g/h", "1.0")).toThrow();
+    expect(() => buildExportStorageKey("../leak")).toThrow();
+    expect(() => buildExportStorageKey("a/b/c/d/e/f/g/h")).toThrow();
+    expect(() => buildExportStorageKey("")).toThrow();
   });
 });
 
@@ -157,7 +156,7 @@ describe("no key builder escapes classification", () => {
     const exported = [...source.matchAll(/export function ((?:build|final)\w*(?:Key|KeyFor)\w*)\(/g)].map((match) => match[1]!);
     expect(exported.length).toBeGreaterThanOrEqual(13);
 
-    const covered = new Set<string>([...MINTING.map(([name]) => name), ...PROMOTING.map(([name]) => name), ...EXPORT_BUILDERS]);
+    const covered = new Set<string>([...MINTING.map(([name]) => name), ...PROMOTING.map(([name]) => name)]);
     const unclassified = exported.filter((name) => !covered.has(name));
     expect(unclassified).toEqual([]);
   });

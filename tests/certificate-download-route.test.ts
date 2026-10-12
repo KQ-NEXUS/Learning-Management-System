@@ -12,6 +12,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   certificateGet: vi.fn(),
   getOwnCertificateForDownload: vi.fn(),
+  /** True when the caller owns the certificate the owner path refused (it is revoked or superseded). */
+  ownerOfWithdrawn: vi.fn((): boolean => false),
+  canAnywhere: vi.fn(async (_permission: string): Promise<boolean> => false),
   presignCertificateObjectUrl: vi.fn(async () => "https://s3.example/o?X-Amz-Expires=60"),
   getCurrentActor: vi.fn(async (): Promise<{ userId: string } | null> => null),
   ensureCertificateFile: vi.fn(async (_id: string): Promise<string | null> => null),
@@ -23,11 +26,19 @@ class AuthorizationError extends Error {}
 vi.mock("@/server/permissions", () => ({
   AuthenticationError,
   AuthorizationError,
+  canAnywhere: h.canAnywhere,
 }));
 
 vi.mock("@/server/services/certificate-service", () => ({
   certificateService: { get: h.certificateGet },
-  getOwnCertificateForDownload: h.getOwnCertificateForDownload,
+  // The route asks one question with three answers. The cases below keep saying what the
+  // owner lookup found (`getOwnCertificateForDownload`) and, when it found nothing, whether
+  // the caller is nevertheless the owner (`ownerOfWithdrawn`).
+  resolveOwnCertificateForDownload: async (actor: { userId: string }, id: string) => {
+    const certificate = await h.getOwnCertificateForDownload(actor, id);
+    if (certificate) return { kind: "served", certificate };
+    return h.ownerOfWithdrawn() ? { kind: "owner-refused" } : { kind: "not-owner" };
+  },
 }));
 
 vi.mock("@/server/services/certificate-file-service", () => ({
@@ -67,14 +78,16 @@ const activeCertificate = {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks, not clearAllMocks: a queued "once" answer that a case did
+  // not use must not leak into the next case.
+  vi.resetAllMocks();
+  h.getCurrentActor.mockResolvedValue(null);
   h.presignCertificateObjectUrl.mockResolvedValue("https://s3.example/o?X-Amz-Expires=60");
   h.ensureCertificateFile.mockResolvedValue(null);
 });
 
 describe("GET /api/certificates/[id]/download", () => {
   it("302s the owner to a presigned URL with private, no-store", async () => {
-    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
     h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
     h.getOwnCertificateForDownload.mockResolvedValueOnce(activeCertificate);
 
@@ -86,16 +99,122 @@ describe("GET /api/certificates/[id]/download", () => {
     expect(h.presignCertificateObjectUrl).toHaveBeenCalledWith({ key: "certificates/cert-1.pdf" });
   });
 
-  it("302s a staff actor with certificates.view in matching scope, never consulting the learner path", async () => {
+  // W-15: the staff check records an "authorization.denied" audit row when it
+  // refuses. An owner fetching their own certificate is not a denial, so the
+  // staff permission is not asked for them at all.
+  it("serves the owner without ever asking for the staff permission (no denial row to write)", async () => {
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(activeCertificate);
+
+    const response = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    expect(response.status).toBe(302);
+    expect(h.getOwnCertificateForDownload).toHaveBeenCalledWith({ userId: "learner-1" }, "cert-1");
+    expect(h.certificateGet).not.toHaveBeenCalled();
+  });
+
+  it("still asks for the staff permission, and so still records the denial, for anyone the owner path refuses", async () => {
+    // A signed-in person who does not own it, and a visitor. Neither is ever excused from the
+    // audited check, whatever permission they hold.
+    const refusedByOwnerPath: Array<{ userId: string } | null> = [{ userId: "someone-else" }, null];
+    for (const actor of refusedByOwnerPath) {
+      h.certificateGet.mockReset();
+      h.certificateGet.mockRejectedValueOnce(actor ? new AuthorizationError("certificates.view") : new AuthenticationError());
+      h.getCurrentActor.mockResolvedValueOnce(actor);
+      h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+
+      const response = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("");
+      expect(h.certificateGet).toHaveBeenCalledTimes(1);
+      expect(h.certificateGet).toHaveBeenCalledWith("cert-1");
+      expect(h.canAnywhere).not.toHaveBeenCalled();
+    }
+  });
+
+  // W-15, the remaining case: a learner asking for their OWN certificate after it was revoked
+  // is refused by the certificate's state, not by a missing permission. The audited staff
+  // check is not run for them, so no "authorization.denied" row is written.
+  it("refuses the owner of a revoked certificate without running the audited staff check", async () => {
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    h.ownerOfWithdrawn.mockReturnValueOnce(true);
+    h.canAnywhere.mockResolvedValueOnce(false);
+
+    const response = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("");
+    expect(h.canAnywhere).toHaveBeenCalledWith("certificates.view");
+    expect(h.certificateGet).not.toHaveBeenCalled();
+    expect(h.ensureCertificateFile).not.toHaveBeenCalled();
+  });
+
+  it("answers the owner of a revoked certificate exactly as it answers a stranger", async () => {
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    h.ownerOfWithdrawn.mockReturnValueOnce(true);
+    const owner = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "someone-else" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
+    const stranger = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    expect(owner.status).toBe(stranger.status);
+    expect(await owner.text()).toBe(await stranger.text());
+    expect([...owner.headers.keys()].sort()).toEqual([...stranger.headers.keys()].sort());
+  });
+
+  it("still runs the audited staff check for an owner who holds certificates.view somewhere", async () => {
+    // Served when their scope covers it: staff may open a revoked certificate, their own included.
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "staff-owner" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    h.ownerOfWithdrawn.mockReturnValueOnce(true);
+    h.canAnywhere.mockResolvedValueOnce(true);
+    h.certificateGet.mockResolvedValueOnce({ ...activeCertificate, status: "REVOKED" as const });
+    expect((await GET(new Request("http://localhost/d"), routeCtx("cert-1"))).status).toBe(302);
+
+    // Refused, and recorded by the check, when their scope does not cover it.
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "staff-owner" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    h.ownerOfWithdrawn.mockReturnValueOnce(true);
+    h.canAnywhere.mockResolvedValueOnce(true);
+    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
+    expect((await GET(new Request("http://localhost/d"), routeCtx("cert-1"))).status).toBe(404);
+    expect(h.certificateGet).toHaveBeenCalledTimes(2);
+  });
+
+  it("302s a staff actor with certificates.view in matching scope who is not the owner", async () => {
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "staff-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
     h.certificateGet.mockResolvedValueOnce(activeCertificate);
 
     const response = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
 
     expect(response.status).toBe(302);
-    expect(h.getCurrentActor).not.toHaveBeenCalled();
-    expect(h.getOwnCertificateForDownload).not.toHaveBeenCalled();
+    expect(h.certificateGet).toHaveBeenCalledWith("cert-1");
     // Normal path: the file already exists, so no on-demand production.
     expect(h.ensureCertificateFile).not.toHaveBeenCalled();
+  });
+
+  it("lets staff with certificates.view open a certificate the owner path refuses (a revoked one)", async () => {
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "staff-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    h.certificateGet.mockResolvedValueOnce({ ...activeCertificate, status: "REVOKED" as const });
+
+    const response = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
+
+    expect(response.status).toBe(302);
+  });
+
+  it("rethrows an unexpected error from the staff check instead of hiding it as a refusal", async () => {
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "someone-else" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
+    h.certificateGet.mockRejectedValueOnce(new Error("database is down"));
+
+    await expect(GET(new Request("http://localhost/d"), routeCtx("cert-1"))).rejects.toThrow("database is down");
   });
 
   it("returns empty 404 for a signed-in learner who does not own the certificate", async () => {
@@ -156,7 +275,6 @@ describe("GET /api/certificates/[id]/download", () => {
   });
 
   it("succeeds for a flagged-but-ACTIVE certificate owned by the caller", async () => {
-    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
     h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
     h.getOwnCertificateForDownload.mockResolvedValueOnce({
       ...activeCertificate,
@@ -169,7 +287,6 @@ describe("GET /api/certificates/[id]/download", () => {
   });
 
   it("returns 404 rather than 500 when the certificate row has no storageKey", async () => {
-    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
     h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
     h.getOwnCertificateForDownload.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
 
@@ -181,7 +298,6 @@ describe("GET /api/certificates/[id]/download", () => {
   });
 
   it("produces a missing file on demand for the authorized owner, then presigns THAT key (plan 11-31)", async () => {
-    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
     h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
     h.getOwnCertificateForDownload.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
     h.ensureCertificateFile.mockResolvedValueOnce("certificates/cert-1/fresh.pdf");
@@ -197,6 +313,8 @@ describe("GET /api/certificates/[id]/download", () => {
   });
 
   it("produces a missing file on demand for an authorized staff actor too", async () => {
+    h.getCurrentActor.mockResolvedValueOnce({ userId: "staff-1" });
+    h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
     h.certificateGet.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
     h.ensureCertificateFile.mockResolvedValueOnce("certificates/cert-1/fresh.pdf");
 
@@ -214,7 +332,6 @@ describe("GET /api/certificates/[id]/download", () => {
     h.getOwnCertificateForDownload.mockResolvedValueOnce(null);
     const denied = await GET(new Request("http://localhost/d"), routeCtx("cert-1"));
 
-    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
     h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
     h.getOwnCertificateForDownload.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
     h.ensureCertificateFile.mockResolvedValueOnce(null);
@@ -229,7 +346,6 @@ describe("GET /api/certificates/[id]/download", () => {
   });
 
   it("only responds after the on-demand production finished (no fire-and-forget)", async () => {
-    h.certificateGet.mockRejectedValueOnce(new AuthorizationError("certificates.view"));
     h.getCurrentActor.mockResolvedValueOnce({ userId: "learner-1" });
     h.getOwnCertificateForDownload.mockResolvedValueOnce({ ...activeCertificate, storageKey: null });
     let release: (key: string) => void = () => undefined;

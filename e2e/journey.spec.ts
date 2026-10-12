@@ -43,6 +43,7 @@ import { confirmManualPayment, gradeAndRelease, markAttendance, openStaffSession
 import { describeDatabaseActivity } from "./support/diagnostics";
 import { allowSessionOverHttp } from "./support/session";
 import { runTask } from "./support/tasks";
+import { recordStorageUploads } from "./support/upload-diagnostic";
 
 type CapturedMessage = { to: string; subject: string; html: string; text: string };
 
@@ -393,6 +394,9 @@ test("staging journey", async ({ page, request, browser }, testInfo) => {
 
   testInfo.annotations.push({ type: "browser-version", description: browser.version() });
   testInfo.annotations.push({ type: "learner", description: learnerName });
+
+  // Off unless STAGING_UPLOAD_DIAG=1: reads the storage service's answer to the upload (see the support file).
+  await recordStorageUploads(page, path.resolve(REPO_ROOT, "perf/results/upload-diag-staging.json"));
 
   // One staff session for the whole journey (load staff hold the Administrator role), opened on first use.
   const staff: { page: Page | null } = { page: null };

@@ -8,16 +8,26 @@
  * a 404 for missing, which would turn this route into an oracle for which
  * certificate ids exist.
  *
- * Two authorization predicates share this route, mirroring
- * `lesson-resources/[id]/download/route.ts`'s structure exactly: staff
- * `certificates.view` in matching scope (`certificateService.get`) is tried
- * first, with an `AuthenticationError`/`AuthorizationError` swallowed to
- * `null` so it falls through to the learner ownership predicate
- * (`getOwnCertificateForDownload`, T-11-51) rather than failing the request
- * outright. That learner predicate itself returns `null` — never throws —
- * for a `REVOKED` certificate (T-11-60, UI-SPEC §7.6 branch 5) and for a
- * flagged-but-`ACTIVE` certificate still succeeds (branch 4 — a flag never
- * withdraws already-earned access).
+ * Two authorization predicates share this route. The learner ownership
+ * predicate (`getOwnCertificateForDownload`, T-11-51) is tried FIRST: it
+ * returns `null` — never throws — for anyone but the owner of a current
+ * `ACTIVE` certificate (so also for a `REVOKED` one, T-11-60, UI-SPEC §7.6
+ * branch 5), and still succeeds for a flagged-but-`ACTIVE` certificate (branch
+ * 4 — a flag never withdraws already-earned access). Only when it returns
+ * `null` is staff `certificates.view` in matching scope checked
+ * (`certificateService.get`), with an `AuthenticationError`/
+ * `AuthorizationError` swallowed to `null`.
+ *
+ * The order matters for the audit log, not for who gets in (W-15): the staff
+ * check writes an `authorization.denied` row whenever it refuses. Asked first,
+ * it wrote one for every learner fetching their OWN certificate, burying the
+ * real denials. Asked second, it runs, and records the denial, only for a
+ * caller the owner path has already refused: a stranger, a visitor, staff
+ * scoped elsewhere. The one caller it is not run for is a learner asking for
+ * their OWN revoked or superseded certificate: they are refused by the
+ * certificate's state (same empty 404), which is not an authorization denial.
+ * Neither predicate is weaker than before and the set of callers who are
+ * served is unchanged.
  *
  * Deliberately no route-config export opting into caching and no cache
  * wrapper anywhere in this file (RESEARCH Pitfall 6): a cached presigned URL
@@ -42,9 +52,12 @@
 import { NextResponse } from "next/server";
 import * as permissions from "@/server/permissions";
 import { getCurrentActor } from "@/server/auth/current-actor";
-import { certificateService, getOwnCertificateForDownload } from "@/server/services/certificate-service";
+import { certificateService, resolveOwnCertificateForDownload } from "@/server/services/certificate-service";
 import { ensureCertificateFile } from "@/server/services/certificate-file-service";
 import { presignCertificateObjectUrl } from "@/server/services/storage-service";
+
+/** A visitor owns nothing: no lookup is made with a null actor. */
+const NOT_OWNER = { kind: "not-owner" } as const;
 
 export async function GET(
   _request: Request,
@@ -53,24 +66,35 @@ export async function GET(
   const { id } = await ctx.params;
 
   try {
-    // Staff path first. A failed `certificates.view` check (Authentication or
-    // Authorization) is swallowed to `null` here so it can fall through to
-    // the learner path below, rather than failing the request outright.
-    let certificate = await certificateService.get(id).catch((err) => {
-      if (
-        err instanceof permissions.AuthenticationError ||
-        err instanceof permissions.AuthorizationError
-      ) {
-        return null;
-      }
-      throw err;
-    });
+    // Owner path first (W-15): it audits nothing, so a learner fetching their
+    // own certificate leaves no denial row. No session at all -> no learner
+    // lookup with a null actor.
+    const actor = await getCurrentActor();
+    const own = actor ? await resolveOwnCertificateForDownload(actor, id) : NOT_OWNER;
+    let certificate = own.kind === "served" ? own.certificate : null;
 
-    if (!certificate) {
-      // No session at all -> 404 without attempting a learner lookup with a
-      // null actor.
-      const actor = await getCurrentActor();
-      certificate = actor ? await getOwnCertificateForDownload(actor, id) : null;
+    // The owner of a REVOKED or SUPERSEDED certificate is refused by the
+    // certificate's state, not by a missing permission, so the audited staff
+    // check is skipped for them and no denial row is written (W-15). Only an
+    // owner who holds `certificates.view` nowhere is excused; one who holds it
+    // somewhere is staff and goes through the audited check like any staff.
+    const refusedByState =
+      own.kind === "owner-refused" && !(await permissions.canAnywhere("certificates.view"));
+
+    if (!certificate && !refusedByState) {
+      // Staff path, for everyone else the owner path did not serve: a stranger,
+      // a visitor, staff. A failed `certificates.view` check (Authentication or
+      // Authorization) is recorded by the check itself and swallowed to `null`
+      // here, so every refusal ends in the same empty 404 below.
+      certificate = await certificateService.get(id).catch((err) => {
+        if (
+          err instanceof permissions.AuthenticationError ||
+          err instanceof permissions.AuthorizationError
+        ) {
+          return null;
+        }
+        throw err;
+      });
     }
 
     // Denial: wrong owner, unknown id, revoked, unauthenticated. Same empty 404

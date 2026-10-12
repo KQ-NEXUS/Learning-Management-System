@@ -160,6 +160,15 @@ export type ResourceServiceConfig<T> = {
    * transaction wrapper, so `course-service.ts` needs no change.
    */
   runInTransaction?: <R>(fn: () => Promise<R>) => Promise<R>;
+  /**
+   * Refuses an `update`, `archive` or `restore` that the record's current state does not
+   * allow, for example a second archive of an archived record (launch checklist W-13/W-14).
+   * Called with the row read just before the write, after the permission and scope check,
+   * so a caller who may not edit the record never learns its state. Throw to refuse: nothing
+   * is written and no audit row is added. Not called for a missing row. When omitted, every
+   * state is accepted, exactly as before.
+   */
+  assertWritable?: (operation: "update" | "archive" | "restore", before: T) => void;
 };
 
 /** The operations every resource service exposes, restore aside. */
@@ -231,6 +240,7 @@ export function createResourceService<
   }>(permissions.edit, (input) => toScope(input.id))(async (input, ctx) => {
     // Read before writing so the audit row carries both states (RBAC-08).
     const before = await delegate.findUnique({ where: { id: input.id } });
+    if (before) config.assertWritable?.("update", before);
     const after = await delegate.update({ where: { id: input.id }, data: input.data });
 
     await audit({
@@ -275,6 +285,7 @@ export function createResourceService<
   )(async (input, ctx) => {
     const { before, after } = await withPositionRetry(async () => {
       const beforeRow = await delegate.findUnique({ where: { id: input.id } });
+      if (beforeRow) config.assertWritable?.("archive", beforeRow);
       const data = (await config.archiveData?.(input.id)) ?? { status: "ARCHIVED" };
       const afterRow = await delegate.update({ where: { id: input.id }, data });
       return { before: beforeRow, after: afterRow };
@@ -303,6 +314,7 @@ export function createResourceService<
         const restoreData = config.restoreData!;
         const { before, after } = await withPositionRetry(async () => {
           const beforeRow = await delegate.findUnique({ where: { id: input.id } });
+          if (beforeRow) config.assertWritable?.("restore", beforeRow);
           const data = await restoreData(input.id);
           const afterRow = await delegate.update({ where: { id: input.id }, data });
           return { before: beforeRow, after: afterRow };

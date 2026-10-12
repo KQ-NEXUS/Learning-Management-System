@@ -859,7 +859,7 @@ export function createReconciliationCaseService(deps: ReconciliationCaseServiceD
       SELECT id, action, "targetType", "targetId", "actorType", "correlationId", reason, "createdAt"
       FROM "AuditEvent"
       WHERE "targetId" IN (${Prisma.join(targetIds)})
-         OR (${row.orderCorrelationId} IS NOT NULL AND "correlationId" = ${row.orderCorrelationId})
+         OR (CAST(${row.orderCorrelationId} AS text) IS NOT NULL AND "correlationId" = ${row.orderCorrelationId})
       ORDER BY "createdAt", id
     `);
 

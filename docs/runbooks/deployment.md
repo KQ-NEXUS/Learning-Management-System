@@ -15,7 +15,21 @@ Related runbooks: [rollback](rollback.md), [restore](restore.md), [job recovery]
    - Build command: `npm run build` (runs `next build`; `npm install` first runs the `postinstall` script, `prisma generate`).
    - Node version: **22** (set `NODE_VERSION=22` in the build environment, matching the Dockerfile and CI).
    - The Next.js runtime is detected by Netlify automatically. Do not set a publish directory by hand.
-5. For a first go-live, work through the ordered list in `.planning/phases/15-launch-readiness-nfr-verification-operational-cutover/15-LAUNCH-CHECKLIST.md` (plan 15-31). It holds the complete ordered migration list for Neon, including the four migrations already waiting (`20261001120000_licence_deployment_control`, `20261003120000_mark_pre_notification_event_backlog_processed`, `20261004120000_user_password_is_temporary`, `20261004150000_learner_numbers`) and the migrations added in Phase 15. `20261003120000_mark_pre_notification_event_backlog_processed` must be applied **before the email sender first runs in production**, so the old event backlog is not mailed out.
+5. For a first go-live, **run `npx prisma migrate status` against production first** (as in "Run migrations first" below) and compare its pending list with the twelve migrations here. This list is the same as "Neon go-live migrations (in order)" in `.planning/phases/15-launch-readiness-nfr-verification-operational-cutover/15-LAUNCH-CHECKLIST.md` (plan 15-31), which also gives the purpose and the pre-check of each one; `tests/launch-checklist.test.ts` fails if the two lists differ. Production was not contacted in Phase 15: the staging schema, copied from the production branch, lacked these twelve, so production is probably twelve behind. If `prisma migrate status` shows a different pending list, stop and correct the checklist and this list before applying anything.
+   1. `20260927015627_communications_notifications`
+   2. `20260927120000_hash_bearer_tokens` (rewrites existing rows: take a restore point first)
+   3. `20260927130000_login_throttle`
+   4. `20260927140000_reconcile_backoff`
+   5. `20260927150000_video_watch_pacing`
+   6. `20261001120000_licence_deployment_control`
+   7. `20261003120000_mark_pre_notification_event_backlog_processed` (must be applied **before the email sender first runs in production**, so the old event backlog is not mailed out)
+   8. `20261004120000_user_password_is_temporary`
+   9. `20261004150000_learner_numbers`
+   10. `20261006120000_grade_completion_uniqueness` (run the two diagnostic SELECTs in the checklist first; each must return no rows)
+   11. `20261007120000_user_anonymisation` (then give `privacy.manage` to the Administrator role, checklist row B-07)
+   12. `20261008120000_lesson_video_captions`
+
+   `npx prisma migrate deploy` applies every pending migration in this order in one run.
 6. Tell staff when the deploy will happen if it includes migrations or visible changes. People with the site open will need to reload after the deploy (see "After deploy checks").
 
 ## Environment variables by deploy context

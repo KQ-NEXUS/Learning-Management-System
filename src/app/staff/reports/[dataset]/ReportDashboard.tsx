@@ -403,7 +403,7 @@ function Rows({ report }: { report: ClientAvailableDatasetReport }) {
   const headers = report.rows[0] ? rowFields(report.rows[0]).map(([label]) => label) : [];
   return (
     <>
-      <div tabIndex={0} aria-label="Scrollable matching rows" className="hidden min-w-0 overflow-x-auto border-t border-foreground sm:block">
+      <div role="region" tabIndex={0} aria-label="Scrollable matching rows" className="hidden min-w-0 overflow-x-auto border-t border-foreground sm:block">
         <table className="min-w-max border-collapse text-sm">
           <caption className="sr-only">Matching {report.definition.id} rows</caption>
           <thead>

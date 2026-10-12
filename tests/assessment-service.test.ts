@@ -9,6 +9,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createAssessmentService,
   AssessmentNotPublishableError,
@@ -463,5 +464,44 @@ describe("saveQuizQuestions — nested write", () => {
       saveQuizQuestions({ assessmentId: "a1", questions: [] }),
     ).rejects.toThrow(NotAQuizError);
     expect(tx.quizQuestion.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("an archived assessment is not published or archived again (launch checklist W-13, W-14)", () => {
+  const archived = () => ({
+    assessmentRows: [makeAssessmentRow({ id: "a1", courseId: "course-a", status: "ARCHIVED", version: 2 })],
+    aggregateRow: makeValidQuizAggregate({ status: "ARCHIVED", version: 2 }),
+  });
+
+  it("refuses to publish it, and leaves status and version alone", async () => {
+    const { publishAssessment, delegate, audits } = harness(archived());
+    const attempt = publishAssessment({ assessmentId: "a1" });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("An archived assessment cannot be published.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(0);
+  });
+
+  it("refuses a second archive without a write or a second assessment.archived audit row", async () => {
+    const { assessmentService, delegate, audits } = harness(archived());
+    const attempt = assessmentService.archive("a1", "Archiving it once more");
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This assessment is already archived.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(0);
+  });
+
+  it("still archives a published assessment, once", async () => {
+    const { assessmentService, audits } = harness({
+      assessmentRows: [makeAssessmentRow({ id: "a1", courseId: "course-a", status: "PUBLISHED" })],
+    });
+    await assessmentService.archive("a1", "No longer part of the course");
+    expect(audits.map((entry) => entry.action)).toEqual(["assessment.archived"]);
+  });
+
+  it("answers a caller without assessments.edit with the authorization refusal, not the record's state", async () => {
+    const { publishAssessment, assessmentService } = harness({ ...archived(), grants: [grant("courses.view")] });
+    await expect(publishAssessment({ assessmentId: "a1" })).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(assessmentService.archive("a1", "Archiving it once more")).rejects.toBeInstanceOf(AuthorizationError);
   });
 });

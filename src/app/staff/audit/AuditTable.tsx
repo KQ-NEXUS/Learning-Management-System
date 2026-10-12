@@ -391,8 +391,10 @@ export function AuditTable({
       ) : (
         <>
           {/* Desktop — hidden below sm, where the card list takes over so
-              nothing scrolls sideways (D-04). */}
-          <div className="hidden overflow-x-auto sm:block">
+              nothing scrolls sideways (D-04). Between 640 and about 1040 px the
+              columns are wider than the page column, so the table scrolls inside
+              this box: a labelled, focusable region a keyboard user can scroll (W-07). */}
+          <div role="region" aria-label="Audit log table" tabIndex={0} className="hidden overflow-x-auto sm:block">
             <table className="w-full border-collapse text-sm">
               <thead className="border-b border-foreground">
                 <tr>

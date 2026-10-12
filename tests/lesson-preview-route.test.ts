@@ -25,6 +25,8 @@ const { mocks, AuthorizationError, AuthenticationError } = vi.hoisted(() => {
       lessonGet: vi.fn(),
       loadCourseTree: vi.fn(),
       listLessonResources: vi.fn(),
+      listLessonCaptions: vi.fn(),
+      LessonContent: vi.fn(() => null),
       resolveCourseIdForLesson: vi.fn(),
       notFound: vi.fn(() => {
         throw new Error("NEXT_NOT_FOUND");
@@ -45,8 +47,9 @@ vi.mock("@/server/services/lesson-service", () => ({
 }));
 vi.mock("@/server/services/lesson-resource-service", () => ({
   listLessonResources: mocks.listLessonResources,
+  listLessonCaptions: mocks.listLessonCaptions,
 }));
-vi.mock("@/components/catalogue/LessonContent", () => ({ LessonContent: () => null }));
+vi.mock("@/components/catalogue/LessonContent", () => ({ LessonContent: mocks.LessonContent }));
 
 import Page from "@/app/staff/courses/[id]/preview/lessons/[lessonId]/page";
 
@@ -97,6 +100,32 @@ const treeWith = (lessonId: string | null) => ({
   ],
 });
 
+/** The props the page hands to `LessonContent`, found by walking the element it returns. */
+function lessonContentProps(node: unknown): Record<string, unknown> | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = lessonContentProps(child);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!node || typeof node !== "object") return null;
+  const element = node as { type?: unknown; props?: Record<string, unknown> };
+  if (element.type === mocks.LessonContent) return element.props ?? null;
+  return lessonContentProps(element.props?.children);
+}
+
+const videoResource = { id: "video-1", title: "Welcome", filename: "welcome.mp4", mimeType: "video/mp4", sizeBytes: BigInt(1024), uploadStatus: "READY" };
+const track = (over: Over = {}) => ({
+  id: "caption-en",
+  videoResourceId: "video-1",
+  language: "en",
+  label: "English",
+  uploadStatus: "READY",
+  uploadDetail: null,
+  ...over,
+});
+
 const run = (over: Over = {}) =>
   Page({
     params: Promise.resolve({ id: "course-1", lessonId: "lesson-1", ...over }),
@@ -112,6 +141,7 @@ beforeEach(() => {
   mocks.resolveCourseIdForLesson.mockResolvedValue("course-1");
   mocks.loadCourseTree.mockResolvedValue(treeWith("lesson-1"));
   mocks.listLessonResources.mockResolvedValue([]);
+  mocks.listLessonCaptions.mockResolvedValue([]);
 });
 
 describe("learner-view lesson preview route", () => {
@@ -147,6 +177,63 @@ describe("learner-view lesson preview route", () => {
     await expect(run()).rejects.toThrow(NOT_FOUND);
     expect(mocks.notFound).toHaveBeenCalled();
     expect(mocks.listLessonResources).not.toHaveBeenCalled();
+  });
+
+  // W-09: the staff preview of a video lesson showed no captions; the learner player did.
+  describe("captions in the preview of a video lesson (W-09)", () => {
+    beforeEach(() => {
+      mocks.lessonGet.mockResolvedValue(lesson({ type: "VIDEO" }));
+      mocks.listLessonResources.mockResolvedValue([videoResource]);
+    });
+
+    it("passes the lesson's caption tracks to the player, read through the staff permission check", async () => {
+      mocks.listLessonCaptions.mockResolvedValue([track(), track({ id: "caption-fr", language: "fr", label: "Français" })]);
+
+      const props = lessonContentProps(await run());
+
+      expect(mocks.listLessonCaptions).toHaveBeenCalledWith("lesson-1");
+      expect(props?.captions).toEqual([
+        { id: "caption-en", videoResourceId: "video-1", language: "en", label: "English" },
+        { id: "caption-fr", videoResourceId: "video-1", language: "fr", label: "Français" },
+      ]);
+    });
+
+    it("offers only tracks that are READY, as the learner view does: an upload in progress or a failed one is left out", async () => {
+      mocks.listLessonCaptions.mockResolvedValue([
+        track(),
+        track({ id: "caption-uploading", uploadStatus: "UPLOADING" }),
+        track({ id: "caption-failed", uploadStatus: "ERROR", uploadDetail: "Not a caption file." }),
+      ]);
+
+      const props = lessonContentProps(await run());
+
+      expect((props?.captions as { id: string }[]).map((caption) => caption.id)).toEqual(["caption-en"]);
+      // Nothing but what the player needs crosses to the client component.
+      expect(JSON.stringify(props?.captions)).not.toMatch(/uploadStatus|uploadDetail|storageKey/);
+    });
+
+    it("does not read captions for a lesson that is not a video", async () => {
+      mocks.lessonGet.mockResolvedValue(lesson({ type: "TEXT" }));
+
+      const props = lessonContentProps(await run());
+
+      expect(mocks.listLessonCaptions).not.toHaveBeenCalled();
+      expect(props?.captions).toEqual([]);
+    });
+
+    it("does not read captions for a lesson of another course", async () => {
+      mocks.resolveCourseIdForLesson.mockResolvedValue("course-2");
+
+      await expect(run()).rejects.toThrow(NOT_FOUND);
+      expect(mocks.listLessonCaptions).not.toHaveBeenCalled();
+    });
+
+    it("maps a refusal to read the captions to the same notFound path", async () => {
+      mocks.listLessonCaptions.mockRejectedValue(new AuthorizationError("denied"));
+
+      await expect(run()).rejects.toThrow(NOT_FOUND);
+      expect(mocks.LessonContent).not.toHaveBeenCalled();
+    });
   });
 
   it("maps an authorization denial on the lesson to the same notFound path", async () => {

@@ -1,7 +1,7 @@
 /**
  * Phase-7 schema-delta regression proof (plan 07-02, Task 1).
  *
- * Two halves, mirroring `tests/schema-cohort.test.ts`:
+ * Two halves, mirroring `tests/schema-cohort.integration.test.ts`:
  *
  *  (a) STATIC — assertions over the `prisma/schema.prisma` text and the
  *      joined `prisma/migrations/*\/migration.sql` history. These prove the
@@ -21,7 +21,7 @@
  * PREREQUISITE for half (b): Docker. If it is unavailable `beforeAll` fails
  * with a container-start error and those cases report BLOCKED — never
  * silently passed, never weakened to a mock (same rule as
- * `tests/schema-cohort.test.ts`).
+ * `tests/schema-cohort.integration.test.ts`).
  */
 
 import { readFileSync, readdirSync } from "node:fs";

@@ -65,8 +65,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Whole-tree scan tests need the longer timeout.
-      - run: npx vitest run --project node --exclude "**/*.integration.test.ts" --testTimeout=60000
+      # Whole-tree scan tests need the longer timeout. VITEST_SKIP_INTEGRATION
+      # keeps every *.integration.test.ts file out of this job (they run in the
+      # sharded job below); vitest.config.mts reads it. An exclude flag on the
+      # command line does not work here: it never reaches the project's own
+      # file selection, and every integration file ran in this job.
+      - run: npx vitest run --project node --testTimeout=60000
+        env:
+          VITEST_SKIP_INTEGRATION: "1"
       - run: npx vitest run --project components
 
   integration:
@@ -86,6 +92,31 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The storage integration tests (submissions, certificate files, private
+      # downloads) talk to an object store at localhost:9000, bucket
+      # `lms-private`. A throwaway MinIO container on the loopback address, with
+      # the placeholder key and secret those test files set for themselves:
+      # local test values for a container that exists only for this run, not
+      # secrets. The image is pinned by digest (the same one as e2e-nightly.yml).
+      # A folder that exists under /data when the server starts is a bucket, so
+      # the bucket is there, and private, before any test runs.
+      - name: Start local object storage
+        run: >-
+          docker run -d --name ci-minio -p 127.0.0.1:9000:9000
+          -e MINIO_ROOT_USER=lms-minio
+          -e MINIO_ROOT_PASSWORD=change-me-minio
+          --entrypoint sh
+          minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+          -c "mkdir -p /data/lms-private && exec minio server /data"
+      - name: Wait for object storage
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:9000/minio/health/live; then exit 0; fi
+            sleep 2
+          done
+          echo "Object storage did not become ready." >&2
+          docker logs ci-minio >&2
+          exit 1
       # Each integration file starts its own Postgres container through
       # Testcontainers (Docker is preinstalled on GitHub's Ubuntu runners), so
       # files run one at a time inside each shard.

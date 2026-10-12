@@ -154,7 +154,7 @@ export function ReconciliationWorkspace({
 
       {refundExportQueued && <p role="status" className={NOTE_SUCCESS}>Export queued. You can leave this page and follow its progress in Export History. <Link href="/staff/reports/exports" className="font-semibold text-accent hover:underline">View export history</Link></p>}
 
-      <nav aria-label="Provider" className="flex gap-8 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav aria-label="Provider" className="flex gap-5 overflow-x-auto sm:gap-8 border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {PROVIDERS.map((item) => {
           const active = provider === item;
           return (
@@ -210,7 +210,8 @@ export function ReconciliationWorkspace({
                   <button type="button" onClick={() => setAssignmentOpen(true)} className={BTN_PRIMARY}>Assign cases</button>
                 </div>
               )}
-              <div className="hidden overflow-x-auto sm:block">
+              {/* Scrolls inside itself between 640 and about 1100 px: a labelled, focusable region (W-07). */}
+              <div role="region" aria-label="Reconciliation cases table" tabIndex={0} className="hidden overflow-x-auto sm:block">
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-border">

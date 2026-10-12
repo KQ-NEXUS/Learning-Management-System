@@ -27,7 +27,7 @@ Use this when production runs on Neon and the restore point is inside the plan's
    neonctl branches create --project-id <project id> --name restore-<yyyymmdd-hhmm> --parent <production branch name>@2026-10-06T08:00:00Z
    ```
 
-   This leaves the production branch untouched.
+   This leaves the production branch untouched. Neon may place the restore point slightly earlier than the time you asked for (30 seconds earlier in the plan 15-29 rehearsal), so read the time the new branch reports and record that as the restore point.
 3. Get the new branch's **direct (unpooled)** connection string from the Neon console and, in a shell on a trusted machine, run the integrity checks against it:
 
    ```bash

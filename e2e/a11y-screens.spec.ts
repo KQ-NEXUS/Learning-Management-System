@@ -160,6 +160,9 @@ test.describe("axe sweep, WCAG 2.2 AA rules, real browser", () => {
                 .trim()
                 .slice(0, 80);
               part.visits.push({ screen: screen.id, state: state.id, width: size.width, path: finalPath, status, heading });
+              // Every screen has a page heading (W-08). axe's own rule for this is a best-practice
+              // rule outside the WCAG tags this sweep runs, so two refusal screens once passed without one.
+              if (!heading) failures.push(`${state.id} @${size.width}: the page has no page heading (h1)`);
 
               // A page that quietly fell back to its not-found or error page would pass axe and prove nothing.
               const headings = await page.locator("h1").allTextContents();

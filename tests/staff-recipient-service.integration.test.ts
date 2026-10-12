@@ -21,7 +21,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
-import { resolveStaffHolders } from "@/server/services/staff-recipient-service";
+import { createStaffRecipientResolver, resolveStaffHolders } from "@/server/services/staff-recipient-service";
 import { hasPermission, isGrantActive, type Grant, type GrantWindow, type ScopeType } from "@/server/permissions/scope";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { Permission } from "@/server/permissions/catalogue";
@@ -258,29 +258,45 @@ describe("resolveStaffHolders parity with hasPermission/isGrantActive (D-20, T-1
     expect(resolvedB.has(globalHolder.id)).toBe(true);
   });
 
-  it("a boundary window (startsAt/endsAt exactly now) is still active, matching isGrantActive's inclusive boundaries", async () => {
+  it("a window around the current moment is active", async () => {
     const role = await createRole([PERMISSION]);
-    const at = new Date();
     const boundaryHolder = await createStaffUser();
     await createAssignment(boundaryHolder.id, role.id, {
       scopeType: "GLOBAL",
-      startsAt: at,
-      endsAt: at,
-    });
-
-    // resolveStaffHolders evaluates against `new Date()` internally, so we
-    // cannot pin the exact same instant — instead assert the SQL's boundary
-    // operators are inclusive by using a window that started slightly in the
-    // past and ends slightly in the future, which is the realistic case this
-    // guards: an assignment active "as of right now".
-    await testDb.prisma.assignment.update({
-      where: { id: (await testDb.prisma.assignment.findFirstOrThrow({ where: { userId: boundaryHolder.id } })).id },
-      data: { startsAt: new Date(Date.now() - 1000), endsAt: new Date(Date.now() + 1000) },
+      startsAt: new Date(Date.now() - 1000),
+      endsAt: new Date(Date.now() + 60_000),
     });
 
     const resolved = new Set(
       await resolveStaffHolders(testDb.prisma, { permission: PERMISSION, scope: {} }),
     );
     expect(resolved.has(boundaryHolder.id)).toBe(true);
+  });
+
+  // G-06: the window is [startsAt, endsAt). The start instant is inside it, the
+  // end instant is not, and at every probed instant the SQL gives the same
+  // answer as `isGrantActive`, so the drain cannot alert a person whose grant
+  // has just ended. A fixed clock makes the exact instants reachable.
+  it("agrees with isGrantActive to the millisecond at both edges: the start is inclusive, the end is exclusive", async () => {
+    const role = await createRole([PERMISSION]);
+    const start = new Date("2027-03-01T12:00:00.000Z");
+    const end = new Date("2027-03-02T12:00:00.000Z");
+    const holder = await createStaffUser();
+    await createAssignment(holder.id, role.id, { scopeType: "GLOBAL", startsAt: start, endsAt: end });
+    const window: GrantWindow = { active: true, revokedAt: null, startsAt: start, endsAt: end };
+
+    const probes: Array<[string, Date, boolean]> = [
+      ["one millisecond before the start", new Date(start.getTime() - 1), false],
+      ["at the start instant", start, true],
+      ["one millisecond before the end", new Date(end.getTime() - 1), true],
+      ["at the end instant", end, false],
+      ["one millisecond after the end", new Date(end.getTime() + 1), false],
+    ];
+    for (const [label, at, expected] of probes) {
+      const resolver = createStaffRecipientResolver({ now: () => at });
+      const resolved = await resolver.resolveStaffHolders(testDb.prisma, { permission: PERMISSION, scope: {} });
+      expect(resolved.includes(holder.id), `SQL, ${label}`).toBe(expected);
+      expect(isGrantActive(window, at), `isGrantActive, ${label}`).toBe(expected);
+    }
   });
 });

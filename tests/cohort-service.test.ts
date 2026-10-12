@@ -10,6 +10,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createCohortService,
   createCohortGuards,
@@ -1230,5 +1231,29 @@ describe("cancelCohort (D-31) — atomic bulk withdraw, session cancellation, st
     expect(cohorts.get("cohort-1")!.status).toBe("PUBLISHED");
     expect(audits).toHaveLength(0);
     expect(events).toHaveLength(0);
+  });
+});
+
+describe("a cancelled cohort is not edited (launch checklist W-13)", () => {
+  it("refuses the edit with a sentence for staff and writes nothing", async () => {
+    const { service, delegate, audits } = harness({ rows: [makeCohortRow({ status: "CANCELLED" })] });
+    const attempt = service.updateCohort({ id: "cohort-1", expectedUpdatedAt: T0, data: { title: "Edited" } });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("A cancelled cohort cannot be edited.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(0);
+  });
+
+  it.each(["DRAFT", "PUBLISHED", "IN_PROGRESS", "COMPLETED"])("still saves an edit to a %s cohort", async (status) => {
+    const { service, delegate } = harness({ rows: [makeCohortRow({ status })] });
+    await service.updateCohort({ id: "cohort-1", expectedUpdatedAt: T0, data: { title: "Edited" } });
+    expect(delegate.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers a caller without cohorts.manage with the authorization refusal, not the cohort's state", async () => {
+    const { service } = harness({ rows: [makeCohortRow({ status: "CANCELLED" })], grants: [grant("cohorts.view")] });
+    await expect(
+      service.updateCohort({ id: "cohort-1", expectedUpdatedAt: T0, data: { title: "Edited" } }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
   });
 });

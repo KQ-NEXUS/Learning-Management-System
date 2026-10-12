@@ -35,6 +35,7 @@ import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   isValidTimeZone,
   utcToWallParts,
@@ -285,12 +286,14 @@ export type SessionCohortInfoDelegate = {
     where: { id: string };
     select: {
       timezone: true;
+      status: true;
       courseId: true;
       programmeId: true;
       cohortCourses: { select: { courseId: true } };
     };
   }): Promise<{
     timezone: string;
+    status: string;
     courseId: string | null;
     programmeId: string | null;
     cohortCourses: Array<{ courseId: string }>;
@@ -381,6 +384,7 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
       where: { id: cohortId },
       select: {
         timezone: true,
+        status: true,
         courseId: true,
         programmeId: true,
         cohortCourses: { select: { courseId: true } },
@@ -391,6 +395,17 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
       throw new InvalidTimeZoneError(row.timezone);
     }
     return row;
+  }
+
+  /**
+   * W-13: a closed cohort takes no new sessions. Called by both create paths after the
+   * permission and scope check and before any write. Changing or cancelling a session that
+   * already exists is not affected.
+   */
+  function assertCohortTakesSessions(cohort: { status: string }): void {
+    if (cohort.status === "CANCELLED" || cohort.status === "COMPLETED") {
+      throw new RecordStateError(`This cohort is ${cohort.status.toLowerCase()}, so sessions cannot be added to it.`);
+    }
   }
 
   /** D-24 — a session's optional course tag. */
@@ -452,6 +467,7 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
     (input) => deps.cohortScope(input.cohortId),
   )(async (input, ctx) => {
     const cohort = await loadCohortInfo(input.cohortId);
+    assertCohortTakesSessions(cohort);
     assertCourseTaggable(cohort, input.courseId);
     await assertFacilitatorIsStaff(input.facilitatorId);
 
@@ -508,6 +524,7 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
       }
 
       const cohort = await loadCohortInfo(input.cohortId);
+      assertCohortTakesSessions(cohort);
       assertCourseTaggable(cohort, input.courseId);
       await assertFacilitatorIsStaff(input.facilitatorId);
 
@@ -709,6 +726,7 @@ export function createScheduledSessionService(deps: ScheduledSessionServiceDeps)
       where: { id: cohortId },
       select: {
         timezone: true,
+        status: true,
         courseId: true,
         programmeId: true,
         cohortCourses: { select: { courseId: true } },

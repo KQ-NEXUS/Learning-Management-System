@@ -9,6 +9,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createScheduledSessionService,
   isMeetingLinkVisible,
@@ -660,5 +661,40 @@ describe("readSessionForViewer — server-side link gate", () => {
     });
     const result = await service.readSessionForViewer({ sessionId: "session-1" });
     expect("meetingUrl" in result).toBe(false);
+  });
+});
+
+describe("a closed cohort takes no new sessions (launch checklist W-13)", () => {
+  const closed = (status: string) =>
+    ({ timezone: LAGOS, courseId: "course-1", programmeId: null, cohortCourses: [], status }) as never;
+
+  it.each(["CANCELLED", "COMPLETED"])("refuses a single session on a %s cohort and writes nothing", async (status) => {
+    const { service, store, events, audits } = harness({ cohort: closed(status) });
+    const attempt = service.createSessionFromWallTime({ ...BASE_CREATE });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow(`This cohort is ${status.toLowerCase()}, so sessions cannot be added to it.`);
+    expect(store.size).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it.each(["CANCELLED", "COMPLETED"])("refuses a weekly series on a %s cohort and writes nothing", async (status) => {
+    const { service, store, events, audits } = harness({ cohort: closed(status) });
+    await expect(service.repeatWeeklySessions({ ...BASE_CREATE, occurrences: 3 })).rejects.toBeInstanceOf(RecordStateError);
+    expect(store.size).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it.each(["DRAFT", "PUBLISHED", "IN_PROGRESS"])("still adds a session to a %s cohort", async (status) => {
+    const { service, store } = harness({ cohort: closed(status) });
+    await service.createSessionFromWallTime({ ...BASE_CREATE });
+    await service.repeatWeeklySessions({ ...BASE_CREATE, occurrences: 2 });
+    expect(store.size).toBe(3);
+  });
+
+  it("answers a caller without cohorts.manage with the authorization refusal, not the cohort's state", async () => {
+    const { service } = harness({ cohort: closed("CANCELLED"), grants: [grant("cohorts.view")] });
+    await expect(service.createSessionFromWallTime({ ...BASE_CREATE })).rejects.toBeInstanceOf(AuthorizationError);
   });
 });

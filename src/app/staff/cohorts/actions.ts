@@ -34,6 +34,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { cohortService, updateCohort, OfferLockedError } from "@/server/services/cohort-service";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { isValidTimeZone } from "@/lib/timezone";
@@ -214,6 +215,10 @@ function toFailure(error: unknown): Extract<CohortActionResult, { ok: false }> {
         "The course/programme this cohort delivers is locked because it has enrolments. " +
         "Changing it needs an approved migration.",
     };
+  }
+  // W-13: a cancelled cohort is not edited.
+  if (error instanceof RecordStateError) {
+    return { ok: false, errors: [], message: error.message };
   }
   if (error instanceof StaleOrderError) {
     return {

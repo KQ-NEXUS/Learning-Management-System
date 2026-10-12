@@ -39,6 +39,7 @@ import type { Permission } from "@/server/permissions/catalogue";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import {
@@ -835,6 +836,8 @@ export function createPublishService(deps: PublishServiceDeps) {
     const reason = requireReason(input.reason);
     const agg = await deps.loadCourse(input.id);
     if (!agg) throw new PublishTargetNotFoundError();
+    // W-14: a second archive would add a second `course.archived` audit row for no change.
+    if (agg.status === "ARCHIVED") throw new RecordStateError("This course is already archived.");
 
     await deps.assertNoRunningCohorts({ courseId: input.id }); // D-14
 
@@ -866,6 +869,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     const reason = requireReason(input.reason);
     const agg = await deps.loadProgramme(input.id);
     if (!agg) throw new PublishTargetNotFoundError();
+    if (agg.status === "ARCHIVED") throw new RecordStateError("This programme is already archived.");
 
     await deps.assertNoRunningCohorts({ programmeId: input.id }); // D-14 / D-18
 

@@ -2,7 +2,7 @@
   "label": "STAGING PILOT at about one tenth of the agreed load (plan 15-30 Task 1). NOT the signed NFR-02 number; the signed numbers come from the full run after the owner's approval.",
   "target": {
     "previewUrl": "https://deploy-preview-16--kqnexuslms.netlify.app",
-    "previewCommit": "9a68b7a (head of pull request 16, branch LAUNCH, read from GitHub on 2026-10-11)",
+    "previewCommit": "9a68b7a for the k6 pilot, the probe, the quiet resend and journey attempts 1 to 3 (head of pull request 16, branch LAUNCH, read from GitHub on 2026-10-11). Journey attempts 4 to 7 ran against 9be7af3 (see journey.attempts[3].previewServed; attempts 6 and 7 on the deploy reported ready at 09:00:47Z; attempt 8, the one that passed, on the deploy reported ready at 09:24:07Z).",
     "neonBranch": "staging-phase 15 (br-icy-river-axqpwts7)",
     "hostsCheckedThroughNeonApi": true,
     "ownerConfirmation": {
@@ -759,7 +759,8 @@
       }
     ]
   },
-  "journeyPassed": false,
+  "journeyPassed": true,
+  "journeyPassedNote": "True since attempt 8 (2026-10-11, 09:27 to 09:30 UTC, learner 144): a real, un-routed browser upload with the diagnostic off. Attempts 1 to 7 failed and are kept below as history.",
   "journey": {
     "test": "e2e/journey.spec.ts \"staging journey\", chromium, headed",
     "attempts": [
@@ -801,6 +802,221 @@
         "probableCause": "Not confirmed. The presigned link carries x-amz-checksum-crc32=AAAAAA== (the CRC32 of an EMPTY body) and x-amz-sdk-checksum-algorithm=CRC32; the 05:29 link carried the same. The AWS SDK in use (client-s3 and s3-request-presigner 3.1125.0) adds these by default and src/server/services/storage-service.ts does not turn that off. The uploaded file is not empty, so the storage service most likely rejects the PUT for a checksum mismatch, and its error answers carry no CORS headers (a PUT with no signature answers 400 with no Access-Control-Allow-Origin for the preview, the production and the localhost origins alike), which the browser shows as a CORS block. Local MinIO accepts the same kind of link (the local full journey passed).",
         "notConfirmedBecause": "The storage service's real answer to the PUT could not be read: the browser hides it, and replaying the request outside the browser was not permitted in this session.",
         "scope": "A product fault in the upload link, not a test fault and not the CORS setting. It would affect uploads from the production address too. Not fixed here: a fix changes src/server/services/storage-service.ts and reaches the preview only through a push and a rebuild."
+      },
+      {
+        "at": "2026-10-11T08:35:58Z",
+        "endedAt": "2026-10-11T08:37:56Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 148",
+        "headed": true,
+        "after": "The owner committed and pushed 9be7af3 \"fix(storage): stop signing an empty-body checksum into upload links\" (makeClient sets requestChecksumCalculation and responseChecksumValidation to WHEN_REQUIRED). Netlify rebuilt the deploy preview.",
+        "previewServed": {
+          "commit": "9be7af3",
+          "how": "At 08:34:59Z GitHub reported 9be7af331a431e9c75b34e912ee4c19744d59f00 as the head of pull request 16 and the Netlify checks for that commit (deploy-preview, Header rules, Redirect rules) as passed; /api/health answered 200. The deployed commit was not read from Netlify itself. The upload link issued during this attempt no longer carries a checksum parameter, which only the new build does.",
+          "ciOnThatCommit": "Not part of this plan: at the time of the run the GitHub checks \"Integration tests (shard 2 of 4)\" and \"(shard 4 of 4)\" had failed on 9be7af3 and \"Unit and component tests\" was still running. The cause was not read."
+        },
+        "uploadLinkObserved": {
+          "note": "Read from the browser trace; the link itself is not recorded here.",
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ],
+          "checksumParameterPresent": false,
+          "contentSha256": "UNSIGNED-PAYLOAD",
+          "signedHeaders": "host",
+          "expiresSeconds": 900,
+          "addressStyle": "bucket name in the host name (virtual-hosted style), S3 API of the storage provider"
+        },
+        "uploadRequestObserved": {
+          "at": "2026-10-11T08:37:31.599Z",
+          "method": "PUT",
+          "requestContentType": "text/plain",
+          "browserResult": "net::ERR_FAILED, no status and no response headers visible to the browser",
+          "browserConsole": "Access to fetch ... has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+          "pageMessage": "Your file couldn't be uploaded (the receipt \"Submitted - receipt\" never appeared; the test waited 20 s)"
+        },
+        "preflightAfterRun": {
+          "at": "2026-10-11T08:38:44Z",
+          "request": "OPTIONS to the same object address as the failed upload (no query string), Access-Control-Request-Method PUT, Access-Control-Request-Headers content-type, for the preview's origin",
+          "status": 204,
+          "allowOrigin": "https://deploy-preview-16--kqnexuslms.netlify.app",
+          "allowMethods": "PUT",
+          "allowHeaders": "content-type"
+        },
+        "reason": "The checksum fix is deployed and works as designed: the link has no checksum parameter. The storage service still refuses the browser's PUT, and the answer still carries no Access-Control-Allow-Origin, so the browser hides the status and the body. The empty-body checksum was therefore not the cause, or not the only cause.",
+        "causeNotEstablished": "The storage service's real answer to the PUT was not read in this attempt either (the browser hides it; the request was not replayed outside the browser). What is known: CORS preflight passes for the exact object address; the link is a plain SigV4 presigned PutObject with only the host header signed; storage error answers carry no CORS headers whatever the reason (shown in the 07:49 session with an unsigned PUT). Candidates that fit, none tested: the storage credentials on the preview being refused (wrong secret, or a token without write permission on this bucket), or a bucket or endpoint value on the preview that does not match. To tell them apart someone must read the status and error code of the PUT: the Network tab of the browser on the preview shows the status code, or one server-side storage call with the preview's credentials.",
+        "notWorkedAround": true
+      },
+      {
+        "at": "2026-10-11T08:46:34Z",
+        "endedAt": "2026-10-11T08:49:23Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 147",
+        "headed": true,
+        "previewServed": "9be7af3 (head of pull request 16 on GitHub at the time; /api/health 200)",
+        "diagnostic": {
+          "switch": "STAGING_UPLOAD_DIAG=1 (e2e/support/upload-diagnostic.ts, off by default)",
+          "how": "The journey's own PUT to the storage host was sent from Playwright's Node side (route.fetch, where CORS does not apply) and handed back to the page unchanged. Authorised by the owner through the orchestrator. Only names, the status, the content type and the masked error code and message were recorded; the link was not.",
+          "at": "2026-10-11T08:48:54.499Z",
+          "status": 400,
+          "errorCode": "InvalidArgument",
+          "errorMessage": "Credential access key has length 0, should be 32",
+          "responseContentType": "application/xml",
+          "responseBodyBytes": 148,
+          "responseHeaderNames": ["cf-ray", "connection", "content-length", "content-type", "date", "server"],
+          "allowOriginPresent": false,
+          "requestHeaderNames": [
+            "accept",
+            "accept-language",
+            "content-type",
+            "origin",
+            "referer",
+            "sec-ch-ua",
+            "sec-ch-ua-mobile",
+            "sec-ch-ua-platform",
+            "user-agent"
+          ],
+          "requestContentType": "text/plain",
+          "requestBodyBytes": 42,
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ],
+          "signedHeaders": "host"
+        },
+        "cause": "The upload link is signed with an empty access key id: the preview's server has no value in S3_ACCESS_KEY_ID (makeClient in src/server/services/storage-service.ts falls back to an empty string). The storage service refuses at that first check, and its error answer carries no CORS header, so the browser reported a CORS block.",
+        "kind": "Configuration of the Netlify deploy preview, not the bucket CORS setting, not the checksum, not the test.",
+        "notTested": "Whether S3_SECRET_ACCESS_KEY is right on the preview and whether the token may write to the bucket (the storage service stops at the empty key). Whether the production context has the same gap.",
+        "ownerAction": "In Netlify set S3_ACCESS_KEY_ID (and check S3_SECRET_ACCESS_KEY) for the Deploy Previews context with the Functions scope, check Production too, redeploy the preview, then run the journey with STAGING_JOURNEY_LEARNER=146 and the diagnostic off.",
+        "note": "A run with the diagnostic on is not proof that uploads work; journeyPassed stays false."
+      },
+      {
+        "at": "2026-10-11T09:03:25Z",
+        "endedAt": "2026-10-11T09:05:22Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 146",
+        "headed": true,
+        "diagnostic": "off (a real, un-routed browser upload)",
+        "after": "The owner reported (\"Done\", 2026-10-11) that S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY were set for the Deploy Previews context in Netlify and the deploy retried.",
+        "previewServed": {
+          "commit": "9be7af3 (head of pull request 16 on GitHub; /api/health 200)",
+          "netlifyStatus": "GitHub shows a new status \"Deploy Preview ready!\" for netlify/kqnexuslms/deploy-preview on that commit at 2026-10-11T09:00:47Z (the one before it was at 08:33:07Z), so a new deploy finished about three minutes before this run. Which variables that deploy carried cannot be read from this machine."
+        },
+        "uploadRequestObserved": {
+          "note": "Read from the browser trace; the link itself is not recorded here. Only the LENGTH of the access key id part of X-Amz-Credential was read.",
+          "at": "2026-10-11T09:04:57.543Z",
+          "method": "PUT",
+          "browserResult": "net::ERR_FAILED, no status and no response headers visible to the browser",
+          "browserConsole": "Access to fetch ... has been blocked by CORS policy (same wording as attempts 3 and 4)",
+          "accessKeyIdLengthInLink": 0,
+          "credentialScopeAfterDate": "auto/s3/aws4_request",
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ]
+        },
+        "reason": "The upload link issued by the new deploy is still signed with an EMPTY access key id. The owner's change has not reached the preview's functions.",
+        "notWorkedAround": true
+      },
+      {
+        "at": "2026-10-11T09:06:13Z",
+        "endedAt": "2026-10-11T09:08:00Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 145",
+        "headed": true,
+        "previewServed": "9be7af3, the deploy reported ready at 09:00:47Z",
+        "diagnostic": {
+          "switch": "STAGING_UPLOAD_DIAG=1 (e2e/support/upload-diagnostic.ts, off by default)",
+          "at": "2026-10-11T09:07:34.664Z",
+          "status": 400,
+          "errorCode": "InvalidArgument",
+          "errorMessage": "Credential access key has length 0, should be 32",
+          "responseContentType": "application/xml",
+          "responseBodyBytes": 148,
+          "responseHeaderNames": ["cf-ray", "connection", "content-length", "content-type", "date", "server"],
+          "allowOriginPresent": false,
+          "requestContentType": "text/plain",
+          "requestBodyBytes": 42,
+          "signedHeaders": "host"
+        },
+        "cause": "Unchanged from attempt 5, byte for byte: the storage service refuses the PUT because the access key id in the link is empty. S3_ACCESS_KEY_ID still has no value in the functions of the deploy preview.",
+        "notTested": "Whether S3_SECRET_ACCESS_KEY is right on the preview, whether the token may write to the bucket, and whether the Production context has the keys (the storage service stops at the empty key).",
+        "ownerAction": "See 15-30-SUMMARY \"Third close-out session\": check the variable's exact name, its Functions scope and its Deploy Previews value in Netlify, then start a NEW build with \"Clear cache and deploy site\" (or push a commit), not \"Retry\" of the old deploy. Next run: STAGING_JOURNEY_LEARNER=144, diagnostic off.",
+        "note": "A run with the diagnostic on is not proof that uploads work; journeyPassed stays false."
+      },
+      {
+        "at": "2026-10-11T09:27:26Z",
+        "endedAt": "2026-10-11T09:30:31Z",
+        "result": "passed",
+        "learner": "Load Learner 144",
+        "headed": true,
+        "diagnostic": "off (a real, un-routed browser upload; STAGING_UPLOAD_DIAG was not set)",
+        "playwright": "1 passed (2.8 min; the test itself 2.3 min), exit 0, no retry",
+        "after": "The owner reported (2026-10-11) that the earlier Netlify change \"did not save before\"; S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY were then saved for the preview, the cache cleared and the site redeployed (\"Published\").",
+        "previewServed": {
+          "commit": "9be7af3 (head of pull request 16 on GitHub and local LAUNCH head; /api/health 200 at 09:26Z)",
+          "netlifyStatus": "GitHub shows a new status \"Deploy Preview ready!\" for netlify/kqnexuslms/deploy-preview on that commit at 2026-10-11T09:24:07Z (the ones before it at 09:00:47Z and 08:33:07Z). The deployed commit and its variables were not read from Netlify itself."
+        },
+        "steps": [
+          { "step": "sign in: a seeded, verified load learner signs in through the form", "result": "passed", "seconds": 8 },
+          { "step": "enrol: choose the cohort and reach the order page", "result": "passed", "seconds": 3 },
+          { "step": "pay: staff confirm the manual payment, drain-domain-events --target staging", "result": "passed", "seconds": 42 },
+          { "step": "learn: open the course", "result": "passed", "seconds": 6 },
+          { "step": "learn: complete both reading lessons", "result": "passed", "seconds": 4 },
+          { "step": "attend: staff mark the learner present", "result": "passed", "seconds": 4 },
+          { "step": "submit: the learner uploads the assignment", "result": "passed", "seconds": 7 },
+          { "step": "grade: staff grade and release", "result": "passed", "seconds": 6 },
+          { "step": "complete: drain background work until the certificate is available", "result": "passed", "seconds": 45 },
+          { "step": "certificate: download the PDF through a short-lived link", "result": "passed", "seconds": 6 },
+          { "step": "verify: the public check reports the certificate as valid", "result": "passed", "seconds": 3 }
+        ],
+        "uploadRequestObserved": {
+          "note": "Read from the browser trace; the link itself is not recorded here. Only names, the status and the LENGTH of the access key id part of X-Amz-Credential were read.",
+          "at": "2026-10-11T09:29:19.470Z",
+          "method": "PUT",
+          "status": 200,
+          "requestContentType": "text/plain",
+          "allowOriginPresent": true,
+          "accessKeyIdLengthInLink": 32,
+          "credentialScopeAfterDate": "auto/s3/aws4_request",
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ],
+          "checksumParameterPresent": false,
+          "traceOddity": "The trace entry for this PUT carries status 200 and also a failure text net::ERR_ABORTED. The cause of that marker was not looked into. The step passed on the page's own evidence: the receipt \"Submitted - receipt\" appeared, which the page shows only after the server has verified the stored file, and the later steps (grading the submission, completion) depend on it."
+        },
+        "certificateDownloadObserved": {
+          "note": "Read from the browser trace and the test's own assertions; the link is not recorded here.",
+          "downloadRoute": { "at": "2026-10-11T09:30:16.570Z", "status": 302 },
+          "presignedGet": { "at": "2026-10-11T09:30:20.115Z", "status": 200, "accessKeyIdLengthInLink": 32, "contentType": "application/pdf (asserted by the test, with the %PDF- file header)" }
+        },
+        "whatThisProves": "On the deploy preview a browser upload to hosted storage succeeds, the server reads the stored file back, a certificate PDF is in storage and is downloaded through a link the preview presigned, and the public verification page reports it valid. So the storage key and secret now reach the preview's functions, belong together, and may read and write the bucket. Which request wrote the PDF was not traced; the task runner on this machine had no S3 variables in its environment (names checked, not values), so the write is taken to have been made by the preview's own functions (inference).",
+        "whatThisDoesNotProve": "Nothing about the Production context in Netlify (its storage keys are not verified). It is one run by a test, not the unassisted manual journey by a person (D-08)."
       }
     ],
     "stepsPassed": [
@@ -809,17 +1025,19 @@
       "pay: staff confirm the manual payment, drain-domain-events --target staging",
       "learn: open the course",
       "learn: complete both reading lessons",
-      "attend: staff mark the learner present"
-    ],
-    "stepsNotReached": [
-      "submit (failed)",
+      "attend: staff mark the learner present",
+      "submit: the learner uploads the assignment",
       "grade and release",
       "complete and certificate issued",
       "certificate download",
       "public verification"
     ],
-    "blocker": "The storage service refuses the browser's upload. Probable cause: the presigned link carries the checksum of an empty body (AWS SDK default). Needs a code fix in storage-service.ts, a rebuilt preview, and then one more run with another load learner (STAGING_JOURNEY_LEARNER=148; learners 149 and 150 are part-way through the journey course).",
-    "stepsPassedNote": "The same six steps passed in the 05:29 attempt (learner 150) and in the 07:49 attempt (learner 149).",
+    "stepsNotReached": [],
+    "stepsNote": "stepsPassed and stepsNotReached describe attempt 8. In attempts 2 to 7 the first six steps passed, \"submit\" failed and the last four were not reached.",
+    "blocker": null,
+    "blockerResolved": "Resolved at 09:29 UTC on 2026-10-11 (attempt 8): the upload link is signed with a 32-character access key id and the storage service answered the browser's PUT with 200.",
+    "formerBlocker": "The storage service refuses the browser's upload with 400 InvalidArgument, \"Credential access key has length 0, should be 32\" (read in attempt 5): the preview has no value in S3_ACCESS_KEY_ID. STILL SO after the owner's Netlify change and a new deploy (attempts 6 and 7, 09:03 to 09:08 UTC): the link's access key id is still empty and the storage answer is the same. Next step: the owner checks the variable's name, scope (Functions) and Deploy Previews value in Netlify and starts a new build, then one more run with another load learner (STAGING_JOURNEY_LEARNER=144; learners 145 to 150 are part-way through the journey course).",
+    "stepsPassedNote": "The same six steps passed in the 05:29 attempt (learner 150), the 07:49 attempt (learner 149), the 08:35 attempt (learner 148), the 08:46 attempt (learner 147), the 09:03 attempt (learner 146) and the 09:06 attempt (learner 145).",
     "localFullJourney": {
       "note": "The LOCAL \"full journey\" (same shared steps, refactored in this plan), run once after the refactor. Local Docker Postgres (licence_test) and a throwaway local MinIO; not the staging target.",
       "at": "2026-10-11T07:53:25Z",

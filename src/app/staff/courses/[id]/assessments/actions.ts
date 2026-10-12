@@ -28,6 +28,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { FieldError } from "@/components/primitives";
 import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import {
   assessmentService,
@@ -375,6 +376,10 @@ export async function archiveAssessmentAction(
   try {
     await assessmentService.archive(parsed.data.assessmentId, parsed.data.reason);
   } catch (error) {
+    // W-14: an archived assessment is not archived again.
+    if (error instanceof RecordStateError) {
+      return { ok: false, message: error.message };
+    }
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
       return { ok: false, message: refusalMessage(error, "This assessment could not be archived.") };
     }
@@ -413,6 +418,10 @@ export async function publishAssessmentAction(
   } catch (error) {
     if (error instanceof AssessmentNotPublishableError) {
       return { ok: false, items: error.failures, message: error.message };
+    }
+    // W-13: an archived assessment is not published.
+    if (error instanceof RecordStateError) {
+      return { ok: false, items: [], message: error.message };
     }
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
       return { ok: false, items: [], message: refusalMessage(error, "This assessment could not be published.") };

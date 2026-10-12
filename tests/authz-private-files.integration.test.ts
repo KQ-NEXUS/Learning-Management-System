@@ -452,9 +452,9 @@ afterAll(async () => {
 async function describeKeyBuilders() {
   const storage = await import("@/server/services/storage-service");
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-  const shape = (name: string, sample: string, random: "uuid-v4" | "job-id") => ({
+  const shape = (name: string, sample: string, random: "uuid-v4") => ({
     builder: name,
-    shape: sample.replace(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/, "<uuid-v4>").replace("tkt-1", "<id>").replace("lesson-1", "<id>").replace("enr-1/asm-1", "<id>/<id>").replace("cert-1", "<id>").replace("tpl-1", "<id>"),
+    shape: sample.replace(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/, "<uuid-v4>").replace("tkt-1", "<id>").replace("lesson-1", "<id>").replace("enr-1/asm-1", "<id>/<id>").replace("cert-1", "<id>").replace("tpl-1", "<id>").replace("job-12345678", "<id>"),
     randomSegment: random,
     endsInUuidV4: uuid.test(sample.split("/").at(-1) ?? ""),
   });
@@ -467,12 +467,8 @@ async function describeKeyBuilders() {
     shape("buildCertificateStorageKey", storage.buildCertificateStorageKey({ certificateId: "cert-1" }), "uuid-v4"),
     shape("buildTemplateAssetStorageKey", storage.buildTemplateAssetStorageKey({ templateId: "tpl-1" }), "uuid-v4"),
     shape("buildStagedTemplateAssetStorageKey", storage.buildStagedTemplateAssetStorageKey({ templateId: "tpl-1" }), "uuid-v4"),
-    {
-      builder: "buildExportStorageKey",
-      shape: "exports/<export job id>/<dataset version>.csv",
-      randomSegment: "job-id",
-      endsInUuidV4: false,
-    },
+    // G-03: minted once when the worker claims the job, stored on the job and reused on a retry.
+    shape("buildExportStorageKey", storage.buildExportStorageKey("job-12345678"), "uuid-v4"),
   ];
 }
 
@@ -891,6 +887,41 @@ describe("the object store refuses anything unsigned (NFR-06)", () => {
   }, CASE_TIMEOUT_MS);
 });
 
+describe("a learner's own certificate download is not logged as a denial (W-15)", () => {
+  const spec = () => SPECS.find((candidate) => candidate.route === "/api/certificates/[id]/download")!;
+  const denialsFor = (userId: string | null) =>
+    fx.world.prisma.auditEvent.count({ where: { action: "authorization.denied", actorId: userId } });
+
+  it("the owner is served and no authorization.denied row is written, however often they download", async () => {
+    const owner = P("learnerOwner");
+    const before = await denialsFor(owner.userId);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const snap = await call(spec(), owner, fx.world.certificateId);
+      expect(snap.status).toBe(302);
+      expectPresigned(snap.location, 60);
+    }
+    expect(await denialsFor(owner.userId)).toBe(before);
+  }, CASE_TIMEOUT_MS);
+
+  it("a real refusal is still logged: another learner, and staff scoped elsewhere, each leave one denial row per attempt", async () => {
+    for (const name of ["learnerOther", "staffNone", "staffCohortB"] as const) {
+      const persona = P(name);
+      const before = await denialsFor(persona.userId);
+      const snap = await call(spec(), persona, fx.world.certificateId);
+      expect(snap.status, name).toBe(404);
+      expect(snap.location, name).toBeNull();
+      expect(await denialsFor(persona.userId), name).toBe(before + 1);
+    }
+  }, CASE_TIMEOUT_MS);
+
+  it("staff with the permission are served through the staff check, with no denial row", async () => {
+    const staff = P("staffGlobal");
+    const before = await denialsFor(staff.userId);
+    expect((await call(spec(), staff, fx.world.certificateId)).status).toBe(302);
+    expect(await denialsFor(staff.userId)).toBe(before);
+  }, CASE_TIMEOUT_MS);
+});
+
 describe("after access is removed, no new URL is issued (edge probe, T-15-27-04)", () => {
   const BURST = 10;
 
@@ -936,11 +967,28 @@ describe("after access is removed, no new URL is issued (edge probe, T-15-27-04)
       data: { status: "REVOKED", revokedAt: new Date(), revocationReason: "plan 15-27 revocation probe" },
     });
 
+    const denialsFor = (userId: string | null) =>
+      fx.world.prisma.auditEvent.count({ where: { action: "authorization.denied", actorId: userId } });
+    const ownerDenialsBefore = await denialsFor(P("learnerOwner").userId);
+
     const unknown = await call(spec, P("learnerOther"), UNKNOWN_ID);
     const burst = await Promise.all(Array.from({ length: BURST }, () => call(spec, P("learnerOwner"), fx.world.certificateId)));
     for (const snap of burst) {
       expect(comparable(snap)).toEqual(comparable(unknown));
       expect(snap.location).toBeNull();
+    }
+
+    // W-15: the owner was refused by the certificate's state, not by a missing permission, so
+    // none of the ten refusals is an "authorization.denied" row.
+    expect(await denialsFor(P("learnerOwner").userId)).toBe(ownerDenialsBefore);
+
+    // Everyone else is still audited on the revoked certificate, one row per attempt.
+    for (const name of ["learnerOther", "staffNone", "staffCohortB"] as const) {
+      const persona = P(name);
+      const denialsBefore = await denialsFor(persona.userId);
+      const snap = await call(spec, persona, fx.world.certificateId);
+      expect(comparable(snap), name).toEqual(comparable(unknown));
+      expect(await denialsFor(persona.userId), name).toBe(denialsBefore + 1);
     }
 
     const stillValid = await fetch(before.location!);

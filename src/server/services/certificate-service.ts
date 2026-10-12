@@ -90,6 +90,12 @@ type WithPermission = ReturnType<typeof createWithPermission>;
 // Row shapes
 // ---------------------------------------------------------------------------
 
+/** What `resolveOwnCertificateForDownload` found for the caller (W-15). */
+export type OwnCertificateDownload =
+  | { kind: "served"; certificate: CertificateRow }
+  | { kind: "owner-refused" }
+  | { kind: "not-owner" };
+
 export type CertificateRow = {
   id: string;
   enrolmentId: string;
@@ -454,11 +460,26 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     actor: { userId: string },
     certificateId: string,
   ): Promise<CertificateRow | null> {
+    const own = await resolveOwnCertificateForDownload(actor, certificateId);
+    return own.kind === "served" ? own.certificate : null;
+  }
+
+  /**
+   * The same predicate in one lookup, but it also says WHY nothing is served (W-15).
+   * `owner-refused` means the caller owns the certificate and it is `REVOKED` or
+   * `SUPERSEDED`: a refusal by the record's state, not by a missing permission.
+   * `not-owner` covers an unknown id and somebody else's certificate alike, so the answer
+   * never tells a stranger whether an id exists. For the download route only: the
+   * distinction decides whether the audited staff check runs, never what the response is.
+   */
+  async function resolveOwnCertificateForDownload(
+    actor: { userId: string },
+    certificateId: string,
+  ): Promise<OwnCertificateDownload> {
     const row = await deps.delegate.findUnique({ where: { id: certificateId } });
-    if (!row) return null;
-    if (row.userId !== actor.userId) return null;
-    if (row.status !== "ACTIVE") return null;
-    return row;
+    if (!row || row.userId !== actor.userId) return { kind: "not-owner" };
+    if (row.status !== "ACTIVE") return { kind: "owner-refused" };
+    return { kind: "served", certificate: row };
   }
 
   // -------------------------------------------------------------------------
@@ -802,6 +823,7 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     certificateService,
     listPendingIssuance,
     getOwnCertificateForDownload,
+    resolveOwnCertificateForDownload,
     getCertificateIssuer,
     listCertificateIssuanceSources,
     issueCertificateManually,
@@ -836,6 +858,7 @@ const built = createCertificateService({
 export const certificateService = built.certificateService;
 export const listPendingIssuance = built.listPendingIssuance;
 export const getOwnCertificateForDownload = built.getOwnCertificateForDownload;
+export const resolveOwnCertificateForDownload = built.resolveOwnCertificateForDownload;
 export const getCertificateIssuer = built.getCertificateIssuer;
 export const listCertificateIssuanceSources = built.listCertificateIssuanceSources;
 export const issueCertificateManually = built.issueCertificateManually;
