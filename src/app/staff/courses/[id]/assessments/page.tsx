@@ -3,6 +3,7 @@ import { AuthenticationError, AuthorizationError, can } from "@/server/permissio
 import { courseService } from "@/server/services/course-service";
 import { assessmentService } from "@/server/services/assessment-service";
 import { AssessmentsTable, type AssessmentRow } from "./AssessmentsTable";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Assessments" };
 
@@ -46,7 +47,7 @@ export default async function AssessmentsListPage({
     })) as unknown as AssessmentRow[];
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // T-10-25: a denial renders as a denial, never an empty table — an

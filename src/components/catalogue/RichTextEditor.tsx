@@ -52,7 +52,8 @@ export function RichTextEditor({
   // reference means Tiptap re-applies them only when the wiring actually
   // changes, but a change *does* propagate because the object identity flips.
   const editorProps = useMemo(() => {
-    const attributes: Record<string, string> = { "aria-label": "Lesson body" };
+    // A name on a plain div is not allowed by ARIA, so the editable node is declared as a multi-line text box.
+    const attributes: Record<string, string> = { "aria-label": "Lesson body", role: "textbox", "aria-multiline": "true" };
     if (id) attributes.id = id;
     if (ariaInvalid) attributes["aria-invalid"] = "true";
     if (ariaDescribedby) attributes["aria-describedby"] = ariaDescribedby;

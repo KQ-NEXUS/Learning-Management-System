@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { FormField, TextInput } from "@/components/primitives";
 
 /**
@@ -112,7 +113,8 @@ function ModuleRenameRow({
       }
       setEditing(false);
       setError(null);
-    } catch {
+    } catch (error) {
+      unstable_rethrow(error);
       setError(RENAME_FALLBACK_ERROR);
     } finally {
       setSaving(false);
@@ -199,7 +201,8 @@ export function ModuleComposer({
         return;
       }
       setTitle("");
-    } catch {
+    } catch (error) {
+      unstable_rethrow(error);
       setLocalError(ADD_FALLBACK_ERROR);
     } finally {
       setSubmitting(false);

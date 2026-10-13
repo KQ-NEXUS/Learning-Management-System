@@ -195,8 +195,8 @@ function makeLearnerAccess(opts: {
 }): EnrolmentDashboardLearnerAccess {
   return {
     listOwnDashboardEnrolments: async (actor: Actor) => opts.enrolmentsByActor[actor.userId] ?? [],
-    loadLearnerCourseStructure: async () => ({ kind: "unpinned" }) as never,
-    loadLearnerPath: neverCalled("loadLearnerPath") as never,
+    // Plan 15-28: the dashboard loads the path once per card; null reads as an unpinned cohort.
+    loadLearnerPath: async () => null,
     loadPinnedCompletionRuleSource: neverCalled("loadPinnedCompletionRuleSource") as never,
     assertLessonOpenable: neverCalled("assertLessonOpenable") as never,
   };

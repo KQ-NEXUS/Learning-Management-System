@@ -287,6 +287,41 @@ describe("phase 9 invariant: zero-client-JS lesson content (INV-5, D-30/NFR-02)"
       ).toHaveLength(0);
     }
   });
+
+  it("LessonMediaPlayer emits a <track> only from its captions prop (no caption-less track, NFR-09)", () => {
+    const file = path.join(SRC_ROOT, "components", "catalogue", "LessonMediaPlayer.tsx");
+    const sourceFile = parse(file);
+
+    // AST-based, so the header comment that discusses <track> elements is invisible here.
+    const trackElements: ts.Node[] = [];
+    (function visit(node: ts.Node): void {
+      if (
+        (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+        node.tagName.getText(sourceFile) === "track"
+      ) {
+        trackElements.push(node);
+      }
+      ts.forEachChild(node, visit);
+    })(sourceFile);
+
+    // Exactly one <track> in the JSX, and it sits inside the callback of captions.map(...):
+    // with no captions the player renders no track, and it is never a bare/source-less one.
+    expect(trackElements).toHaveLength(1);
+    let insideCaptionsMap = false;
+    for (let ancestor: ts.Node | undefined = trackElements[0].parent; ancestor; ancestor = ancestor.parent) {
+      if (
+        ts.isCallExpression(ancestor) &&
+        ts.isPropertyAccessExpression(ancestor.expression) &&
+        ancestor.expression.expression.getText(sourceFile) === "captions" &&
+        ancestor.expression.name.text === "map"
+      ) {
+        insideCaptionsMap = true;
+      }
+    }
+    expect(insideCaptionsMap).toBe(true);
+    expect(trackElements[0].getText(sourceFile)).toContain('kind="captions"');
+    expect(trackElements[0].getText(sourceFile)).toContain("src={CAPTIONS_ROUTE(caption.id)}");
+  });
 });
 
 describe("phase 9 invariant: zero raw hex colour literals outside globals.css (INV-6, 04.1 precedent)", () => {

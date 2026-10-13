@@ -59,7 +59,7 @@ describe("RecentlyIssuedList", () => {
     const auto = items[0];
     expect(within(auto).getByText("Ada Lovelace")).toBeTruthy();
     expect(within(auto).getByText("Intro to Testing")).toBeTruthy();
-    expect(within(auto).getByText("01/01/2026, 00:00:00")).toBeTruthy();
+    expect(within(auto).getByText("1 Jan 2026, 01:00 WAT")).toBeTruthy();
     expect(within(auto).getByText("Automatic")).toBeTruthy();
     expect(within(auto).getByRole("link").getAttribute("href")).toBe("/staff/certificates/issued/c-auto");
 

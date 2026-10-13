@@ -44,6 +44,7 @@ import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import type { ResourceScope } from "@/server/permissions/scope";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createResourceService,
   type Delegate,
@@ -156,6 +157,12 @@ export function createCertificateTemplateService(deps: CreateCertificateTemplate
     toScope: certificateTemplateScope,
     withPermission: deps.withPermission,
     audit: deps.audit,
+    // W-14: a second archive would overwrite the time the template was first archived.
+    assertWritable: (operation, before) => {
+      if (operation === "archive" && before.archivedAt) {
+        throw new RecordStateError("This template is already archived.");
+      }
+    },
     // CertificateTemplate has no `status` column (the factory's default
     // `{ status: "ARCHIVED" }` payload would be a no-op write) — D-10 gives
     // it `archivedAt` instead. Runs inside the permission-gated closure

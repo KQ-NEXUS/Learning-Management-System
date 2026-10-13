@@ -15,7 +15,7 @@ import {
 } from "@/server/services/assignment-service";
 import { scopeLookupService } from "@/server/services/scope-lookup-service";
 import { ContinuityError } from "@/server/services/continuity-service";
-import { AuthorizationError, ScopeError } from "@/server/permissions";
+import { AuthorizationError, ScopeError, refusalMessage } from "@/server/permissions";
 import type { ScopeType } from "@/server/permissions";
 import type { FieldError } from "@/components/primitives";
 import type { ScopeTarget } from "@/server/services/scope-lookup-service";
@@ -84,7 +84,7 @@ export async function createStaffAccountAction(
     }
     if (error instanceof AuthorizationError) {
       return {
-        errors: [{ name: "form", message: "You do not have access to create staff accounts." }],
+        errors: [{ name: "form", message: refusalMessage(error, "You do not have access to create staff accounts.") }],
         created: null,
       };
     }
@@ -122,7 +122,7 @@ export async function revokeAssignmentAction(
       return { error: error.message };
     }
     if (error instanceof AuthorizationError) {
-      return { error: "You do not have access to revoke this assignment." };
+      return { error: refusalMessage(error, "You do not have access to revoke this assignment.") };
     }
     throw error;
   }
@@ -142,7 +142,7 @@ export async function deactivateStaffAccountAction(
       return { error: error.message };
     }
     if (error instanceof AuthorizationError) {
-      return { error: "You do not have access to deactivate this account." };
+      return { error: refusalMessage(error, "You do not have access to deactivate this account.") };
     }
     throw error;
   }
@@ -157,7 +157,7 @@ export async function reactivateStaffAccountAction(userId: string): Promise<Acti
     await staffAccountService.reactivate({ userId });
   } catch (error) {
     if (error instanceof AuthorizationError) {
-      return { error: "You do not have access to reactivate this account." };
+      return { error: refusalMessage(error, "You do not have access to reactivate this account.") };
     }
     throw error;
   }
@@ -211,7 +211,7 @@ export async function createAssignmentAction(
     }
     if (error instanceof AuthorizationError) {
       return {
-        errors: [{ name: "form", message: "You do not have access to assign roles." }],
+        errors: [{ name: "form", message: refusalMessage(error, "You do not have access to assign roles.") }],
         success: false,
       };
     }

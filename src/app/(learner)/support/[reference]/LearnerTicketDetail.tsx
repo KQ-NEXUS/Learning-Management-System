@@ -21,6 +21,7 @@ import {
 import { TicketContextCard } from "@/components/support/TicketContextCard";
 import { TicketTimeline, type TimelineMessage } from "@/components/support/TicketTimeline";
 import { TicketStatusPill, TicketTime, ticketCategoryLabel } from "@/components/support/ticket-labels";
+import { LagosTime } from "@/components/time/LagosTime";
 import { uploadTicketAttachment } from "@/components/support/upload-ticket-attachment";
 import {
   closeTicketAction,
@@ -56,10 +57,6 @@ const LIVE_ACTIONS: Actions = { reply: replyToTicketAction, reopen: reopenTicket
 
 const CONFLICT =
   "This ticket changed while you were working. We loaded the latest activity—review it and try again.";
-
-function formatDate(value: Date | string): string {
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" }).format(new Date(value));
-}
 
 export function LearnerTicketDetail({
   ticket,
@@ -269,7 +266,7 @@ export function LearnerTicketDetail({
             Did this solve the issue?
           </h2>
           <p className="text-sm text-muted-foreground">
-            This ticket will close automatically on {formatDate(ticket.autoCloseAt)} unless you reopen it.
+            This ticket will close automatically on <LagosTime value={ticket.autoCloseAt} variant="date" /> unless you reopen it.
           </p>
           <div className="flex flex-wrap gap-2">
             {ticket.canClose && (

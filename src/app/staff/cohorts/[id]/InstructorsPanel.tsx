@@ -12,9 +12,11 @@
  * `CohortDetailActions` gates Publish/Cancel.
  */
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { assignInstructorAction, removeInstructorAction } from "./instructor-actions";
+import { assignInstructorAction, listInstructorCandidatesAction, removeInstructorAction } from "./instructor-actions";
+import { useToast } from "@/components/feedback/Toaster";
+import { PersonPickerDialog, type PickablePerson } from "@/components/people/PersonPickerDialog";
 
 export type InstructorRow = { id: string; userId: string; userName: string; userEmail: string };
 
@@ -31,22 +33,43 @@ const BTN_PRIMARY =
 
 export function InstructorsPanel({ cohortId, instructors, canManage }: InstructorsPanelProps) {
   const router = useRouter();
-  const [userId, setUserId] = useState("");
+  const toast = useToast();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleAssign() {
+  async function handleAssign(person: PickablePerson) {
     setPending(true);
     setError(null);
-    const result = await assignInstructorAction({ cohortId, userId: userId.trim() });
+    const result = await assignInstructorAction({ cohortId, userId: person.id });
     setPending(false);
     if (result.ok) {
-      setUserId("");
+      toast.success(`${person.name} added as an instructor`);
+      setPickerOpen(false);
       router.refresh();
     } else {
       setError(result.message);
     }
   }
+
+  // Staff are listed by the server, which checks the caller may manage this cohort's instructors.
+  const loadCandidates = useCallback(
+    async (query: string) => {
+      const result = await listInstructorCandidatesAction({ cohortId, query });
+      if (!result.ok) return result;
+      return {
+        ok: true as const,
+        people: result.people.map((person) => ({
+          id: person.id,
+          name: person.name,
+          email: person.email,
+          detail: person.roles.join(", ") || "No role",
+          disabledReason: person.assigned ? "Already an instructor" : undefined,
+        })),
+      };
+    },
+    [cohortId],
+  );
 
   async function handleRemove(targetUserId: string) {
     setPending(true);
@@ -54,7 +77,10 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
     const result = await removeInstructorAction({ cohortId, userId: targetUserId });
     setPending(false);
     if (!result.ok) setError(result.message);
-    else router.refresh();
+    else {
+      toast.success("Instructor removed");
+      router.refresh();
+    }
   }
 
   return (
@@ -103,28 +129,40 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
         </ul>
       )}
       {canManage ? (
-        <div className="flex items-end gap-2 pt-4">
-          <label className="flex flex-col gap-1 text-sm">
-            Add instructor (user id)
-            <input
-              type="text"
-              className="rounded-md border border-input-border bg-surface px-2 py-1 text-sm text-foreground"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              placeholder="cmta..."
-            />
-          </label>
+        <div className="pt-4">
           <button
             type="button"
             className={BTN_PRIMARY}
-            disabled={pending || !userId.trim()}
-            onClick={handleAssign}
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              setPickerOpen(true);
+            }}
           >
-            Add
+            Add instructor
           </button>
         </div>
       ) : null}
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error && !pickerOpen ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+
+      <PersonPickerDialog
+        open={pickerOpen}
+        title="Add instructor"
+        description="Active staff accounts. Search by name or email, choose one, then add them to this cohort."
+        confirmLabel="Add instructor"
+        load={loadCandidates}
+        emptyText="No active staff accounts."
+        pending={pending}
+        error={error}
+        onConfirm={handleAssign}
+        onClose={() => {
+          if (!pending) setPickerOpen(false);
+        }}
+      />
     </section>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import {
   ArrangeBoard,
   GuardedLink,
@@ -121,7 +121,8 @@ export function ArrangeClient({
         setModuleError(res.message);
         setModuleStale(res.reason === "STALE");
       }
-    } catch {
+    } catch (error) {
+      unstable_rethrow(error);
       // An unexpected rejection (network drop, action runtime error) leaves the
       // outcome unknown — surface a generic retryable message, never the caught
       // value, and do not imply the order was applied. `moduleStale` stays false.
@@ -153,7 +154,8 @@ export function ArrangeClient({
         setLessonError(res.message);
         setLessonStale(res.reason === "STALE");
       }
-    } catch {
+    } catch (error) {
+      unstable_rethrow(error);
       setLessonError(
         "Something went wrong saving the lesson arrangement. Nothing was changed — try again.",
       );
@@ -168,6 +170,11 @@ export function ArrangeClient({
   // keep the edited text for a retry. There is no pending state to strand here
   // — the composer owns per-control busy state and clears it in its own
   // `finally`.
+  //
+  // WR-02: every catch in this file first hands Next.js control flow
+  // (`redirect()` / `notFound()` thrown through an awaited action) back to the
+  // framework via `unstable_rethrow`; only application errors reach the
+  // generic message.
   async function handleAddModule(title: string): Promise<ComposerResult> {
     try {
       const res = await createModuleAction({ courseId, title });
@@ -176,7 +183,8 @@ export function ArrangeClient({
         return { ok: true };
       }
       return { ok: false, message: res.message };
-    } catch {
+    } catch (error) {
+      unstable_rethrow(error);
       return {
         ok: false,
         message: "Something went wrong adding the module. Try again.",
@@ -195,7 +203,8 @@ export function ArrangeClient({
         return { ok: true };
       }
       return { ok: false, message: res.message };
-    } catch {
+    } catch (error) {
+      unstable_rethrow(error);
       return {
         ok: false,
         message: "Something went wrong renaming the module. Try again.",
@@ -203,9 +212,35 @@ export function ArrangeClient({
     }
   }
 
+  // WR-01: the same try/catch/finally shape as the save handlers. The ref is
+  // the in-flight guard (a ref, so two clicks in one tick cannot both pass);
+  // it is always released in `finally`, so a rejection never strands the
+  // Restore control. The failure lands on the board that owns the item.
+  const restoringRef = useRef(false);
   async function handleRestore(kind: "module" | "lesson", id: string) {
-    const res = await restoreItemAction({ courseId, kind, id });
-    if (res.ok) router.refresh();
+    if (restoringRef.current) return;
+    restoringRef.current = true;
+    const setError = kind === "module" ? setModuleError : setLessonError;
+    setError(null);
+    try {
+      const res = await restoreItemAction({ courseId, kind, id });
+      if (res.ok) {
+        router.refresh();
+      } else {
+        setError(res.message);
+      }
+    } catch (error) {
+      unstable_rethrow(error);
+      // Outcome unknown — generic retryable message, never the caught value,
+      // and never imply the item was restored.
+      setError(
+        kind === "module"
+          ? "Something went wrong restoring that module. Nothing was changed — try again."
+          : "Something went wrong restoring that lesson. Nothing was changed — try again.",
+      );
+    } finally {
+      restoringRef.current = false;
+    }
   }
 
   const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);

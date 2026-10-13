@@ -252,6 +252,40 @@ describe("/learn/[enrolmentId]", () => {
     expect(html).toMatch(/<a href="\/learn\/enrolment-1\/lessons\/lesson-open"[^>]*>/);
   });
 
+  it("a COMPLETED enrolment renders its lessons as a record with no lesson links, and points to the certificate and results (R3-04, G-01)", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        enrolment: { ...pathFixture().enrolment, status: "COMPLETED" },
+        courses: [
+          courseFixture({
+            modules: [
+              moduleFixture({
+                lessons: [
+                  lessonFixture({ id: "lesson-1", title: "Lesson One", completed: true }),
+                  lessonFixture({ id: "lesson-2", title: "Optional Extra", required: false }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const html = await renderPage();
+
+    expect(mocks.loadLearnerPath).toHaveBeenCalledWith(ACTOR, "enrolment-1", { includeCompleted: true });
+    expect(mocks.notFound).not.toHaveBeenCalled();
+    expect(html).toContain("You&#x27;ve completed this course");
+    expect(html).toContain("Lesson One");
+    expect(html).toContain("Optional Extra");
+    expect(html).toContain('href="/dashboard"');
+    expect(html).toContain('href="/learn/enrolment-1/results"');
+    // Not operable: nothing links into a lesson or the ACTIVE-only sessions page, and nothing is "next up".
+    expect(html).not.toContain("/lessons/");
+    expect(html).not.toContain("/learn/enrolment-1/sessions");
+    expect(html).not.toContain("Next up");
+  });
+
   it("renders the denied panel and leaks no lesson or module title for a PENDING_PAYMENT enrolment", async () => {
     mocks.loadLearnerPath.mockResolvedValue(null);
     mocks.getOwnPendingEnrolmentOrderHref.mockResolvedValue("/orders/ORD-123");

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { notFound } from "next/navigation";
 import { AlertCircle, ChevronLeft } from "lucide-react";
@@ -12,6 +13,7 @@ import { payAction } from "@/app/(checkout)/checkout/[orderId]/actions";
 import { PolicyConsentForm } from "@/app/(checkout)/checkout/[orderId]/PolicyConsentForm";
 import { HoldCountdown } from "@/app/(checkout)/checkout/[orderId]/HoldCountdown";
 import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
+import { LagosTime } from "@/components/time/LagosTime";
 
 // Rendered per request, never prerendered — matches the public course-detail
 // page's own reasoning, and this page reads a real Order.
@@ -23,10 +25,13 @@ const DELIVERY_MODE_LABEL: Record<string, string> = {
   BLENDED: "Blended",
 };
 
-function formatDateRange(startsAt: Date, endsAt: Date): string {
-  const fmt = (value: Date) =>
-    new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-  return `${fmt(startsAt)}–${fmt(endsAt)}`;
+/** The cohort's start and end as Lagos days (D-17), each in a time element. */
+function DateRange({ startsAt, endsAt }: { startsAt: Date; endsAt: Date }) {
+  return (
+    <>
+      <LagosTime value={startsAt} variant="date" />–<LagosTime value={endsAt} variant="date" />
+    </>
+  );
 }
 
 function formatAmount(amountMinor: number, currency: string): string {
@@ -74,20 +79,19 @@ export default async function CheckoutOrderPage({
   if (holdExpired) {
     const backHref = await getCohortOfferPath(order.cohort.id);
     return (
+      // UX batch D: the state IS the page heading (it used to sit under a
+      // contradictory "Review your order" h1), and recovery is a real button.
       <div className="flex flex-col gap-8">
-        <LearnerPageHeader title="Review your order" />
-      <div className="flex w-full max-w-[640px] flex-col items-start gap-3 border-t border-foreground py-12">
+        <LearnerPageHeader title="Your seat hold has expired" />
+      <div className="flex w-full max-w-[640px] flex-col items-start gap-4 border-t border-foreground py-8">
         <AlertCircle aria-hidden className="size-6 text-danger" />
-        <h1 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
-          Your seat hold has expired
-        </h1>
         <p className="max-w-prose text-sm text-muted-foreground">
-          This seat was only held for a limited time and it&apos;s no longer available. Check the
-          cohort page for current availability.
+          This seat was only held for a limited time and it&apos;s no longer available. Nothing was
+          charged. Check the cohort page for current availability.
         </p>
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-sm text-accent hover:underline"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
         >
           <ChevronLeft aria-hidden className="size-4" />
           Back to cohort
@@ -122,9 +126,9 @@ export default async function CheckoutOrderPage({
     throw new Error(`Order ${order.id} has no commercial snapshot to render a breakdown from.`);
   }
 
-  const facts: [string, string][] = [
+  const facts: [string, ReactNode][] = [
     ["Cohort", order.cohort.title],
-    ["Dates", formatDateRange(order.cohort.startsAt, order.cohort.endsAt)],
+    ["Dates", <DateRange key="dates" startsAt={order.cohort.startsAt} endsAt={order.cohort.endsAt} />],
     ["Mode", DELIVERY_MODE_LABEL[order.cohort.deliveryMode] ?? order.cohort.deliveryMode],
   ];
 
@@ -134,6 +138,9 @@ export default async function CheckoutOrderPage({
   // The payment never reached the provider's page (payAction's catch-all).
   const showUnavailableBanner =
     !emailUnverified && !showDeclineBanner && payment === "unavailable" && enrolment?.holdExpiresAt;
+  // The deployment has no payment provider configured: retrying cannot help.
+  const showNotSetUpBanner =
+    !emailUnverified && !showDeclineBanner && payment === "not-set-up" && enrolment?.holdExpiresAt;
 
   return (
     <article className="flex flex-col gap-8">
@@ -141,6 +148,38 @@ export default async function CheckoutOrderPage({
 
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="flex max-w-[720px] flex-col gap-10">
+      {/* Payment problems come first, so they are seen without scrolling past the order details. */}
+      {showUnavailableBanner && (
+        <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
+          <p className="text-sm font-semibold text-danger">We couldn&apos;t start your payment</p>
+          <p className="text-sm text-danger">
+            Nothing was charged. The payment provider didn&apos;t accept the request — please try again in a
+            moment. Your seat is still held for {formatRemaining(new Date(enrolment!.holdExpiresAt as Date), at)}.
+          </p>
+        </div>
+      )}
+
+      {showDeclineBanner && (
+        <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
+          <p className="text-sm font-semibold text-danger">Your payment didn&apos;t go through</p>
+          <p className="text-sm text-danger">
+            Try again or use a different payment method — your seat is still held for{" "}
+            {formatRemaining(new Date(enrolment!.holdExpiresAt as Date), at)}.
+          </p>
+        </div>
+      )}
+
+      {showNotSetUpBanner && (
+        <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
+          <p className="text-sm font-semibold text-danger">Online payment isn&apos;t set up yet</p>
+          <p className="text-sm text-danger">
+            Nothing was charged. Payments can&apos;t be taken on this site right now, so trying again won&apos;t
+            help. Please contact support. Your seat is still held for{" "}
+            {formatRemaining(new Date(enrolment!.holdExpiresAt as Date), at)}.
+          </p>
+        </div>
+      )}
+
       <section className="flex flex-col gap-4 border-t border-foreground pt-5">
         <dl className="grid grid-cols-1 gap-0">
           {facts.map(([label, value]) => (
@@ -175,26 +214,6 @@ export default async function CheckoutOrderPage({
           <p className="text-sm text-warning">
             We sent a verification link to {verification.email}. Verify it, then come back to this
             page — your seat hold and order are still here.
-          </p>
-        </div>
-      )}
-
-      {showUnavailableBanner && (
-        <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
-          <p className="text-sm font-semibold text-danger">We couldn&apos;t start your payment</p>
-          <p className="text-sm text-danger">
-            Nothing was charged. The payment provider didn&apos;t accept the request — please try again in a
-            moment. Your seat is still held for {formatRemaining(new Date(enrolment!.holdExpiresAt as Date), at)}.
-          </p>
-        </div>
-      )}
-
-      {showDeclineBanner && (
-        <div role="alert" className="flex flex-col gap-1 border-t-2 border-danger py-3">
-          <p className="text-sm font-semibold text-danger">Your card was declined</p>
-          <p className="text-sm text-danger">
-            Try a different card — your seat is still held for{" "}
-            {formatRemaining(new Date(enrolment!.holdExpiresAt as Date), at)}.
           </p>
         </div>
       )}

@@ -4,10 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
+  ChevronDown,
   Award,
   BookOpen,
   ChevronRight,
   CreditCard,
+  Hash,
+  KeyRound,
   Layers,
   LayoutGrid,
   ListChecks,
@@ -19,6 +22,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { BrandMark } from "@/components/shell/BrandMark";
+import { MAIN_CONTENT_ID, SkipLink } from "@/components/shell/SkipLink";
+import {
+  LicenceRestrictionProvider,
+  UNRESTRICTED_LICENCE_RESTRICTION,
+  type LicenceRestrictionValue,
+} from "@/components/licence/LicenceRestrictionProvider";
 
 /**
  * StaffShell — the client half of the staff workspace shell (D-19, D-20).
@@ -48,7 +57,74 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/staff/users": User,
   "/staff/roles": ShieldCheck,
   "/staff/audit": ListChecks,
+  "/staff/licence": KeyRound,
+  "/staff/learner-numbers": Hash,
 };
+
+// ---------------------------------------------------------------------------
+// Collapsible nav groups (owner request, 2026-10-04)
+// ---------------------------------------------------------------------------
+//
+// Each labelled group (Delivery, Finance, Catalogue...) can be folded to its
+// heading. Which groups are folded is a per-browser preference kept in
+// localStorage, read through `useSyncExternalStore` so the server render and
+// the first client render agree (everything open) and the stored choice is
+// applied right after, without a set-state-in-effect.
+
+const COLLAPSED_GROUPS_KEY = "kq.staffNav.collapsedGroups";
+const COLLAPSED_GROUPS_EVENT = "kq:staff-nav-groups";
+
+/** Stands for "the user has never chosen". Not a valid group label, so it cannot clash with a stored value. */
+const UNSET = "*";
+
+/** The stored value ("" when the user opened everything), `UNSET` when nothing was ever stored, or `null` when storage cannot be read at all. */
+function readCollapsedGroups(): string | null {
+  try {
+    return window.localStorage.getItem(COLLAPSED_GROUPS_KEY) ?? UNSET;
+  } catch {
+    return null;
+  }
+}
+
+function writeCollapsedGroups(labels: string[]): void {
+  try {
+    window.localStorage.setItem(COLLAPSED_GROUPS_KEY, labels.join("|"));
+  } catch {
+    // Not remembered; still applied for this page view through the event below.
+  }
+  window.dispatchEvent(new CustomEvent(COLLAPSED_GROUPS_EVENT, { detail: labels.join("|") }));
+}
+
+let collapsedGroupsFallback: string | null = null;
+
+function subscribeCollapsedGroups(onChange: () => void): () => void {
+  const onCustom = (event: Event) => {
+    collapsedGroupsFallback = (event as CustomEvent<string>).detail;
+    onChange();
+  };
+  window.addEventListener("storage", onChange);
+  window.addEventListener(COLLAPSED_GROUPS_EVENT, onCustom);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(COLLAPSED_GROUPS_EVENT, onCustom);
+  };
+}
+
+/**
+ * The folded groups. Before the user has ever folded or opened a group, every group
+ * is folded except the one holding the current page (`unset`), so the whole menu fits
+ * on a laptop screen. The server and first client render agree on "everything open".
+ * Falls back to the last value set in this page when storage is blocked.
+ */
+function useCollapsedGroups(): { labels: Set<string>; unset: boolean } {
+  const raw = useSyncExternalStore(
+    subscribeCollapsedGroups,
+    // Storage is the truth when it can be read; the in-page value only stands in when it cannot.
+    () => readCollapsedGroups() ?? collapsedGroupsFallback ?? UNSET,
+    () => "",
+  );
+  return { labels: new Set(raw && raw !== UNSET ? raw.split("|") : []), unset: raw === UNSET };
+}
 
 /** Groups consecutive items that share a group label, preserving nav order. */
 function groupNav(nav: StaffNavItem[]): { label: string | null; items: StaffNavItem[] }[] {
@@ -69,6 +145,15 @@ type StaffShellProps = {
   nav: StaffNavItem[];
   identity: StaffIdentity;
   signOut: ReactNode;
+  /** The notification bell (D-18). Optional so existing callers/tests need no change. */
+  bell?: ReactNode;
+  /**
+   * The persistent licence banner (D-15), rendered between the header and `<main>`.
+   * Built by the layout for holders of licence.view only; absent for everyone else.
+   */
+  banner?: ReactNode;
+  /** The licence restriction mirror (D-09). Optional: absent means unrestricted. */
+  licenceRestriction?: LicenceRestrictionValue;
   children: ReactNode;
 };
 
@@ -117,7 +202,7 @@ function subscribeToViewport(onChange: () => void) {
 const getDesktopSnapshot = () => window.matchMedia(DESKTOP_QUERY).matches;
 const getServerDesktopSnapshot = () => false;
 
-export function StaffShell({ nav, identity, signOut, children }: StaffShellProps) {
+export function StaffShell({ nav, identity, signOut, bell, banner, licenceRestriction, children }: StaffShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const desktop = useSyncExternalStore(subscribeToViewport, getDesktopSnapshot, getServerDesktopSnapshot);
@@ -193,14 +278,29 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
   const display = deriveIdentityDisplay(identity);
 
   const groups = groupNav(nav);
+  const { labels: collapsedGroups, unset: groupsUnset } = useCollapsedGroups();
+  const navGroupId = useId();
+
+  function toggleGroup(label: string) {
+    // The default is "all folded", so the first choice starts from that.
+    const next = new Set(
+      groupsUnset ? groups.flatMap((group) => (group.label ? [group.label] : [])) : collapsedGroups,
+    );
+    if (next.has(label)) next.delete(label);
+    else next.add(label);
+    writeCollapsedGroups([...next]);
+  }
 
   return (
-    // No `overflow-x` clip on this row wrapper: `overflow-x: hidden` forces
+    // The provider (D-09) wraps the whole shell so the page content can read the licence restriction.
+    // No `overflow-x` clip on the row wrapper below: `overflow-x: hidden` forces
     // `overflow-y` to compute to `auto`, turning it into a scroll container, and
     // the sidebar's `lg:sticky` would then anchor to this non-scrolling box
     // instead of the viewport — so it scrolled away with the page on tall
     // routes. Horizontal bleed is clipped on the content column instead.
+    <LicenceRestrictionProvider value={licenceRestriction ?? UNRESTRICTED_LICENCE_RESTRICTION}>
     <div className="flex min-h-screen bg-sidebar-bg">
+      <SkipLink />
       {mobileOpen && (
         <div
           aria-hidden
@@ -216,7 +316,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         inert={!desktop && !mobileOpen}
         aria-hidden={!desktop && !mobileOpen ? true : undefined}
         aria-label="Workspace navigation"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-hidden [@media(max-height:691px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:[scrollbar-width:thin] lg:[&::-webkit-scrollbar]:block lg:[&::-webkit-scrollbar]:w-1.5 [@media(max-height:691px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -234,13 +334,39 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
         </div>
 
         <nav aria-label="Workspace" className="flex flex-1 flex-col gap-6 [@media(min-height:780px)_and_(max-height:899px)]:gap-4 [@media(min-height:692px)_and_(max-height:779px)]:gap-3 [@media(max-height:691px)]:gap-2">
-          {groups.map((group) => (
+          {groups.map((group, groupIndex) => {
+            // The group holding the current page is always open, so you never lose your place.
+            const holdsCurrentPage = group.items.some((item) => isActiveNavItem(pathname, item.href));
+            const collapsed =
+              group.label !== null && (groupsUnset || collapsedGroups.has(group.label)) && !holdsCurrentPage;
+            const itemsId = `${navGroupId}-group-${groupIndex}`;
+            return (
             <div key={group.label ?? "top"} className="flex flex-col gap-1">
               {group.label && (
-                <span className="px-3 pb-2 text-[12px] font-semibold tracking-[0.06em] text-sidebar-muted uppercase [@media(max-height:779px)]:pb-1 [@media(max-height:691px)]:pb-0">
-                  {group.label}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!holdsCurrentPage) toggleGroup(group.label as string);
+                  }}
+                  aria-expanded={!collapsed}
+                  aria-controls={itemsId}
+                  // Folding the group you are in would hide the page you are on, so it stays open.
+                  aria-disabled={holdsCurrentPage || undefined}
+                  title={holdsCurrentPage ? undefined : collapsed ? `Show ${group.label}` : `Hide ${group.label}`}
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-3 pb-2 text-left text-[12px] font-semibold tracking-[0.06em] text-sidebar-muted uppercase [@media(max-height:779px)]:pb-1 [@media(max-height:691px)]:pb-0 ${
+                    holdsCurrentPage ? "cursor-default" : "hover:text-white"
+                  }`}
+                >
+                  <span>{group.label}</span>
+                  {!holdsCurrentPage && (
+                    <ChevronDown
+                      aria-hidden
+                      className={`size-4 shrink-0 transition-transform duration-150 ${collapsed ? "-rotate-90" : ""}`}
+                    />
+                  )}
+                </button>
               )}
+              <div id={itemsId} hidden={collapsed} className="flex flex-col gap-1">
               {group.items.map((item) => {
                 const active = isActiveNavItem(pathname, item.href);
                 const Icon = NAV_ICONS[item.href];
@@ -262,8 +388,10 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
                   </Link>
                 );
               })}
+              </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Footer identity chip. */}
@@ -318,6 +446,7 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
           </div>
 
           <div className="flex shrink-0 items-center gap-5">
+            {bell}
             <span className="hidden font-mono text-[12px] text-sidebar-soft sm:inline">
               Africa/Lagos
             </span>
@@ -325,10 +454,13 @@ export function StaffShell({ nav, identity, signOut, children }: StaffShellProps
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 rounded-t-[28px] bg-surface px-6 pt-9 pb-14 lg:px-10">
+        {banner}
+
+        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 rounded-t-[28px] bg-surface px-6 pt-9 pb-14 focus:outline-none lg:px-10">
           {children}
         </main>
       </div>
     </div>
+    </LicenceRestrictionProvider>
   );
 }

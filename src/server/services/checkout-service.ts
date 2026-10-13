@@ -50,6 +50,7 @@ import {
 } from "@/server/services/seat-accounting";
 import { writeDomainEvent, type DomainEventTxClient } from "@/server/services/domain-event-service";
 import { recordAudit, type BusinessAuditEvent } from "@/server/services/audit-service";
+import { licenceService } from "@/server/services/licence-service";
 import { getStripe } from "@/server/payments/providers/stripe/client";
 import { buildCheckoutSessionParams } from "@/server/payments/providers/stripe/checkout-session";
 import { initiatePaystackTransaction } from "@/server/payments/providers/paystack/initialize";
@@ -308,6 +309,15 @@ export type CheckoutTxClient = SeatTxClient &
   };
 
 export type CheckoutServiceDeps = {
+  /**
+   * D-08/D-09 — the explicit restricted-state guard. Checkout does not run
+   * through `withPermission`, so each session-creating entry point calls this
+   * first and lets `LicenceWriteBlockedError` propagate unchanged. Optional so
+   * existing unit tests (no guard injected) behave exactly as before.
+   */
+  licence?: {
+    assertWriteAllowed(input: { operation: string; actorId?: string | null }): Promise<void>;
+  };
   db: {
     $transaction: <R>(
       fn: (tx: CheckoutTxClient) => Promise<R>,
@@ -440,6 +450,10 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     cohortId: string,
     currency: SupportedCurrency,
   ): Promise<{ orderId: string }> {
+    // D-08 — refuse a new checkout session in restricted continuity mode before
+    // any transaction, seat hold or provider call.
+    await deps.licence?.assertWriteAllowed({ operation: "checkout.start", actorId: actor.userId });
+
     const at = now();
 
     let supersededOrderId: string | null = null;
@@ -797,6 +811,9 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     orderId: string,
     consent: PaymentConsent,
   ): Promise<{ url: string }> {
+    // D-08 — first statement: refused before any read, transaction or provider call.
+    await deps.licence?.assertWriteAllowed({ operation: "checkout.initiate_stripe", actorId: actor.userId });
+
     const { order, enrolment } = await runPaymentGuards(actor, orderId, consent);
 
     // D-07/T-07-29 — refuse before any provider call and before the
@@ -875,6 +892,9 @@ export function createCheckoutService(deps: CheckoutServiceDeps) {
     orderId: string,
     consent: PaymentConsent,
   ): Promise<{ url: string }> {
+    // D-08 — first statement: refused before any read, transaction or provider call.
+    await deps.licence?.assertWriteAllowed({ operation: "checkout.initiate_paystack", actorId: actor.userId });
+
     const { order, enrolment, email } = await runPaymentGuards(actor, orderId, consent);
 
     // D-07/T-07-29 — the mirror-image refusal of initiateStripePayment's own
@@ -993,6 +1013,7 @@ function mapOrderRow(row: AnyPrisma): OrderWithRelationsRow {
 
 export function createPrismaBackedCheckoutService(client: AnyPrisma) {
   return createCheckoutService({
+    licence: licenceService,
     db: {
       $transaction: (fn, options) =>
         client.$transaction((tx: unknown) => fn(tx as CheckoutTxClient), options),

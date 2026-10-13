@@ -13,11 +13,13 @@
  * Bound to the one cohort in the route param — there is no all-cohorts
  * export here; queued/processing/retry export infrastructure is Phase 8.
  *
- * On `AuthorizationError` (or `AuthenticationError`) this returns a generic
- * 403 body that never reveals whether the cohort exists (T-05-93) — the
- * filename is only ever built AFTER authorization has already succeeded.
- * The response's cache-control header keeps a scoped export out of any
- * shared cache (T-05-92) — see `NO_STORE_CACHE_CONTROL` below.
+ * On `AuthorizationError` (or `AuthenticationError`) this returns an empty
+ * 404, the same denial every other private download uses (plan 15-27, ledger
+ * P-07, NFR-06): a different status or body for "not allowed" than for "does
+ * not exist" would turn the route into an oracle for which cohorts exist
+ * (T-05-93). The filename is only ever built AFTER authorization has already
+ * succeeded. The response's cache-control header keeps a scoped export out of
+ * any shared cache (T-05-92) — see `NO_STORE_CACHE_CONTROL` below.
  */
 
 import { NextResponse } from "next/server";
@@ -28,7 +30,7 @@ import {
   type ExceptionCategory,
 } from "@/server/services/roster-service";
 
-const NO_STORE_CACHE_CONTROL = "no-store";
+const NO_STORE_CACHE_CONTROL = "private, no-store";
 
 export async function GET(
   request: Request,
@@ -62,8 +64,8 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-      return new NextResponse("You do not have access to this export.", {
-        status: 403,
+      return new NextResponse(null, {
+        status: 404,
         headers: { "Cache-Control": NO_STORE_CACHE_CONTROL },
       });
     }

@@ -10,6 +10,7 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -429,5 +430,23 @@ describe("RefundDialog", () => {
 
     await waitFor(() => expect(screen.getByText("Action not applied")).toBeTruthy());
     expect(screen.getByText(/exceeds the eligible captured value of 10000000/)).toBeTruthy();
+  });
+});
+
+describe("RefundDialog in restricted continuity mode (14-19, D-07)", () => {
+  it("is never disabled by the licence mirror: refunds are continuity work", () => {
+    render(
+      <LicenceRestrictionProvider value={{ restricted: true, canViewLicence: true, stateLabel: "Restricted continuity mode" }}>
+        <RefundDialog orderId="order-1" currency="NGN" eligibleRefundMinor={10_000_000} />
+      </LicenceRestrictionProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Record a refund" }));
+    fireEvent.change(screen.getByLabelText("Amount (minor units)"), { target: { value: "5000000" } });
+    fireEvent.change(screen.getByLabelText(/Reason for refund/), {
+      target: { value: "Learner requested a partial refund." },
+    });
+
+    expect((screen.getByRole("button", { name: "Record refund" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/Unavailable in restricted continuity mode/)).toBeNull();
   });
 });

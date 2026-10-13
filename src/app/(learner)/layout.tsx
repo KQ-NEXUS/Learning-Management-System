@@ -2,8 +2,11 @@ import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { signOutAction } from "@/app/(auth)/signin/actions";
 import { profileService } from "@/server/services/profile-service";
-import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
+import { notificationService } from "@/server/services/notification-service";
+import { LearnerShell } from "@/components/shell/LearnerShell";
+import { LEARNER_NAV } from "@/components/shell/learner-nav";
 import { LearnerAccountSlot } from "@/components/shell/LearnerAccountSlot";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { deriveAvatarDisplay } from "@/lib/avatar-display";
 
 /**
@@ -24,14 +27,6 @@ import { deriveAvatarDisplay } from "@/lib/avatar-display";
  * matching `account/layout.tsx`'s identical handling.
  */
 
-const NAV: LearnerNavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "My learning", href: "/learn" },
-  { label: "Support", href: "/support" },
-  { label: "Catalogue", href: "/courses" },
-  { label: "Account", href: "/account" },
-];
-
 export default async function LearnerDeliveryLayout({
   children,
 }: {
@@ -43,10 +38,24 @@ export default async function LearnerDeliveryLayout({
   const profile = await profileService.getOwnProfile(actor);
   const display = deriveAvatarDisplay(profile ? { name: profile.name, email: profile.email } : null);
 
-  const rightSlot = <LearnerAccountSlot display={display} signOut={signOutAction} />;
+  // A database blip must never remove the header chrome (UI-SPEC chrome
+  // persistence, D-22) — the bell falls back to a 0 badge, never a crash.
+  let unread = 0;
+  try {
+    unread = await notificationService.unreadCount(actor);
+  } catch {
+    unread = 0;
+  }
+
+  const rightSlot = (
+    <>
+      <NotificationBell initialUnread={unread} variant="learner" />
+      <LearnerAccountSlot display={display} signOut={signOutAction} />
+    </>
+  );
 
   return (
-    <LearnerShell nav={NAV} homeHref="/dashboard" rightSlot={rightSlot}>
+    <LearnerShell nav={LEARNER_NAV} homeHref="/dashboard" rightSlot={rightSlot}>
       {children}
     </LearnerShell>
   );

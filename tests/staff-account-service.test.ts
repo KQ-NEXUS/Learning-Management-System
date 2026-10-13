@@ -315,6 +315,14 @@ describe("staff account service", () => {
       expect(assignmentCreates).toHaveLength(0);
     });
 
+    it("marks the new account as using a temporary password, so its holder is prompted to change it (R3-12)", async () => {
+      const { service, store } = harness({ grants: [grant("users.manage"), grant("roles.manage"), grant("courses.view")] });
+      await service.create({ name: "New Staff", email: "new@kqnexus.test", roleId: "role-plain", scopeType: "GLOBAL", scopeId: null });
+
+      const created = (store.user.create as unknown as { mock: { calls: Array<[{ data: Record<string, unknown> }]> } }).mock.calls[0]![0].data;
+      expect(created.passwordIsTemporary).toBe(true);
+    });
+
     it("returns a non-empty temporaryPassword not present in either audit entry", async () => {
       const { service, audits } = harness({ grants: [grant("users.manage"), grant("roles.manage"), grant("courses.view")] });
       const result = await service.create({

@@ -1,19 +1,24 @@
 "use client";
 
 import { useActionState } from "react";
-import { AuthTitle } from "../AuthPanel";
+import { AuthFooterLine, AuthTitle } from "../AuthPanel";
+import { CheckEmail } from "../CheckEmail";
+import { useFocusOnError } from "@/lib/use-focus-on-error";
 import { forgotPasswordAction, type ForgotPasswordState } from "./actions";
 
 const INITIAL: ForgotPasswordState = { error: null, sent: false };
 
 export function ForgotPasswordForm() {
   const [state, action, pending] = useActionState(forgotPasswordAction, INITIAL);
+  const alertRef = useFocusOnError<HTMLParagraphElement>(state, state.error !== null);
 
   if (state.sent) {
     return (
-      <AuthTitle
-        title="Check your email"
+      <CheckEmail
         subtitle="If an account exists for that email, we've sent a link to reset your password."
+        expiresIn="1 hour"
+        retryHref="/forgot-password"
+        retryLabel="Try a different email"
       />
     );
   }
@@ -28,6 +33,8 @@ export function ForgotPasswordForm() {
       <form action={action} className="flex w-full max-w-sm flex-col gap-4">
         {state.error && (
           <p
+            ref={alertRef}
+            tabIndex={-1}
             role="alert"
             className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger"
           >
@@ -54,6 +61,7 @@ export function ForgotPasswordForm() {
           {pending ? "Sending…" : "Send reset link"}
         </button>
       </form>
+      <AuthFooterLine text="Remembered it?" href="/signin" linkLabel="Back to sign in" />
     </>
   );
 }

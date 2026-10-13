@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDateShort } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { useState } from "react";
 import { ConfirmModal } from "@/components/primitives";
 import {
@@ -23,10 +23,6 @@ export type AssignmentRow = {
   reason: string | null;
 };
 
-function fmtDate(value: Date | string | null): string {
-  if (!value) return "—";
-  return formatDateShort(new Date(value));
-}
 
 function scopeLabel(row: AssignmentRow): string {
   if (row.scopeType === "GLOBAL") return "Global";
@@ -129,9 +125,13 @@ export function AssignmentsPanel({
                 <span className="text-xs text-muted-foreground">{scopeLabel(row)}</span>
               </div>
               <div className="flex items-center gap-2 font-mono text-sm tabular-nums text-muted-foreground">
-                <span>{fmtDate(row.startsAt)}</span>
+                <span>
+                  <LagosTime value={row.startsAt} variant="date" />
+                </span>
                 <span>→</span>
-                <span>{fmtDate(row.endsAt)}</span>
+                <span>
+                  <LagosTime value={row.endsAt} variant="date" />
+                </span>
               </div>
               {canManage && (
                 <button type="button" onClick={() => setRevokeTarget(row)} className={BTN_DANGER}>
@@ -153,7 +153,9 @@ export function AssignmentsPanel({
               <li key={row.id} className="rounded-xl border border-border bg-surface-2 px-4 py-2 opacity-70">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-foreground">{row.role.name}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{fmtDate(row.revokedAt)}</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    <LagosTime value={row.revokedAt} variant="date" />
+                  </span>
                 </div>
                 {row.reason && <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>}
               </li>
@@ -249,6 +251,9 @@ export function AccountStatusControl({
 
       <ConfirmModal
         open={open}
+        // Deactivation is security administration and stays available in restricted continuity
+        // mode (A10); reactivation is a staff-account write and is blocked (14-19, D-07).
+        licenceEffect={isActive ? "continuity" : "write"}
         tone={isActive ? "danger" : "default"}
         title={isActive ? `Deactivate ${userName}'s account?` : `Reactivate ${userName}?`}
         description={

@@ -1,0 +1,143 @@
+# Continuous integration for every push and pull request to main and develop
+# (Phase 15, D-10). The repository is public, so this workflow treats every
+# pull request as untrusted code:
+#   - it triggers on the plain pull_request event only (never the privileged
+#     "target" variant), so fork pull requests run without repository secrets
+#     and with a read-only token;
+#   - the token is limited to `contents: read`;
+#   - no job reads a repository secret, and no job names a real database host
+#     (integration tests start throwaway Postgres containers via Testcontainers).
+# Third-party actions are pinned to full commit SHAs (version in the trailing
+# comment); Dependabot's github-actions block keeps the pins current.
+# tests/ci-config.test.ts guards these rules.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  EMAIL_TRANSPORT: stub
+
+jobs:
+  static:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      # postinstall runs `prisma generate`.
+      - run: npm ci
+      - run: npm run lint
+      # next-env.d.ts and .next/types are generated files (gitignored), so a
+      # clean checkout must generate them before tsc can check route types.
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+
+  unit:
+    name: Unit and component tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Whole-tree scan tests need the longer timeout. VITEST_SKIP_INTEGRATION
+      # keeps every *.integration.test.ts file out of this job (they run in the
+      # sharded job below); vitest.config.mts reads it. An exclude flag on the
+      # command line does not work here: it never reaches the project's own
+      # file selection, and every integration file ran in this job.
+      - run: npx vitest run --project node --testTimeout=60000
+        env:
+          VITEST_SKIP_INTEGRATION: "1"
+      - run: npx vitest run --project components
+
+  integration:
+    name: Integration tests (shard ${{ matrix.shard }} of 4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The storage integration tests (submissions, certificate files, private
+      # downloads) talk to an object store at localhost:9000, bucket
+      # `lms-private`. A throwaway MinIO container on the loopback address, with
+      # the placeholder key and secret those test files set for themselves:
+      # local test values for a container that exists only for this run, not
+      # secrets. The image is pinned by digest (the same one as e2e-nightly.yml).
+      # The official minio/minio image was withdrawn from Docker Hub in
+      # September 2026 (pulls answer "pull access denied"), so this uses
+      # Chainguard's build of the same server, which pulls without an account.
+      # It has no shell, so the bucket folder is made on the runner and mounted:
+      # a folder that exists under /data when the server starts is a bucket.
+      # It runs as root so it can write to that mounted folder.
+      - name: Start local object storage
+        run: |
+          mkdir -p "$RUNNER_TEMP/minio-data/lms-private"
+          docker run -d --name ci-minio -p 127.0.0.1:9000:9000 \
+            -e MINIO_ROOT_USER=lms-minio \
+            -e MINIO_ROOT_PASSWORD=change-me-minio \
+            --user 0 -v "$RUNNER_TEMP/minio-data:/data" \
+            cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56 \
+            server /data
+      - name: Wait for object storage
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:9000/minio/health/live; then exit 0; fi
+            sleep 2
+          done
+          echo "Object storage did not become ready." >&2
+          docker logs ci-minio >&2
+          exit 1
+      # Each integration file starts its own Postgres container through
+      # Testcontainers (Docker is preinstalled on GitHub's Ubuntu runners), so
+      # files run one at a time inside each shard.
+      - run: npx vitest run integration.test --project node --no-file-parallelism --shard=${{ matrix.shard }}/4
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      # Fails on any high or critical advisory in production dependencies.
+      # D-07: critical security findings are fixed, never waived.
+      - run: npm audit --omit=dev --audit-level=high

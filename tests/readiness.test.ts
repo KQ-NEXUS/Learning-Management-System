@@ -38,6 +38,53 @@ function makeProgramme(overrides: Partial<ReadinessProgrammeInput> = {}): Readin
   };
 }
 
+describe("evaluateCourseReadiness — video captions warning (NFR-09, option-a)", () => {
+  const video = (hasCleanCaptions?: boolean) => ({
+    type: "VIDEO",
+    withdrawnAt: null,
+    ...(hasCleanCaptions === undefined ? {} : { hasCleanCaptions }),
+  });
+  const courseWith = (...lessons: Array<ReturnType<typeof video> | { type: string; withdrawnAt: null }>) =>
+    makeCourse({ modules: [{ withdrawnAt: null, lessons }] });
+  const captionsItem = (course: ReadinessCourseInput) =>
+    evaluateCourseReadiness(course).find((item) => item.id === "video-captions");
+
+  it("produces no item when the course has no video lesson", () => {
+    expect(captionsItem(makeCourse())).toBeUndefined();
+  });
+
+  it("warns, without blocking, naming 1 video lesson with no captions", () => {
+    const course = courseWith(video(true), video(false));
+    const item = captionsItem(course);
+    expect(item).toMatchObject({ state: "WARN", blocking: false, label: "1 video lesson has no captions." });
+    expect(blockingFailures(evaluateCourseReadiness(course))).toEqual([]);
+  });
+
+  it("uses the plural wording for several uncaptioned video lessons", () => {
+    expect(captionsItem(courseWith(video(false), video(false), video(true)))?.label).toBe(
+      "2 video lessons have no captions.",
+    );
+  });
+
+  it("counts a video lesson whose caption state was not supplied as having none", () => {
+    expect(captionsItem(courseWith(video()))?.label).toBe("1 video lesson has no captions.");
+  });
+
+  it("passes when every video lesson has a ready caption", () => {
+    expect(captionsItem(courseWith(video(true), video(true)))).toMatchObject({ state: "PASS", blocking: false });
+  });
+
+  it("ignores withdrawn video lessons and withdrawn modules", () => {
+    const course = makeCourse({
+      modules: [
+        { withdrawnAt: null, lessons: [video(true), { type: "VIDEO", withdrawnAt: "2026-01-01" as string | null }] },
+        { withdrawnAt: "2026-01-01", lessons: [video(false)] },
+      ],
+    });
+    expect(captionsItem(course)).toMatchObject({ state: "PASS" });
+  });
+});
+
 describe("evaluateCourseReadiness — four states, four blockers", () => {
   it("every item's state is one of PASS, FAIL, WARN, NOT_YET_CHECKED", () => {
     const items = evaluateCourseReadiness(makeCourse());

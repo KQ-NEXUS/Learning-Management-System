@@ -20,12 +20,13 @@
 import { useState, useTransition } from "react";
 import { RotateCcw } from "lucide-react";
 import { ConfirmModal, FormField, StatusPill, TextInput } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import {
   saveDraftGradeAction,
   releaseGradeAction,
   overrideGradeAction,
 } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type OverrideHistoryRow = {
   previousScore: number;
@@ -86,9 +87,10 @@ export function GradeEntryClient({
   const released = status === "RELEASED";
 
   const [scoreInput, setScoreInput] = useState(score !== null ? String(score) : "");
+  const toast = useToast();
   const [feedbackInput, setFeedbackInput] = useState(feedback ?? "");
   const [errors, setErrors] = useState<string[]>([]);
-  const [draftStatus, setDraftStatus] = useState<string | undefined>(undefined);
+  const [draftStatus, setDraftStatus] = useState<string | undefined>(undefined); // ISO instant of the last draft save
   const [pending, startTransition] = useTransition();
 
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -116,7 +118,8 @@ export function GradeEntryClient({
         setErrors([result.message]);
         return;
       }
-      setDraftStatus(`Draft saved ${formatTimestamp(new Date(result.grade.gradedAt))}`);
+      setDraftStatus(new Date(result.grade.gradedAt).toISOString());
+      toast.success("Draft grade saved");
     });
   }
 
@@ -143,7 +146,9 @@ export function GradeEntryClient({
       const result = await release({ cohortId, assessmentId, submissionId, gradeId: id });
       if (!result.ok) {
         setErrors([result.message]);
+        return;
       }
+      toast.success("Grade released to the learner");
     });
   }
 
@@ -166,6 +171,7 @@ export function GradeEntryClient({
         setOverrideError(result.message);
         return;
       }
+      toast.success("Grade overridden");
       setOverrideOpen(false);
     });
   }
@@ -228,7 +234,11 @@ export function GradeEntryClient({
             override by just re-saving (10-RESEARCH.md Pitfall 5).
           */}
           <div className="flex flex-wrap items-center gap-4">
-            {draftStatus && <p className="font-mono text-xs text-muted-foreground">{draftStatus}</p>}
+            {draftStatus && (
+              <p className="font-mono text-xs text-muted-foreground">
+                Draft saved <LagosTime value={draftStatus} />
+              </p>
+            )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <button type="button" className={BTN} disabled={pending} onClick={handleSaveDraft}>
                 {pending ? "Saving…" : "Save draft"}
@@ -268,7 +278,7 @@ export function GradeEntryClient({
               {overrides.map((o, i) => (
                 <li key={i} className="text-sm text-muted-foreground">
                   Overridden from {o.previousScore} to {o.newScore} by {o.actorName ?? "Unknown"},{" "}
-                  {formatTimestamp(new Date(o.createdAt))} — &ldquo;{o.reason}&rdquo;
+                  <LagosTime value={o.createdAt} /> — &ldquo;{o.reason}&rdquo;
                 </li>
               ))}
             </ul>
@@ -285,6 +295,7 @@ export function GradeEntryClient({
 
       <ConfirmModal
         open={overrideOpen}
+        licenceEffect="continuity"
         tone="default"
         title="Override grade"
         confirmLabel="Override grade"

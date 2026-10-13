@@ -10,6 +10,7 @@ import { AuthenticationError, AuthorizationError, type RawGrant } from "@/server
 import { isExportDataset, getExportDatasetDefinition, type ExportDataset, type ReportColumn, type ReportDataset } from "@/server/services/report-registry";
 import { createReportQueryService, type ReportQueryStore, type ReportRow, type ReconciliationRefundRow } from "@/server/services/report-query-service";
 import { recordAuditInTransaction } from "@/server/services/audit-service";
+import { learnerSubjectProducer } from "@/server/services/privacy-export-service";
 
 export const MAX_EXPORT_ROWS = 25_000;
 export const MAX_EXPORT_SNAPSHOT_BYTES = 25 * 1024 * 1024;
@@ -159,7 +160,8 @@ async function grants(tx: Tx, userId: string): Promise<RawGrant[]> {
 async function authorize(tx: Tx, userId: string, dataset: ExportDataset, sensitive: boolean, asOf: Date) {
   const definition = getExportDatasetDefinition(dataset);
   const active = await grants(tx, userId);
-  const required: Permission[] = [definition.permission, ...(dataset === "audit" ? ["audit.export" as const] : ["reports.export" as const])];
+  // A standalone dataset (learner-subject) is gated by its own permission alone.
+  const required: Permission[] = [definition.permission, ...(definition.standalone ? [] : dataset === "audit" ? ["audit.export" as const] : ["reports.export" as const])];
   const scopes = required.map((permission) => collectionScopeFromGrants(active, permission, asOf));
   if (scopes.some((scope) => !scope)) throw new AuthorizationError(required[0]);
   const scope = scopes[0]!;
@@ -172,12 +174,22 @@ async function authorize(tx: Tx, userId: string, dataset: ExportDataset, sensiti
       if (uncovered > 0) throw new AuthorizationError(required[1]);
     }
   }
+  if (definition.dataPermission) {
+    // A-02: the records' own module grant must cover everything the export will contain.
+    const data = collectionScopeFromGrants(active, definition.dataPermission, asOf);
+    if (!data) throw new AuthorizationError(definition.dataPermission);
+    if (scope.kind === "GLOBAL" && data.kind !== "GLOBAL") throw new AuthorizationError(definition.dataPermission);
+    if (scope.kind === "LIMITED" && data.kind === "LIMITED") {
+      const uncovered = await tx.cohort.count({ where: { AND: [cohortWhereForCollection(scope), { NOT: cohortWhereForCollection(data) }] } });
+      if (uncovered > 0) throw new AuthorizationError(definition.dataPermission);
+    }
+  }
   if (dataset === "support") {
     // Tickets are not cohort-owned: viewing them requires a GLOBAL ticket grant.
     const tickets = collectionScopeFromGrants(active, "tickets.view", asOf);
     if (!tickets || tickets.kind !== "GLOBAL") throw new AuthorizationError("tickets.view");
   }
-  if (sensitive) {
+  if (sensitive && !definition.standalone) {
     const identity = collectionScopeFromGrants(active, "users.view", asOf);
     if (!identity) throw new AuthorizationError("users.view");
     if (dataset === "support" && identity.kind !== "GLOBAL") throw new AuthorizationError("users.view");
@@ -220,7 +232,9 @@ export function createExportService(deps: ExportServiceDeps) {
     if (suppliedAsOf && (Number.isNaN(suppliedAsOf.getTime()) || suppliedAsOf > frozenAt || frozenAt.getTime() - suppliedAsOf.getTime() > 5 * 60_000)) throw new ExportRequestError("The report has changed. Refresh it before exporting.");
     if (input.idempotencyKey !== undefined && (typeof input.idempotencyKey !== "string" || !/^[\w-]{8,128}$/.test(input.idempotencyKey))) throw new ExportRequestError("Invalid export request key.");
     const key = input.idempotencyKey ? fingerprint([actor.userId, input.idempotencyKey]) : null;
-    const producer = producers[dataset] ?? (dataset === "audit" ? null : builtIn);
+    // audit and learner-subject have no report-query fallback: they run only
+    // through a producer the server registered for them.
+    const producer = producers[dataset] ?? (dataset === "audit" || dataset === "learner-subject" ? null : builtIn);
     if (!producer) throw new ExportRequestError("This export is not available yet.");
     try { return await deps.db.$transaction(async (tx) => {
       const scope = await authorize(tx, actor.userId, dataset, sensitive, frozenAt);
@@ -264,6 +278,13 @@ export function createExportService(deps: ExportServiceDeps) {
     return deps.db.$transaction(async (tx) => {
       const old = await tx.exportJob.findFirst({ where: { id: jobId, requestedById: actor.userId }, include: { snapshotRows: { orderBy: { ordinal: "asc" } } } });
       if (!old || old.status !== "FAILED" || !isExportDataset(old.dataset)) throw new ExportRequestError("Failed export not found.");
+      if (old.dataset === "learner-subject") {
+        // The frozen rows hold personal data. If the account was anonymised
+        // after the first attempt failed, they must not be handed out again.
+        const target = old.filters && typeof old.filters === "object" && !Array.isArray(old.filters) ? (old.filters as Record<string, unknown>).userId : null;
+        const subject = typeof target === "string" ? await tx.user.findUnique({ where: { id: target }, select: { anonymisedAt: true } }) : null;
+        if (!subject || subject.anonymisedAt) throw new ExportRequestError("Failed export not found.");
+      }
       const currentScope = await authorize(tx, actor.userId, old.dataset, Boolean(old.sensitiveReason), now());
       await assertScopeStillCovered(tx, parseScopeSnapshot(old.scopeSnapshot), currentScope);
       const existing = await tx.exportJob.findFirst({ where: { retryOfId: old.id }, orderBy: { createdAt: "desc" } });
@@ -279,6 +300,9 @@ export function createExportService(deps: ExportServiceDeps) {
     const actor = await deps.actor(); if (!actor) throw new AuthenticationError();
     const original = await deps.db.$transaction((tx) => tx.exportJob.findFirst({ where: { id: jobId, requestedById: actor.userId } }));
     if (!original || original.status !== "EXPIRED") throw new ExportRequestError("Expired export not found.");
+    // A learner data export is always re-requested from the learner's privacy
+    // record, where the reason is asked for again and the request is audited.
+    if (original.dataset === "learner-subject") throw new ExportRequestError("Prepare a new export from the learner's privacy record.");
     const filters = original.filters && typeof original.filters === "object" && !Array.isArray(original.filters) ? { ...original.filters as Record<string, unknown> } : {};
     const columns = Array.isArray(original.columnSnapshot) ? original.columnSnapshot.map((column) => (column as { key: string }).key) : undefined;
     return requestExport({ dataset: original.dataset, filters, columns, reason: original.sensitiveReason ?? undefined });
@@ -287,4 +311,8 @@ export function createExportService(deps: ExportServiceDeps) {
   return { requestExport, retryExport, rerunExpiredExport };
 }
 
-export const exportService = createExportService({ db: prisma, actor: getCurrentActor });
+export const exportService = createExportService({
+  db: prisma,
+  actor: getCurrentActor,
+  producers: { "learner-subject": learnerSubjectProducer },
+});

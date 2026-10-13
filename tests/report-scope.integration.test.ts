@@ -450,6 +450,51 @@ describe("scoped report query service", () => {
     ]);
   });
 
+  it("refuses the payments report without payments.view before any query, and limits rows to cohorts both grants cover (A-02)", async () => {
+    const PAYMENTS_AUTHORIZATION = {
+      actor: { userId: "staff-1" },
+      permission: "payments.view" as const,
+      scope: { kind: "LIMITED" as const, programmeIds: [], courseIds: [], cohortIds: ["cohort-paid"] },
+      cohortWhere: { OR: [{ id: { in: ["cohort-paid"] } }] },
+    };
+    const findMany = vi.fn(async (args: Record<string, unknown>) => {
+      void args;
+      return [];
+    });
+    const store = {
+      order: { count: vi.fn(async () => 0), groupBy: vi.fn(async () => []), findMany },
+      enrolment: { count: vi.fn(async () => 0) },
+      reconciliationCase: { count: vi.fn(async () => 0) },
+      cohort: { findMany: vi.fn(async () => []) },
+    } as unknown as ReportQueryStore;
+
+    // Programme Manager / Instructor: reports.view only.
+    const reportOnly = vi.fn(async (permission: string) => {
+      if (permission === "reports.view") return LIMITED_AUTHORIZATION;
+      throw new AuthorizationError(permission as "payments.view");
+    });
+    const denied = createReportQueryService({ store, authorizeCollection: reportOnly as never, now: () => NOW });
+    await expect(denied.getDatasetReport("payments", {})).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(denied.getExportDatasetRows("payments", {})).rejects.toBeInstanceOf(AuthorizationError);
+    expect(reportOnly).toHaveBeenCalledWith("payments.view");
+    expect(findMany).not.toHaveBeenCalled();
+    // A dataset with no module of its own is still theirs to read.
+    reportOnly.mockClear();
+    await expect(denied.getDatasetReport("progress", {})).resolves.toMatchObject({ available: false });
+    expect(reportOnly).not.toHaveBeenCalledWith("payments.view");
+
+    // Finance: both grants. Every order query carries BOTH cohort predicates.
+    const both = vi.fn(async (permission: string) => (permission === "payments.view" ? PAYMENTS_AUTHORIZATION : LIMITED_AUTHORIZATION));
+    const allowed = createReportQueryService({ store, authorizeCollection: both as never, now: () => NOW });
+    findMany.mockClear();
+    await allowed.getDatasetReport("payments", {});
+    expect(findMany).toHaveBeenCalled();
+    for (const [args] of findMany.mock.calls) {
+      expect(JSON.stringify(args)).toContain(JSON.stringify(LIMITED_AUTHORIZATION.cohortWhere));
+      expect(JSON.stringify(args)).toContain(JSON.stringify(PAYMENTS_AUTHORIZATION.cohortWhere));
+    }
+  });
+
   it("uses one scoped refund-row predicate for provider, currency, date and status export filters", async () => {
     const findMany = vi.fn(async () => [{
       id: "refund-a", orderId: "order-a", paymentAttemptId: "attempt-a",

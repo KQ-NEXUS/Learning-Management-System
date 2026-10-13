@@ -60,10 +60,14 @@ export function createExportWorkerService(deps: ExportWorkerDeps) {
         FOR UPDATE SKIP LOCKED
         LIMIT ${bounded(limit)}`;
       for (const row of rows) {
+        // The object key is random, so it is minted once here and stored. A job
+        // that was claimed before (a stale claim put back in the queue) keeps the
+        // key it already has, so a retry overwrites the same object.
         await tx.$executeRaw`
           UPDATE "ExportJob"
           SET "status" = 'PROCESSING',
               "startedAt" = COALESCE("startedAt", ${claimTime}),
+              "storageKey" = COALESCE("storageKey", ${buildExportStorageKey(row.id)}),
               "updatedAt" = ${claimTime}
           WHERE "id" = ${row.id} AND "status" = 'QUEUED'`;
       }
@@ -104,7 +108,10 @@ export function createExportWorkerService(deps: ExportWorkerDeps) {
       const job = await deps.db.exportJob.findFirst({ where: { id: jobId, status: "PROCESSING" } });
       if (!job || job.rowCount === null || job.rowCount < 0) throw new Error("Export job unavailable.");
       const columns = frozenColumns(job.columnSnapshot);
-      const key = buildExportStorageKey(job.id, job.datasetVersion);
+      // Minted and stored by claimQueued. A download needs SUCCEEDED as well as
+      // a key, so a key on a job that is still being made opens nothing.
+      const key = job.storageKey;
+      if (!key) throw new Error("Export job has no storage key.");
       const body = Readable.from(streamCsv({
         dataset: job.dataset,
         version: job.datasetVersion,

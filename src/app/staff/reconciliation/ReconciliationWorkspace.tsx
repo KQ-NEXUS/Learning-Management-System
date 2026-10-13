@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { humanizeCode } from "@/lib/humanize";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -153,7 +154,7 @@ export function ReconciliationWorkspace({
 
       {refundExportQueued && <p role="status" className={NOTE_SUCCESS}>Export queued. You can leave this page and follow its progress in Export History. <Link href="/staff/reports/exports" className="font-semibold text-accent hover:underline">View export history</Link></p>}
 
-      <nav aria-label="Provider" className="flex gap-8 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav aria-label="Provider" className="flex gap-5 overflow-x-auto sm:gap-8 border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {PROVIDERS.map((item) => {
           const active = provider === item;
           return (
@@ -209,7 +210,8 @@ export function ReconciliationWorkspace({
                   <button type="button" onClick={() => setAssignmentOpen(true)} className={BTN_PRIMARY}>Assign cases</button>
                 </div>
               )}
-              <div className="hidden overflow-x-auto sm:block">
+              {/* Scrolls inside itself between 640 and about 1100 px: a labelled, focusable region (W-07). */}
+              <div role="region" aria-label="Reconciliation cases table" tabIndex={0} className="hidden overflow-x-auto sm:block">
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -310,7 +312,7 @@ function RefundExportDialog({ searchParams, asOf, canExportSensitive, onClose, o
         <label className={FIELD}>Refund status
           <select value={refundStatus} disabled={pending} onChange={(event) => setRefundStatus(event.target.value)} className={CONTROL}>
             <option value="">All refund statuses</option>
-            {REFUND_STATUSES.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
+            {REFUND_STATUSES.map((status) => <option key={status} value={status}>{humanizeCode(status)}</option>)}
           </select>
         </label>
         {canExportSensitive && (

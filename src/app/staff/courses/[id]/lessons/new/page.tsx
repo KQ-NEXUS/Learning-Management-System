@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AuthorizationError } from "@/server/permissions";
 import { moduleService, type ModuleRecord } from "@/server/services/module-service";
 import { LessonEditorClient } from "../[lessonId]/LessonEditorClient";
+import { loadLinkableAssessments } from "../linkable-assessments";
 
 export const metadata = { title: "New lesson" };
 
@@ -39,6 +40,7 @@ export default async function NewLessonPage({
 
   return (
     <LessonEditorClient
+      assessmentOptions={await loadLinkableAssessments(courseId)}
       mode="create"
       courseId={courseId}
       moduleId={moduleId}

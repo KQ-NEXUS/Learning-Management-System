@@ -10,6 +10,7 @@ import {
   searchStaffUsersAction,
   type CreateAssignmentState,
 } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 const INITIAL: CreateAssignmentState = { errors: [], success: false };
 
@@ -21,8 +22,8 @@ const SCOPE_TYPES: { value: ScopeType; label: string }[] = [
 ];
 
 const EMPTY_STATE_COPY: Partial<Record<ScopeType, string>> = {
-  PROGRAMME: "No Programmes exist yet — check back once catalogue authoring (Phase 4) lands.",
-  COHORT: "No Cohorts exist yet — check back once scheduling (Phase 5) lands.",
+  PROGRAMME: "No programmes yet. Create one under Programmes first.",
+  COHORT: "No cohorts yet. Create one under Cohorts first.",
 };
 
 const RESULT_CAP = 10;
@@ -155,9 +156,12 @@ function DrawerPanel({
     };
   }, [scopeType, scopeQuery, scopeKey]);
 
+  const toast = useToast();
   useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+    if (!state.success) return;
+    toast.success("Role assigned");
+    onClose();
+  }, [state.success, onClose, toast]);
 
   const canSave =
     selectedUser !== null && roleId !== "" && (scopeType === "GLOBAL" || (!scopePending && !scopeError && scopeTargets.some(target => target.id === scopeId)));

@@ -1,32 +1,32 @@
 /**
- * Plan 06-08 Task 1 — unit coverage for the confirmation-email dispatch
- * `activateOrderAsSystem` performs after settlement, exercised against fully
- * faked deps (no Docker, no real Postgres — the same in-memory staged-commit
- * fake `$transaction` pattern `tests/checkout-service.test.ts` and
- * `tests/enrolment-service.test.ts` already use for this module's sibling
- * services). The settlement transaction's OWN correctness against a real
- * database is proven separately by `tests/checkout-webhook.integration.test.ts`.
+ * Unit coverage for `activateOrderAsSystem`'s settlement transaction,
+ * exercised against fully faked deps (no Docker, no real Postgres — the same
+ * in-memory staged-commit fake `$transaction` pattern
+ * `tests/checkout-service.test.ts` and `tests/enrolment-service.test.ts`
+ * already use for this module's sibling services). The settlement
+ * transaction's OWN correctness against a real database is proven separately
+ * by `tests/checkout-webhook.integration.test.ts`.
  *
- * Why this file exists alongside that one: `EmailDispatch` has no body
- * column (see `email-dispatch-service.ts`'s own row shape — `template`,
- * `toEmail`, `status`, timestamps, but never `textContent`), so a real-DB
- * assertion can prove a row was created but cannot prove what the email
- * SAYS. This file captures the exact `DispatchParams` passed to
- * `dispatchEmail` instead, so the plan's own transparency prohibition — the
- * exception-branch body never claims enrolment — has a direct, deterministic
- * assertion rather than an inferred one.
+ * Plan 08 (D-07, D-02) removed this module's direct confirmation-email send
+ * entirely — the checkout path now only ever writes `order.paid`/
+ * `order.exception`/`enrolment.activated` outbox rows, and the Phase 13 drain
+ * (proven separately, `tests/enrolment-payment-drain.integration.test.ts`)
+ * is the only sender. `SettlementDeps` therefore carries no
+ * `orderEmailFacts`/`dispatchEmail` member at all — a test literal that
+ * tried to pass either would fail to compile (TypeScript's excess-property
+ * check on an object literal assigned to a typed variable), which is this
+ * file's own proof that the dependency is gone, not merely unused.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createActivateOrderAsSystem,
   createRecordSessionExpiredAsSystem,
   createMarkWebhookEventRetryable,
   createRecordWebhookEventOrSkip,
+  createRecordPaymentFailureAsSystem,
   type SettlementTxClient,
   type SettlementDeps,
-  type OrderEmailFacts,
 } from "@/server/services/checkout-webhook-system-service";
-import type { DispatchParams } from "@/server/services/email-dispatch-service";
 
 type CohortRow = { status: string; seatsTaken: number; capacity: number };
 
@@ -132,6 +132,7 @@ type OrderRow = {
   gatewayFeeEstimateMinor?: number | null;
   selectedProvider?: string | null;
   schoolSettlementExpectedMinor?: number | null;
+  createdAt?: Date | null;
   enrolments: EnrolmentRow[];
 };
 
@@ -143,6 +144,7 @@ type PaymentAttemptRow = {
   providerRef?: string | null;
   provider?: string;
   confirmedAt?: Date | null;
+  initiatedAt?: Date | null;
   exceptionNote?: string | null;
 };
 
@@ -151,7 +153,6 @@ function buildHarness(args: {
   cohortId: string;
   order: OrderRow;
   attempts: PaymentAttemptRow[];
-  email: string | null;
   /**
    * 07-04 Task 2 — the seeded `WebhookEvent` row's own `provider`. Defaults
    * to `"STRIPE"` (every pre-existing test in this file settles a Stripe
@@ -183,7 +184,6 @@ function buildHarness(args: {
   const domainEvents: Array<Record<string, unknown>> = [];
   const transactionOptions: Array<{ timeout?: number } | undefined> = [];
   const auditEvents: Array<Record<string, unknown>> = [];
-  const dispatchCalls: DispatchParams[] = [];
   const rawQueries: string[] = [];
 
   const tx: SettlementTxClient = {
@@ -289,32 +289,13 @@ function buildHarness(args: {
     audit: async (event) => {
       auditEvents.push(event);
     },
-    orderEmailFacts: {
-      findUnique: async ({ where }) => {
-        const o = orders.get(where.id);
-        if (!o) return null;
-        const facts: OrderEmailFacts = {
-          reference: `ORD-${o.id}`,
-          cohortTitle: "Advanced Testing",
-          userId: o.enrolments[0]?.userId ?? "user-unknown",
-          email: args.email,
-        };
-        return facts;
-      },
-    },
-    dispatchEmail: async (params) => {
-      dispatchCalls.push(params);
-      return { id: "ed-1", status: "SENT" };
-    },
-    baseUrl: () => "https://app.example.test",
-    now: () => new Date("2026-09-10T12:00:00Z"),
   };
 
   return {
     deps,
-    dispatchCalls,
     auditEvents,
     domainEvents,
+    cohorts,
     orders,
     attempts,
     webhookEvents,
@@ -357,7 +338,7 @@ function baseOrder(
   };
 }
 
-describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
+describe("activateOrderAsSystem — settlement writes outbox events, never dispatches email directly (D-07, D-02)", () => {
   it("locks the Order row before reading settlement state", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
@@ -373,7 +354,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: null,
     });
 
     await createActivateOrderAsSystem(deps)({
@@ -403,7 +383,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
       cohortId: COHORT_ID,
       order,
       attempts: [],
-      email: null,
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -454,7 +433,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: null,
     });
 
     await createActivateOrderAsSystem(deps)({
@@ -492,7 +470,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           confirmedAt: new Date("2026-09-14T09:59:00Z"),
         },
       ],
-      email: null,
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -541,7 +518,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     await createActivateOrderAsSystem(deps)({
@@ -556,10 +532,10 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     expect(transactionOptions).toEqual([{ timeout: 15_000 }]);
   });
 
-  it("a successful settlement dispatches exactly one confirmation email naming the reference, cohort, amount and receipt link", async () => {
+  it("a successful settlement writes order.paid with the settled amount and currency, and touches no email dependency", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -571,7 +547,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -584,51 +559,22 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("ACTIVATED");
-    expect(dispatchCalls).toHaveLength(1);
-    expect(dispatchCalls[0].template).toBe("order-confirmation");
-    expect(dispatchCalls[0].toEmail).toBe("learner@example.test");
-    expect(dispatchCalls[0].userId).toBe("user-1");
-    expect(dispatchCalls[0].textContent).toContain("ORD-order-1");
-    expect(dispatchCalls[0].textContent).toContain("Advanced Testing");
-    expect(dispatchCalls[0].textContent).toContain(
-      "https://app.example.test/orders/ORD-order-1",
+    // D-07/D-02 — the checkout path only ever writes the outbox row; the
+    // Phase 13 drain (proven separately) is the only sender, and
+    // `SettlementDeps` above carries no email member for this test to fake.
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.paid",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          amountMinor: 45_000_000,
+          currency: "NGN",
+        }),
+      }),
     );
-    // Never a secret, a raw Stripe object, or a raw provider error string.
-    expect(dispatchCalls[0].textContent).not.toMatch(/sk_|whsec_|pi_|cs_test_/);
   });
 
-  it("skips dispatch entirely when the order's owner has no email on file, without changing the settlement outcome", async () => {
-    const enrolment = baseEnrolment();
-    const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
-      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
-      cohortId: COHORT_ID,
-      order,
-      attempts: [
-        {
-          id: "pa-1",
-          status: "PROCESSING",
-          orderId: BASE_ORDER_ID,
-          providerIntentId: SESSION_ID,
-        },
-      ],
-      email: null,
-    });
-
-    const result = await createActivateOrderAsSystem(deps)({
-      orderId: BASE_ORDER_ID,
-      provider: "STRIPE",
-      providerIntentId: SESSION_ID,
-      amountMinor: 45_000_000,
-      currency: "NGN",
-      eventId: "evt-1",
-    });
-
-    expect(result.outcome).toBe("ACTIVATED");
-    expect(dispatchCalls).toHaveLength(0);
-  });
-
-  it("the Pitfall-4 exception branch (hold already expired) dispatches exactly one email that never claims enrolment", async () => {
+  it("the Pitfall-4 exception branch (hold already expired) writes order.exception with reason illegal_transition, never touching email", async () => {
     // The enrolment is already CANCELLED (the hold-sweep worker beat the
     // webhook here) — VALID_TRANSITIONS.CANCELLED is empty, so
     // applyEnrolmentActivation throws IllegalTransitionError.
@@ -637,7 +583,7 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
       holdExpiresAt: null,
     });
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 0, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -649,7 +595,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -662,14 +607,18 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(1);
-    expect(dispatchCalls[0].template).toBe("order-payment-exception");
-    expect(dispatchCalls[0].subject).not.toMatch(/enroll/i);
-    // The transparency prohibition, directly: the body must never use
-    // success-framing enrolment language for a seat that is not ACTIVE.
-    expect(dispatchCalls[0].textContent).not.toMatch(/enroll(ed|ment)?/i);
-    expect(dispatchCalls[0].textContent).toContain("no action is needed");
-    expect(dispatchCalls[0].textContent).toContain("ORD-order-1");
+    // The "payment received, finishing up" mail is now the drain's own
+    // enrolment-payment mapper's job (tests/enrolment-payment-drain.integration.test.ts) —
+    // this module's own responsibility ends at writing the event.
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          reason: "illegal_transition",
+        }),
+      }),
+    );
   });
 
   it("settles a successful retry after the same provider attempt was previously marked FAILED", async () => {
@@ -687,7 +636,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -720,7 +668,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -753,7 +700,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
       activeEnrolmentId: "enr-already-active",
     });
 
@@ -775,10 +721,10 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     expect(enrolment.status).toBe("PENDING_PAYMENT");
   });
 
-  it("an amount/currency mismatch (REG-03) never dispatches — the PaymentAttempt never reached SUCCEEDED, so 'your payment succeeded' would be false", async () => {
+  it("an amount/currency mismatch (REG-03) writes order.exception with reason amount_or_currency_mismatch — the PaymentAttempt never reached SUCCEEDED, so 'your payment succeeded' would be false", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -790,7 +736,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -803,18 +748,22 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(0);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "amount_or_currency_mismatch" }),
+      }),
+    );
   });
 
-  it("no matching PaymentAttempt never dispatches — nothing can be correlated or trusted yet", async () => {
+  it("no matching PaymentAttempt writes order.exception with reason payment_attempt_not_found — nothing can be correlated or trusted yet", async () => {
     const enrolment = baseEnrolment();
     const order = baseOrder(enrolment);
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
       attempts: [], // no PaymentAttempt row at all
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -827,13 +776,18 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(0);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "payment_attempt_not_found" }),
+      }),
+    );
   });
 
-  it("an echo of an already-settled event (illegal payment transition) never dispatches a second copy", async () => {
+  it("an echo of an already-settled event writes order.exception with reason illegal_payment_transition, never a second order.paid", async () => {
     const enrolment = baseEnrolment({ status: "ACTIVE", holdExpiresAt: null });
     const order = baseOrder(enrolment, { status: "PAID" });
-    const { deps, dispatchCalls } = buildHarness({
+    const { deps, domainEvents } = buildHarness({
       cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
       cohortId: COHORT_ID,
       order,
@@ -846,7 +800,6 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
           providerIntentId: SESSION_ID,
         },
       ],
-      email: "learner@example.test",
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -859,7 +812,13 @@ describe("activateOrderAsSystem — confirmation email dispatch (D-18)", () => {
     });
 
     expect(result.outcome).toBe("EXCEPTION");
-    expect(dispatchCalls).toHaveLength(0);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "illegal_payment_transition" }),
+      }),
+    );
+    expect(domainEvents.filter((e) => e.type === "order.paid")).toHaveLength(0);
   });
 });
 
@@ -888,7 +847,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
           providerIntentId: "ORD-REF-1",
         },
       ],
-      email: null,
       webhookEventProvider: "PAYSTACK",
     });
 
@@ -920,7 +878,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
           providerIntentId: "ORD-REF-1",
         },
       ],
-      email: null,
       webhookEventProvider: "PAYSTACK",
     });
 
@@ -949,7 +906,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
       cohortId: COHORT_ID,
       order,
       attempts: [],
-      email: null,
       webhookEventProvider: "PAYSTACK",
     });
 
@@ -981,7 +937,6 @@ describe("activateOrderAsSystem — provider-aware WebhookEvent marking (07-04)"
           providerIntentId: "ORD-REF-1",
         },
       ],
-      email: null,
       webhookEventProvider: "STRIPE", // seeded row is STRIPE, event below claims PAYSTACK
     });
 
@@ -1016,7 +971,6 @@ describe("activateOrderAsSystem — never writes the four actual-settlement colu
           providerIntentId: SESSION_ID,
         },
       ],
-      email: null,
     });
 
     const result = await createActivateOrderAsSystem(deps)({
@@ -1060,7 +1014,6 @@ describe("F-16 — settled orders stay settled; extra money is flagged, not the 
         { id: "pa-1", status: "SUCCEEDED", orderId: BASE_ORDER_ID, providerIntentId: SESSION_ID, provider: "STRIPE" },
         extraAttempt,
       ],
-      email: "learner@example.test",
     });
   }
 
@@ -1118,7 +1071,6 @@ describe("F-16 — settled orders stay settled; extra money is flagged, not the 
       cohortId: COHORT_ID,
       order: baseOrder(enrolment),
       attempts: [{ id: "pa-1", status: "CANCELLED", orderId: BASE_ORDER_ID, providerIntentId: SESSION_ID, provider: "STRIPE" }],
-      email: "learner@example.test",
     });
     const result = await createRecordSessionExpiredAsSystem(h.deps)({
       orderId: BASE_ORDER_ID,
@@ -1127,5 +1079,470 @@ describe("F-16 — settled orders stay settled; extra money is flagged, not the 
     });
     expect(result.outcome).toBe("CANCELLED");
     expect(h.domainEvents.filter((e) => e.type === "order.exception")).toEqual([]);
+  });
+});
+
+describe("recordPaymentFailureAsSystem — payment.failed outbox event (D-09)", () => {
+  it("writes exactly one payment.failed event, on the same transaction as the FAILED update, with orderId/paymentAttemptId/provider only", async () => {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment);
+    const { deps, domainEvents, attempts } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+        },
+      ],
+    });
+
+    const result = await createRecordPaymentFailureAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      eventId: "evt-payment-failed-1",
+      providerIntentId: SESSION_ID,
+      failureReason: "card_declined",
+    });
+
+    expect(result.outcome).toBe("FAILED");
+    expect(attempts.get("pa-1")?.status).toBe("FAILED");
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "payment.failed",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          paymentAttemptId: "pa-1",
+          provider: "STRIPE",
+        }),
+      }),
+    );
+    // T-13-03 — the provider failure reason never reaches the outbox payload.
+    expect(JSON.stringify(domainEvents)).not.toContain("card_declined");
+  });
+
+  it("an illegal-transition failure (already SUCCEEDED) writes order.exception and no payment.failed event", async () => {
+    const enrolment = baseEnrolment({ status: "ACTIVE", holdExpiresAt: null });
+    const order = baseOrder(enrolment, { status: "PAID" });
+    const { deps, domainEvents } = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "SUCCEEDED",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+        },
+      ],
+    });
+
+    const result = await createRecordPaymentFailureAsSystem(deps)({
+      orderId: BASE_ORDER_ID,
+      eventId: "evt-payment-failed-2",
+      providerIntentId: SESSION_ID,
+      failureReason: "late_failure_echo",
+    });
+
+    expect(result.outcome).toBe("EXCEPTION");
+    expect(domainEvents.some((e) => e.type === "payment.failed")).toBe(false);
+    expect(domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "illegal_payment_transition" }),
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 14 (D-08) - the initiated-before rule for restricted continuity mode
+// ---------------------------------------------------------------------------
+
+describe("activateOrderAsSystem - D-08 initiated-before rule (Phase 14)", () => {
+  // The restriction instant R (graceEndsAt for a time-derived restriction).
+  const R = new Date("2026-10-01T12:00:00.000Z");
+  const TOLERANCE_MS = 600_000;
+  const at = (offsetMs: number) => new Date(R.getTime() + offsetMs);
+
+  function restrictedLicence() {
+    return {
+      getRestrictionCutoff: vi.fn(async () => ({
+        restricted: true,
+        restrictedAt: R,
+      })),
+    };
+  }
+
+  function webhookSetup(attemptInitiatedAt: Date | undefined, orderStatus = "PENDING") {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment, { status: orderStatus });
+    const h = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+          ...(attemptInitiatedAt ? { initiatedAt: attemptInitiatedAt } : {}),
+        },
+      ],
+    });
+    return { ...h, enrolment };
+  }
+
+  const settleInput = {
+    orderId: BASE_ORDER_ID,
+    provider: "STRIPE" as const,
+    providerIntentId: SESSION_ID,
+    amountMinor: 45_000_000,
+    currency: "NGN",
+    eventId: "evt-1",
+  };
+
+  it("activates an attempt initiated one hour before the restriction instant", async () => {
+    const h = webhookSetup(at(-3_600_000));
+    const licence = restrictedLicence();
+    const result = await createActivateOrderAsSystem({ ...h.deps, licence })(settleInput);
+
+    expect(result.outcome).toBe("ACTIVATED");
+    expect(h.enrolment.status).toBe("ACTIVE");
+    expect(h.attempts.get("pa-1")?.status).toBe("SUCCEEDED");
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+    // Activation converts the held seat; the counter itself does not move.
+    expect(h.cohorts.get(COHORT_ID)?.seatsTaken).toBe(1);
+    expect(licence.getRestrictionCutoff).toHaveBeenCalledTimes(1);
+  });
+
+  it("tolerance boundary: initiatedAt at restrictedAt plus 10 minutes activates, plus 1 ms becomes the payment_after_restriction exception", async () => {
+    const onBoundary = webhookSetup(at(TOLERANCE_MS));
+    const ok = await createActivateOrderAsSystem({
+      ...onBoundary.deps,
+      licence: restrictedLicence(),
+    })(settleInput);
+    expect(ok.outcome).toBe("ACTIVATED");
+    expect(onBoundary.enrolment.status).toBe("ACTIVE");
+
+    const beyond = webhookSetup(at(TOLERANCE_MS + 1));
+    const syncs: Array<Record<string, unknown>> = [];
+    const result = await createActivateOrderAsSystem({
+      ...beyond.deps,
+      licence: restrictedLicence(),
+      syncOrderReconciliationEvidence: (async (args: Record<string, unknown>) => {
+        syncs.push(args);
+      }) as unknown as SettlementDeps["syncOrderReconciliationEvidence"],
+    })(settleInput);
+
+    expect(result.outcome).toBe("EXCEPTION");
+    // The money is recorded, never lost.
+    expect(beyond.attempts.get("pa-1")).toMatchObject({
+      status: "SUCCEEDED",
+      exceptionNote: expect.stringContaining("needs reconciliation"),
+    });
+    expect(beyond.attempts.get("pa-1")?.confirmedAt).toBeInstanceOf(Date);
+    expect(beyond.orders.get(BASE_ORDER_ID)?.status).toBe("EXCEPTION");
+    // No enrolment activation and no seat movement.
+    expect(beyond.enrolment.status).toBe("PENDING_PAYMENT");
+    expect(beyond.cohorts.get(COHORT_ID)?.seatsTaken).toBe(1);
+    expect(beyond.rawQueries.filter((q) => /FROM "Cohort"/.test(q))).toEqual([]);
+    expect(beyond.domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({
+          orderId: BASE_ORDER_ID,
+          reason: "payment_after_restriction",
+        }),
+      }),
+    );
+    expect(beyond.domainEvents.some((e) => e.type === "order.paid")).toBe(false);
+    expect(beyond.auditEvents).toContainEqual(
+      expect.objectContaining({ action: "order.exception", targetId: BASE_ORDER_ID }),
+    );
+    expect(syncs).toHaveLength(1);
+    expect(syncs[0]).toMatchObject({
+      orderId: BASE_ORDER_ID,
+      risk: "CAPTURED_MONEY",
+      evidence: expect.objectContaining({ reason: "payment_after_restriction" }),
+    });
+  });
+
+  it("an already-settled order is not downgraded by a payment after restriction", async () => {
+    const h = webhookSetup(at(TOLERANCE_MS + 1), "PAID");
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: restrictedLicence(),
+    })(settleInput);
+    expect(result.outcome).toBe("EXCEPTION");
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+    expect(h.attempts.get("pa-1")?.status).toBe("SUCCEEDED");
+  });
+
+  it("not restricted: behaves exactly as before for any date, with or without a licence dependency", async () => {
+    const farFuture = at(10 * 365 * 86_400_000);
+
+    const withLicence = webhookSetup(farFuture);
+    const notRestricted = {
+      getRestrictionCutoff: vi.fn(async () => ({
+        restricted: false,
+        restrictedAt: null,
+      })),
+    };
+    const a = await createActivateOrderAsSystem({
+      ...withLicence.deps,
+      licence: notRestricted,
+    })(settleInput);
+    expect(a.outcome).toBe("ACTIVATED");
+
+    const withoutLicence = webhookSetup(farFuture);
+    const b = await createActivateOrderAsSystem(withoutLicence.deps)(settleInput);
+    expect(b.outcome).toBe("ACTIVATED");
+    expect(withoutLicence.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+  });
+
+  it("a restricted cutoff without a restrictedAt instant applies no rule (fail open)", async () => {
+    const h = webhookSetup(at(86_400_000));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: {
+        getRestrictionCutoff: async () => ({ restricted: true, restrictedAt: null }),
+      },
+    })(settleInput);
+    expect(result.outcome).toBe("ACTIVATED");
+  });
+
+  it("T-14-13-03: a rejecting cutoff read is treated as not restricted and the order activates", async () => {
+    const h = webhookSetup(at(86_400_000));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const result = await createActivateOrderAsSystem({
+        ...h.deps,
+        licence: {
+          getRestrictionCutoff: async () => {
+            throw new Error("licence read unavailable");
+          },
+        },
+      })(settleInput);
+      expect(result.outcome).toBe("ACTIVATED");
+      expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("PAID");
+      // The failure is logged by name only, never the message.
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("licence read unavailable");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("an attempt row without initiatedAt (older fakes) is treated as before the cutoff", async () => {
+    const h = webhookSetup(undefined);
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: restrictedLicence(),
+    })(settleInput);
+    expect(result.outcome).toBe("ACTIVATED");
+  });
+
+  it("the cutoff is read once, before the transaction opens", async () => {
+    const h = webhookSetup(at(-60_000));
+    const order: string[] = [];
+    const licence = {
+      getRestrictionCutoff: vi.fn(async () => {
+        order.push("cutoff");
+        return { restricted: true, restrictedAt: R };
+      }),
+    };
+    const wrapped: SettlementDeps = {
+      ...h.deps,
+      licence,
+      db: {
+        $transaction: (fn, options) => {
+          order.push("transaction");
+          return h.deps.db.$transaction(fn, options);
+        },
+      },
+    };
+    await createActivateOrderAsSystem(wrapped)(settleInput);
+    expect(order).toEqual(["cutoff", "transaction"]);
+  });
+
+  it("recordPaymentFailureAsSystem and recordSessionExpiredAsSystem never consult the licence dependency", async () => {
+    const licence = restrictedLicence();
+
+    const failing = webhookSetup(at(86_400_000));
+    const failed = await createRecordPaymentFailureAsSystem({
+      ...failing.deps,
+      licence,
+    })({
+      orderId: BASE_ORDER_ID,
+      eventId: "evt-1",
+      providerIntentId: SESSION_ID,
+      failureReason: "card_declined",
+    });
+    expect(failed.outcome).toBe("FAILED");
+
+    const expiring = webhookSetup(at(86_400_000));
+    const expired = await createRecordSessionExpiredAsSystem({
+      ...expiring.deps,
+      licence,
+    })({
+      orderId: BASE_ORDER_ID,
+      providerIntentId: SESSION_ID,
+      eventId: "evt-1",
+    });
+    expect(expired.outcome).toBe("CANCELLED");
+
+    expect(licence.getRestrictionCutoff).not.toHaveBeenCalled();
+  });
+});
+
+describe("activateOrderAsSystem - D-08 manual confirmation anchor (OQ4, A13)", () => {
+  const R = new Date("2026-10-01T12:00:00.000Z");
+  const TOLERANCE_MS = 600_000;
+  const at = (offsetMs: number) => new Date(R.getTime() + offsetMs);
+
+  const licence = () => ({
+    getRestrictionCutoff: async () => ({ restricted: true, restrictedAt: R }),
+  });
+
+  function manualSetup(orderCreatedAt: Date) {
+    const enrolment = baseEnrolment();
+    const order = baseOrder(enrolment, {
+      amountMinor: 45_875_000,
+      baseAmountMinor: 45_000_000,
+      platformFeeMinor: 675_000,
+      gatewayFeeEstimateMinor: 200_000,
+      selectedProvider: "PAYSTACK",
+      schoolSettlementExpectedMinor: 45_000_000,
+      createdAt: orderCreatedAt,
+    });
+    const h = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order,
+      attempts: [],
+    });
+    return { ...h, enrolment };
+  }
+
+  const manualInput = {
+    orderId: BASE_ORDER_ID,
+    provider: "MANUAL" as const,
+    providerIntentId: "BANK-REF-1",
+    providerRef: "BANK-REF-1",
+    amountMinor: 45_675_000,
+    currency: "NGN",
+    eventId: "manual:order-1:BANK-REF-1",
+    manualConfirmation: {
+      confirmedById: "staff-1",
+      manualChannel: "bank_transfer",
+      manualReference: "BANK-REF-1",
+      manualPaidAt: new Date("2026-10-01T10:00:00Z"),
+      manualEvidenceKey: "evidence/order-1.pdf",
+      reason: "Matched against the school bank statement.",
+    },
+  };
+
+  it("an order created one day before the restriction is confirmed and activated", async () => {
+    const h = manualSetup(at(-86_400_000));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: licence(),
+    })(manualInput);
+    expect(result.outcome).toBe("ACTIVATED");
+    expect(h.enrolment.status).toBe("ACTIVE");
+    expect([...h.attempts.values()]).toHaveLength(1);
+  });
+
+  it("an order created at restrictedAt plus 10 minutes plus 1 ms becomes the exception, with the manual evidence intact", async () => {
+    const h = manualSetup(at(TOLERANCE_MS + 1));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: licence(),
+    })(manualInput);
+
+    expect(result.outcome).toBe("EXCEPTION");
+    const attempts = [...h.attempts.values()];
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      provider: "MANUAL",
+      status: "SUCCEEDED",
+      providerRef: "BANK-REF-1",
+      manualChannel: "bank_transfer",
+      manualReference: "BANK-REF-1",
+      manualEvidenceKey: "evidence/order-1.pdf",
+      confirmedById: "staff-1",
+      reason: "Matched against the school bank statement.",
+    });
+    expect(h.orders.get(BASE_ORDER_ID)?.status).toBe("EXCEPTION");
+    expect(h.enrolment.status).toBe("PENDING_PAYMENT");
+    expect(h.cohorts.get(COHORT_ID)?.seatsTaken).toBe(1);
+    expect(h.domainEvents).toContainEqual(
+      expect.objectContaining({
+        type: "order.exception",
+        payload: expect.objectContaining({ reason: "payment_after_restriction" }),
+      }),
+    );
+    expect(h.auditEvents).toContainEqual(
+      expect.objectContaining({ action: "order.exception_manual" }),
+    );
+  });
+
+  it("an order created exactly at restrictedAt plus 10 minutes is still confirmed", async () => {
+    const h = manualSetup(at(TOLERANCE_MS));
+    const result = await createActivateOrderAsSystem({
+      ...h.deps,
+      licence: licence(),
+    })(manualInput);
+    expect(result.outcome).toBe("ACTIVATED");
+  });
+
+  it("the anchor differs by rail: an old order with a fresh manual attempt activates, a fresh webhook attempt on the same old order is judged by its own initiatedAt", async () => {
+    // Manual: the attempt is created inside the transaction (initiatedAt is
+    // "now", after R), but the Order is old, so it activates.
+    const manual = manualSetup(at(-86_400_000));
+    const m = await createActivateOrderAsSystem({
+      ...manual.deps,
+      licence: licence(),
+    })(manualInput);
+    expect(m.outcome).toBe("ACTIVATED");
+
+    // Webhook rail: the Order is old but the attempt was initiated after the
+    // cutoff plus tolerance, so the attempt's own timestamp decides.
+    const enrolment = baseEnrolment();
+    const web = buildHarness({
+      cohort: { status: "PUBLISHED", seatsTaken: 1, capacity: 2 },
+      cohortId: COHORT_ID,
+      order: baseOrder(enrolment, { createdAt: at(-86_400_000) }),
+      attempts: [
+        {
+          id: "pa-1",
+          status: "PROCESSING",
+          orderId: BASE_ORDER_ID,
+          providerIntentId: SESSION_ID,
+          provider: "STRIPE",
+          initiatedAt: at(TOLERANCE_MS + 1),
+        },
+      ],
+    });
+    const w = await createActivateOrderAsSystem({
+      ...web.deps,
+      licence: licence(),
+    })({
+      orderId: BASE_ORDER_ID,
+      provider: "STRIPE",
+      providerIntentId: SESSION_ID,
+      amountMinor: 45_000_000,
+      currency: "NGN",
+      eventId: "evt-1",
+    });
+    expect(w.outcome).toBe("EXCEPTION");
+    expect(web.orders.get(BASE_ORDER_ID)?.status).toBe("EXCEPTION");
   });
 });

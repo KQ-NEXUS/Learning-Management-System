@@ -236,8 +236,8 @@ describe("evaluateCohortReadiness — Price (D-06/D-08, 07-05)", () => {
     expect(priceUsd?.detail).toContain("Stripe");
   });
 
-  it("price-ngn FAILs when priceNgnMinor is null, with the exact UI-SPEC copy naming the rail", () => {
-    const items = evaluateCohortReadiness(makeCohort({ priceNgnMinor: null }));
+  it("price-ngn FAILs when priceNgnMinor is null and no other rail is priced, with the exact UI-SPEC copy naming the rail", () => {
+    const items = evaluateCohortReadiness(makeCohort({ priceNgnMinor: null, priceUsdMinor: null }));
     const priceNgn = find(items, "price-ngn");
     expect(priceNgn?.state).toBe("FAIL");
     expect(priceNgn?.detail).toBe(
@@ -245,8 +245,8 @@ describe("evaluateCohortReadiness — Price (D-06/D-08, 07-05)", () => {
     );
   });
 
-  it("price-usd FAILs when priceUsdMinor is null, with the exact UI-SPEC copy naming the rail", () => {
-    const items = evaluateCohortReadiness(makeCohort({ priceUsdMinor: null }));
+  it("price-usd FAILs when priceUsdMinor is null and no other rail is priced, with the exact UI-SPEC copy naming the rail", () => {
+    const items = evaluateCohortReadiness(makeCohort({ priceUsdMinor: null, priceNgnMinor: null }));
     const priceUsd = find(items, "price-usd");
     expect(priceUsd?.state).toBe("FAIL");
     expect(priceUsd?.detail).toBe(
@@ -264,15 +264,51 @@ describe("evaluateCohortReadiness — Price (D-06/D-08, 07-05)", () => {
     expect(find(items, "price-ngn")?.state).toBe("FAIL");
   });
 
-  it("with NGN priced and USD unpriced on a deployment where both rails are enabled, price-ngn PASSes and price-usd FAILs, and blockingFailures includes exactly the USD item", () => {
+  it("one price is enough (R3-06): NGN priced and USD not offered, both rails enabled, WARNs on USD and blocks nothing", () => {
     const items = evaluateCohortReadiness(
       makeCohort({ priceNgnMinor: 45000000, priceUsdMinor: null, enabledRails: { ngn: true, usd: true } }),
     );
     expect(find(items, "price-ngn")?.state).toBe("PASS");
+    expect(find(items, "price-usd")).toMatchObject({
+      state: "WARN",
+      detail: "No USD price set — learners will not be able to pay in USD (Stripe). They can still pay in NGN.",
+    });
+    expect(blockingFailures(items)).toEqual([]);
+  });
+
+  it("one price is enough (R3-06): USD priced and NGN not offered WARNs on NGN and blocks nothing", () => {
+    const items = evaluateCohortReadiness(
+      makeCohort({ priceNgnMinor: null, priceUsdMinor: 50000, enabledRails: { ngn: true, usd: true } }),
+    );
+    expect(find(items, "price-usd")?.state).toBe("PASS");
+    expect(find(items, "price-ngn")).toMatchObject({
+      state: "WARN",
+      detail: "No NGN price set — learners will not be able to pay in NGN (Paystack). They can still pay in USD.",
+    });
+    expect(blockingFailures(items)).toEqual([]);
+  });
+
+  it("no price on any enabled rail still blocks publication on both", () => {
+    const items = evaluateCohortReadiness(
+      makeCohort({ priceNgnMinor: null, priceUsdMinor: null, enabledRails: { ngn: true, usd: true } }),
+    );
+    expect(blockingFailures(items).map((item) => item.id)).toEqual(["price-ngn", "price-usd"]);
+  });
+
+  it("a price on a rail this deployment has not enabled does not excuse the enabled rail", () => {
+    const items = evaluateCohortReadiness(
+      makeCohort({ priceNgnMinor: null, priceUsdMinor: 50000, enabledRails: { ngn: true, usd: false } }),
+    );
+    expect(find(items, "price-ngn")?.state).toBe("FAIL");
+    expect(blockingFailures(items).map((item) => item.id)).toEqual(["price-ngn"]);
+  });
+
+  it("a zero price is bad data, not a rail left out: it still FAILs and blocks even when the other rail is priced", () => {
+    const items = evaluateCohortReadiness(
+      makeCohort({ priceNgnMinor: 45000000, priceUsdMinor: 0, enabledRails: { ngn: true, usd: true } }),
+    );
     expect(find(items, "price-usd")?.state).toBe("FAIL");
-    const failures = blockingFailures(items);
-    expect(failures.map((item) => item.id)).toContain("price-usd");
-    expect(failures.map((item) => item.id)).not.toContain("price-ngn");
+    expect(blockingFailures(items).map((item) => item.id)).toEqual(["price-usd"]);
   });
 
   it("with NGN priced and only the NGN rail enabled, price-usd is present but non-blocking, so publication is not blocked on price", () => {
@@ -280,7 +316,8 @@ describe("evaluateCohortReadiness — Price (D-06/D-08, 07-05)", () => {
       makeCohort({ priceNgnMinor: 45000000, priceUsdMinor: null, enabledRails: { ngn: true, usd: false } }),
     );
     const priceUsd = find(items, "price-usd");
-    expect(priceUsd?.state).toBe("FAIL");
+    // Not offered while another rail is priced reads as a warning, never a red failure (R3-06).
+    expect(priceUsd?.state).toBe("WARN");
     expect(priceUsd?.blocking).toBe(false);
     expect(blockingFailures(items).map((item) => item.id)).not.toContain("price-usd");
   });

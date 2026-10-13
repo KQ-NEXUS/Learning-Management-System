@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Menu } from "lucide-react";
 import { BrandMark } from "@/components/shell/BrandMark";
+import { MAIN_CONTENT_ID, SkipLink } from "@/components/shell/SkipLink";
 
 /**
  * LearnerShell — the shared chrome for the public catalogue and `/account`
@@ -32,6 +33,8 @@ type LearnerShellProps = {
   /** Where the brand mark links. Defaults to the public catalogue; signed-in shells pass /dashboard. */
   homeHref?: string;
   rightSlot: ReactNode;
+  /** Extra content at the end of the open phone menu, e.g. sign-in links hidden from the cramped header. */
+  mobileMenuExtra?: ReactNode;
   children: ReactNode;
 };
 
@@ -40,7 +43,7 @@ function isActiveNavItem(pathname: string | null, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function LearnerShell({ nav, rightSlot, children, homeHref = "/courses" }: LearnerShellProps) {
+export function LearnerShell({ nav, rightSlot, mobileMenuExtra, children, homeHref = "/courses" }: LearnerShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -76,6 +79,7 @@ export function LearnerShell({ nav, rightSlot, children, homeHref = "/courses" }
     // Navy frame: the top bar sits on navy and the page body is a white sheet with
     // rounded top corners, so the corners reveal the navy behind them.
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-sidebar-bg">
+      <SkipLink />
       <header className="shrink-0 pb-3">
         <div className="mx-auto flex h-[76px] max-w-[1168px] items-center justify-between gap-4 px-6">
           <div className="flex h-full min-w-0 items-center gap-10">
@@ -109,7 +113,8 @@ export function LearnerShell({ nav, rightSlot, children, homeHref = "/courses" }
 
           <div className="flex shrink-0 items-center gap-3">
             {rightSlot}
-            <button
+            {/* No navigation (e.g. the root 404) means no menu to open. */}
+            {nav.length > 0 && <button
               type="button"
               ref={menuButtonRef}
               aria-expanded={open}
@@ -121,7 +126,7 @@ export function LearnerShell({ nav, rightSlot, children, homeHref = "/courses" }
               <span className="sr-only">
                 {open ? "Close navigation" : "Open navigation"}
               </span>
-            </button>
+            </button>}
           </div>
         </div>
 
@@ -148,12 +153,13 @@ export function LearnerShell({ nav, rightSlot, children, homeHref = "/courses" }
                 </Link>
               );
             })}
+            {mobileMenuExtra}
           </nav>
         )}
       </header>
 
       <div className="flex-1 rounded-t-[28px] bg-surface">
-        <main className="mx-auto w-full max-w-[1168px] px-6 pt-10 pb-16">
+        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="mx-auto w-full max-w-[1168px] px-6 pt-10 pb-16 focus:outline-none">
           {children}
         </main>
       </div>

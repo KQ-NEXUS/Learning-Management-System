@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { withPermission, AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { withPermission, AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { validateTemplateAssetUpload, UPLOAD_URL_TTL_SECONDS } from "@/lib/upload-limits";
 import {
   buildStagedTemplateAssetStorageKey,
@@ -102,7 +102,7 @@ export async function presignTemplateAssetUploadAction(input: unknown): Promise<
     return { ok: true, stagedKey, uploadUrl, expiresIn: UPLOAD_URL_TTL_SECONDS };
   } catch (error) {
     if (error instanceof AuthenticationError || error instanceof AuthorizationError) {
-      return { ok: false, message: DENIED_MESSAGE };
+      return { ok: false, message: refusalMessage(error, DENIED_MESSAGE) };
     }
     return { ok: false, message: "This upload could not be started. Reload the page and try again." };
   }
@@ -190,7 +190,7 @@ export async function confirmTemplateAssetUploadAction(input: unknown): Promise<
     return { ok: true, assetKey };
   } catch (error) {
     if (error instanceof AuthenticationError || error instanceof AuthorizationError) {
-      return { ok: false, message: DENIED_MESSAGE };
+      return { ok: false, message: refusalMessage(error, DENIED_MESSAGE) };
     }
     if (error instanceof UploadVerificationError) {
       return { ok: false, message: VERIFICATION_FAILED_MESSAGE };

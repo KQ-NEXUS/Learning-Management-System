@@ -40,6 +40,12 @@ export type LessonCompleteControlProps = {
   completed: boolean;
   completedSource: string | null;
   allowManualComplete: boolean;
+  /**
+   * `"QUIZ"` and `"ASSIGNMENT"` lessons are completed by their assessment, never by hand (A-01):
+   * no "Mark complete", no "Undo", and a line saying what completes them. Any other type (or
+   * omitted) keeps the manual rules above.
+   */
+  lessonType?: string;
   /** How many lessons would re-lock if this completion were undone (D-16). */
   relockCount: number;
 };
@@ -120,14 +126,34 @@ function CompletedState({
   );
 }
 
+/** What finishes a lesson that only its assessment can complete; `null` for every other type. */
+export function assessmentCompletionHint(lessonType: string | undefined): string | null {
+  if (lessonType === "QUIZ") return "This lesson is marked complete when you pass the quiz.";
+  if (lessonType === "ASSIGNMENT") return "This lesson is marked complete when you submit your assignment.";
+  return null;
+}
+
 export function LessonCompleteControl({
   enrolmentId,
   lessonId,
   completed,
   completedSource,
   allowManualComplete,
+  lessonType,
   relockCount,
 }: LessonCompleteControlProps) {
+  const assessmentHint = assessmentCompletionHint(lessonType);
+  if (assessmentHint) {
+    return completed ? (
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
+        <CheckCircle2 aria-hidden className="size-5 text-success" />
+        Completed
+      </span>
+    ) : (
+      <p className="text-sm text-muted-foreground">{assessmentHint}</p>
+    );
+  }
+
   if (completed) {
     return (
       <CompletedState

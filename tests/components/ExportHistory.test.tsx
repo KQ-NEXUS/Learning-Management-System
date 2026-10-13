@@ -55,9 +55,18 @@ describe("Export History", () => {
   it("links both sides of retry lineage without exposing a storage key", () => {
     render(<ExportHistory state="ready" filters={filters} rows={[{ ...base, id: "old", status: "FAILED", canDownload: false, retriedById: "new" }, { ...base, id: "new", retryOfId: "old", canDownload: false }]} />);
     const cards = screen.getByRole("list", { name: "Export history cards" });
-    expect(within(cards).getByRole("link", { name: "new" }).getAttribute("href")).toBe("/staff/reports/exports?search=new");
-    expect(within(cards).getByText("Retry of old")).toBeTruthy();
+    expect(within(cards).getByRole("link", { name: "export new" }).getAttribute("href")).toBe("/staff/reports/exports?search=new");
+    expect(within(cards).getByText("Retry of export old")).toBeTruthy();
   });
+  it("UX batch C: shows filters and columns as labels, never raw keys, codes or full ids", () => {
+    render(<ExportHistory state="ready" filters={filters} rows={[{ ...base, id: "cmuk1uaom0007ulisglrjzwhu", filters: { provider: "PAYSTACK", programmeId: "clx0000000000programme" }, columns: ["amountMinor", "reference"] }]} />);
+    const cards = screen.getByRole("list", { name: "Export history cards" });
+    expect(within(cards).getByText("Filters: Provider Paystack · Programme ID clx00000…")).toBeTruthy();
+    expect(within(cards).getByText("Columns: Learner total, Reference")).toBeTruthy();
+    expect(within(cards).getByText("Export cmuk1uao…")).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/PAYSTACK|programmeId|amountMinor|Version 1\.0|cmuk1uaom0007ulisglrjzwhu/);
+  });
+
   it("preserves URL filters when paging through many jobs", () => {
     render(<ExportHistory state="ready" filters={{ ...filters, dataset: "payments" }} rows={[base]} page={1} hasMore />);
     expect(screen.getByRole("link", { name: "Next page" }).getAttribute("href")).toBe("/staff/reports/exports?dataset=payments&page=2");

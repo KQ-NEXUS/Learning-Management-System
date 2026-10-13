@@ -26,12 +26,16 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import {
   createSessionFromWallTime,
   repeatWeeklySessions,
   cancelSession,
+  updateSession,
+  SessionCancelledError,
+  SessionFacilitatorNotStaffError,
   InvalidTimeZoneError,
   SessionCourseNotInCohortError,
   SessionTimeRangeError,
@@ -68,6 +72,16 @@ function toFailure(error: unknown): Extract<SessionActionResult, { ok: false }> 
   if (error instanceof ReasonRequiredError) {
     return { ok: false, message: "A reason is required to cancel a session." };
   }
+  if (error instanceof SessionCancelledError) {
+    return { ok: false, message: error.message };
+  }
+  // W-13: a cancelled or completed cohort takes no new sessions.
+  if (error instanceof RecordStateError) {
+    return { ok: false, message: error.message };
+  }
+  if (error instanceof SessionFacilitatorNotStaffError) {
+    return { ok: false, message: error.message };
+  }
   if (error instanceof SessionNotFoundError) {
     return { ok: false, message: "This session could not be found." };
   }
@@ -80,7 +94,7 @@ function toFailure(error: unknown): Extract<SessionActionResult, { ok: false }> 
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
       ok: false,
-      message: "Your role does not permit scheduling sessions for this cohort.",
+      message: refusalMessage(error, "Your role does not permit scheduling sessions for this cohort."),
     };
   }
   throw error;
@@ -125,6 +139,12 @@ const repeatWeeklySchema = sessionFieldsSchema
   })
   .strict();
 
+// The same fields as a new session, addressed by the session rather than the cohort (audit A-11).
+const updateSessionSchema = sessionFieldsSchema
+  .omit({ cohortId: true })
+  .extend({ sessionId: z.string().min(1) })
+  .strict();
+
 const cancelSchema = z
   .object({
     sessionId: z.string().min(1),
@@ -163,6 +183,22 @@ export async function repeatWeeklyAction(
     const created = await repeatWeeklySessions(parsed.data);
     revalidateCohort(parsed.data.cohortId);
     return { ok: true, sessionIds: created.map((row) => row.id) };
+  } catch (error) {
+    return toFailure(error);
+  }
+}
+
+export async function updateSessionAction(
+  input: z.input<typeof updateSessionSchema>,
+): Promise<SessionActionResult> {
+  const parsed = updateSessionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "The session details were invalid." };
+  }
+  try {
+    const updated = await updateSession(parsed.data);
+    revalidateCohort(updated.cohortId);
+    return { ok: true, sessionId: updated.id };
   } catch (error) {
     return toFailure(error);
   }

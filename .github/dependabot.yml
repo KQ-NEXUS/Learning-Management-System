@@ -1,0 +1,82 @@
+# Dependabot version updates (Phase 15, D-10).
+#
+# Every block targets develop, the working branch; nothing is proposed straight
+# to main. Because target-branch is set, the ignore rules below apply to
+# version updates only: GitHub's security updates still use the default
+# branch and are not blocked by them. The CI audit job
+# (npm audit --omit=dev --audit-level=high) fails on any high or critical
+# advisory whatever Dependabot does.
+#
+# Exact pins in package.json (no ^ or ~) are deliberate, reviewed choices, so
+# each one is ignored here and bumped only by a person. tests/ci-config.test.ts
+# fails if a new exact pin is added to package.json without an ignore entry.
+
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    # Hold brand-new releases back for a few days before proposing them.
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+    groups:
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Exact pins in package.json (every version string without ^ or ~).
+      - dependency-name: "next"
+      - dependency-name: "eslint-config-next"
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "stripe"
+      - dependency-name: "@tiptap/extensions"
+      - dependency-name: "pdf-lib"
+      - dependency-name: "@pdf-lib/fontkit"
+      # @aws-sdk/lib-storage is pinned exactly (tests/aws-sdk-lockfile.test.ts)
+      # and its S3 siblings must stay on the same release, so the whole family
+      # moves together by hand.
+      - dependency-name: "@aws-sdk/lib-storage"
+      - dependency-name: "@aws-sdk/*"
+      # Held to the range @axe-core/playwright uses.
+      - dependency-name: "axe-core"
+      # Browser test tooling is pinned exactly (plans 15-15 and 15-19): the sweep's
+      # rule set and the bundled browsers move only when a person reviews them.
+      - dependency-name: "@axe-core/playwright"
+      - dependency-name: "@playwright/test"
+      # Major upgrades of the framework, database and language toolchain are
+      # planned work, not automated pull requests.
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+
+  # Dockerfile base images (node:22-alpine).
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+
+  # docker-compose.yml images (local stack). If GitHub ever rejects this
+  # ecosystem, remove this block and record it in the phase report.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"

@@ -19,9 +19,13 @@ import {
   VERIFICATION_TOKEN_TTL_MS,
 } from "@/lib/identity";
 import { verificationService } from "@/server/services/verification-service";
-import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { sendAuthEmail } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
+import { licenceService } from "@/server/services/licence-service";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
+import { issueLearnerNumber, type LearnerNumberTx } from "@/server/services/learner-number-service";
 
 export type RegistrationInput = {
   email: string;
@@ -41,7 +45,10 @@ export type RegisteredUserRow = {
   passwordHash: string | null;
 };
 
-export type RegistrationResult = { ok: true } | { ok: false; reason: "INVALID_INPUT" };
+export type RegistrationResult =
+  | { ok: true }
+  | { ok: false; reason: "INVALID_INPUT" }
+  | { ok: false; reason: "UNAVAILABLE" };
 
 // Built once as module-level constants — three hand-written near-identical
 // objects is precisely how the response shape drifts apart (Pitfall 5). All
@@ -51,6 +58,15 @@ export const REGISTRATION_ACCEPTED: RegistrationResult = Object.freeze({ ok: tru
 export const REGISTRATION_INVALID_INPUT: RegistrationResult = Object.freeze({
   ok: false,
   reason: "INVALID_INPUT",
+});
+/**
+ * Phase 14 (D-06, A12) — new registration is refused in restricted continuity
+ * mode. One frozen value for every email, so the refusal is never an
+ * enumeration oracle (IAM-06): it is returned before any store call.
+ */
+export const REGISTRATION_UNAVAILABLE: RegistrationResult = Object.freeze({
+  ok: false,
+  reason: "UNAVAILABLE",
 });
 
 /** The narrow slice of the Prisma client this service actually uses. */
@@ -65,14 +81,6 @@ export type RegistrationStore = {
   };
   $transaction<T>(fn: (tx: RegistrationStore) => Promise<T>): Promise<T>;
 };
-
-function buildVerificationEmailText(verifyUrl: string): string {
-  // F-11 — the one pre-hijack case no server rule can catch is the owner
-  // verifying an account they never registered; the copy tells them not to.
-  return `Click to verify: ${verifyUrl}
-
-If you didn't create an account with this email address, ignore this email and don't click the link.`;
-}
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (
@@ -95,7 +103,21 @@ export function createRegistrationService(deps: {
   audit: (event: BusinessAuditEvent) => Promise<void>;
   hash?: (plaintext: string) => Promise<string>;
   now?: () => Date;
+  /**
+   * Takes the next learner number inside the registration transaction, or
+   * returns null when numbers are switched off. Optional: absent means a
+   * learner is created without one.
+   */
+  issueLearnerNumber?: (tx: unknown, at: Date) => Promise<string | null>;
+  /**
+   * D-09 — explicit restricted-state guard (this service does not run through
+   * `withPermission`). Optional: absent means registration behaves as before.
+   */
+  licence?: {
+    assertWriteAllowed(input: { operation: string; actorId?: string | null }): Promise<void>;
+  };
 }) {
+  const registeredAt = deps.now ?? (() => new Date());
   const { store, issueToken, resendVerification, dispatch, audit } = deps;
   const hash = deps.hash ?? hashPassword;
 
@@ -147,6 +169,19 @@ export function createRegistrationService(deps: {
       return REGISTRATION_INVALID_INPUT;
     }
 
+    // D-06 / A12 / D-09 — restricted continuity mode refuses every new
+    // registration, after validation and before any store call, so the result
+    // does not depend on whether the email exists (IAM-06). Only the neutral
+    // licence refusal is mapped; any other failure propagates unchanged.
+    if (deps.licence) {
+      try {
+        await deps.licence.assertWriteAllowed({ operation: "registration", actorId: null });
+      } catch (error) {
+        if (error instanceof LicenceWriteBlockedError) return REGISTRATION_UNAVAILABLE;
+        throw error;
+      }
+    }
+
     // Cost symmetry: hash before the branch decision so every post-validation
     // path pays the same dominant cost, even the arms that discard the result.
     const passwordHash = await hash(input.password);
@@ -165,6 +200,9 @@ export function createRegistrationService(deps: {
     let user: RegisteredUserRow;
     try {
       user = await store.$transaction(async (tx) => {
+        // Taken in this same transaction: if the account is not created, the
+        // counter's increment rolls back with it and no number is skipped.
+        const learnerNumber = (await deps.issueLearnerNumber?.(tx, registeredAt())) ?? null;
         const created = await tx.user.create({
           data: {
             email,
@@ -172,6 +210,7 @@ export function createRegistrationService(deps: {
             phone: input.phone ?? null,
             passwordHash,
             status: "PENDING_VERIFICATION",
+            ...(learnerNumber ? { learnerNumber } : {}),
           },
         });
 
@@ -233,18 +272,18 @@ export function createRegistrationService(deps: {
     });
 
     if (issued.ok) {
-      const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-      const verifyUrl = `${baseUrl}/verify?token=${issued.token}`;
-      // G-03-3 — routed through the best-effort wrapper: a provider outage
-      // must degrade delivery, never leave a committed, audited account
-      // behind a framework error page. The result is discarded — no
-      // caller-visible value may depend on whether the send happened.
-      await dispatchBestEffort(dispatch, {
+      // G-03-3 — routed through the best-effort wrapper (inside
+      // sendAuthEmail): a provider outage must degrade delivery, never leave
+      // a committed, audited account behind a framework error page. The
+      // result is discarded — no caller-visible value may depend on whether
+      // the send happened.
+      await sendAuthEmail(dispatch, {
         template: "email-verification",
         toEmail: email,
         userId: user.id,
-        subject: "Verify your account",
-        textContent: buildVerificationEmailText(verifyUrl),
+        path: "/verify",
+        token: issued.token,
+        ttlMs: VERIFICATION_TOKEN_TTL_MS,
       });
     }
 
@@ -260,4 +299,6 @@ export const registrationService = createRegistrationService({
   resendVerification: (email) => verificationService.resendVerification(email),
   dispatch: (params) => emailDispatchService.dispatch(params),
   audit: recordAudit,
+  licence: licenceService,
+  issueLearnerNumber: (tx, at) => issueLearnerNumber(tx as LearnerNumberTx, at),
 });

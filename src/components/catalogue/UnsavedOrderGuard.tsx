@@ -132,6 +132,7 @@ export function GuardedLink({ href, children, ...rest }: GuardedLinkProps) {
       </Link>
       <ConfirmModal
         open={pendingHref !== null}
+        licenceEffect="continuity"
         eyebrow="Unsaved changes"
         tone="default"
         title="Leave without saving the order?"

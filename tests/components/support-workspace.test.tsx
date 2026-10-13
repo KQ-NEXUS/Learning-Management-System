@@ -94,7 +94,8 @@ describe("SupportWorkspace queue", () => {
     expect(cards.getByText(/Owner: Sam Agent/)).toBeTruthy();
     expect(cards.getByText(/Learning & Assessment/)).toBeTruthy();
     expect(cards.getByText(/Ada Learner/)).toBeTruthy();
-    expect(cards.getByText(/UTC/)).toBeTruthy();
+    expect(cards.getByText("24 Sep 2026, 11:00 WAT")).toBeTruthy();
+    expect(cards.queryByText(/UTC/)).toBeNull();
   });
 
   it("has no row checkbox or bulk action", () => {
@@ -152,7 +153,8 @@ describe("StaffTicketDetail timeline", () => {
     expect(items[2].textContent).toContain("Learner enrolled late");
     expect(items[3].textContent).toContain("Looking into it");
     expect(list.querySelectorAll("time[datetime]").length).toBe(4);
-    expect(items[0].textContent).toContain("UTC");
+    expect(items[0].textContent).toContain("20 Sep 2026, 10:00 WAT");
+    expect(list.textContent).not.toContain("UTC");
   });
 
   it("marks internal notes Staff only and offers no edit or delete on any entry", () => {

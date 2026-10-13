@@ -10,7 +10,9 @@
     "docker:up": "docker compose up -d --build",
     "lint": "eslint",
     "test": "vitest run --no-file-parallelism",
+    "test:perf": "vitest run --config vitest.perf.config.mts",
     "db:seed": "prisma db seed",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"
   },
@@ -27,7 +29,7 @@
     "@tiptap/react": "^3.31.0",
     "@tiptap/starter-kit": "^3.31.0",
     "lucide-react": "^1.41.0",
-    "next": "16.3.4",
+    "next": "16.3.8",
     "pdf-lib": "1.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -37,7 +39,9 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@netlify/functions": "^6.0.0",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4",
     "@testcontainers/postgresql": "^12.1.0",
     "@testing-library/react": "^16.3.3",
@@ -48,7 +52,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "axe-core": "^4.13.0",
     "eslint": "^9",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.3.8",
     "jsdom": "^29.1.1",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",

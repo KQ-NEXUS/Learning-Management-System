@@ -114,7 +114,7 @@ describe("/dashboard", () => {
 
     const html = await renderPage();
 
-    expect(html).toContain("Nothing to pick up right now");
+    expect(html).toContain("not enrolled in a course yet");
     expect(html).toContain("Your dashboard");
   });
 
@@ -162,7 +162,32 @@ describe("/dashboard", () => {
     const count = (html.match(/role="progressbar"/g) ?? []).length;
 
     expect(count).toBe(1);
-    expect(html).toContain("80% of 75% required");
+    expect(html).toContain("80% attended");
+    expect(html).toContain("75% needed to qualify");
+  });
+
+  it("says no sessions have been attended yet when attendance is 0%", async () => {
+    mocks.loadLearnerDashboard.mockResolvedValue({
+      cards: [
+        card({
+          progress: progress({
+            attendance: {
+              kind: "computed",
+              earnedPct: 0,
+              requiredPct: 75,
+              attendedCount: 0,
+              countableCount: 4,
+              meetsThreshold: false,
+            },
+          }),
+        }),
+      ],
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("No sessions attended yet");
+    expect(html).toContain("You need 75% to qualify");
   });
 
   it("renders exactly one progressbar when the cohort has no attendance rule", async () => {
@@ -227,8 +252,8 @@ describe("/dashboard", () => {
     const html = await renderPage();
     const anchors = html.match(/<a\b[^>]*>[\s\S]*?<\/a>/g) ?? [];
     const gapStrings = [
-      "Assignments and quizzes — arriving in a future update",
-      "Results — arriving in a future update",
+      "No quizzes or assignments are set for this course yet.",
+      "No results yet.",
     ];
 
     for (const anchor of anchors) {
@@ -279,7 +304,7 @@ describe("/dashboard", () => {
       ],
     });
     const endingHtml = await renderPage();
-    expect(endingHtml).toContain("Your access ends 2026-10-01");
+    expect(endingHtml).toContain('Your access ends <time dateTime="2026-10-01T00:00:00.000Z">1 Oct 2026</time>');
     expect(endingHtml).toContain("border-warning");
     expect(endingHtml).not.toContain("border-danger");
 

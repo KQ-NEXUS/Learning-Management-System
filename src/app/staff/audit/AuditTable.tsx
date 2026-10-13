@@ -15,7 +15,7 @@ import {
   TEXTAREA,
 } from "@/components/primitives/controls";
 import type { AuditRow, AuditFilterOptions } from "@/server/services/audit-read-service";
-import { formatDateTimeShort, formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { getExportDatasetDefinition } from "@/server/services/report-registry";
 import { requestAuditExportAction } from "./actions";
 
@@ -391,8 +391,10 @@ export function AuditTable({
       ) : (
         <>
           {/* Desktop — hidden below sm, where the card list takes over so
-              nothing scrolls sideways (D-04). */}
-          <div className="hidden overflow-x-auto sm:block">
+              nothing scrolls sideways (D-04). Between 640 and about 1040 px the
+              columns are wider than the page column, so the table scrolls inside
+              this box: a labelled, focusable region a keyboard user can scroll (W-07). */}
+          <div role="region" aria-label="Audit log table" tabIndex={0} className="hidden overflow-x-auto sm:block">
             <table className="w-full border-collapse text-sm">
               <thead className="border-b border-foreground">
                 <tr>
@@ -426,7 +428,7 @@ export function AuditTable({
                                 className={DESKTOP_COLS}
                               >
                                 <span className="self-center font-mono text-[13px] tabular-nums text-foreground">
-                                  {formatDateTimeShort(new Date(row.createdAt))}
+                                  <LagosTime value={row.createdAt} variant="dateTimeSeconds" className="font-mono text-[13px] whitespace-nowrap" />
                                 </span>
                                 <span className="flex min-w-0 flex-col gap-1">
                                   <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
@@ -499,17 +501,18 @@ export function AuditTable({
                             {row.actorEmail ?? "—"}
                           </span>
                         </span>
-                        <span className="min-w-0 font-mono text-sm text-foreground [overflow-wrap:anywhere]">
-                          {row.action}
+                        <span className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+                          {humanizeAction(row.action)}
                         </span>
                         <span className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
                           {row.targetType}{" "}
+                          {/* The full id, wrapped: the audit log is evidence. */}
                           <span className="font-mono [overflow-wrap:anywhere]">
                             {row.targetId ?? "—"}
                           </span>
                         </span>
                         <span className="font-mono text-sm tabular-nums text-muted-foreground">
-                          {formatTimestamp(row.createdAt)}
+                          <LagosTime value={row.createdAt} variant="dateTimeSeconds" className="font-mono text-[13px] whitespace-nowrap" />
                         </span>
                       </button>
                       {expanded && (

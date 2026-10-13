@@ -1,6 +1,6 @@
 import { sanitizeLessonBody } from "@/lib/sanitize";
 import { parseEmbedUrl } from "@/lib/embed-url";
-import { LessonMediaPlayer } from "./LessonMediaPlayer";
+import { LessonMediaPlayer, type LessonMediaCaption } from "./LessonMediaPlayer";
 
 /**
  * The learner-facing lesson renderer for all eight `LessonType` values.
@@ -32,9 +32,17 @@ export type LessonContentResource = {
   uploadStatus: "UPLOADING" | "READY" | "ERROR";
 };
 
+/**
+ * A caption track for a VIDEO resource (NFR-09). Callers pass only READY
+ * (scanned) tracks; `videoResourceId` says which resource it captions.
+ */
+export type LessonContentCaption = LessonMediaCaption & { videoResourceId: string };
+
 export type LessonContentProps = {
   lesson: LessonContentLesson;
   resources?: LessonContentResource[];
+  /** CLEAN caption tracks of the lesson's video; none by default. */
+  captions?: LessonContentCaption[];
 };
 
 const DOWNLOAD_ROUTE = (id: string) => `/api/lesson-resources/${id}/download`;
@@ -82,7 +90,7 @@ function BodyProse({ html }: { html: string }) {
   );
 }
 
-export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
+export function LessonContent({ lesson, resources = [], captions = [] }: LessonContentProps) {
   const withdrawn = lesson.withdrawnAt != null;
   const first = resources[0];
 
@@ -200,7 +208,13 @@ export function LessonContent({ lesson, resources = [] }: LessonContentProps) {
           {!first ? (
             <p className="text-sm text-muted-foreground">No video has been uploaded for this lesson yet.</p>
           ) : first.uploadStatus === "READY" ? (
-            <LessonMediaPlayer src={DOWNLOAD_ROUTE(first.id)} title={lesson.title} />
+            <LessonMediaPlayer
+              src={DOWNLOAD_ROUTE(first.id)}
+              title={lesson.title}
+              captions={captions
+                .filter((caption) => caption.videoResourceId === first.id)
+                .map(({ id, language, label }) => ({ id, language, label }))}
+            />
           ) : (
             <UploadUnavailable status={first.uploadStatus} />
           )}

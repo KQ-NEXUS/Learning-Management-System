@@ -24,9 +24,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { FieldError } from "@/components/primitives";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { parseLessonInput, parseLessonUpdateInput } from "@/lib/lesson-input";
-import { createLesson, lessonService, updateLesson } from "@/server/services/lesson-service";
+import { AssessmentLinkError, createLesson, lessonService, updateLesson } from "@/server/services/lesson-service";
+import { withFlash } from "@/lib/flash-notices";
 
 const LESSON_TYPES = [
   "TEXT",
@@ -93,12 +95,22 @@ function toFailure(error: unknown): SaveLessonState {
   if (error instanceof z.ZodError) {
     return { ok: false, errors: zodFieldErrors(error), message: null };
   }
+  // The assessment link was refused (another course, wrong type, archived).
+  if (error instanceof AssessmentLinkError) {
+    return { ok: false, errors: [{ name: "assessmentId", message: error.message }], message: null };
+  }
+  // W-14: a withdrawn lesson is restored before it is changed.
+  if (error instanceof RecordStateError) {
+    return { ok: false, errors: [], message: error.message };
+  }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
     return {
       ok: false,
       errors: [],
-      message:
+      message: refusalMessage(
+        error,
         "This lesson could not be saved. It may have moved, or your role no longer permits editing it.",
+      ),
     };
   }
   throw error;
@@ -133,6 +145,10 @@ export async function saveLessonAction(
     linkUrl: fieldValue(form, "linkUrl"),
     required: form.get("required") === "on",
     allowManualComplete: form.get("allowManualComplete") === "on",
+    // A blank choice clears the link; only Quiz/Assignment lessons carry one.
+    ...(type === "QUIZ" || type === "ASSIGNMENT"
+      ? { assessmentId: fieldValue(form, "assessmentId") ?? null }
+      : {}),
     // F-15 — a blank length clears it; only VIDEO lessons carry one.
     ...(type === "VIDEO" ? { videoDurationSeconds: fieldValue(form, "videoDurationSeconds") ?? null } : {}),
   };
@@ -165,7 +181,7 @@ export async function saveLessonAction(
   // A brand-new lesson: move to its own editor, where the UploadPanel (which
   // needs a lessonId) and the rest of the per-type fields become usable.
   if (newLessonId) {
-    redirect(`/staff/courses/${courseId}/lessons/${newLessonId}`);
+    redirect(withFlash(`/staff/courses/${courseId}/lessons/${newLessonId}`, "lesson-created"));
   }
   return { ok: true, errors: [], message: null };
 }
@@ -195,8 +211,12 @@ export async function withdrawLessonAction(
   try {
     await lessonService.archive(parsed.data.lessonId, parsed.data.reason);
   } catch (error) {
+    // W-14: a withdrawn lesson is not withdrawn again.
+    if (error instanceof RecordStateError) {
+      return { ok: false, message: error.message };
+    }
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-      return { ok: false, message: "This lesson could not be withdrawn." };
+      return { ok: false, message: refusalMessage(error, "This lesson could not be withdrawn.") };
     }
     throw error;
   }

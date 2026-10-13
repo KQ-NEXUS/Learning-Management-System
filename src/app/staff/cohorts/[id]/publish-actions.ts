@@ -28,7 +28,7 @@
 import { revalidatePath } from "next/cache";
 import { UserInputError } from "@/server/errors/user-input-error";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { CohortClosedError } from "@/server/services/seat-accounting";
 import { ReasonRequiredError } from "@/server/services/enrolment-service";
@@ -123,7 +123,7 @@ function toFailure(error: unknown): CommonFailure {
     return {
       ok: false,
       reason: "DENIED",
-      message: "Your role does not permit this action on this cohort.",
+      message: refusalMessage(error, "Your role does not permit this action on this cohort."),
     };
   }
   throw error;

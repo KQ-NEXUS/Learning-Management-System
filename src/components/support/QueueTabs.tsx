@@ -56,7 +56,7 @@ export function QueueTabs({
             aria-controls={`${idPrefix}-panel`}
             tabIndex={selected ? 0 : -1}
             onKeyDown={(event) => onKeyDown(event, index)}
-            className={`-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-focus ${
+            className={`-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 whitespace-nowrap ${
               selected
                 ? "border-accent font-semibold text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"

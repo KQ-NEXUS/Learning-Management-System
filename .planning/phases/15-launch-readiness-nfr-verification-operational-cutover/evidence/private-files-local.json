@@ -1,0 +1,150 @@
+{
+  "plan": "15-27",
+  "note": "Local Testcontainers Postgres and a local MinIO. No timestamps or ids: the file is identical from run to run.",
+  "routes": [
+    {
+      "route": "/api/certificates/[id]/download",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "empty",
+      "noStore": true,
+      "ttlSeconds": 60,
+      "expiryEnforced": true,
+      "note": "The URL expires after 60 s; the store refuses it afterwards (proven with a 1 s URL)."
+    },
+    {
+      "route": "/api/lesson-resources/[id]/captions",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "empty",
+      "noStore": true,
+      "ttlSeconds": null,
+      "expiryEnforced": null,
+      "note": "Delivered by the app itself, so no storage URL exists to expire; the response is private, no-store."
+    },
+    {
+      "route": "/api/lesson-resources/[id]/download",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "empty",
+      "noStore": true,
+      "ttlSeconds": 60,
+      "expiryEnforced": true,
+      "ttlSecondsByKind": {
+        "FILE": 60,
+        "IMAGE": 60,
+        "VIDEO": 14400
+      },
+      "note": "The URL expires after 60 s; the store refuses it afterwards (proven with a 1 s URL)."
+    },
+    {
+      "route": "/api/staff/licence/diagnostic",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "empty",
+      "noStore": true,
+      "ttlSeconds": null,
+      "expiryEnforced": null,
+      "note": "Delivered by the app itself, so no storage URL exists to expire; the response is private, no-store."
+    },
+    {
+      "route": "/api/staff/reports/exports/[jobId]/download",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "fixed-page",
+      "noStore": true,
+      "ttlSeconds": 60,
+      "expiryEnforced": true,
+      "note": "Past expiresAt: refused. The sweep marks the job Expired and deletes the object. Re-running creates a new job. Refusals are one fixed page for every cause, not an empty body."
+    },
+    {
+      "route": "/api/submissions/[submissionId]/download",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "empty",
+      "noStore": true,
+      "ttlSeconds": 60,
+      "expiryEnforced": true,
+      "note": "The URL expires after 60 s; the store refuses it afterwards (proven with a 1 s URL)."
+    },
+    {
+      "route": "/api/ticket-attachments/[attachmentId]/download",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "empty",
+      "noStore": true,
+      "ttlSeconds": 60,
+      "expiryEnforced": true,
+      "note": "The URL expires after 60 s; the store refuses it afterwards (proven with a 1 s URL)."
+    },
+    {
+      "route": "/staff/cohorts/[id]/exceptions/csv",
+      "denialParity": true,
+      "denialStatus": 404,
+      "denialBody": "empty",
+      "noStore": true,
+      "ttlSeconds": null,
+      "expiryEnforced": null,
+      "note": "Delivered by the app itself, so no storage URL exists to expire; the response is private, no-store."
+    }
+  ],
+  "unsignedGetStatus": 403,
+  "wrongKeySignedStatus": 403,
+  "expiredSignedUrlStatus": 403,
+  "keyBuilders": [
+    {
+      "builder": "buildStorageKey",
+      "shape": "lessons/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildStagedStorageKey",
+      "shape": "lesson-uploads/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildSubmissionStorageKey",
+      "shape": "submissions/<id>/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildStagedSubmissionStorageKey",
+      "shape": "submission-uploads/<id>/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildStagedTicketAttachmentKey",
+      "shape": "ticket-uploads/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildCertificateStorageKey",
+      "shape": "certificates/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildTemplateAssetStorageKey",
+      "shape": "certificate-template-assets/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildStagedTemplateAssetStorageKey",
+      "shape": "certificate-template-asset-uploads/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    },
+    {
+      "builder": "buildExportStorageKey",
+      "shape": "exports/<id>/<uuid-v4>",
+      "randomSegment": "uuid-v4",
+      "endsInUuidV4": true
+    }
+  ]
+}

@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
   beginLessonResourceUpload: vi.fn(),
   completeLessonResourceUpload: vi.fn(),
   removeLessonResource: vi.fn(async () => {}),
+  removeCaption: vi.fn(async () => {}),
+  listLessonCaptions: vi.fn(async () => [] as unknown[]),
   listLessonResources: vi.fn(),
   getDownloadableResource: vi.fn(),
   getDownloadableResourceForLearner: vi.fn(),
@@ -28,6 +30,7 @@ const h = vi.hoisted(() => ({
 
 class AuthenticationError extends Error {}
 class AuthorizationError extends Error {}
+class LicenceRestrictedError extends AuthorizationError {}
 class ResourceUploadValidationError extends Error {
   constructor(
     message: string,
@@ -36,12 +39,15 @@ class ResourceUploadValidationError extends Error {
     super(message);
   }
 }
+class CaptionAttachmentError extends Error {}
 class ResourceUploadPendingError extends Error {}
 class ResourceUploadUnavailableError extends Error {}
 
 vi.mock("@/server/permissions", () => ({
   AuthenticationError,
   AuthorizationError,
+  // Plan 14-18: the routes answer a licence refusal with 403 before the 404 denial branch.
+  isLicenceRestricted: (error: unknown) => error instanceof LicenceRestrictedError,
   withPermission:
     (_permission: string, resolveScope: (input: unknown) => unknown) =>
     (handler: (input: unknown, ctx: { actor: { userId: string } }) => unknown) =>
@@ -67,6 +73,9 @@ vi.mock("@/server/services/lesson-resource-service", () => ({
   beginLessonResourceUpload: h.beginLessonResourceUpload,
   completeLessonResourceUpload: h.completeLessonResourceUpload,
   removeLessonResource: h.removeLessonResource,
+  removeCaption: h.removeCaption,
+  listLessonCaptions: h.listLessonCaptions,
+  CaptionAttachmentError,
   listLessonResources: h.listLessonResources,
   getDownloadableResource: h.getDownloadableResource,
   getDownloadableResourceForLearner: h.getDownloadableResourceForLearner,
@@ -190,6 +199,81 @@ describe("POST /api/lesson-resources/upload-intent", () => {
   });
 });
 
+describe("POST /api/lesson-resources/upload-intent (captions, NFR-09)", () => {
+  const captionBody = {
+    title: "English captions",
+    filename: "en.vtt",
+    mimeType: "text/vtt",
+    sizeBytes: 800,
+    kind: "CAPTION",
+    captionForResourceId: "video-res-1",
+    captionLanguage: "en",
+    captionLabel: "English",
+  };
+
+  beforeEach(() => {
+    h.getLessonTypeById.mockResolvedValue("VIDEO");
+  });
+
+  it("passes the caption fields to the service and presigns a text/vtt upload", async () => {
+    const response = await POST_INTENT(intentRequest(captionBody));
+    expect(response.status).toBe(201);
+    expect(h.beginLessonResourceUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lessonId: "l1",
+        mimeType: "text/vtt",
+        caption: { forResourceId: "video-res-1", language: "en", label: "English" },
+      }),
+    );
+    expect(h.presignLessonUploadUrl).toHaveBeenCalledWith({
+      key: "lesson-uploads/l1/opaque",
+      contentType: "text/vtt",
+    });
+  });
+
+  it("returns 400 for a CAPTION request without captionForResourceId", async () => {
+    const response = await POST_INTENT(intentRequest({ ...captionBody, captionForResourceId: undefined }));
+    expect(response.status).toBe(400);
+    expect(h.presignLessonUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when caption fields arrive on an ordinary upload", async () => {
+    h.getLessonTypeById.mockResolvedValue("FILE");
+    const response = await POST_INTENT(intentRequest({ captionForResourceId: "video-res-1" }));
+    expect(response.status).toBe(400);
+    expect(h.beginLessonResourceUpload).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 with the plain message when the lesson is not a video lesson", async () => {
+    h.getLessonTypeById.mockResolvedValue("FILE");
+    const response = await POST_INTENT(intentRequest(captionBody));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: "Captions can only be added to a video in the same lesson.",
+    });
+    expect(h.presignLessonUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 with the service's plain message when the service refuses the caption", async () => {
+    h.beginLessonResourceUpload.mockRejectedValueOnce(
+      new CaptionAttachmentError("Enter the caption language as a language code such as en or fr-CA."),
+    );
+    const response = await POST_INTENT(intentRequest({ ...captionBody, captionLanguage: "english!" }));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: "Enter the caption language as a language code such as en or fr-CA.",
+    });
+  });
+
+  it("returns empty 404 when courses.edit is denied for a caption", async () => {
+    h.authorize.mockRejectedValueOnce(new AuthorizationError("courses.edit"));
+    const response = await POST_INTENT(intentRequest(captionBody));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("");
+    expect(h.beginLessonResourceUpload).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /api/lesson-resources/[id]/complete", () => {
   it("completes an authorized staged resource and returns READY", async () => {
     h.completeLessonResourceUpload.mockResolvedValueOnce({
@@ -251,6 +335,36 @@ describe("DELETE /api/lesson-resources/[id]", () => {
     );
     expect(response.status).toBe(404);
   });
+
+  it("removes a caption through removeCaption only when ?caption=1 is present", async () => {
+    const response = await DELETE_RESOURCE(
+      new Request("http://localhost/resource?caption=1", { method: "DELETE" }),
+      routeCtx("cap-1"),
+    );
+    expect(response.status).toBe(204);
+    expect(h.removeCaption).toHaveBeenCalledWith("cap-1");
+    expect(h.removeLessonResource).not.toHaveBeenCalled();
+  });
+
+  it("answers a caption removal aimed at a non-caption with a plain 422", async () => {
+    h.removeCaption.mockRejectedValueOnce(new CaptionAttachmentError("Only caption files can be removed here."));
+    const response = await DELETE_RESOURCE(
+      new Request("http://localhost/resource?caption=1", { method: "DELETE" }),
+      routeCtx("res-1"),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "Only caption files can be removed here." });
+  });
+
+  it("returns empty 404 when caption removal is not authorized", async () => {
+    h.removeCaption.mockRejectedValueOnce(new AuthorizationError("courses.edit"));
+    const response = await DELETE_RESOURCE(
+      new Request("http://localhost/resource?caption=1", { method: "DELETE" }),
+      routeCtx("cap-1"),
+    );
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("");
+  });
 });
 
 describe("GET /api/lesson-resources", () => {
@@ -277,6 +391,36 @@ describe("GET /api/lesson-resources", () => {
     ]);
     expect(JSON.stringify(body)).not.toContain("storageKey");
     expect(JSON.stringify(body)).not.toContain("uploadedById");
+  });
+
+  it("returns the lesson's caption tracks only when includeCaptions=1 is asked for", async () => {
+    h.listLessonResources.mockResolvedValue([]);
+    const track = {
+      id: "cap-1",
+      videoResourceId: "video-1",
+      language: "en",
+      label: "English",
+      uploadStatus: "READY",
+      uploadDetail: null,
+    };
+    h.listLessonCaptions.mockResolvedValueOnce([track]);
+
+    const without = await GET_LIST(new Request("http://localhost/api/lesson-resources?lessonId=l1"));
+    expect(Object.keys(await without.json())).toEqual(["resources"]);
+    expect(h.listLessonCaptions).not.toHaveBeenCalled();
+
+    const withCaptions = await GET_LIST(
+      new Request("http://localhost/api/lesson-resources?lessonId=l1&includeCaptions=1"),
+    );
+    expect(await withCaptions.json()).toEqual({ resources: [], captions: [track] });
+    expect(h.listLessonCaptions).toHaveBeenCalledWith("l1");
+  });
+
+  it("returns 400 for an includeCaptions value other than 1", async () => {
+    const response = await GET_LIST(
+      new Request("http://localhost/api/lesson-resources?lessonId=l1&includeCaptions=yes"),
+    );
+    expect(response.status).toBe(400);
   });
 
   it("returns 400 when lessonId is missing", async () => {

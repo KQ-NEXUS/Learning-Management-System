@@ -5,9 +5,11 @@ import { revalidatePath } from "next/cache";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import {
   revokeCertificate,
+  confirmFlaggedCertificate,
   reissueCertificate,
   RevocationReasonRequiredError,
   CertificateChangedError,
+  CertificateNotFlaggedError,
   NoCompletionRecordError,
 } from "@/server/services/certificate-service";
 
@@ -61,6 +63,9 @@ function mapError(error: unknown): string {
   if (error instanceof RevocationReasonRequiredError) {
     return "Explain the correction using at least 10 characters.";
   }
+  if (error instanceof CertificateNotFlaggedError) {
+    return "This certificate is no longer waiting for review. Reload the page.";
+  }
   if (error instanceof CertificateChangedError) {
     return "This certificate changed while you were working on it. Reload it and try again.";
   }
@@ -68,6 +73,24 @@ function mapError(error: unknown): string {
     return "This learner no longer meets the completion rules, so the certificate can't be reissued. It can be reissued once they complete again.";
   }
   return "This action could not be completed. Reload the page and try again.";
+}
+
+/** A flagged certificate reviewed and kept (A-08). Same input shape and reason rule as revocation. */
+export async function confirmFlaggedCertificateAction(input: unknown): Promise<ActionResult> {
+  const parsed = revokeCertificateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Explain the decision using at least 10 characters." };
+  }
+
+  try {
+    await confirmFlaggedCertificate(parsed.data);
+  } catch (error) {
+    return { ok: false, message: mapError(error) };
+  }
+
+  revalidatePath(`/staff/certificates/issued/${parsed.data.certificateId}`);
+  revalidatePath("/staff/certificates/issued");
+  return { ok: true };
 }
 
 export async function revokeCertificateAction(input: unknown): Promise<ActionResult> {

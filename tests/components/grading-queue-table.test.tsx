@@ -17,7 +17,7 @@ describe("grading queue", () => {
   it("renders late only where needed, mono timestamps, status and an ungraded dash", () => {
     const { container } = setup(); expect(screen.getAllByText("Late").length).toBeGreaterThan(0); expect(screen.getAllByText("Ada").length).toBeGreaterThan(0);
     expect(screen.getAllByText("—").length).toBeGreaterThan(0); expect(container.querySelector("td.font-mono")).toBeTruthy();
-    expect(screen.getAllByText("01/01/2026, 00:00:00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 Jan 2026, 01:00 WAT").length).toBeGreaterThan(0);
   });
   it("enables release only when at least one selected grade is draft", () => {
     setup(); select("Grace"); expect((screen.getByText("Release selected") as HTMLButtonElement).disabled).toBe(true);
@@ -30,7 +30,7 @@ describe("grading queue", () => {
     fireEvent.click(screen.getByRole("button", { name: "Release grades" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(onRelease).toHaveBeenCalledExactlyOnceWith({ cohortId: "c", gradeIds: ["g1", "g2"] });
-    expect(screen.queryByText("2 selected")).toBeNull(); expect(screen.getByText(/already released grades skipped/)).toBeTruthy();
+    expect(screen.queryByText("2 selected")).toBeNull(); expect(screen.getByText(/already released and skipped/)).toBeTruthy();
   });
   it("keeps confirmation pending for the whole transaction", async () => {
     let finish!: (result: { ok: true; released: string[]; skipped: string[] }) => void;

@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmManualPaymentAction } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * "Confirm manual payment" — the PAY-03 dialog (07-UI-SPEC §0.3, §6.1, §7.6).
@@ -49,6 +50,7 @@ export type ManualPaymentDialogProps = {
 
 export function ManualPaymentDialog({ orderId, currency }: ManualPaymentDialogProps) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export function ManualPaymentDialog({ orderId, currency }: ManualPaymentDialogPr
     // ACTIVATED/EXCEPTION outcome are both handled the same way: close the
     // dialog and let the server-rendered page — the source of truth for
     // PAY-04's already-paid banner — re-render.
+    toast.success("Manual payment confirmed");
     setOpen(false);
     router.refresh();
   }
@@ -191,6 +194,16 @@ function ManualPaymentDialogBody({
     evidence.trim().length > 0 &&
     reasonValid &&
     !pending;
+
+  // Say what is still missing, instead of leaving Confirm greyed out without a reason.
+  const stillNeeded = [
+    !amountValid && "an amount above zero",
+    !date && "the payment date",
+    channel.trim().length === 0 && "the payment channel",
+    reference.trim().length === 0 && "a reference",
+    evidence.trim().length === 0 && "where the evidence is held",
+    !reasonValid && `a reason of at least ${MIN_REASON} characters`,
+  ].filter(Boolean) as string[];
 
   function submit() {
     if (!canConfirm) return;
@@ -358,8 +371,20 @@ function ManualPaymentDialogBody({
           </p>
         </div>
 
+        {stillNeeded.length > 0 && !pending && (
+          <p id="manual-confirm-help" className="text-sm text-muted-foreground">
+            Still needed to confirm: {stillNeeded.join(", ")}.
+          </p>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <button type="button" disabled={!canConfirm} onClick={submit} className={BTN_PRIMARY}>
+          <button
+            type="button"
+            disabled={!canConfirm}
+            aria-describedby={stillNeeded.length > 0 && !pending ? "manual-confirm-help" : undefined}
+            onClick={submit}
+            className={BTN_PRIMARY}
+          >
             {pending ? "Confirming…" : "Confirm payment"}
           </button>
           <button type="button" onClick={onCancel} disabled={pending} className={BTN}>

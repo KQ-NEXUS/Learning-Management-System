@@ -35,6 +35,7 @@ const { mocks } = vi.hoisted(() => ({
     assertLessonOpenable: vi.fn(),
     getLessonContentForLearner: vi.fn(),
     listLessonResourcesForLearner: vi.fn(),
+    listLessonCaptionsForLearner: vi.fn(),
     countLessonsRelockedBy: vi.fn(),
     getOwnWatchProgress: vi.fn(),
     markLessonCompleteAction: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock("@/server/services/lesson-service", () => ({
 }));
 vi.mock("@/server/services/lesson-resource-service", () => ({
   listLessonResourcesForLearner: mocks.listLessonResourcesForLearner,
+  listLessonCaptionsForLearner: mocks.listLessonCaptionsForLearner,
 }));
 vi.mock("@/server/services/lesson-progress-service", () => ({
   countLessonsRelockedBy: mocks.countLessonsRelockedBy,
@@ -213,6 +215,9 @@ function findLessonInPath(
 function defaultAssertLessonOpenable(path: ReturnType<typeof pathFixture>, lessonId: string) {
   const lesson = findLessonInPath(path, lessonId);
   if (!lesson) return { ok: false as const, reason: "not-found" as const };
+  if (path.enrolment.status === "COMPLETED") {
+    return { ok: false as const, reason: "access-window-closed" as const };
+  }
   if (path.enrolment.accessWindow.readOnly) {
     return { ok: false as const, reason: "access-window-closed" as const };
   }
@@ -240,6 +245,7 @@ beforeEach(() => {
   mocks.assertLessonOpenable.mockImplementation(defaultAssertLessonOpenable);
   mocks.getLessonContentForLearner.mockResolvedValue(contentFixture());
   mocks.listLessonResourcesForLearner.mockResolvedValue([]);
+  mocks.listLessonCaptionsForLearner.mockResolvedValue([]);
   mocks.countLessonsRelockedBy.mockReturnValue(0);
   mocks.getOwnWatchProgress.mockResolvedValue(null);
 });
@@ -268,15 +274,20 @@ describe("/learn/[enrolmentId]/lessons/[lessonId]", () => {
     expect(html).toContain("Lesson body text for Lesson One");
   });
 
-  it("calls notFound() for a locked lesson id, and no lesson body text appears", async () => {
+  it("a locked lesson in the learner's own course shows an in-course 'not available' state — no content, no blocker named (UX batch B)", async () => {
     mocks.loadLearnerPath.mockResolvedValue(
       pathFixture({
         courses: [courseFixture({ modules: [moduleFixture({ lessons: [lessonFixture({ locked: true })] })] })],
       }),
     );
 
-    await expect(run()).rejects.toThrow(NOT_FOUND);
-    expect(mocks.notFound).toHaveBeenCalled();
+    const html = await renderPage();
+
+    expect(mocks.notFound).not.toHaveBeenCalled();
+    expect(html).toContain("This lesson isn&#x27;t available right now");
+    expect(html).toContain('href="/learn/enrolment-1"');
+    expect(html).not.toContain("Lesson body text for Lesson One");
+    expect(html).not.toContain("Lesson One");
     expect(mocks.getLessonContentForLearner).not.toHaveBeenCalled();
   });
 
@@ -292,6 +303,23 @@ describe("/learn/[enrolmentId]/lessons/[lessonId]", () => {
     expect(html).toContain("Your access window has ended");
     expect(html).not.toContain("Lesson body text for Lesson One");
     expect(html).not.toContain("Lesson One");
+    expect(mocks.getLessonContentForLearner).not.toHaveBeenCalled();
+  });
+
+  it("a COMPLETED enrolment shows a 'completed' panel with certificate and results links, never a 404 and never content (R3-04, G-01)", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({ enrolment: { ...pathFixture().enrolment, status: "COMPLETED" } }),
+    );
+
+    const html = await renderPage();
+
+    expect(mocks.loadLearnerPath).toHaveBeenCalledWith(ACTOR, "enrolment-1", { includeCompleted: true });
+    expect(mocks.notFound).not.toHaveBeenCalled();
+    expect(html).toContain("You&#x27;ve completed this course");
+    expect(html).toContain('href="/dashboard"');
+    expect(html).toContain('href="/learn/enrolment-1/results"');
+    expect(html).not.toContain("Your access window has ended");
+    expect(html).not.toContain("Lesson body text for Lesson One");
     expect(mocks.getLessonContentForLearner).not.toHaveBeenCalled();
   });
 
@@ -516,6 +544,47 @@ describe("VideoWatchTracker wiring (09-12 Task 3)", () => {
 
     expect(html).toContain('data-testid="video-watch-tracker"');
     expect(html).toContain("Lesson body text for Lesson One");
+  });
+
+  it("passes the lesson's READY caption tracks to the video player (NFR-09), and asks only for a VIDEO lesson", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(
+      pathFixture({
+        courses: [
+          courseFixture({
+            modules: [moduleFixture({ lessons: [lessonFixture({ type: "VIDEO" })] })],
+          }),
+        ],
+      }),
+    );
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "VIDEO" }));
+    mocks.listLessonResourcesForLearner.mockResolvedValue([
+      {
+        id: "vid-1",
+        title: "Video",
+        filename: "v.mp4",
+        mimeType: "video/mp4",
+        sizeBytes: BigInt(1000),
+        uploadStatus: "READY",
+      },
+    ]);
+    mocks.listLessonCaptionsForLearner.mockResolvedValue([
+      { id: "cap-en", videoResourceId: "vid-1", language: "en", label: "English" },
+    ]);
+
+    const html = await renderPage();
+
+    expect(html).toContain('kind="captions"');
+    expect(html).toContain('src="/api/lesson-resources/cap-en/captions"');
+    expect(html).toContain('srcLang="en"');
+  });
+
+  it("does not look up captions for a TEXT lesson", async () => {
+    mocks.loadLearnerPath.mockResolvedValue(pathFixture());
+    mocks.getLessonContentForLearner.mockResolvedValue(contentFixture({ type: "TEXT" }));
+
+    await renderPage();
+
+    expect(mocks.listLessonCaptionsForLearner).not.toHaveBeenCalled();
   });
 
   it("does not render VideoWatchTracker output for a TEXT lesson", async () => {

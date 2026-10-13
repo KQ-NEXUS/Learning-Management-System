@@ -58,7 +58,7 @@ function statePresentation(item: ReadinessItem): StatePresentation {
   // NOT_YET_CHECKED — a genuine third state: neither a grey tick nor a grey
   // cross. It carries a dot, never ✓ or ✗.
   return {
-    label: `Not yet checked — ${item.deferredTo ?? "a later phase"}`,
+    label: "Not checked yet — this check is not available yet",
     glyph: "•",
     className: "text-muted-foreground",
   };
@@ -121,7 +121,7 @@ export function ReadinessPanel({ items }: { items: ReadinessItem[] }) {
                 {category}
               </h3>
               {categoryItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Not yet checked — a later phase.</p>
+                <p className="text-xs text-muted-foreground">Not checked yet — these checks are not available yet.</p>
               ) : (
                 <ul className="flex flex-col divide-y divide-border border-b border-border py-3">
                   {categoryItems.map((item) => (

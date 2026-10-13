@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createPublishService,
   PublishTargetNotFoundError,
@@ -331,6 +332,28 @@ describe("publishCourse — authorization (D-09)", () => {
   });
 });
 
+describe("publishCourse — CAT-06: an Instructor publishes only their assigned Course", () => {
+  it("a COURSE-scoped courses.publish grant publishes that Course, recording actor and version", async () => {
+    const h = makeHarness();
+    const svc = h.buildService([grant("courses.publish", "COURSE", "course-1")]);
+
+    const result = await svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 });
+
+    expect(result.version).toBe(1);
+    expect(h.state.coursePublications[0].publishedById).toBe("actor-9");
+  });
+
+  it("a courses.publish grant scoped to a different Course is denied and writes nothing", async () => {
+    const h = makeHarness();
+    const svc = h.buildService([grant("courses.publish", "COURSE", "some-other-course")]);
+
+    await expect(
+      svc.publishCourse({ courseId: "course-1", expectedUpdatedAt: T0 }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    expect(h.state.coursePublications).toHaveLength(0);
+  });
+});
+
 describe("publishCourse — the immutable version", () => {
   it("inserts one CoursePublication at version 1 with the frozen payload, schema, and actor", async () => {
     const h = makeHarness();
@@ -531,5 +554,41 @@ describe("unpublishContent (D-12)", () => {
     await expect(
       svc.unpublishContent({ kind: "Course", id: "course-1", reason: "  " }),
     ).rejects.toBeInstanceOf(ReasonRequiredError);
+  });
+});
+
+describe("archive is not repeated (launch checklist W-14)", () => {
+  it("refuses a second archive of a Course without a write or a second course.archived audit row", async () => {
+    const h = makeHarness({ courseOverrides: { status: "ARCHIVED" } });
+    const svc = h.buildService([grant("courses.edit")]);
+    const attempt = svc.archiveCatalogueRecord({ kind: "Course", id: "course-1", reason: "Archiving it once more" });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This course is already archived.");
+    expect(h.audits).toHaveLength(0);
+  });
+
+  it("refuses a second archive of a Programme the same way", async () => {
+    const h = makeHarness({ programmeOverrides: { status: "ARCHIVED" } });
+    const svc = h.buildService([grant("programmes.manage")]);
+    const attempt = svc.archiveCatalogueRecord({ kind: "Programme", id: "programme-1", reason: "Archiving it once more" });
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This programme is already archived.");
+    expect(h.audits).toHaveLength(0);
+  });
+
+  it("still archives a published Course, once", async () => {
+    const h = makeHarness({ courseOverrides: { status: "PUBLISHED" } });
+    const svc = h.buildService([grant("courses.edit")]);
+    await svc.archiveCatalogueRecord({ kind: "Course", id: "course-1", reason: "Retired this course" });
+    expect(h.state.courses.get("course-1")!.status).toBe("ARCHIVED");
+    expect(h.audits).toHaveLength(1);
+  });
+
+  it("answers a caller without courses.edit with the authorization refusal, not the record's state", async () => {
+    const h = makeHarness({ courseOverrides: { status: "ARCHIVED" } });
+    const svc = h.buildService([grant("courses.view")]);
+    await expect(
+      svc.archiveCatalogueRecord({ kind: "Course", id: "course-1", reason: "Archiving it once more" }),
+    ).rejects.toBeInstanceOf(AuthorizationError);
   });
 });

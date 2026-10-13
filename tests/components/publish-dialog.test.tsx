@@ -22,6 +22,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { useState } from "react";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import { PublishDialog, type AffectedCohort, type PublishDialogProps } from "@/components/catalogue/PublishDialog";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
 
 afterEach(() => {
   cleanup();
@@ -253,5 +254,38 @@ describe("PublishDialog — immutable pending payload", () => {
     expect(publish.disabled).toBe(false);
     fireEvent.click(publish);
     expect(onPublish).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PublishDialog in restricted continuity mode (D-06, launch check LC-09)", () => {
+  function inMode(restricted: boolean, canViewLicence: boolean) {
+    return render(
+      <LicenceRestrictionProvider value={{ restricted, canViewLicence, stateLabel: restricted && canViewLicence ? "Restricted continuity mode" : null }}>
+        <PublishDialog {...baseProps({ affectedCohorts: [] })} />
+      </LicenceRestrictionProvider>,
+    );
+  }
+
+  it("disables Publish and says why, for a person who can open the licence page", () => {
+    inMode(true, true);
+    const publish = screen.getByRole("button", { name: "Publish" }) as HTMLButtonElement;
+    expect(publish.disabled).toBe(true);
+    const reason = publish.getAttribute("aria-describedby");
+    expect(reason).toBeTruthy();
+    expect(document.getElementById(reason as string)?.textContent).toMatch(/Open Licence/);
+  });
+
+  it("tells staff without licence view to ask an administrator", () => {
+    inMode(true, false);
+    const publish = screen.getByRole("button", { name: "Publish" }) as HTMLButtonElement;
+    expect(publish.disabled).toBe(true);
+    expect(document.getElementById(publish.getAttribute("aria-describedby") as string)?.textContent).toMatch(/Ask an administrator/);
+  });
+
+  it("is unchanged when the deployment is not restricted", () => {
+    inMode(false, true);
+    const publish = screen.getByRole("button", { name: "Publish" }) as HTMLButtonElement;
+    expect(publish.disabled).toBe(false);
+    expect(publish.getAttribute("aria-describedby")).toBeNull();
   });
 });

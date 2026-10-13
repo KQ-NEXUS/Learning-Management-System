@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { CourseForm } from "@/app/staff/courses/CourseForm";
 import { createCourseAction, updateCourseAction } from "@/app/staff/courses/actions";
 
@@ -24,7 +18,18 @@ afterEach(() => {
 });
 
 function submit(container: HTMLElement) {
-  fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+  const form = container.querySelector("form") as HTMLFormElement;
+  // A stepped create form shows its submit button only on the last step: take "Next" until it is there.
+  for (let step = 0; step < 6 && !form.querySelector('button[type="submit"]'); step++) {
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  }
+  fireEvent.submit(form);
+}
+
+/** Opens the form's last step from its progress bar (an edit form lets any step be opened directly). */
+function openLastStep() {
+  const steps = within(screen.getByRole("navigation", { name: "Progress" })).getAllByRole("button");
+  fireEvent.click(steps[steps.length - 1]);
 }
 
 describe("CourseForm", () => {
@@ -77,7 +82,7 @@ describe("CourseForm — edit mode", () => {
   };
 
   function renderEdit(overrides: Partial<typeof values> = {}, tpls = templates) {
-    return render(
+    const view = render(
       <CourseForm
         mode="edit"
         courseId="course-9"
@@ -85,7 +90,18 @@ describe("CourseForm — edit mode", () => {
         templates={tpls}
       />,
     );
+    // The certificate settings these tests read sit on the last step.
+    openLastStep();
+    return view;
   }
+
+  it("never rewrites the stored web address of an existing course", () => {
+    renderEdit();
+    const slug = screen.getByLabelText(/^Slug/) as HTMLInputElement;
+    const before = slug.value;
+    fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "A completely different title" } });
+    expect(slug.value).toBe(before);
+  });
 
   it("renders the stored values in the fields", () => {
     renderEdit();
@@ -167,12 +183,42 @@ describe("CourseForm — edit mode", () => {
     expect(option.textContent).toContain("(archived)");
   });
 
-  it("keeps create mode unchanged: starts unchecked and says Create course", () => {
+  it("create mode starts with certificates unchecked, and offers Create course only on the Review step", () => {
     renderEdit();
     cleanup();
     render(<CourseForm mode="create" />);
     expect((screen.getByLabelText("Certificate enabled") as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole("button", { name: "Create course" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "Fire Safety" } });
+    fireEvent.change(screen.getByLabelText(/^Slug/), { target: { value: "fire-safety" } });
+    // Three steps, then the Review step that carries the submit button.
+    for (let step = 0; step < 3; step++) fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Review and create" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create course" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  });
+});
+
+describe("CourseForm — web address from the title", () => {
+  const slugInput = () => screen.getByLabelText(/^Slug/) as HTMLInputElement;
+  const title = (value: string) => fireEvent.change(screen.getByLabelText(/^Title/), { target: { value } });
+
+  it("follows the title while creating", () => {
+    render(<CourseForm mode="create" />);
+    title("Fire Safety 101");
+    expect(slugInput().value).toBe("fire-safety-101");
+    title("Fire Safety Basics");
+    expect(slugInput().value).toBe("fire-safety-basics");
+  });
+
+  it("stops following once the person edits the web address", () => {
+    render(<CourseForm mode="create" />);
+    title("Fire Safety");
+    fireEvent.change(slugInput(), { target: { value: "my-own-address" } });
+    title("Fire Safety Basics");
+    expect(slugInput().value).toBe("my-own-address");
   });
 });
 

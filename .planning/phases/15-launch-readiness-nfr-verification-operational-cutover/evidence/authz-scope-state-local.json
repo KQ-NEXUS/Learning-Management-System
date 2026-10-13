@@ -1,0 +1,1190 @@
+{
+  "plan": "15-26",
+  "note": "Local Testcontainers Postgres. No timestamps or ids: the file is identical from run to run.",
+  "scopedEntries": 74,
+  "recordScopedEntries": 69,
+  "collectionScopedEntries": 5,
+  "statefulEntries": 69,
+  "stateCases": 94,
+  "entries": 102,
+  "cases": 433,
+  "passed": 433,
+  "byKind": {
+    "tracer": {
+      "cases": 3,
+      "passed": 3
+    },
+    "wrong-scope": {
+      "cases": 216,
+      "passed": 216
+    },
+    "wrong-scope-claimed": {
+      "cases": 20,
+      "passed": 20
+    },
+    "wrong-scope-target": {
+      "cases": 1,
+      "passed": 1
+    },
+    "right-scope": {
+      "cases": 69,
+      "passed": 69
+    },
+    "collection-scope": {
+      "cases": 30,
+      "passed": 30
+    },
+    "record-state": {
+      "cases": 94,
+      "passed": 94
+    }
+  },
+  "perEntry": [
+    {
+      "key": "src/app/(checkout)/checkout/[orderId]/actions.ts#payAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "order:PAID": "redirect",
+        "order:CANCELLED": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(learner)/support/[reference]/actions.ts#closeTicketAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "ticket:CLOSED": "returned-refusal",
+        "ticket:OPEN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(learner)/support/[reference]/actions.ts#reopenTicketAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "ticket:CLOSED": "returned-refusal",
+        "ticket:OPEN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(learner)/support/[reference]/actions.ts#replyToTicketAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "ticket:CLOSED": "returned-refusal",
+        "ticket:RESOLVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts#markLessonCompleteAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "enrolment:CANCELLED": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts#recordWatchProgressAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "enrolment:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/actions.ts#undoLessonCompleteAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "enrolment:CANCELLED": "redirect"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions.ts#saveAttemptAnswersAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "attempt:SUBMITTED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions.ts#startAttemptAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "enrolment:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions.ts#submitAttemptAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "attempt:SUBMITTED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions.ts#beginSubmissionUploadAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "enrolment:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/api/certificates/[id]/download/route.ts#GET",
+      "permission": "certificates.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "right-cohort": "HTTP 404",
+        "certificate:REVOKED": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/captions/route.ts#GET",
+      "permission": "courses.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "right-course": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/complete/route.ts#POST",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "right-course": "HTTP 422"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/download/route.ts#GET",
+      "permission": "courses.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "right-course": "HTTP 302",
+        "resource:UPLOADING": "HTTP 409"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/[id]/route.ts#DELETE",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "staffCohortB [route.resourceRemoveCaption]": "HTTP 404",
+        "staffCourseB [route.resourceRemoveCaption]": "HTTP 404",
+        "staffProgrammeZ [route.resourceRemoveCaption]": "HTTP 404",
+        "right-course": "HTTP 204"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/route.ts#GET",
+      "permission": "courses.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "staffCohortB [route.resourceListCaptions]": "HTTP 404",
+        "staffCourseB [route.resourceListCaptions]": "HTTP 404",
+        "staffProgrammeZ [route.resourceListCaptions]": "HTTP 404",
+        "right-course": "HTTP 200"
+      }
+    },
+    {
+      "key": "src/app/api/lesson-resources/upload-intent/route.ts#POST",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "staffCohortB [route.resourceUploadIntentCaption]": "HTTP 404",
+        "staffCourseB [route.resourceUploadIntentCaption]": "HTTP 404",
+        "staffProgrammeZ [route.resourceUploadIntentCaption]": "HTTP 404",
+        "right-course": "HTTP 201"
+      }
+    },
+    {
+      "key": "src/app/api/staff/reports/exports/[jobId]/download/route.ts#GET",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "job:EXPIRED": "HTTP 404",
+        "job:FAILED": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/api/submissions/[submissionId]/download/route.ts#GET",
+      "permission": "submissions.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "right-cohort": "HTTP 302",
+        "submission:UPLOADING": "HTTP 409"
+      }
+    },
+    {
+      "key": "src/app/api/ticket-attachments/[attachmentId]/download/route.ts#GET",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "attachment:UPLOADING": "HTTP 404"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/certificate-actions.ts#issueCertificateAction",
+      "permission": "certificates.issue",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "enrolment:CANCELLED": "returned-refusal",
+        "certificate:ACTIVE": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/issued/[id]/certificate-record-actions.ts#confirmFlaggedCertificateAction",
+      "permission": "certificates.revoke",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "certificate:REVOKED": "returned-refusal",
+        "certificate:SUPERSEDED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/issued/[id]/certificate-record-actions.ts#reissueCertificateAction",
+      "permission": "certificates.issue",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/issued/[id]/certificate-record-actions.ts#revokeCertificateAction",
+      "permission": "certificates.revoke",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "certificate:REVOKED": "returned-refusal",
+        "certificate:SUPERSEDED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-actions.ts#archiveTemplateAction",
+      "permission": "certificates.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "template:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/certificates/templates/template-actions.ts#setDefaultTemplateAction",
+      "permission": "certificates.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "template:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/attendance-actions.ts#correctAttendanceAction",
+      "permission": "attendance.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "session:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/attendance-actions.ts#saveAttendanceAction",
+      "permission": "attendance.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "session:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#addEnrolmentAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#addEnrolmentsAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#approveEnrolmentAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "enrolment:CANCELLED": "returned-refusal",
+        "enrolment:WITHDRAWN": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#cancelEnrolmentAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "wrong-cohort": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cancelled-enrolment": "returned-refusal",
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "enrolment:CANCELLED": "returned-refusal",
+        "enrolment:WITHDRAWN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#listEnrolmentCandidatesAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#transferEnrolmentAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "staffCohortA:target-outside-scope": "returned-refusal",
+        "right-scope-override": "returned-refusal",
+        "enrolment:CANCELLED": "returned-refusal",
+        "enrolment:WITHDRAWN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/enrolment-actions.ts#withdrawEnrolmentAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "enrolment:CANCELLED": "returned-refusal",
+        "enrolment:WITHDRAWN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/exceptions/csv/route.ts#GET",
+      "permission": "attendance.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "HTTP 404",
+        "staffCourseB": "HTTP 404",
+        "staffProgrammeZ": "HTTP 404",
+        "right-cohort": "HTTP 200"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading-actions.ts#releaseGradesBatchAction",
+      "permission": "submissions.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/actions.ts#overrideGradeAction",
+      "permission": "grades.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "grade:DRAFT": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/actions.ts#releaseGradeAction",
+      "permission": "grades.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "grade:RELEASED": "idempotent-no-write"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/grading/[assessmentId]/[submissionId]/actions.ts#saveDraftGradeAction",
+      "permission": "grades.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCohortB:claims-cohortId": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "grade:RELEASED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/instructor-actions.ts#assignInstructorAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/instructor-actions.ts#listInstructorCandidatesAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/instructor-actions.ts#removeInstructorAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/progress-actions.ts#overrideLessonProgressAction",
+      "permission": "enrolments.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "notFound",
+        "staffCourseB": "notFound",
+        "staffProgrammeZ": "notFound",
+        "staffCohortB:claims-cohortId": "notFound",
+        "right-cohort": "returned-refusal",
+        "enrolment:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/publish-actions.ts#cancelCohortAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/publish-actions.ts#publishCohortAction",
+      "permission": "cohorts.publish",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#cancelSessionAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "session:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#createSessionAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#repeatWeeklyAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal",
+        "cohort:COMPLETED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/[id]/session-actions.ts#updateSessionAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "session:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/cohorts/actions.ts#updateCohortAction",
+      "permission": "cohorts.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "cohort:CANCELLED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#createModuleAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#renameModuleAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal",
+        "module:WITHDRAWN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#restoreItemAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal",
+        "module:LIVE": "returned-refusal",
+        "lesson:LIVE": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#saveLessonArrangementAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#saveModuleOrderAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/arrange/actions.ts#withdrawItemAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal",
+        "lesson:WITHDRAWN": "returned-refusal",
+        "module:WITHDRAWN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#archiveAssessmentAction",
+      "permission": "assessments.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal",
+        "assessment:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#createAssessmentAction",
+      "permission": "assessments.create",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-scope-override": "redirect"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#publishAssessmentAction",
+      "permission": "assessments.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal",
+        "assessment:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/actions.ts#updateAssessmentAction",
+      "permission": "assessments.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/assessments/question-actions.ts#saveQuizQuestionsAction",
+      "permission": "courses.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/lessons/[lessonId]/actions.ts#saveLessonAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal",
+        "lesson:WITHDRAWN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/lessons/[lessonId]/actions.ts#withdrawLessonAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "staffCourseB:claims-courseId": "returned-refusal",
+        "right-course": "returned-refusal",
+        "lesson:WITHDRAWN": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#archiveCourseAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal",
+        "course:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#publishCourseAction",
+      "permission": "courses.publish",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal",
+        "course:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#setListingAction",
+      "permission": "programmes.publish",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#unarchiveCourseAction",
+      "permission": "courses.edit",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal",
+        "course:PUBLISHED": "returned-refusal",
+        "course:DRAFT": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/[id]/publish-actions.ts#unpublishCourseAction",
+      "permission": "courses.publish",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/courses/actions.ts#updateCourseAction",
+      "permission": "courses.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-course": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/payments/actions.ts#confirmManualPaymentAction",
+      "permission": "payments.confirm",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "order:PAID": "idempotent-no-write",
+        "order:REFUNDED": "idempotent-no-write"
+      }
+    },
+    {
+      "key": "src/app/staff/payments/actions.ts#recordRefundAction",
+      "permission": "refunds.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "order:PENDING": "returned-refusal",
+        "order:CANCELLED": "returned-refusal",
+        "order:REFUNDED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/privacy/actions.ts#anonymiseLearnerAction",
+      "permission": "privacy.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "user:ANONYMISED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/arrange/actions.ts#addCourseAction",
+      "permission": "programmes.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/arrange/actions.ts#removeCourseAction",
+      "permission": "programmes.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/arrange/actions.ts#saveProgrammeCourseOrderAction",
+      "permission": "programmes.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#archiveProgrammeAction",
+      "permission": "programmes.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal",
+        "programme:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#publishProgrammeAction",
+      "permission": "programmes.publish",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal",
+        "programme:ARCHIVED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#setProgrammeListingAction",
+      "permission": "programmes.publish",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#unarchiveProgrammeAction",
+      "permission": "programmes.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal",
+        "programme:PUBLISHED": "returned-refusal",
+        "programme:DRAFT": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/[id]/publish-actions.ts#unpublishProgrammeAction",
+      "permission": "programmes.publish",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/programmes/actions.ts#updateProgrammeAction",
+      "permission": "programmes.manage",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-programme": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reconciliation/actions.ts#assignReconciliationCasesAction",
+      "permission": "payments.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reconciliation/actions.ts#requestReconciliationRefundExportAction",
+      "permission": "payments.view",
+      "scope": "COLLECTION",
+      "cases": {
+        "staffCohortA:refund-export": "rows:1",
+        "staffCohortB:refund-export": "rows:1",
+        "staffCourseA:refund-export": "rows:1",
+        "staffCourseB:refund-export": "rows:1",
+        "staffProgrammeZ:refund-export": "rows:0",
+        "staffGlobal:refund-export": "rows:2"
+      }
+    },
+    {
+      "key": "src/app/staff/reconciliation/actions.ts#resolveReconciliationCaseAction",
+      "permission": "payments.view",
+      "scope": "RECORD",
+      "cases": {
+        "staffCohortB": "returned-refusal",
+        "staffCourseB": "returned-refusal",
+        "staffProgrammeZ": "returned-refusal",
+        "right-cohort": "returned-refusal",
+        "case:RESOLVED": "idempotent-no-write"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#permittedSensitiveColumnsAction",
+      "permission": "reports.view",
+      "scope": "COLLECTION",
+      "cases": {
+        "staffCohortA:sensitive-columns": "columns:2",
+        "staffCohortB:sensitive-columns": "columns:2",
+        "staffCourseA:sensitive-columns": "columns:2",
+        "staffCourseB:sensitive-columns": "columns:2",
+        "staffProgrammeZ:sensitive-columns": "columns:2",
+        "staffGlobal:sensitive-columns": "columns:2"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#requestReportExportAction",
+      "permission": "reports.view",
+      "scope": "COLLECTION",
+      "cases": {
+        "staffCohortA:enrolments-export": "rows:1",
+        "staffCohortB:enrolments-export": "rows:1",
+        "staffCourseA:enrolments-export": "rows:1",
+        "staffCourseB:enrolments-export": "rows:1",
+        "staffProgrammeZ:enrolments-export": "rows:0",
+        "staffGlobal:enrolments-export": "rows:2"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#rerunExportAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "job:SUCCEEDED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/reports/actions.ts#retryExportAction",
+      "permission": null,
+      "scope": null,
+      "cases": {
+        "job:SUCCEEDED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#acceptEscalationAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#addInternalNoteAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#assignTicketAction",
+      "permission": "tickets.view",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#changePriorityAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#claimTicketAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#escalateTicketAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#moveQueueAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#resolveTicketAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/support/[reference]/actions.ts#sendPublicReplyAction",
+      "permission": "tickets.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "ticket:CLOSED": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#createAssignmentAction",
+      "permission": "roles.manage",
+      "scope": "COLLECTION",
+      "cases": {
+        "staffCohortB grants at GLOBAL scope": "returned-refusal",
+        "staffCohortB grants on cohort A": "returned-refusal",
+        "staffCohortB grants on course A": "returned-refusal",
+        "staffCourseB grants on cohort A": "returned-refusal",
+        "staffProgrammeZ grants on programme A": "returned-refusal",
+        "staffCohortB grants on its own cohort B": "returned-refusal",
+        "staffCohortA grants on its own cohort A": "returned-refusal",
+        "grant-ceiling": "returned-refusal"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#deactivateStaffAccountAction",
+      "permission": "users.manage",
+      "scope": "GLOBAL",
+      "cases": {
+        "user:DEACTIVATED": "idempotent-no-write"
+      }
+    },
+    {
+      "key": "src/app/staff/users/actions.ts#revokeAssignmentAction",
+      "permission": "roles.manage",
+      "scope": "COLLECTION",
+      "cases": {
+        "staffCohortB revokes an assignment on cohort A": "returned-refusal",
+        "staffCourseB revokes an assignment on cohort A": "returned-refusal",
+        "staffCohortA revokes a GLOBAL assignment": "returned-refusal",
+        "staffCohortA revokes an assignment on its own cohort A": "returned-refusal"
+      }
+    }
+  ]
+}

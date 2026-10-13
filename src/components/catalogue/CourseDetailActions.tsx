@@ -14,6 +14,7 @@ import {
   type PublishActionResult,
 } from "@/app/staff/courses/[id]/publish-actions";
 import { PublishDialog, type AffectedCohort } from "./PublishDialog";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * The course detail action bar.
@@ -70,6 +71,7 @@ export function CourseDetailActions({
   affectedCohorts,
 }: CourseDetailActionsProps) {
   const router = useRouter();
+  const toast = useToast();
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -94,6 +96,7 @@ export function CourseDetailActions({
 
   function settle(result: CatalogueActionResult | PublishActionResult, successText: string) {
     if (result.ok) {
+      toast.success(successText);
       setFeedback({ tone: "success", text: successText });
       router.refresh();
       return true;

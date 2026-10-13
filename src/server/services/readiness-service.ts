@@ -52,6 +52,12 @@ export type ReadinessItem = {
 export type ReadinessLessonInput = {
   type: string;
   withdrawnAt: Date | string | null;
+  /**
+   * NFR-09 (plan 15-24): true when the lesson has at least one caption track that
+   * finished its upload checks (READY). Only read for VIDEO lessons. The caller
+   * derives it from stored data; this module stays free of data access.
+   */
+  hasCleanCaptions?: boolean;
 };
 
 export type ReadinessModuleInput = {
@@ -96,6 +102,40 @@ function hasAssessmentLesson(modules: ReadinessModuleInput[]): boolean {
         (lessonRow) => lessonRow.withdrawnAt == null && (lessonRow.type === "QUIZ" || lessonRow.type === "ASSIGNMENT"),
       ),
     );
+}
+
+/**
+ * NFR-09 (plan 15-24, decision option-a): a video lesson with no caption track is
+ * counted so publishers are told, in plain words, how many need captions. This is
+ * a WARNING and never blocks publication; 15-DECISIONS.md records option-a. When a
+ * course has no live video lesson the item is not produced at all.
+ */
+function videoCaptionsItem(modules: ReadinessModuleInput[]): ReadinessItem | null {
+  const videoLessons = modules
+    .filter((moduleRow) => moduleRow.withdrawnAt == null)
+    .flatMap((moduleRow) => moduleRow.lessons)
+    .filter((lessonRow) => lessonRow.withdrawnAt == null && lessonRow.type === "VIDEO");
+  if (videoLessons.length === 0) return null;
+
+  const missing = videoLessons.filter((lessonRow) => lessonRow.hasCleanCaptions !== true).length;
+  if (missing === 0) {
+    return {
+      id: "video-captions",
+      category: "Content",
+      label: "Every video lesson has captions",
+      blocking: false,
+      state: "PASS",
+    };
+  }
+  return {
+    id: "video-captions",
+    category: "Content",
+    label: missing === 1 ? "1 video lesson has no captions." : `${missing} video lessons have no captions.`,
+    blocking: false,
+    state: "WARN",
+    detail:
+      "Add a .vtt caption file on each video lesson so learners who cannot hear the video can follow it. You can still publish without them.",
+  };
 }
 
 /**
@@ -182,6 +222,9 @@ export function evaluateCourseReadiness(course: ReadinessCourseInput): Readiness
     // (05-RESEARCH.md, RESOLVED) and plan 05-03 Task 1. The `assessments`
     // slot stays here — Phase 10 owns it and it is genuinely per-Course.
   ];
+
+  const videoCaptions = videoCaptionsItem(course.modules);
+  if (videoCaptions) items.push(videoCaptions);
 
   // D-31 named gap — only present when the course actually has a QUIZ or
   // ASSIGNMENT lesson; the assessment picker has nothing to choose from yet.
@@ -320,7 +363,14 @@ function toEpoch(value: Date | string): number {
  * is `blocking` only when `enabledRails` says this deployment has turned
  * that rail on, and FAILs when the matching price is null or non-positive.
  * A rail this deployment has not enabled is never blocking, however it is
- * priced — D-08 only requires a price for every ENABLED rail.
+ * priced.
+ *
+ * One price is enough to publish (owner decision 2026-10-03, audit R3-06,
+ * narrowing D-08): a null rail price means "not offered in that currency",
+ * so when another enabled rail IS priced, an unpriced rail is a WARN that
+ * says which currency learners cannot pay in, not a FAIL. A cohort with no
+ * price on any enabled rail still FAILs, and so does a rail priced at zero
+ * or below, which is bad data rather than a rail left out.
  */
 export function evaluateCohortReadiness(cohort: ReadinessCohortInput): ReadinessItem[] {
   const selfPaced = cohort.deliveryMode === "SELF_PACED";
@@ -379,27 +429,35 @@ export function evaluateCohortReadiness(cohort: ReadinessCohortInput): Readiness
 
   // --- Price (D-06/D-08) — per-rail, blocking only for an enabled rail ---
   const ngnPricePass = cohort.priceNgnMinor != null && cohort.priceNgnMinor > 0;
+  const usdPricePass = cohort.priceUsdMinor != null && cohort.priceUsdMinor > 0;
+  // "Not offered" (null) on one enabled rail is acceptable when the other enabled rail is priced.
+  const ngnNotOffered = cohort.priceNgnMinor == null && cohort.enabledRails.usd && usdPricePass;
+  const usdNotOffered = cohort.priceUsdMinor == null && cohort.enabledRails.ngn && ngnPricePass;
+
   const priceNgn: ReadinessItem = {
     id: "price-ngn",
     category: "Price",
     label: "NGN price set (Paystack)",
     blocking: cohort.enabledRails.ngn,
-    state: ngnPricePass ? "PASS" : "FAIL",
+    state: ngnPricePass ? "PASS" : ngnNotOffered ? "WARN" : "FAIL",
     detail: ngnPricePass
       ? `${formatRailAmount(cohort.priceNgnMinor as number, "NGN")} (Paystack)`
-      : "No NGN price set — this rail is unavailable to learners until an administrator adds one.",
+      : ngnNotOffered
+        ? "No NGN price set — learners will not be able to pay in NGN (Paystack). They can still pay in USD."
+        : "No NGN price set — this rail is unavailable to learners until an administrator adds one.",
   };
 
-  const usdPricePass = cohort.priceUsdMinor != null && cohort.priceUsdMinor > 0;
   const priceUsd: ReadinessItem = {
     id: "price-usd",
     category: "Price",
     label: "USD price set (Stripe)",
     blocking: cohort.enabledRails.usd,
-    state: usdPricePass ? "PASS" : "FAIL",
+    state: usdPricePass ? "PASS" : usdNotOffered ? "WARN" : "FAIL",
     detail: usdPricePass
       ? `${formatRailAmount(cohort.priceUsdMinor as number, "USD")} (Stripe)`
-      : "No USD price set — this rail is unavailable to learners until an administrator adds one.",
+      : usdNotOffered
+        ? "No USD price set — learners will not be able to pay in USD (Stripe). They can still pay in NGN."
+        : "No USD price set — this rail is unavailable to learners until an administrator adds one.",
   };
 
   // --- Capacity (D-28) --------------------------------------------------

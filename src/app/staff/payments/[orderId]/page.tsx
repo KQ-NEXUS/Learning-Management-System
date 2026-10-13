@@ -7,6 +7,9 @@ import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { OrderBreakdownCard } from "@/components/checkout/OrderBreakdownCard";
 import { ManualPaymentDialog } from "@/app/staff/payments/ManualPaymentDialog";
 import { RefundDialog } from "@/app/staff/payments/RefundDialog";
+import { SessionEnded } from "@/components/shell/SessionEnded";
+import { humanizeCode } from "@/lib/humanize";
+import { LagosTime } from "@/components/time/LagosTime";
 
 /**
  * The Finance payment detail (PAY-03, PAY-04, PAY-05, PAY-07, PAY-13, PAY-17,
@@ -89,14 +92,6 @@ function money(minor: number | null, currency: string): string {
   }
 }
 
-function formatDate(value: Date | string | null): string {
-  if (!value) return "—";
-  const date = typeof value === "string" ? new Date(value) : value;
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
 export default async function PaymentDetailPage({
   params,
 }: {
@@ -109,7 +104,7 @@ export default async function PaymentDetailPage({
     detail = await getPaymentDetailForStaff(orderId);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // Identical to a missing record — RBAC-06, matching the Cohort/Course
@@ -161,11 +156,11 @@ export default async function PaymentDetailPage({
       badges={
         <>
           <StatusPill
-            label={PAYMENT_STATUS_LABEL[detail.status] ?? detail.status}
+            label={PAYMENT_STATUS_LABEL[detail.status] ?? humanizeCode(detail.status)}
             tone={PAYMENT_STATUS_TONE[detail.status] ?? "neutral"}
           />
           <StatusPill
-            label={SETTLEMENT_LABEL[detail.settlementState] ?? detail.settlementState}
+            label={SETTLEMENT_LABEL[detail.settlementState] ?? humanizeCode(detail.settlementState)}
             tone={SETTLEMENT_TONE[detail.settlementState] ?? "neutral"}
           />
         </>
@@ -258,16 +253,21 @@ export default async function PaymentDetailPage({
                   {detail.existingAttempt ? "This order is already paid" : "This order can’t be confirmed manually"}
                 </p>
                 <p className="max-w-prose text-sm text-foreground-soft">
-                  {detail.existingAttempt
-                    ? `A payment was already recorded for this order on ${formatDate(detail.existingAttempt.confirmedAt ?? null)} via ${PROVIDER_LABEL[detail.existingAttempt.provider ?? ""] ?? "—"}. Check the existing transaction before taking any further action.`
-                    : "It is already paid or under review, and no payment transaction is recorded against it yet."}
+                  {detail.existingAttempt ? (
+                    <>
+                      A payment was already recorded for this order on{" "}
+                      <LagosTime value={detail.existingAttempt.confirmedAt ?? null} variant="date" /> via{" "}
+                      {PROVIDER_LABEL[detail.existingAttempt.provider ?? ""] ?? "—"}. Check the existing transaction
+                      before taking any further action.
+                    </>
+                  ) : "It is already paid or under review, and no payment transaction is recorded against it yet."}
                 </p>
               </div>
               {detail.existingAttempt && (
                 <DetailFacts
                   facts={[
                     { label: "Provider", value: PROVIDER_LABEL[detail.existingAttempt.provider ?? ""] ?? "—" },
-                    { label: "Date", value: formatDate(detail.existingAttempt.confirmedAt ?? null), mono: true },
+                    { label: "Date", value: <LagosTime value={detail.existingAttempt.confirmedAt ?? null} />, mono: true },
                     {
                       label: "Reference",
                       value: detail.existingAttempt.providerRef ?? detail.existingAttempt.providerIntentId ?? "—",
@@ -301,18 +301,20 @@ export default async function PaymentDetailPage({
                   <tbody>
                     {detail.refunds.map((refund) => (
                       <tr key={refund.id} className="border-b border-border">
-                        <td className="py-2 pr-2 font-mono text-sm">{refund.id}</td>
+                        <td className="py-2 pr-2 font-mono text-sm">{refund.providerRef ?? "Not issued yet"}</td>
                         <td className="py-2 pr-2 font-mono tabular-nums">
                           {money(refund.amountMinor, refund.currency)}
                         </td>
                         <td className="py-2 pr-2">
                           <StatusPill
-                            label={REFUND_STATUS_LABEL[refund.status] ?? refund.status}
+                            label={REFUND_STATUS_LABEL[refund.status] ?? humanizeCode(refund.status)}
                             tone={REFUND_STATUS_TONE[refund.status] ?? "neutral"}
                           />
                         </td>
                         <td className="py-2 pr-2 max-w-prose break-words">{refund.actorName ?? "—"}</td>
-                        <td className="py-2 font-mono tabular-nums">{formatDate(refund.createdAt)}</td>
+                        <td className="py-2 font-mono tabular-nums">
+                          <LagosTime value={refund.createdAt} className="font-mono text-[13px] whitespace-nowrap" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>

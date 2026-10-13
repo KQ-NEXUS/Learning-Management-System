@@ -1,4 +1,5 @@
 import { StatusPill } from "@/components/primitives/ResourceTable";
+import { LagosTime } from "@/components/time/LagosTime";
 
 export const TICKET_CATEGORY_OPTIONS = [
   { value: "ACCOUNT_ACCESS", label: "Account access" },
@@ -31,17 +32,7 @@ export function TicketStatusPill({ status }: { status: string }) {
   return <StatusPill label={entry.label} tone={entry.tone} />;
 }
 
-/** Absolute, consistent-locale timestamp with a machine-readable datetime. */
+/** Absolute Lagos-time timestamp ("5 Oct 2026, 14:30 WAT") with a machine-readable datetime (D-17). */
 export function TicketTime({ value }: { value: Date | string }) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  const text = new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(date);
-  return (
-    <time dateTime={date.toISOString()} className="font-mono text-xs text-muted-foreground">
-      {text} UTC
-    </time>
-  );
+  return <LagosTime value={value} className="font-mono text-xs text-muted-foreground" />;
 }

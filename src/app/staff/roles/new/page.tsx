@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { AuthorizationError, AuthenticationError } from "@/server/permissions";
 import { ResourceForm } from "@/components/primitives";
 import { RoleForm, type CloneSource } from "../RoleForm";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "New role" };
 
@@ -25,15 +26,11 @@ export default async function NewRolePage() {
       .map((r) => ({ id: r.id, name: r.name, permissions: r.permissions }));
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       return (
-        <ResourceForm
-          title="New role"
-          state={{ status: "denied", permission: "roles.manage" }}
-          onSubmit={() => {}}
-        >
+        <ResourceForm title="New role" state={{ status: "denied", permission: "roles.manage" }}>
           {null}
         </ResourceForm>
       );

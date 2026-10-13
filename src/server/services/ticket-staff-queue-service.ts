@@ -159,6 +159,152 @@ export function buildQueueView(rows: readonly QueueRow[], params: QueueParams, a
   };
 }
 
+/*
+ * SQL translation of buildQueueView (NFR-02, folded todo 2026-09-25). The
+ * pure buildQueueView above stays the oracle: the differential test
+ * (tests/ticket-staff-queue-sql.integration.test.ts) proves the SQL path
+ * returns the same QueueView for every tab, filter, search and page.
+ */
+const CLOSED_STATUSES: TicketStatusValue[] = ["RESOLVED", "CLOSED"];
+
+function tabWhere(tab: QueueTab, actorId: string, now: Date): Prisma.TicketWhereInput {
+  switch (tab) {
+    case "my-work":
+      return { status: { notIn: CLOSED_STATUSES }, assigneeId: actorId };
+    case "unassigned":
+      return { status: { notIn: CLOSED_STATUSES }, assigneeId: null };
+    case "open":
+      return { status: { notIn: CLOSED_STATUSES } };
+    case "escalated":
+      return { status: "ESCALATED" };
+    case "resolved":
+      return { status: "RESOLVED", resolvedAt: { gte: new Date(now.getTime() - RECENTLY_RESOLVED_MS) } };
+  }
+}
+
+/** Tab plus every filter and the text search, as one parameterised where (T-15-09-02). */
+export function queueWhere(params: QueueParams, actorId: string, now: Date): Prisma.TicketWhereInput {
+  const and: Prisma.TicketWhereInput[] = [tabWhere(params.tab, actorId, now)];
+  if (params.category) and.push({ category: params.category });
+  if (params.priority) and.push({ priority: params.priority });
+  if (params.queue) and.push({ queue: params.queue });
+  if (params.owner) {
+    and.push({
+      assigneeId: params.owner === "me" ? actorId : params.owner === "unassigned" ? null : params.owner,
+    });
+  }
+  if (params.q) {
+    // Prisma passes contains to ILIKE without escaping, so "_" and "%" would
+    // act as wildcards. Escape them (and the escape character itself) so the
+    // search is a literal substring match, as in buildQueueView.
+    const literal = params.q.replace(/[\\%_]/g, (char) => `\\${char}`);
+    const contains = { contains: literal, mode: "insensitive" as const };
+    and.push({
+      OR: [{ reference: contains }, { subject: contains }, { user: { name: contains } }, { user: { email: contains } }],
+    });
+  }
+  return { AND: and };
+}
+
+/**
+ * compareQueueRows in SQL. TicketPriority is declared LOW, NORMAL, HIGH,
+ * URGENT and Postgres orders enum values by declaration, so "desc" gives
+ * URGENT first, matching PRIORITY_RANK. References share one uppercase
+ * format, so byte order equals localeCompare.
+ */
+export const QUEUE_ORDER_BY: Prisma.TicketOrderByWithRelationInput[] = [
+  { priority: "desc" },
+  { updatedAt: "asc" },
+  { reference: "asc" },
+];
+
+const QUEUE_ROW_SELECT = {
+  id: true,
+  reference: true,
+  subject: true,
+  category: true,
+  priority: true,
+  status: true,
+  queue: true,
+  assigneeId: true,
+  updatedAt: true,
+  resolvedAt: true,
+  user: { select: { name: true, email: true } },
+  assignee: { select: { name: true } },
+} satisfies Prisma.TicketSelect;
+
+/** The ticket delegate surface the queue read needs (a spy can stand in for it). */
+export type QueueTicketClient = {
+  ticket: Pick<PrismaClient["ticket"], "findMany" | "count" | "groupBy">;
+};
+
+export async function loadQueueView(client: QueueTicketClient, params: QueueParams, actorId: string, at: Date): Promise<QueueView> {
+  const where = queueWhere(params, actorId, at);
+  const findPage = (page: number) =>
+    client.ticket.findMany({
+      where,
+      orderBy: QUEUE_ORDER_BY,
+      skip: (page - 1) * QUEUE_PAGE_SIZE,
+      take: QUEUE_PAGE_SIZE,
+      select: QUEUE_ROW_SELECT,
+    });
+  const [groups, recentlyResolved, total, firstPage] = await Promise.all([
+    // Bounded: at most statuses x priorities x (assignees + 1) groups.
+    client.ticket.groupBy({ by: ["status", "priority", "assigneeId"], _count: { _all: true } }),
+    client.ticket.count({ where: tabWhere("resolved", actorId, at) }),
+    client.ticket.count({ where }),
+    // Page 1 never needs clamping, so it can run alongside the counts.
+    params.page === 1 ? findPage(1) : Promise.resolve(null),
+  ]);
+  const pageCount = Math.max(1, Math.ceil(total / QUEUE_PAGE_SIZE));
+  const page = Math.min(params.page, pageCount);
+  const records = firstPage ?? (await findPage(page));
+
+  let all = 0;
+  let open = 0;
+  let myWork = 0;
+  let unassigned = 0;
+  let urgent = 0;
+  let escalated = 0;
+  for (const group of groups) {
+    const n = group._count._all;
+    all += n;
+    if (group.status === "ESCALATED") escalated += n;
+    if (CLOSED_STATUSES.includes(group.status as TicketStatusValue)) continue;
+    open += n;
+    if (group.assigneeId === null) unassigned += n;
+    if (group.assigneeId === actorId) myWork += n;
+    if (group.priority === "URGENT") urgent += n;
+  }
+
+  const rows: QueueRow[] = records.map((record) => ({
+    id: record.id,
+    reference: record.reference,
+    subject: record.subject,
+    learnerName: record.user.name,
+    learnerEmail: record.user.email,
+    category: record.category as TicketCategoryValue,
+    priority: record.priority as TicketPriorityValue,
+    status: record.status as TicketStatusValue,
+    queue: record.queue as TicketQueueValue,
+    assigneeId: record.assigneeId,
+    assigneeName: record.assignee?.name ?? null,
+    updatedAt: record.updatedAt,
+    resolvedAt: record.resolvedAt,
+  }));
+
+  return {
+    params: { ...params, page },
+    rows,
+    total,
+    pageCount,
+    tabCounts: { "my-work": myWork, unassigned, open, escalated, resolved: recentlyResolved },
+    health: { open, unassigned, urgent, escalated },
+    hasAnyTickets: all > 0,
+    asOf: at,
+  };
+}
+
 export type TicketAssigneeOption = { id: string; name: string };
 
 type WithPermission = ReturnType<typeof createWithPermission>;
@@ -175,40 +321,10 @@ export function createTicketStaffQueueService(deps: TicketStaffQueueDeps) {
   const now = deps.now ?? (() => new Date());
   const viewTickets = deps.withPermission<void>("tickets.view", () => ({}));
 
-  const getStaffQueue = deps.withPermission<QueueParams>("tickets.view", () => ({}))(async (params, ctx) => {
-    const records = await client.ticket.findMany({
-      select: {
-        id: true,
-        reference: true,
-        subject: true,
-        category: true,
-        priority: true,
-        status: true,
-        queue: true,
-        assigneeId: true,
-        updatedAt: true,
-        resolvedAt: true,
-        user: { select: { name: true, email: true } },
-        assignee: { select: { name: true } },
-      },
-    });
-    const rows: QueueRow[] = records.map((record) => ({
-      id: record.id,
-      reference: record.reference,
-      subject: record.subject,
-      learnerName: record.user.name,
-      learnerEmail: record.user.email,
-      category: record.category as TicketCategoryValue,
-      priority: record.priority as TicketPriorityValue,
-      status: record.status as TicketStatusValue,
-      queue: record.queue as TicketQueueValue,
-      assigneeId: record.assigneeId,
-      assigneeName: record.assignee?.name ?? null,
-      updatedAt: record.updatedAt,
-      resolvedAt: record.resolvedAt,
-    }));
-    return buildQueueView(rows, params, ctx.actor.userId, now());
-  });
+  // One page plus a few counts per load; never the whole ticket table (NFR-02).
+  const getStaffQueue = deps.withPermission<QueueParams>("tickets.view", () => ({}))(async (params, ctx) =>
+    loadQueueView(client, params, ctx.actor.userId, now()),
+  );
 
   /** Active staff whose role currently grants tickets.manage globally. */
   const listTicketAssignees = viewTickets(async (): Promise<TicketAssigneeOption[]> => {

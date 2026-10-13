@@ -1,17 +1,20 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 12 complete (9/9) — ready to discuss Phase 13
-last_updated: 2026-09-25T19:28:27.710Z
-last_activity: 2026-09-25
+current_phase: 15
+current_phase_name: Launch Readiness — NFR Verification & Operational Cutover
+status: executing
+stopped_at: 15-31 Task 1 done (checklist skeleton and guard test, 28 tests pass); stopped at the Task 2 owner checkpoint (names, waiver decisions, manual results)
+last_updated: "2026-10-11T10:04:50.759Z"
+last_activity: 2026-10-06
+last_activity_desc: Phase 15 execution started
+state_head: 9be7af331a431e9c75b34e912ee4c19744d59f00
 progress:
   total_phases: 16
-  completed_phases: 11
-  total_plans: 191
-  completed_plans: 191
-  percent: 69
+  completed_phases: 9
+  total_plans: 259
+  completed_plans: 258
+milestone_name: milestone
 ---
 
 # Project State
@@ -21,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** The complete learner + operator journey (discover → register → verify → pay → learn → attend → submit → grade → complete → download certificate) runs end to end against real seeded data, with every mutation authorized, scoped, and audited.
-**Current focus:** Phase 13 — transactional communications & notifications
+**Current focus:** Phase 15 — Launch Readiness — NFR Verification & Operational Cutover
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-09-25
+Phase: 15 (Launch Readiness — NFR Verification & Operational Cutover) — EXECUTING
+Plan: 22 of 33
+Status: Ready to execute
+Last activity: 2026-10-06 — Phase 15 execution started
 
 Progress: [██████████] 99%
 
@@ -99,6 +102,70 @@ Progress: [██████████] 99%
 | Phase 12 P02 | 1h 20min | 3 tasks | 9 files |
 | Phase 12 P03 | 25min | 3 tasks | 9 files |
 | Phase 12 P07 | 2h | 3 tasks | 22 files |
+| Phase 13 P01 | 20 min | 3 tasks | 6 files |
+| Phase 13 P02 | 25 min | 3 tasks | 17 files |
+| Phase 13 P03 | 45min | 3 tasks | 12 files |
+| Phase 13 P04 | 55min | 3 tasks | 13 files |
+| Phase 13 P05 | ~90min | 3 tasks | 12 files |
+| Phase 13 P06 | ~70min | 3 tasks | 13 files |
+| Phase 13 P07 | 95min | 3 tasks | 12 files |
+| Phase 13 P08 | 30min | 3 tasks | 14 files |
+| Phase 13 P12 | 50min | 2 tasks | 11 files |
+| Phase 13 P09 | 70min | 3 tasks | 4 files |
+| Phase 13 P10 | 50min | 3 tasks | 7 files |
+| Phase 13 P11 | 75min | 3 tasks | 11 files |
+| Phase 13 P13 | 2h30m | 3 tasks | 5 files |
+| Phase 14 P01 | 20min | 3 tasks | 2 files |
+| Phase 14 P02 | 35min | 3 tasks | 21 files |
+| Phase 14 P03 | ~30min | 1 tasks | 4 files |
+| Phase 14 P04 | 15min | 2 tasks | 5 files |
+| Phase 14 P05 | 25min | 2 tasks | 6 files |
+| Phase 14 P06 | 25min | 3 tasks | 6 files |
+| Phase 14 P07 | 35min | 3 tasks | 4 files |
+| Phase 14 P08 | ~12min | 2 tasks | 13 files |
+| Phase 14 P09 | 40min | 3 tasks | 4 files |
+| Phase 14 P10 | 40min | 3 tasks | 13 files |
+| Phase 14 P11 | 25min | 2 tasks | 7 files |
+| Phase 14 P12 | 30min | 2 tasks | 11 files |
+| Phase 14 P13 | 45min | 3 tasks | 5 files |
+| Phase 14 P14 | 40min | 3 tasks | 6 files |
+| Phase 14 P15 | 45min | 3 tasks | 13 files |
+| Phase 14 P16 | 25min | 3 tasks | 9 files |
+| Phase 14 P17 | 45min | 2 tasks | 6 files |
+| Phase 14 P18 | 35min | 3 tasks | 24 files |
+| Phase 14 P19 | 30min | 3 tasks | 31 files |
+| Phase 14 P20 | 35min | 3 tasks | 14 files |
+| Phase 14 P21 | 95min | 3 tasks | 3 files |
+| Phase 15 P01 | 3 min | 3 tasks | 1 files |
+| Phase 15 P07 | 36 min | 2 tasks | 7 files |
+| Phase 15 P02 | 1h 36m | 3 tasks | 8 files |
+| Phase 15 P03 | 30 min | 3 tasks | 16 files |
+| Phase 15 P06 | 12 min | 2 tasks | 6 files |
+| Phase 15 P08 | 13 min | 2 tasks | 8 files |
+| Phase 15 P09 | 76 min | 3 tasks | 12 files |
+| Phase 15 P04 | 86 min | 3 tasks | 6 files |
+| Phase 15 P05 | 35min | 2 tasks | 15 files |
+| Phase 15 P11 | 50min | 3 tasks | 11 files |
+| Phase 15 P12 | 95min | 3 tasks | 8 files |
+| Phase 15 P15 | 60min | 3 tasks | 12 files |
+| Phase 15 P10 | 25min | 2 tasks | 12 files |
+| Phase 15 P13 | 90min | 3 tasks | 12 files |
+| Phase 15 P16 | 100 min | 3 tasks | 15 files |
+| Phase 15 P17 | 190min | 3 tasks | 12 files |
+| Phase 15 P32 | ~25min | 2 tasks | 14 files |
+| Phase 15 P21 | about 2 h | 2 tasks | 10 files |
+| Phase 15 P33 | resumed | 3 tasks | 13 files |
+| Phase 15 P18 | not timed | 2 tasks | 17 files |
+| Phase 15 P22 | 55 min | 3 tasks | 16 files |
+| Phase 15 P24 | resumed session | 2 tasks | 15 files |
+| Phase 15 P19 | 3h | 3 tasks | 15 files |
+| Phase 15 P20 | 2h20m | 3 tasks | 9 files |
+| Phase 15 P26 | 75min | 3 tasks | 11 files |
+| Phase 15 P27 | 35min | 3 tasks | 7 files |
+| Phase 15 P28 | about 9h wall (two executors, long waits on 13-minute load runs and 30-minute sweeps) | 3 tasks | 20 files |
+| Phase 15 P29 | 60min | 3 tasks | 5 files |
+| Phase 15 P30 | 195min | 3 tasks | 12 files |
+| Phase 15 P31 | 25 min (Task 1 only) | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -204,6 +271,106 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions affe
 - [Phase 11-30]: CR-01b/WR-01: two-phase issuance. issueCertificateForEnrolment is database-only (row with storageKey null, COMPLETED, audit, event) and registers the certificate id against the tx object; certificate-file-service.ts renders from the row snapshot and stores after commit (compare-and-set on storageKey null and status ACTIVE), never throws, settle bounded at 6 s, ensureCertificateFile produces the file on demand. Layout parsing moved to the post-commit step; IssueCertificateDeps is now {generateRef, audit, writeEvent}. Until plan 11-31 wires runTransactionThenSettleCertificateFiles at the lesson-progress/attendance roots and the download route, new certificates have no file (degraded but consistent). The roots must pass the SAME tx object to issuance (registry keys on identity).
 - [Phase 12]: 12-03: attachment auth via service (owner+PUBLIC or staff perms), single NotFound for all denials; cleanup bounded per kind
 - [Phase 12]: 12-07: QUEUE_CHANGED event added so queue moves are attributed chronology; claimTicket requires reassignment reason when taking another owner's ticket; eligible owners are active staff with a GLOBAL tickets.manage role
+- [Phase 13]: 13-01: DOMAIN_EVENT_TYPE_LIST derived from Record<DomainEventType,true> for compile-time exhaustiveness; EmailDispatch status kept String with SQL CHECK
+- [Phase 13]: Email identity (sender, brand, Reply-To, base URL, transport) resolved only in src/server/email/config.ts; no defaults, fail loud — COM-04/D-14: unconfigured deployment must not send as an unapproved identity
+- [Phase 13]: TEMPLATE_REGISTRY is a total Record over TEMPLATE_IDS across auth, learner and staff modules — A missing template is a compile error; params are allow-listed so payload spreads cannot leak
+- [Phase 13]: 13-03: notification-service.ts unreadCount/list/markRead/markAllRead all scope every query and update by recipientId=actor.userId; markRead separates an ownership read from a conditional readAt:null write so an owned-but-already-read row still returns true; renderNotificationText is a total Record<NotificationType, ...> over all 27 types (Claude's Discretion); email-preference-service validates the requested category set before opening the transaction so an always-sent/unknown category writes nothing
+- [Phase 13]: Kept DispatchParams.template as a plain string and correlationId/htmlContent optional until Plan 08 removes the legacy checkout-webhook caller
+- [Phase 13]: sendAuthEmail is the sole place path/token/ttl become an absolute url and correlation key; no auth service reads process.env directly
+- [Phase 13]: resend permission enforcement stays out of email-dispatch-service; it belongs to Plan 12's delivery-log service
+- [Phase 13]: 13-05: LEARNER_TICKET resolver queries prisma.ticket directly (mirroring findOwnByReference) rather than calling getOwnTicketByReference, which self-resolves its actor from the session; STAFF_TICKET/STAFF_PAYMENT/STAFF_SUBMISSION resolvers instead reuse the live withPermission-wrapped page functions directly (getStaffTicketWorkspace/getPaymentDetailForStaff/getGradingDetail), letting a thrown denial propagate since resolveOpen's own catch treats any resolver rejection as denied
+- [Phase 13]: 13-05: archiveReadOlderThan selects a bounded id subset then updates only that subset in one statement (no long-lock unbounded UPDATE); the STAFF_PAYMENT integration test builds a testDb.prisma-bound getPaymentDetailForStaff via createPaymentReadService+createCohortScopeResolvers+createTestWithPermission rather than createPrismaBackedPaymentReadService, whose orderScope is hardcoded to the app's own live prisma import
+- [Phase 13]: 13-06: NotificationDrawer owns the back-arrow+title header swap itself (not an EmailPreferencesPanel onBack prop); item activation decrements the bell count on both ok-href and unavailable outcomes (not just ok-href); mark-all-read failure copy authored in UI-SPEC tone
+- [Phase 13]: 13-06: fixed a real react-hooks/set-state-in-effect + react-hooks/purity lint break (async-function-in-effect, inline Date.now() in render) using the .then/.catch-in-effect and requestAnimationFrame-deferred-state patterns already established by UploadPanel.tsx and StaffShell.tsx
+- [Phase 13]: 13-07: outbox drain claims one DomainEvent per own transaction with FOR UPDATE SKIP LOCKED, fans out EmailDispatch/Notification via createMany skipDuplicates, gates via decideEmailDisposition, and poison-bookkeeps failed attempts in a separate transaction after the event's own rolls back
+- [Phase 13]: 13-08: One shared enrolment-payment mapper group emits enrolment-confirmed (activated/approved), order-payment-exception (illegal_transition only), payment-failed and payment-refunded; checkout webhook and refund-service no longer send email directly, and DispatchParams now requires correlationId/htmlContent with template narrowed to TemplateId (no random-key fallback).
+- [Phase 13]: 13-12: permission-gated email delivery log (audit.view list / users.manage resend) never exposes templateParams; a too-short reason and an ineligible row both throw the same ResendNotAllowedError; plans 09-11 remain unexecuted so state.advance-plan was deliberately skipped (would falsely advance past unexecuted plan 9).
+- [Phase 13]: 13-09: enrolment.withdrawn/enrolment.cancelled share one mapper (enrolmentStatusChangeMail) extended in-place with a bidirectional cohort-cancellation precedence check (60s window on cohortId/actorId/reason, queried both directions via parameterised Prisma.sql over the DomainEvent JSONB payload) so either the per-enrolment or the cohort.cancelled event can be drained first with the same outcome; session.updated coalescing is framed as 'does a newer still-unprocessed event exist' rather than a separate latest-event pointer, composing correctly with the drain's own oldest-first claim order.
+- [Phase 13]: 13-10: shared gradeResultMail mapper for grade.released/grade.overridden (loads Enrolment.userId and Assessment.title only, never score/maxScore/passed/previousScore/newScore/passedChanged); certificate.issued/revoked/reissued each resolve the holder from the Certificate row's own userId (never a payload field, T-13-42), certificate.reissued from the NEW certificate row; support.ts extended with ticket.created/resolved/closed (requester from payload) and ticket.reopened (requester+reference from the Ticket row since payload ownerId/assignee may be null, A-04).
+- [Phase 13]: 13-11: resolveStaffHolders — one parameterised SQL query over User/Assignment/Role reproducing grantMatches/isGrantActive/hasPermission exactly (optional COHORT/PROGRAMME/COURSE scope branches omitted, not wildcarded, when the caller's ResourceScope field is undefined); parity-tested against the real authorization core across the full grant matrix on real Postgres.
+- [Phase 13]: 13-11: order.exception is now mapped by both the enrolment-payment group (learner mail, illegal_transition only) and the new staff group (every reason, cohort-scoped payments.view holders) — fanning out to both mappers is intentional; the coded reason is rendered through a fixed allow-list (ORDER_EXCEPTION_REASON_LABELS), never the raw code, to a generic 'Payment needs review' fallback for anything unmapped.
+- [Phase 13]: 13-11: email-failure-alert-service.ts never writes EmailDispatch and never throws (own try/catch, belt-and-suspenders with the drain's existing onEmailFailed try/catch) — resolves global audit.view holders and creates one staff.email_failed notification per holder (params limited to template + 8-char dispatchRef) via createMany skipDuplicates.
+- [Phase 13]: 13-13: permission catalogue invariant asserts 37 (not the plan's literal 36) — Phase 11's certificates.manage already made 37 the correct, live count per tests/permissions.test.ts
+- [Phase 13]: 13-13: two stale mapper-registration assertions (event-intent-mappers.test.ts payment.failed, event-mappers-support.test.ts ticket.created) are pre-existing Plan 08/10 debt, confirmed isolated from 13-13's new files, logged to deferred-items.md and WINDOWS.md rather than fixed (out of file scope)
+- [Phase 13]: 13-13: acceptance test criterion 1 uses the real sendTransactionalEmail with only the Brevo SDK client mocked (real payload construction); criteria 2/3 use a plain injected send stub, matching tests/domain-event-drain.integration.test.ts's existing convention
+- [Phase 14]: Phase 14 D-02 contract approved as written (option-a): compact LMS-LIC1 Ed25519 envelope, schema v1
+- [Phase 14]: Phase 14 OQ1 (option-a): deployment fully operational until first activation, then permanent enforcement; policy constant NEVER_ACTIVATED_POLICY
+- [Phase 14]: [Phase 14 P02] encodeLicenceEnvelope accepts the signature as bytes or a function of the signed input (signature depends on the encoded parts); unrecognised integer payload schemaVersion is reported UNSUPPORTED_SCHEMA before the v1 shape is enforced; malformed shipped trust key throws LicenceUnavailableError
+- [Phase 14]: [Phase 14 P03] dbgenerated deployment UUID default is spelled (gen_random_uuid())::text in schema and migration to avoid permanent migrate-diff drift; licence singletons (DeploymentIdentity 'deployment', LicenceState 'current') are CHECK-pinned and seeded inside the migration
+- [Phase 14]: [Phase 14 P03] Task 2 (migrate deploy/db push/migrate status) left as an outstanding human step: project .env targets a remote shared Neon DB; Testcontainers proof plus empty migrate diff stand in
+- [Phase 14]: [Phase 14-04] OQ1 option-a implemented as NEVER_ACTIVATED_POLICY (unrestricted until first activation, then permanent enforcement via everActivated); never-activated deployments stay UNLICENSED even when the licence store is unreadable
+- [Phase 14]: [Phase 14-04] createClockMonitor compares each sample with the previous one so a single backward clock step is reported once
+- [Phase 14]: [Phase 14-05] Grace is computed by the issuer as expiresAt + graceDays x 24h UTC (default 14, whole days); the LMS never adds grace
+- [Phase 14]: [Phase 14-05] assertOutsideRepo resolves real paths so symlinks and Windows short names cannot place the signing key inside the repository; keygen and issue refuse to overwrite existing files
+- [Phase 14]: 14-06: display.ts pins month abbreviations and WAT/SAST/EAT zone abbreviations because ICU en-GB prints GMT+1 and Sept; other zones use Intl en-GB short names
+- [Phase 14]: 14-06: forbidden-words guard permits only the verbatim UI-SPEC UNKNOWN_KEY sentence containing 'signing key' (spec bans key values, not the phrase)
+- [Phase 14]: 14-06: notice closed set also accepts invalid-RECORD_MISSING and invalid-VALIDATION_WINDOW_EXHAUSTED (emitted by deriveState)
+- [Phase 14]: 14-07: CONCURRENT_CHANGE rolls back by throwing a sentinel out of the activation transaction (returning normally would commit the record insert without the state update)
+- [Phase 14]: 14-07: computeDerived rejects a stored record whose signed licenceId differs from its licenceId column as BAD_SIGNATURE (blocks SQL swap to another validly signed file)
+- [Phase 14]: 14-08: writeDomainEventOnce (createMany skipDuplicates, deterministic id) is the licence notice dedupe; no new table (D-15, LIC-07)
+- [Phase 14]: 14-08: staff-licence-notice sample omits the word deployment; real noticeCopy emailDetail prose (no deployment ID) unchanged
+- [Phase 14]: [Phase 14-09]: evaluateAndRecord returns due noticeKeys on every call (expiring buckets move without a state change; notice writer dedupes on deterministic event ids)
+- [Phase 14]: [Phase 14-09]: a lost version-guarded licence write retries up to 3 times and skips touch-only writes after a loss, so transitions are not lost and parallel callers still produce one audit row and one version bump
+- [Phase 14]: [Phase 14-09]: attentionSince is kept while verification is UNAVAILABLE in every derived state so INVALID(VALIDATION_WINDOW_EXHAUSTED) cannot flap into a fresh 24-hour window; cleared on verification success or rejection
+- [Phase 14]: [14-10] View model re-derives clock-based licence states from the injected now with deriveState; non-clock states (not activated, invalid, check pending) come from the snapshot
+- [Phase 14]: [14-10] What is blocked list follows the restriction flag (isRestricted), not the state name, so Check pending keeps the last-known restriction visible
+- [Phase 14]: [14-10] Deployment ID Copy button from the UI-SPEC added as client component CopyButton.tsx (not in the plan file list)
+- [Phase 14]: 14-11: licence guard runs strictly after authorization in withPermission; LicenceRestrictedError extends AuthorizationError with fixed LICENCE_REFUSAL_MESSAGE; guard skipped when no licence dependency configured
+- [Phase 14]: [Phase 14-12]: Registration licence guard runs after validation and before password hashing and any store call, returning one frozen REGISTRATION_UNAVAILABLE for every email (IAM-06); only LicenceWriteBlockedError is mapped
+- [Phase 14]: [Phase 14-13]: D-08 initiated-before rule is strictly greater-than: an anchor at restrictedAt plus 10 minutes settles normally, plus 1 ms becomes the payment_after_restriction exception (money recorded SUCCEEDED, Order EXCEPTION, no enrolment or seat change, CAPTURED_MONEY case); webhook anchor is PaymentAttempt.initiatedAt, manual anchor is Order.createdAt (OQ4/A13); cutoff read fails open
+- [Phase 14]: 14-14: licence notices reach only active staff with a Global licence.view grant; every notice notifies and every notice except expiring-60 also emails; unknown/missing noticeKey is poisoned (MalformedEventError), never notified; prismaCreateManyClient adapts Prisma to the structural once-only writer
+- [Phase 14]: 14-15: OQ3 adopted default stays visible: seeded Administrator role keeps licence.activate (prisma/seed.ts [...PERMISSIONS]), deviating from PRD 18.4; activation and inspection are declared continuity so recovery works in restricted mode
+- [Phase 14]: 14-15: diagnostic download fails closed (500) if the licence.diagnostic_downloaded audit write fails, per LIC-06 no download without evidence
+- [Phase 14]: 14-16: Scheduled licence check task rejects on evaluation failure (visible failed Netlify run); only the startup path swallows errors and is bounded to 3000 ms
+- [Phase 14]: 14-16: Startup and scheduled logs carry state code, counts and (startup error) error name only; hosting note documents that Docker Compose ships no scheduler (OQ5/A3), cadence hourly UTC (A4)
+- [Phase 14]: [Phase 14 P17] Exact-three snapshot counts effective continuity exceptions; two licence.activate restatements in licence-staff-service are a separately hard-coded reviewed pair
+- [Phase 14]: [Phase 14 P17] Boundary scan resolves options passed by same-file const and fails on unresolvable options; course-service and learner-quiz-service not registered (no own writes/permission calls; file absent)
+- [Phase 14]: [Phase 14-18]: licence-kind files src/app/staff/licence/actions.ts and src/app/api/staff/licence/diagnostic/route.ts classified CONTINUITY in the action-refusal gate (licence.activate is continuity); plan inventory of 12 predates them
+- [Phase 14]: [Phase 14-18]: blocked actions wrap only the message value with refusalMessage(error, existingText); lesson-resource routes answer LicenceRestrictedError with 403 { error: LICENCE_REFUSAL_MESSAGE } before the unchanged 404
+- [Phase 14]: 14-19: licence activation ConfirmModal marked continuity (plan list omitted it; default write would lock out the recovery action); CONTINUITY_MODAL_FILES has 10 files
+- [Phase 14]: 14-19: restriction context stateLabel is null for staff without licence.view (no licence detail in the browser payload); licence refusal field errors render as a warning note, never the danger summary
+- [Phase 14]: 14-19: ManualPaymentDialog and RefundDialog are bespoke dialogs (no ConfirmModal) so the UI mirror never disables them; ConfirmModal and ResourceForm import policy.ts which pulls zod into client bundles (flagged for owner review)
+- [Phase 14]: 14-20: wording check pattern requires a hyphen or space separator and word boundaries; PRD and PXR edits are local-only (docs/reference gitignored), recorded in 14-PRD-AMENDMENT.md; 13 registry reason literals reworded so policy.ts is the only phrase literal
+- [Phase 14]: [Phase 14 P21]: No production code changed; no end-to-end test exposed a defect in plans 14-01 to 14-20
+- [Phase 14]: [Phase 14 P21]: No-deletion scan exempts a delete call on a same-file new Map or Set receiver (licence-service.ts enforcementAudited.delete is the in-memory coalescing map); prisma delete, deleteMany, DELETE FROM and TRUNCATE still count
+- [Phase 14]: [Phase 14 P21]: OQ3 proof uses grants equal to the full PERMISSIONS spread and demonstrates licence.activate recovers a restricted deployment; PRD 18.4 deviation stays documented in 14-DECISIONS.md
+- [Phase 15]: 15-01: NFR-09 owner chose option-a, build narrow WebVTT caption tracks (plans 15-23/15-24 execute, no waiver)
+- [Phase 15]: 15-01: privacy tool owner chose option-a, new Global-only permission privacy.manage; conservative retention keep-list; hard deletion stays blocked
+- [Phase 15]: 15-07: integrity checks treat PAID, PARTIALLY_REFUNDED and REFUNDED as paid, and ACTIVE or COMPLETED as live enrolments; seed certificates now carry a completion record
+- [Phase 15]: 15-07: every Phase 15 database script runs assertSafeDatabaseUrl (or assert-local-db.ts) before importing Prisma; staging needs STAGING_DATABASE_HOSTS plus ALLOW_STAGING_DATABASE=1
+- [Phase 15]: 15-02: next and eslint-config-next exact-pinned at 16.3.8; prod audit gate (npm audit --omit=dev --audit-level=high) green; sharp 0.35.5 and source-map-js 1.2.2 fixed in range, nothing waived
+- [Phase 15]: 15-02: CI pins actions/checkout v7.0.1 and actions/setup-node v7.0.0 by SHA; static job runs next typegen before tsc; Dependabot ignores every exact pin (guarded by tests/ci-config.test.ts)
+- [Phase 15]: 15-03: a limiter failure falls back to each entry point's existing failure state (neutral sent / generic refusal / not-created), and an audit-write failure never lifts a refusal
+- [Phase 15]: 15-06: /api/health returns a fixed ok/degraded body with no-store and no route segment config; onRequestError logs route template, route type, method, error name and digest only
+- [Phase 15]: [Phase 15/15-08] Client mutation catch blocks call unstable_rethrow(error) first (ArrangeClient, ProgrammeArrangeClient, LessonEditorClient, ModuleComposer); handleRestore uses an in-client ref guard because ArrangeBoard's Restore button is a shared component outside this plan
+- [Phase 15]: 15-09: staff support queue filters, orders, counts (groupBy + count) and pages in SQL; buildQueueView kept as the differential-test oracle; Prisma contains search escapes \, % and _
+- [Phase 15]: 15-09: getCurrentActor and loadGrantsForUser wrapped with React cache() (request-scoped only; no module-level or unstable_cache caching)
+- [Phase 15]: 15-09: listPaymentsForStaff pages 50 (max 100) newest-first then id with a total from the same scoped where; PaymentsTable client filters now cover the current page only (deferred)
+- [Phase 15]: 15-04: auth audit writes (sign-in/out) are best-effort, logged by error name only, never change the sign-in result
+- [Phase 15]: 15-04: auth.sign_out is audited only when the call actually revoked a session
+- [Phase 15]: 15-05: Lagos formatter uses a fixed month table (ICU en-GB prints 'Sept' on Node 24) and numeric formatToParts with a literal ' WAT'; central functions return '—' for invalid input
+- [Phase 15]: 15-05: formatTimestamp is now minutes precision; seconds only via formatTimestampWithSeconds / LagosTime dateTimeSeconds (audit)
+- [Phase 15]: 15-11: restore rehearsal RTO = integrity pass minus start; target is always a fresh container on its own port, licence_test and the source refused on top of the host guard
+- [Phase 15]: 15-11: poisoned-event replay documented as an owner-approved single-row SQL reset guarded to poisoned rows only, recorded in the incident record
+- [Phase 15]: 15-12: applyVerdict wraps the open CompletionRecord insert in a SAVEPOINT so a P2002 from CompletionRecord_open_key means 'already completed' without aborting the caller's transaction
+- [Phase 15]: 15-12: Grade_submissionId_key and CompletionRecord_open_key are partial unique indexes kept only in migration 20261006120000 (Prisma cannot express them); never db push, strip any generated DROP INDEX
+- [Phase 15]: 15-16: privacy.manage (Global only, licence write) gates learner anonymisation; lost race is AnonymiseConflictError, all other refusals one generic error
+- [Phase 15]: 15-16: Phase 13 no-delete and 37-permission invariants updated with one reviewed exception for privacy-anonymise-service (notification, emailPreference)
+- [Phase 15]: 15-22: privacy-read-service carries a fifth reviewed licence continuity override (LIC-08) so the lookup and record pages stay reachable in restricted mode — privacy.manage is a licence write because it also guards anonymisation; without the override both reads would refuse in restricted mode and the continuity export could not be reached. Pinned in registry CONTINUITY_TAG_SNAPSHOT and tests/licence-enforcement-boundary.test.ts.
+- [Phase 15]: 15-24: NFR-09 missing-captions readiness item is a non-blocking warning (option-a); READY counts as clean; caption removal shares UploadPanel's single confirm dialog
+- [Phase 15]: 15-19: the accessibility sweep enables axe's landmark rules beside the five WCAG tags, runs against its own throwaway database, and the manifest has one entry per page with no exclusions — Landmark rules carry no WCAG tag; the operations All clear state needs a controllable database; token pages are swept in their invalid-link state
+- [Phase 15]: 15-20: scroll check rejects hidden overflow; tab strips (record sections, support queue, list filters) are allow-listed as kind tabs; ResourceTable search box shrinks and table box is a labelled focusable region
+- [Phase 15]: 15-26: restoring a record that is not archived, publishing an archived record, cancelling a cancelled session and writing to a closed ticket are refused on the server (found by the record-state matrix); grant end instant is inclusive (isGrantActive: ended only when endsAt < now)
+- [Phase 15]: 15-27: attendance exceptions CSV route denies with an empty 404 and private, no-store (ledger P-07); export object keys stay exports/<jobId>/<version>.csv (cuid job id, not UUID v4) pending owner decision
+- [Phase 15]: 15-28: local rehearsal runs use Prisma connection_limit=25 and next start --keepAliveTimeout 70000; default pool of 9 timed out at 160 users; staging pool tuning stays P-10 in plan 15-30. Local numbers are relative, not the signed NFR-02.
+- [Phase 15]: 15-29: schema-only staging branch baselined (18 migrations resolved as applied, 12 deployed) rather than dropped; staging branch expiration left for the owner to remove
+- [Phase 15]: 15-29: Neon point-in-time restore to a new branch rehearsed on staging (RPO 300 s, RTO 37 s to checked data, 8 of 8 row counts equal, 7 of 7 integrity checks passed, rehearsal branch deleted); staging branch expiration removed with the owner's authorisation; RPO 24h still needs a paid Neon plan or a daily external dump
+- [Phase 15]: 15-30: staging pilot (15 learners, 1 staff) passed k6 and probe; after() proven on Netlify; staging journey blocked at upload by storage CORS for the preview origin, not worked around
+- [Phase 15]: 15-30: the staging journey counts as passed only for a real, un-routed browser upload with the diagnostic off (eighth attempt, learner 144, 2026-10-11 09:27 to 09:30 UTC)
+- [Phase 15]: 15-30: uploads on the deploy preview failed because S3_ACCESS_KEY_ID was empty there (Netlify setting), not because of CORS or the checksum; fixed by the owner's saved keys and a new deploy, no code change
+- [Phase 15]: 15-30: marked complete with open items for 15-31: lesson view browser number under load (Task 3 check exits 1), D-08 manual journey by a person, owner usage checks, Production storage keys unverified
+- [Phase 15]: [Phase 15-31]: The launch checklist's Neon migration list holds 12 folders from 20260927015627_communications_notifications onward (not the 7 after video_watch_pacing), because the staging schema copied from production lacked the five 20260927 migrations too; tests/launch-checklist.test.ts guards that range against prisma/migrations
+- [Phase 15]: [Phase 15-31]: Findings touching payment, authorization, private files or security are owner items (fix or decide the rule) in checklist group G, never waiver candidates; the guard refuses those categories in both waiver tables (D-07)
 
 ### Pending Todos
 
@@ -233,13 +400,15 @@ Carried forward from `.planning/codebase/CONCERNS.md` (full detail there) — re
 - [Phase 11 P15, informational] tests/boundary.test.ts's importersOf-based closure/importer-scan tests (checkout-webhook-system-service.ts closure, pdf-lib single-importer check) intermittently exceed the default 5000ms Vitest timeout in this sandbox when run alongside the full suite or in isolation -- a different sub-test times out each run, consistent with a slow full-src-tree scan under this sandbox's I/O, not a regression from plan 11-15's changes (unrelated files). Not fixed here (out of this plan's scope); worth a longer per-test timeout if it recurs.
 - [Tooling, Phase 11 P15] Same gap as the Phase 11 P05 entry above recurred: after state.advance-plan (15->16 of 16), the frontmatter's percent field was still stuck at 56 even though state.update-progress reported percent:99 (151/152) -- hand-corrected in STATE.md's frontmatter this session, same as before.
 
-- [Phase 11/11-16 walkthrough, OPEN]: Browser walkthrough (2026-09-19) found 6 gaps, none fixed. BLOCKER CRD-03: learner dashboard lists only ACTIVE enrolments (learner-access.ts listOwnActiveEnrolments) but issuance sets COMPLETED, so the certificate download slot vanishes when a certificate is ACTIVE. MAJOR CRD-03: certificate-pdf-renderer.ts passes top-origin y straight to pdf-lib (bottom-origin), so PDFs are vertically mirrored vs the editor, and images stretch. MAJOR: no Course edit page (CourseForm is create-only) so issuance mode/template cannot be changed on existing courses. Also: native image drag glitch on the editor canvas, bare /verify is the email-verification page, stale dashboard copy. Reopen CRD-03; CRD-02 has no browser evidence. Do not mark Phase 11 Complete until closed.
+- [Phase 11/11-16 walkthrough, OPEN]: Browser walkthrough (2026-09-19) found 6 gaps, fixed. BLOCKER CRD-03: learner dashboard lists only ACTIVE enrolments (learner-access.ts listOwnActiveEnrolments) but issuance sets COMPLETED, so the certificate download slot vanishes when a certificate is ACTIVE. MAJOR CRD-03: certificate-pdf-renderer.ts passes top-origin y straight to pdf-lib (bottom-origin), so PDFs are vertically mirrored vs the editor, and images stretch. MAJOR: no Course edit page (CourseForm is create-only) so issuance mode/template cannot be changed on existing courses. Also: native image drag glitch on the editor canvas, bare /verify is the email-verification page, stale dashboard copy. Reopen CRD-03; CRD-02 has no browser evidence. Do not mark Phase 11 Complete until closed.
 
 - [Phase 11 gap closure done, verification OPEN]: Plans 11-17..11-24 executed and 8 UAT gaps re-verified in a browser (see 11-UAT.md). Full suite 3000/3001 pass; the 1 failure (Phase 10 submission-service.integration) is a 5s timeout under load and passes alone. NOT complete: (1) code review 11-REVIEW.md has 6 critical + 10 warning findings, CR-01 empirically confirmed (PDF renderer throws for non-WinAnsi names such as Yoruba ọ/ṣ/ẹ, inside the lesson-progress/attendance transaction, so the learner write rolls back); (2) new gap: deriveCertificateColumn hides the certificate slot when completion is superseded but a flagged certificate exists. gsd-verifier was NOT run. Certificates issued before 11-19 keep mirrored PDFs. Next: second gap-closure pass from 11-REVIEW.md, then verify.
 
 - [Phase 11/11-32]: Real-infrastructure proof executed (Testcontainers Postgres + live MinIO at localhost:9002): tests/certificate-unicode-file.integration.test.ts (12/12) and tests/certificate-lifecycle-guards.integration.test.ts (12/12), plus enrolment-live-index (10), certificate-concurrency (2) and certificate-download (5), all green; no source change. A temporary neutralisation of reissue's supersede-all-REVOKED step failed only the legacy two-REVOKED test, then was restored. Evidence PDFs for the 11-33 visual check (untracked, synthetic names): .planning/phases/11-certificates-completion-lifecycle/11-32-evidence/{yoruba,polish,cjk}-certificate.pdf. Phase 11 stays In Progress until 11-33.
 
 - [Phase 11 second gap pass, plan 11-33 visual check]: The human visual check caught a real defect the automated tests missed: the 11-29 renderer embedded a SUBSET of the certificate font, and fontkit's subsetter dropped glyph outlines, so most letters drew blank in Chrome and pdf.js while ToUnicode text extraction still passed. Fixed by embedding the whole font (about 316 KB per certificate) with outline-asserting tests (commit after 44a87d2, see 11-29-SUMMARY.md). Regenerated Yoruba/Polish/CJK evidence PDFs look correct. Follow-up: trim the font to Latin-only to shrink the files. Still open: plan 11-33 (human sign-off on the PDFs, and applying or deferring the CR-06 migration on Neon).
+- 13-11's own files (7 commits) were committed per the standard GSD executor workflow per explicit instruction for this run, overriding Plans 07-10/12's commit_policy_override convention (no commits, project owner must explicitly ask). ~90 other pre-existing uncommitted files from Plans 01-10/12 remain exactly as found -- the project owner should review that working-tree diff and explicitly request commits for those plans separately.
+- [Phase 13, 13-13]: Phase 13 code/tests are complete (13/13 plans, all requirements COM-01..04 checked off) but full npm test has 7 failed files / 24 failed tests, all pre-existing and unrelated to 13-13 (2 stale mapper-count assertions from Plans 08/10, 11 MinIO-not-running failures, 2 apparent resource-contention timeouts) — see deferred-items.md. D-24 live Brevo check still needs a human with real credentials. Not yet run: gsd-verify-work / phase sign-off.
 
 ### Quick Tasks Completed
 
@@ -257,6 +426,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-25T13:04:05.705Z
-Stopped at: Phase 12 UI-SPEC approved
-Resume file: None
+Last session: 2026-10-11T10:04:29.901Z
+Stopped at: 15-31 Task 1 done (checklist skeleton and guard test, 28 tests pass); stopped at the Task 2 owner checkpoint (names, waiver decisions, manual results)
+Resume file: .planning/phases/15-launch-readiness-nfr-verification-operational-cutover/15-31-PLAN.md

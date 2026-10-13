@@ -31,6 +31,10 @@ vi.mock("@aws-sdk/client-s3", async (importOriginal) => {
 
 process.env.S3_BUCKET = "lms-private";
 process.env.S3_PUBLIC_ENDPOINT = "";
+// Placeholders: the storage client refuses to be built without a key and a
+// secret (G-02). The SDK is mocked here, so nothing is signed or sent.
+process.env.S3_ACCESS_KEY_ID = "test-access-key";
+process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
 
 const {
   buildStagedStorageKey,

@@ -110,6 +110,20 @@ function enrolmentTransitionsClosure(): string[] {
   return runtimeClosureFrom(entrypoints);
 }
 
+/**
+ * The outbox drain's Netlify scheduled function (13-07, D-01) — a fourth
+ * always-off-request entrypoint alongside the hold-release/reconciliation
+ * worker set `workerRuntimeClosure()` already walks generically. This named
+ * closure exists so the "reaches the drain and dispatch services, not
+ * vacuous" assertion below can point at exactly this one entrypoint.
+ */
+function drainDomainEventsRuntimeClosure(): string[] {
+  const entrypoints = [
+    path.resolve(process.cwd(), "netlify/functions/drain-domain-events.ts"),
+  ];
+  return runtimeClosureFrom(entrypoints);
+}
+
 /** The set of specifiers `enrolment-transitions.ts`'s isolation rule forbids — `next/*` and the permission choke point, checked independently of `findRequestOnlyOffenders` (that helper only flags `next/headers`, not every `next/*` specifier). */
 function findIsolationOffenders(closure: string[]): Array<{ file: string; specifier: string }> {
   return closure.flatMap((filePath) =>
@@ -274,4 +288,97 @@ describe("service-layer boundary", () => {
     const closure = enrolmentTransitionsClosure();
     expect(findIsolationOffenders(closure)).toEqual([]);
   });
+
+  it("rejects a Prisma import from the drain-domain-events Netlify scheduled function (13-07)", async () => {
+    expect(await lintAs("netlify/functions/drain-domain-events.ts")).toHaveLength(1);
+  });
+
+  it("keeps the drain-domain-events closure worker-safe and non-vacuous (13-07)", () => {
+    const closure = drainDomainEventsRuntimeClosure();
+    expect(findRequestOnlyOffenders(closure)).toEqual([]);
+
+    const norm = closure.map((f) => f.replace(/\\/g, "/"));
+    expect(norm.some((f) => f.endsWith("src/server/services/domain-event-drain-service.ts"))).toBe(true);
+    expect(norm.some((f) => f.endsWith("src/server/services/email-dispatch-service.ts"))).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // 13-13 — phase close-out: the communications contracts/config modules stay
+  // Prisma-free, and the cleanup-notifications scheduled function joins the
+  // drain-domain-events one as a request-API-free, off-request entrypoint.
+  // -------------------------------------------------------------------------
+
+  it("rejects a Prisma import from src/server/communications/contracts.ts (13-13)", async () => {
+    expect(await lintAs("src/server/communications/contracts.ts")).toHaveLength(1);
+  });
+
+  it("rejects a Prisma import from src/server/email/config.ts (13-13)", async () => {
+    expect(await lintAs("src/server/email/config.ts")).toHaveLength(1);
+  });
+
+  it("keeps the cleanup-notifications closure worker-safe and non-vacuous, alongside the drain-domain-events closure (13-13)", () => {
+    const cleanupClosure = runtimeClosureFrom([
+      path.resolve(process.cwd(), "netlify/functions/cleanup-notifications.ts"),
+    ]);
+    expect(findRequestOnlyOffenders(cleanupClosure)).toEqual([]);
+    const cleanupNorm = cleanupClosure.map((f) => f.replace(/\\/g, "/"));
+    expect(cleanupNorm.some((f) => f.endsWith("src/server/services/notification-service.ts"))).toBe(true);
+
+    // The drain closure proven above stays request-API-free too — the two
+    // always-off-request Phase 13 entrypoints checked together.
+    const drainClosure = drainDomainEventsRuntimeClosure();
+    expect(findRequestOnlyOffenders(drainClosure)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 14-16 — the licence check's always-off-request entry points (D-16).
+// Each test carries an explicit 30000 ms timeout: the full-tree scans in this
+// file are slow under load (STATE.md records intermittent default-timeout
+// failures).
+// ---------------------------------------------------------------------------
+
+describe("licence check closures (plan 14-16)", () => {
+  const normalise = (closure: string[]) => closure.map((f) => f.replace(/\\/g, "/"));
+
+  it("rejects a Prisma import from the check-licence Netlify scheduled function (14-16)", async () => {
+    expect(await lintAs("netlify/functions/check-licence.ts")).toHaveLength(1);
+  }, 30_000);
+
+  it("keeps the check-licence closure request-API-free and non-vacuous (14-16)", () => {
+    const closure = runtimeClosureFrom([
+      path.resolve(process.cwd(), "netlify/functions/check-licence.ts"),
+    ]);
+    expect(findRequestOnlyOffenders(closure)).toEqual([]);
+
+    const norm = normalise(closure);
+    expect(norm.some((f) => f.endsWith("src/server/services/licence-service.ts"))).toBe(true);
+    expect(norm.some((f) => f.endsWith("src/server/services/licence-notice-service.ts"))).toBe(true);
+  }, 30_000);
+
+  it.each(["format", "verify", "state"])(
+    "rejects a Prisma import from the pure licence module src/server/licence/%s.ts (14-16)",
+    async (name) => {
+      expect(await lintAs(`src/server/licence/${name}.ts`)).toHaveLength(1);
+    },
+    30_000,
+  );
+
+  it("keeps both webhook route closures request-API-free while now reaching licence-service.ts through the settlement service (14-16)", () => {
+    for (const closure of [webhookRuntimeClosure(), paystackWebhookRuntimeClosure()]) {
+      expect(findRequestOnlyOffenders(closure)).toEqual([]);
+      expect(
+        normalise(closure).some((f) => f.endsWith("src/server/services/licence-service.ts")),
+      ).toBe(true);
+    }
+  }, 30_000);
+
+  it("keeps the licence-service.ts and licence-activation-service.ts closures request-API-free (14-16)", () => {
+    for (const entry of ["licence-service.ts", "licence-activation-service.ts"]) {
+      const closure = runtimeClosureFrom([
+        path.resolve(process.cwd(), "src", "server", "services", entry),
+      ]);
+      expect(findRequestOnlyOffenders(closure)).toEqual([]);
+    }
+  }, 30_000);
 });

@@ -36,6 +36,7 @@ import { prisma } from "@/server/db";
 import { withPermission as liveWithPermission } from "@/server/permissions";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createResourceService,
   type Delegate,
@@ -199,6 +200,34 @@ export class AssessmentNotFoundError extends Error {
   }
 }
 
+/**
+ * A save would leave a PUBLISHED assessment with a pass mark above its total
+ * marks, which nobody can pass (audit A-07). `publishAssessment` already
+ * refuses that state; this is the same rule on the two edits that can
+ * re-create it afterwards: changing the pass mark (or an assignment's total),
+ * and replacing a quiz's questions with a set worth fewer marks.
+ */
+export class PassMarkExceedsTotalError extends Error {
+  readonly passMark: number;
+  readonly totalMarks: number;
+
+  constructor(passMark: number, totalMarks: number) {
+    super(
+      `The pass mark (${passMark}) is higher than the total marks (${totalMarks}), so nobody could pass. ` +
+        `Lower the pass mark or raise the total marks.`,
+    );
+    this.name = "PassMarkExceedsTotalError";
+    this.passMark = passMark;
+    this.totalMarks = totalMarks;
+  }
+}
+
+function assertPassable(status: string, passMark: number | null, totalMarks: number | null): void {
+  if (status !== "PUBLISHED") return; // a draft is checked when it is published
+  if (passMark == null || totalMarks == null) return;
+  if (passMark > totalMarks) throw new PassMarkExceedsTotalError(passMark, totalMarks);
+}
+
 /** `saveQuizQuestions` was called on an Assessment whose `type` is not `QUIZ`. */
 export class NotAQuizError extends Error {
   readonly assessmentId: string;
@@ -289,6 +318,25 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     audit: deps.audit,
     // Default `{ status: "ARCHIVED" }` is correct — `Assessment.status` is
     // `PublicationStatus`, same as Course (D-16 precedent, no `restoreData`).
+    // W-14: a second archive would add a second `assessment.archived` audit row for no change.
+    assertWritable: (operation, before) => {
+      if (operation === "archive" && before.status === "ARCHIVED") {
+        throw new RecordStateError("This assessment is already archived.");
+      }
+    },
+  });
+
+  // A-07: runs behind the same permission and scope as the update itself, so
+  // a caller who may not edit the assessment learns nothing about its marks.
+  const assertUpdateKeepsPassable = deps.withPermission<{ id: string; data: Record<string, unknown> }>(
+    "assessments.edit",
+    (input) => assessmentCourseScope(input.id),
+  )(async (input) => {
+    const before = await deps.delegate.findUnique({ where: { id: input.id } });
+    if (!before) return; // the update below reports the missing row its own way
+    const next = (key: "passMark" | "totalMarks") =>
+      key in input.data ? (input.data[key] as number | null) : before[key];
+    assertPassable(before.status, next("passMark"), next("totalMarks"));
   });
 
   // feedbackBehaviour has no database-level constraint (a raw Prisma
@@ -306,6 +354,7 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     },
     update: async (id: string, data: Record<string, unknown>, reason?: string) => {
       assertValidFeedbackBehaviour(data);
+      await assertUpdateKeepsPassable({ id, data });
       return baseService.update(id, data, reason);
     },
   };
@@ -327,6 +376,7 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
     if (before.type !== "QUIZ") throw new NotAQuizError(input.assessmentId);
 
     const totalMarks = input.questions.reduce((sum, question) => sum + question.marks, 0);
+    assertPassable(before.status, before.passMark, totalMarks);
 
     const { beforeCount, createdQuestions } = await deps.db.$transaction(async (tx) => {
       const existing = await tx.quizQuestion.findMany({
@@ -406,6 +456,9 @@ export function createAssessmentService(deps: CreateAssessmentServiceDeps) {
   )(async (input, ctx) => {
     const row = await deps.aggregate.findUnique({ where: { id: input.assessmentId } });
     if (!row) throw new AssessmentNotFoundError(input.assessmentId);
+    // W-13: an archived assessment went straight back to PUBLISHED here. Archiving is how an
+    // assessment is retired, so publishing is refused rather than used as a silent restore.
+    if (row.status === "ARCHIVED") throw new RecordStateError("An archived assessment cannot be published.");
 
     const failures = blockingFailures(evaluateAssessmentReadiness(toReadinessInput(row)));
     if (failures.length > 0) {

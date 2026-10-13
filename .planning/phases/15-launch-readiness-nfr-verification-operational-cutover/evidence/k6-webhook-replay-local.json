@@ -1,0 +1,151 @@
+{
+  "generatedAt": "2026-10-08T18:17:39.336Z",
+  "target": "local production build with the Verify Transaction stub (no live provider)",
+  "reference": "LOAD-PENDING-c39a82da1d",
+  "eventId": 9128127999,
+  "postsSent": 10,
+  "postsAcknowledged": 10,
+  "succeededAttempts": 1,
+  "processedEvents": 1,
+  "webhookEventRows": 1,
+  "duplicateEvents": 9,
+  "orderStatus": "PAID",
+  "enrolmentStatuses": [
+    "ACTIVE"
+  ],
+  "k6": {
+    "metrics": {
+      "http_req_connecting": {
+        "avg": 10.846388300000001,
+        "min": 6.843721,
+        "med": 10.254529999999999,
+        "max": 18.591374,
+        "p(90)": 14.617910899999998,
+        "p(95)": 16.604642449999993
+      },
+      "http_req_sending": {
+        "p(95)": 0.21173649999999994,
+        "avg": 0.1297095,
+        "min": 0.080112,
+        "med": 0.1148175,
+        "max": 0.238336,
+        "p(90)": 0.18513699999999997
+      },
+      "webhook_ok": {
+        "count": 10,
+        "rate": 18.572114683714492,
+        "thresholds": {
+          "count==10": false
+        }
+      },
+      "iterations": {
+        "count": 10,
+        "rate": 18.572114683714492
+      },
+      "http_req_tls_handshaking": {
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "max": 0,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "http_req_waiting": {
+        "p(95)": 457.1444301999999,
+        "avg": 365.7235033,
+        "min": 317.793221,
+        "med": 351.94906849999995,
+        "max": 515.842774,
+        "p(90)": 398.44608639999996
+      },
+      "http_req_failed": {
+        "passes": 0,
+        "fails": 10,
+        "value": 0
+      },
+      "http_reqs": {
+        "count": 10,
+        "rate": 18.572114683714492
+      },
+      "webhook_not_ok": {
+        "count": 0,
+        "rate": 0,
+        "thresholds": {
+          "count==0": false
+        }
+      },
+      "data_sent": {
+        "count": 5020,
+        "rate": 9323.201571224674
+      },
+      "iteration_duration": {
+        "avg": 386.28103150000004,
+        "min": 336.069049,
+        "med": 373.638705,
+        "max": 532.703691,
+        "p(90)": 422.5356216,
+        "p(95)": 477.6196562999999
+      },
+      "http_req_blocked": {
+        "p(90)": 23.1497347,
+        "p(95)": 23.26486135,
+        "avg": 18.8759066,
+        "min": 15.516315,
+        "med": 19.057944,
+        "max": 23.379988
+      },
+      "http_req_duration{expected_response:true}": {
+        "p(90)": 399.42082189999996,
+        "p(95)": 457.8594324499999,
+        "avg": 366.1210531,
+        "min": 318.242389,
+        "med": 352.260465,
+        "max": 516.298043
+      },
+      "http_req_receiving": {
+        "p(95)": 0.6184278999999995,
+        "avg": 0.2678403,
+        "min": 0.118118,
+        "med": 0.20653149999999998,
+        "max": 0.853228,
+        "p(90)": 0.38362779999999985
+      },
+      "data_received": {
+        "count": 5600,
+        "rate": 10400.384222880115
+      },
+      "http_req_duration": {
+        "max": 516.298043,
+        "p(90)": 399.42082189999996,
+        "p(95)": 457.8594324499999,
+        "avg": 366.1210531,
+        "min": 318.242389,
+        "med": 352.260465
+      },
+      "checks": {
+        "passes": 10,
+        "fails": 0,
+        "value": 1
+      }
+    },
+    "setup_data": {
+      "body": "{\"event\":\"charge.success\",\"data\":{\"id\":9128127999,\"reference\":\"LOAD-PENDING-c39a82da1d\",\"status\":\"success\",\"amount\":12500000,\"currency\":\"NGN\",\"metadata\":{\"orderId\":\"cmuzuznzg0002s5e0l07d07o0\"}}}",
+      "signature": "22ebbae1d09bb839cf1f92ff779df8663910437cfbb44f946b321d3dfaf544378c6c2ff151d3b84735c92b290bc45da6bb200559c7c863db37b507c5426f6694"
+    },
+    "root_group": {
+      "name": "",
+      "path": "",
+      "id": "d41d8cd98f00b204e9800998ecf8427e",
+      "groups": {},
+      "checks": {
+        "webhook acknowledged with 200": {
+          "path": "::webhook acknowledged with 200",
+          "id": "7593264c10bf1d5a64d708898f99e7ca",
+          "passes": 10,
+          "fails": 0,
+          "name": "webhook acknowledged with 200"
+        }
+      }
+    }
+  }
+}

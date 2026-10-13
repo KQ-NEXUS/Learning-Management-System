@@ -324,7 +324,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
           <p className="text-sm font-semibold">Archive this assessment</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             It leaves every staff authoring list. It cannot be deleted — archiving is the only
-            removal path throughout this product (CAT-08).
+            removal path throughout this product.
           </p>
           <button
             type="button"
@@ -343,7 +343,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
         <ConfirmModal
           open={archiveOpen}
           title="Archive this assessment"
-          description="It leaves every staff authoring list. This cannot be undone from this screen — archiving is the only removal path (CAT-08)."
+          description="It leaves every staff authoring list. This cannot be undone from this screen — archiving is the only removal path."
           confirmLabel="Archive assessment"
           minReasonLength={10}
           reasonLabel="Reason for archiving"

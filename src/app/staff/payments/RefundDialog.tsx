@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { recordRefundAction } from "./actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * "Record a refund" — the PAY-05 dialog (07-UI-SPEC §0.3, §6.1, §7.6).
@@ -53,6 +54,7 @@ export type RefundDialogProps = {
 
 export function RefundDialog({ orderId, currency, eligibleRefundMinor }: RefundDialogProps) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function RefundDialog({ orderId, currency, eligibleRefundMinor }: RefundD
       return;
     }
 
+    toast.success("Refund recorded");
     setOpen(false);
     router.refresh();
   }
@@ -174,6 +177,11 @@ function RefundDialogBody({
   const amountValid = Number.isInteger(amountMinor) && amountMinor > 0 && amountMinor <= eligibleRefundMinor;
   const reasonValid = reason.trim().length >= MIN_REASON;
   const canConfirm = amountValid && reasonValid && !pending;
+  // Say what is still missing, instead of leaving Record refund greyed out without a reason.
+  const stillNeeded = [
+    !amountValid && "an amount above zero, no more than the refundable total",
+    !reasonValid && `a reason of at least ${MIN_REASON} characters`,
+  ].filter(Boolean) as string[];
 
   function submit() {
     if (!canConfirm) return;
@@ -274,8 +282,20 @@ function RefundDialogBody({
           </p>
         </div>
 
+        {stillNeeded.length > 0 && !pending && (
+          <p id="refund-confirm-help" className="text-sm text-muted-foreground">
+            Still needed to record the refund: {stillNeeded.join(", ")}.
+          </p>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <button type="button" disabled={!canConfirm} onClick={submit} className={BTN_DANGER}>
+          <button
+            type="button"
+            disabled={!canConfirm}
+            aria-describedby={stillNeeded.length > 0 && !pending ? "refund-confirm-help" : undefined}
+            onClick={submit}
+            className={BTN_DANGER}
+          >
             {pending ? "Recording…" : "Record refund"}
           </button>
           <button type="button" onClick={onCancel} disabled={pending} className={BTN}>

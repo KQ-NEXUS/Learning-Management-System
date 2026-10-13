@@ -18,7 +18,7 @@ import {
 } from "@/server/services/roster-service";
 import { courseService } from "@/server/services/course-service";
 import { programmeService } from "@/server/services/programme-service";
-import { utcToWallParts } from "@/lib/timezone";
+import { LagosTime } from "@/components/time/LagosTime";
 import { cohortResourceScope } from "@/server/services/cohort-scope";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { ReadinessPanel } from "@/components/catalogue/ReadinessPanel";
@@ -28,6 +28,8 @@ import { RosterTab, type RosterRowView } from "./RosterTab";
 import { ExceptionsTab, type AttendanceExceptionView } from "./ExceptionsTab";
 import { InstructorsPanel, type InstructorRow } from "./InstructorsPanel";
 import { GradingTab } from "./GradingTab";
+import { SessionEnded } from "@/components/shell/SessionEnded";
+import { humanizeCode } from "@/lib/humanize";
 
 export const metadata = { title: "Cohort" };
 
@@ -58,22 +60,18 @@ const DELIVERY_LABEL: Record<string, string> = {
 
 type TitleRow = { id: string; title: string };
 
-/** D-23: every date shown with its explicit zone label, in mono — `utcToWallParts` already bakes the `(timezone)` suffix into `label`. */
-/** "12 Sep 2026, 10:00" in the cohort's own timezone (the zone is shown once, after a range). */
-function zoned(date: Date, timezone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      timeZone: timezone,
-    }).format(date);
-  } catch {
-    return utcToWallParts(date, timezone).label;
-  }
+/**
+ * D-17: the enrolment window and the cohort dates are record dates, so they render in Lagos time with " WAT"
+ * (UI-SPEC S6). The cohort's own timezone (the zone its edit form and sessions use, ledger OQ4) is named once
+ * after a range, only when it differs from Lagos.
+ */
+function CohortRange({ from, to, timezone }: { from: Date; to: Date; timezone: string }) {
+  return (
+    <>
+      <LagosTime value={from} className="whitespace-nowrap" /> to <LagosTime value={to} className="whitespace-nowrap" />
+      {timezone !== "Africa/Lagos" ? <span className="text-muted-foreground"> (cohort timezone: {timezone})</span> : null}
+    </>
+  );
 }
 
 function formatPrice(priceMinor: number, currency: string): string {
@@ -119,11 +117,7 @@ export default async function CohortDetailPage({
     readinessAggregate = await loadCohortReadinessAggregate(cohortId);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return (
-        <p className="text-sm text-foreground">
-          Your session has ended. Sign in again.
-        </p>
-      );
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       notFound();
@@ -181,6 +175,7 @@ export default async function CohortDetailPage({
       learnerId: r.learnerId,
       learnerName: r.learnerName,
       learnerEmail: r.learnerEmail,
+      learnerNumber: r.learnerNumber,
       enrolmentId: r.enrolmentId,
       status: r.status,
       transitionCount: r.transitionCount,
@@ -302,198 +297,201 @@ export default async function CohortDetailPage({
   }
 
   return (
-    <DetailLayout
-      mode="tabbed"
-      initialSectionId={sp.tab}
-      breadcrumbs={[
-        { label: "Workspace", href: "/staff/cohorts" },
-        { label: "Cohorts", href: "/staff/cohorts" },
-        { label: cohort.title },
-      ]}
-      title={cohort.title}
-      identifier={cohort.code}
-      actions={
-        <CohortDetailActions
-          cohortId={cohortId}
-          code={cohort.code}
-          status={cohort.status}
-          expectedUpdatedAt={cohort.updatedAt.toISOString()}
-          readinessItems={readinessItems}
-          activeEnrolmentCount={activeEnrolmentCount}
-          canPublish={canPublish}
-          canManage={canManage}
-        />
-      }
-      badges={
-        <>
-          <StatusPill
-            label={STATUS_LABEL[cohort.status] ?? cohort.status}
-            tone={STATUS_TONE[cohort.status] ?? "neutral"}
+    <div data-primary-content>
+      <DetailLayout
+        mode="tabbed"
+        initialSectionId={sp.tab}
+        breadcrumbs={[
+          { label: "Workspace", href: "/staff/cohorts" },
+          { label: "Cohorts", href: "/staff/cohorts" },
+          { label: cohort.title },
+        ]}
+        title={cohort.title}
+        identifier={cohort.code}
+        actions={
+          <CohortDetailActions
+            cohortId={cohortId}
+            code={cohort.code}
+            status={cohort.status}
+            expectedUpdatedAt={cohort.updatedAt.toISOString()}
+            readinessItems={readinessItems}
+            activeEnrolmentCount={activeEnrolmentCount}
+            canPublish={canPublish}
+            canManage={canManage}
           />
-          <StatusPill
-            label={DELIVERY_LABEL[cohort.deliveryMode] ?? cohort.deliveryMode}
-          />
-        </>
-      }
-      sections={[
-        {
-          id: "overview",
-          label: "Overview",
-          content: (
-            <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_380px]">
-              <section aria-label="Cohort details" className="min-w-0 lg:pr-14">
-                <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
-                  Cohort details
-                </h2>
-                <div className="border-t border-foreground">
-                  <DetailFacts
-                    facts={[
-                      // A viewer without access to the offer's own list sees the kind only, not a dash.
-                      {
-                        label: "Offer",
-                        value:
-                          offerTitle === "—"
-                            ? offerKind
-                            : `${offerKind}: ${offerTitle}`,
-                      },
-                      {
-                        label: "Enrolment window",
-                        value: `${zoned(cohort.enrolmentOpensAt, cohort.timezone)} to ${zoned(cohort.enrolmentClosesAt, cohort.timezone)} (${cohort.timezone})`,
-                        mono: true,
-                      },
-                      {
-                        label: "Dates",
-                        value: `${zoned(cohort.startsAt, cohort.timezone)} to ${zoned(cohort.endsAt, cohort.timezone)} (${cohort.timezone})`,
-                        mono: true,
-                      },
-                      {
-                        label: "Seats",
-                        value: (
-                          <span className="flex items-center gap-4 font-sans tabular-nums">
-                            <span>
-                              {cohort.seatsTaken} of {cohort.capacity} taken
-                            </span>
-                            <span
-                              aria-hidden
-                              className="h-1 w-36 overflow-hidden rounded-full bg-accent-wash"
-                            >
+        }
+        badges={
+          <>
+            <StatusPill
+              label={STATUS_LABEL[cohort.status] ?? humanizeCode(cohort.status)}
+              tone={STATUS_TONE[cohort.status] ?? "neutral"}
+            />
+            <StatusPill
+              label={DELIVERY_LABEL[cohort.deliveryMode] ?? humanizeCode(cohort.deliveryMode)}
+            />
+          </>
+        }
+        sections={[
+          {
+            id: "overview",
+            label: "Overview",
+            content: (
+              <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_380px]">
+                <section aria-label="Cohort details" className="min-w-0 lg:pr-14">
+                  <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+                    Cohort details
+                  </h2>
+                  <div className="border-t border-foreground">
+                    <DetailFacts
+                      facts={[
+                        // A viewer without access to the offer's own list sees the kind only, not a dash.
+                        {
+                          label: "Offer",
+                          value:
+                            offerTitle === "—"
+                              ? offerKind
+                              : `${offerKind}: ${offerTitle}`,
+                        },
+                        {
+                          label: "Enrolment window",
+                          value: <CohortRange from={cohort.enrolmentOpensAt} to={cohort.enrolmentClosesAt} timezone={cohort.timezone} />,
+                          mono: true,
+                        },
+                        {
+                          label: "Dates",
+                          value: <CohortRange from={cohort.startsAt} to={cohort.endsAt} timezone={cohort.timezone} />,
+                          mono: true,
+                        },
+                        {
+                          label: "Seats",
+                          value: (
+                            <span className="flex items-center gap-4 font-sans tabular-nums">
+                              <span>
+                                {cohort.seatsTaken} of {cohort.capacity} taken
+                              </span>
                               <span
-                                className="block h-full rounded-full bg-progress-fill"
-                                style={{
-                                  width: `${Math.min(100, Math.round((cohort.seatsTaken / Math.max(cohort.capacity, 1)) * 100))}%`,
-                                }}
-                              />
+                                aria-hidden
+                                className="h-1 w-36 overflow-hidden rounded-full bg-accent-wash"
+                              >
+                                <span
+                                  className="block h-full rounded-full bg-progress-fill"
+                                  style={{
+                                    width: `${Math.min(100, Math.round((cohort.seatsTaken / Math.max(cohort.capacity, 1)) * 100))}%`,
+                                  }}
+                                />
+                              </span>
                             </span>
-                          </span>
-                        ),
-                      },
-                      {
-                        label: "NGN price",
-                        value:
-                          cohort.priceNgnMinor != null
-                            ? formatPrice(cohort.priceNgnMinor, "NGN")
-                            : "Not set",
-                        mono: true,
-                      },
-                      {
-                        label: "USD price",
-                        value:
-                          cohort.priceUsdMinor != null
-                            ? formatPrice(cohort.priceUsdMinor, "USD")
-                            : "Not set",
-                        mono: true,
-                      },
-                      {
-                        label: "Delivery mode",
-                        value:
-                          DELIVERY_LABEL[cohort.deliveryMode] ??
-                          cohort.deliveryMode,
-                      },
-                      {
-                        label: "Seat-hold minutes",
-                        value:
-                          cohort.holdMinutes && cohort.holdMinutes > 0
-                            ? `${cohort.holdMinutes} min`
-                            : "No hold — seat taken only on activation",
-                        mono: true,
-                      },
-                      {
-                        label: "Attendance threshold",
-                        value:
-                          cohort.attendanceThresholdPct != null
-                            ? `${cohort.attendanceThresholdPct}%`
-                            : "Not set",
-                        mono: true,
-                      },
-                    ]}
+                          ),
+                        },
+                        {
+                          label: "NGN price",
+                          value:
+                            cohort.priceNgnMinor != null
+                              ? formatPrice(cohort.priceNgnMinor, "NGN")
+                              : "Not set",
+                          mono: true,
+                        },
+                        {
+                          label: "USD price",
+                          value:
+                            cohort.priceUsdMinor != null
+                              ? formatPrice(cohort.priceUsdMinor, "USD")
+                              : "Not set",
+                          mono: true,
+                        },
+                        {
+                          label: "Delivery mode",
+                          value:
+                            DELIVERY_LABEL[cohort.deliveryMode] ??
+                            cohort.deliveryMode,
+                        },
+                        {
+                          label: "Seat-hold minutes",
+                          value:
+                            cohort.holdMinutes && cohort.holdMinutes > 0
+                              ? `${cohort.holdMinutes} min`
+                              : "No hold — seat taken only on activation",
+                          mono: true,
+                        },
+                        {
+                          label: "Attendance threshold",
+                          value:
+                            cohort.attendanceThresholdPct != null
+                              ? `${cohort.attendanceThresholdPct}%`
+                              : "Not set",
+                          mono: true,
+                        },
+                      ]}
+                    />
+                  </div>
+                </section>
+                <div className="flex flex-col gap-12 lg:border-l lg:border-border lg:pl-10">
+                  <InstructorsPanel
+                    cohortId={cohortId}
+                    instructors={instructorRows}
+                    canManage={canManage}
                   />
+                  <ReadinessPanel items={readinessItems} />
                 </div>
-              </section>
-              <div className="flex flex-col gap-12 lg:border-l lg:border-border lg:pl-10">
-                <InstructorsPanel
-                  cohortId={cohortId}
-                  instructors={instructorRows}
-                  canManage={canManage}
-                />
-                <ReadinessPanel items={readinessItems} />
               </div>
-            </div>
-          ),
-        },
-        {
-          id: "sessions",
-          label: "Sessions",
-          badge: sessions?.length,
-          content: (
-            <SessionsTab
-              facilitatorNames={Object.fromEntries(instructorRows.map((row) => [row.userId, row.userName]))}
-              cohortId={cohortId}
-              cohortTimezone={cohort.timezone}
-              sessions={sessions}
-              canManage={canManage}
-            />
-          ),
-          error: sessionsErrorMessage
-            ? { message: sessionsErrorMessage }
-            : undefined,
-        },
-        {
-          id: "roster",
-          label: "Roster",
-          badge: rosterRows?.length,
-          content: (
-            <RosterTab
-              cohortId={cohortId}
-              rows={rosterRows}
-              canManage={canManageEnrolments}
-            />
-          ),
-          error: rosterErrorMessage
-            ? { message: rosterErrorMessage }
-            : undefined,
-        },
-        {
-          id: "exceptions",
-          label: "Exceptions",
-          badge: exceptionRows?.length,
-          content: (
-            <ExceptionsTab
-              cohortId={cohortId}
-              rows={exceptionRows}
-              categories={categories}
-              search={search}
-            />
-          ),
-          error: exceptionsErrorMessage
-            ? { message: exceptionsErrorMessage }
-            : undefined,
-        },
-        {
-          id: "grading",
-          label: "Grading",
-          content: <GradingTab cohortId={cohortId} />,
-        },
-      ]}
-    />
+            ),
+          },
+          {
+            id: "sessions",
+            label: "Sessions",
+            badge: sessions?.length,
+            content: (
+              <SessionsTab
+                facilitatorNames={Object.fromEntries(instructorRows.map((row) => [row.userId, row.userName]))}
+                facilitatorOptions={instructorRows.map((row) => ({ id: row.userId, name: row.userName, email: row.userEmail }))}
+                cohortId={cohortId}
+                cohortTimezone={cohort.timezone}
+                sessions={sessions}
+                canManage={canManage}
+              />
+            ),
+            error: sessionsErrorMessage
+              ? { message: sessionsErrorMessage }
+              : undefined,
+          },
+          {
+            id: "roster",
+            label: "Roster",
+            badge: rosterRows?.length,
+            content: (
+              <RosterTab
+                cohortId={cohortId}
+                rows={rosterRows}
+                canManage={canManageEnrolments}
+              />
+            ),
+            error: rosterErrorMessage
+              ? { message: rosterErrorMessage }
+              : undefined,
+          },
+          {
+            id: "exceptions",
+            label: "Exceptions",
+            badge: exceptionRows?.length,
+            content: (
+              <ExceptionsTab
+                cohortId={cohortId}
+                rows={exceptionRows}
+                categories={categories}
+                search={search}
+              />
+            ),
+            error: exceptionsErrorMessage
+              ? { message: exceptionsErrorMessage }
+              : undefined,
+          },
+          {
+            id: "grading",
+            label: "Grading",
+            content: <GradingTab cohortId={cohortId} />,
+          },
+        ]}
+      />
+    </div>
   );
 }

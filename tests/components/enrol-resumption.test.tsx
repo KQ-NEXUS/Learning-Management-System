@@ -59,3 +59,24 @@ describe("F-13 — /enrol only starts checkout on a same-origin navigation", () 
     expect(screen.getByRole("button", { name: "Continue to checkout" })).toBeTruthy();
   });
 });
+
+describe("UX batch B — a checkout that can't start says why", () => {
+  it.each([
+    ["AlreadyEnrolledError", "enrolled"],
+    ["CapacityExceededError", "full"],
+    ["CohortClosedError", "closed"],
+  ] as const)("%s returns to the course page with ?notice=%s", async (name, notice) => {
+    const seats = await import("@/server/services/seat-accounting");
+    const ErrorClass = seats[name] as unknown as new (...args: unknown[]) => Error;
+    headerValues.set("sec-fetch-site", "same-origin");
+    startCheckout.mockRejectedValue(Object.create(ErrorClass.prototype));
+    await expect(EnrolResumptionPage(props())).rejects.toThrow(`NEXT_REDIRECT:/courses/example?notice=${notice}`);
+  });
+
+  it("a currency this cohort no longer sells returns with ?notice=currency", async () => {
+    const { CurrencyUnavailableError } = await import("@/server/services/checkout-service");
+    headerValues.set("sec-fetch-site", "same-origin");
+    startCheckout.mockRejectedValue(new CurrencyUnavailableError("cohort-1", "NGN"));
+    await expect(EnrolResumptionPage(props())).rejects.toThrow("NEXT_REDIRECT:/courses/example?notice=currency");
+  });
+});

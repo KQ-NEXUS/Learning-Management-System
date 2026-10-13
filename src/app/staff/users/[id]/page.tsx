@@ -1,4 +1,4 @@
-import { formatDateShort } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { notFound } from "next/navigation";
 import { staffAccountService, type StaffAccountSummary } from "@/server/services/staff-account-service";
 import { assignmentService, type AssignmentWithRole } from "@/server/services/assignment-service";
@@ -6,6 +6,7 @@ import { roleService, MIN_REASON_LENGTH } from "@/server/services/role-service";
 import { AuthorizationError, can } from "@/server/permissions";
 import { DetailLayout, DetailFacts, StatusPill } from "@/components/primitives";
 import { AssignmentsPanel, AccountStatusControl, type AssignmentRow } from "../AssignmentsPanel";
+import { humanizeCode } from "@/lib/humanize";
 
 const TONE: Record<string, "success" | "warning" | "neutral"> = {
   ACTIVE: "success",
@@ -19,10 +20,6 @@ const STATUS_LABEL: Record<string, string> = {
   PENDING_VERIFICATION: "Pending verification",
 };
 
-function fmtDate(value: Date | string | null): string {
-  if (!value) return "—";
-  return formatDateShort(new Date(value));
-}
 
 export default async function StaffUserDetailPage({
   params,
@@ -74,7 +71,7 @@ export default async function StaffUserDetailPage({
       ]}
       title={user.name}
       identifier={user.email}
-      badges={<StatusPill label={STATUS_LABEL[user.status] ?? user.status} tone={TONE[user.status] ?? "neutral"} />}
+      badges={<StatusPill label={STATUS_LABEL[user.status] ?? humanizeCode(user.status)} tone={TONE[user.status] ?? "neutral"} />}
       actions={
         canManageUsers ? (
           <AccountStatusControl
@@ -94,10 +91,10 @@ export default async function StaffUserDetailPage({
               facts={[
                 { label: "Name", value: user.name },
                 { label: "Email", value: user.email, mono: true },
-                { label: "Status", value: <StatusPill label={STATUS_LABEL[user.status] ?? user.status} tone={TONE[user.status] ?? "neutral"} /> },
-                { label: "Created", value: fmtDate(user.createdAt) },
+                { label: "Status", value: <StatusPill label={STATUS_LABEL[user.status] ?? humanizeCode(user.status)} tone={TONE[user.status] ?? "neutral"} /> },
+                { label: "Created", value: <LagosTime value={user.createdAt} variant="date" /> },
                 ...(user.deactivatedAt
-                  ? [{ label: "Deactivated", value: fmtDate(user.deactivatedAt) }]
+                  ? [{ label: "Deactivated", value: <LagosTime value={user.deactivatedAt} variant="date" /> }]
                   : []),
               ]}
             />

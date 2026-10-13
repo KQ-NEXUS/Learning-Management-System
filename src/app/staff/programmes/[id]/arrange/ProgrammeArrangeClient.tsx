@@ -1,7 +1,8 @@
 "use client";
 
+import { humanizeCode } from "@/lib/humanize";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { ArrangeBoard, type ArrangeContainer } from "@/components/catalogue";
 import type { ProgrammeMemberRow } from "@/server/services/programme-service";
 import {
@@ -53,7 +54,7 @@ export function ProgrammeArrangeClient({
           id: m.membershipId,
           label: m.title,
           sublabel:
-            (m.status !== "PUBLISHED" ? `${m.status} · ` : "") +
+            (m.status !== "PUBLISHED" ? `${humanizeCode(m.status)} · ` : "") +
             (m.otherProgrammeTitles.length > 0
               ? `also in ${m.otherProgrammeTitles.join(", ")}`
               : "only in this programme"),
@@ -95,7 +96,9 @@ export function ProgrammeArrangeClient({
         setOrderError(result.message);
         setStale(result.reason === "STALE");
       }
-    } catch {
+    } catch (error) {
+      // WR-02: hand Next.js control flow (redirect / notFound) back first.
+      unstable_rethrow(error);
       // An unexpected rejection leaves the outcome unknown — surface a generic
       // retryable message, never the caught value, and never imply the order
       // was applied. `stale` stays false.
@@ -114,7 +117,9 @@ export function ProgrammeArrangeClient({
       const result = await addCourseAction({ programmeId, courseId });
       if (result.ok) router.refresh();
       else setMembershipError(result.message);
-    } catch {
+    } catch (error) {
+      // WR-02: hand Next.js control flow (redirect / notFound) back first.
+      unstable_rethrow(error);
       setMembershipError(
         "Something went wrong adding that course. Nothing was changed — try again.",
       );
@@ -132,7 +137,9 @@ export function ProgrammeArrangeClient({
       const result = await removeCourseAction({ programmeId, courseId: member.courseId });
       if (result.ok) router.refresh();
       else setMembershipError(result.message);
-    } catch {
+    } catch (error) {
+      // WR-02: hand Next.js control flow (redirect / notFound) back first.
+      unstable_rethrow(error);
       setMembershipError(
         "Something went wrong removing that course. Nothing was changed — try again.",
       );
@@ -232,7 +239,7 @@ export function ProgrammeArrangeClient({
                   <span className="truncate font-semibold text-foreground">{course.title}</span>
                   <span className="block truncate text-sm text-muted-foreground">
                     {course.slug}
-                    {course.status !== "PUBLISHED" && ` · ${course.status}`}
+                    {course.status !== "PUBLISHED" && ` · ${humanizeCode(course.status)}`}
                   </span>
                 </span>
                 <button

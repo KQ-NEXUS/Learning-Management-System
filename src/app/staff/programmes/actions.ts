@@ -13,13 +13,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { programmeService } from "@/server/services/programme-service";
 import { assertSlugMutable, SlugFrozenError } from "@/server/services/catalogue-guards";
 import {
   assertTemplateSelectable,
   TemplateNotSelectableError,
 } from "@/server/services/certificate-template-service";
+import { withFlash } from "@/lib/flash-notices";
 
 export type ProgrammeFormError = { name: string; message: string };
 export type ProgrammeActionResult =
@@ -98,7 +99,7 @@ function toFailure(error: unknown): Extract<ProgrammeActionResult, { ok: false }
     return {
       ok: false,
       errors: [],
-      message: "Your role does not permit creating or editing programmes.",
+      message: refusalMessage(error, "Your role does not permit creating or editing programmes."),
     };
   }
   throw error;
@@ -120,7 +121,7 @@ export async function createProgrammeAction(
     return toFailure(error);
   }
   revalidatePath("/staff/programmes");
-  redirect(`/staff/programmes/${id}`);
+  redirect(withFlash(`/staff/programmes/${id}`, "programme-created"));
 }
 
 const updateSchema = baseSchema.partial().extend({ programmeId: z.string().min(1) });

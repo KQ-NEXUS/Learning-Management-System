@@ -1,0 +1,1574 @@
+{
+  "label": "SIGNED STAGING RUN for NFR-02 (plan 15-30 Task 3; D-01, D-02, D-03): k6 pilot-load at the agreed load against the Netlify deploy preview and the staging Neon branch. One run; not repeated.",
+  "target": {
+    "previewUrl": "https://deploy-preview-16--kqnexuslms.netlify.app",
+    "previewCommit": "9a68b7a (head of branch LAUNCH on GitHub, read with git ls-remote right after the run; the pilot read the same commit for pull request 16, so the preview was not rebuilt in between)",
+    "neonBranch": "staging-phase 15 (br-icy-river-axqpwts7)",
+    "hostsCheckedThroughNeonApi": {
+      "pooledUrlHostOnBranch": true,
+      "pooledUrlIsPooler": true,
+      "directUrlHostOnBranch": true,
+      "allowListCount": 2,
+      "allowListAllOnBranch": true,
+      "branchIsDefault": false
+    }
+  },
+  "ownerDecision": {
+    "date": "2026-10-11",
+    "askedBy": "the orchestrator, through a question dialog; relayed to the executor",
+    "question": "The last big test simulates 150 learners and 10 staff on the test website for 12 minutes. It uses some of your free Netlify allowance. Should I run it?",
+    "answerVerbatim": "Run the full test",
+    "optionDescription": "150 learners and 10 staff. Gives the full signed numbers. Uses the most allowance; if the free allowance runs out, Netlify pauses the site until next month.",
+    "planOption": "proceed",
+    "note": "The owner was told the full run is about 28 times the pilot and that Netlify usage could not be read from this machine. The owner did not report Netlify or Neon usage numbers before approving."
+  },
+  "approvedLoad": {
+    "learners": 150,
+    "staff": 10,
+    "stages": "learners ramp to 150 over 2 min, hold 10 min, ramp down 30 s; 10 staff for the whole 12 min 30 s",
+    "thinkTime": "5 to 15 s per page",
+    "requests": "documents only (no static assets); k6 does not ask for compression",
+    "loadGenerator": "grafana/k6:2.3.0 in Docker on the operator's laptop (one machine, one home network link)"
+  },
+  "runWindow": {
+    "k6StartedAt": "2026-10-11T07:26:07Z",
+    "firstRequestAt": "2026-10-11T07:26:11.049Z",
+    "lastRequestAt": "2026-10-11T07:39:09.516Z",
+    "holdFrom": "2026-10-11T07:28:11.049Z",
+    "holdTo": "2026-10-11T07:38:11.049Z",
+    "note": "holdFrom and holdTo are the first request plus 2 and plus 12 minutes."
+  },
+  "result": {
+    "k6ExitCode": 0,
+    "stoppedEarly": false,
+    "requests": 10599,
+    "failed": 0,
+    "failureRate": 0,
+    "statusCounts": {
+      "200": 10599
+    },
+    "checksPassed": 31797,
+    "checksFailed": 0,
+    "virtualUsersPeak": 160,
+    "dataReceivedBytes": 398688675,
+    "allRequests": {
+      "p50Ms": 566,
+      "p75Ms": 716,
+      "p90Ms": 1031,
+      "p95Ms": 1446,
+      "p99Ms": 2572,
+      "maxMs": 7739,
+      "over2500": 120
+    },
+    "everyThresholdPassed": true,
+    "thresholdNote": "In the k6 summary export below, a threshold value of false means \"not breached\" (passed). p75 values are k6's own (the export was written with --summary-trend-stats including p(75))."
+  },
+  "p75ByPage": {
+    "course-home": {
+      "requests": 1265,
+      "failed": 0,
+      "p50Ms": 605,
+      "p75Ms": 792,
+      "p95Ms": 1531,
+      "p99Ms": 2670,
+      "maxMs": 7739,
+      "over2500Ms": 19,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "dashboard": {
+      "requests": 1265,
+      "failed": 0,
+      "p50Ms": 588,
+      "p75Ms": 751,
+      "p95Ms": 1706,
+      "p99Ms": 2845,
+      "maxMs": 7447,
+      "over2500Ms": 23,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "learn": {
+      "requests": 1265,
+      "failed": 0,
+      "p50Ms": 483,
+      "p75Ms": 640,
+      "p95Ms": 1207,
+      "p99Ms": 2465,
+      "maxMs": 5813,
+      "over2500Ms": 12,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "lesson": {
+      "requests": 2496,
+      "failed": 0,
+      "p50Ms": 541,
+      "p75Ms": 658,
+      "p95Ms": 1340,
+      "p99Ms": 2547,
+      "maxMs": 7143,
+      "over2500Ms": 28,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "results": {
+      "requests": 1220,
+      "failed": 0,
+      "p50Ms": 481,
+      "p75Ms": 606,
+      "p95Ms": 1305,
+      "p99Ms": 2375,
+      "maxMs": 6936,
+      "over2500Ms": 10,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "sessions": {
+      "requests": 1204,
+      "failed": 0,
+      "p50Ms": 570,
+      "p75Ms": 708,
+      "p95Ms": 1368,
+      "p99Ms": 2430,
+      "maxMs": 5641,
+      "over2500Ms": 12,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "staff-cohort": {
+      "requests": 118,
+      "failed": 0,
+      "p50Ms": 786,
+      "p75Ms": 967,
+      "p95Ms": 1724,
+      "p99Ms": 2383,
+      "maxMs": 4148,
+      "over2500Ms": 1,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "staff-cohorts": {
+      "requests": 118,
+      "failed": 0,
+      "p50Ms": 651,
+      "p75Ms": 752,
+      "p95Ms": 1515,
+      "p99Ms": 1741,
+      "maxMs": 3886,
+      "over2500Ms": 1,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "staff-grading": {
+      "requests": 118,
+      "failed": 0,
+      "p50Ms": 628,
+      "p75Ms": 747,
+      "p95Ms": 1119,
+      "p99Ms": 1500,
+      "maxMs": 3248,
+      "over2500Ms": 1,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "staff-overview": {
+      "requests": 118,
+      "failed": 0,
+      "p50Ms": 671,
+      "p75Ms": 881,
+      "p95Ms": 1673,
+      "p99Ms": 3034,
+      "maxMs": 3666,
+      "over2500Ms": 2,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "staff-payments": {
+      "requests": 112,
+      "failed": 0,
+      "p50Ms": 928,
+      "p75Ms": 1313,
+      "p95Ms": 2080,
+      "p99Ms": 5495,
+      "maxMs": 6926,
+      "over2500Ms": 4,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "staff-support": {
+      "requests": 116,
+      "failed": 0,
+      "p50Ms": 623,
+      "p75Ms": 716,
+      "p95Ms": 1398,
+      "p99Ms": 2149,
+      "maxMs": 2353,
+      "over2500Ms": 0,
+      "budgetMs": 2500,
+      "passed": true
+    },
+    "support": {
+      "requests": 1184,
+      "failed": 0,
+      "p50Ms": 555,
+      "p75Ms": 710,
+      "p95Ms": 1358,
+      "p99Ms": 2112,
+      "maxMs": 6498,
+      "over2500Ms": 7,
+      "budgetMs": 2500,
+      "passed": true
+    }
+  },
+  "perMinute": [
+    {
+      "minute": 0,
+      "from": "2026-10-11T07:26:11.049Z",
+      "vusMax": 85,
+      "requests": 307,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 554,
+      "p75Ms": 611,
+      "p95Ms": 907,
+      "maxMs": 1972,
+      "over2500": 0
+    },
+    {
+      "minute": 1,
+      "from": "2026-10-11T07:27:11.049Z",
+      "vusMax": 160,
+      "requests": 726,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 550,
+      "p75Ms": 618,
+      "p95Ms": 953,
+      "maxMs": 1788,
+      "over2500": 0
+    },
+    {
+      "minute": 2,
+      "from": "2026-10-11T07:28:11.049Z",
+      "vusMax": 160,
+      "requests": 847,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 713,
+      "p75Ms": 1148,
+      "p95Ms": 2690,
+      "maxMs": 7739,
+      "over2500": 56
+    },
+    {
+      "minute": 3,
+      "from": "2026-10-11T07:29:11.049Z",
+      "vusMax": 160,
+      "requests": 882,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 641,
+      "p75Ms": 882,
+      "p95Ms": 1801,
+      "maxMs": 3913,
+      "over2500": 15
+    },
+    {
+      "minute": 4,
+      "from": "2026-10-11T07:30:11.049Z",
+      "vusMax": 160,
+      "requests": 896,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 603,
+      "p75Ms": 797,
+      "p95Ms": 1880,
+      "maxMs": 3443,
+      "over2500": 13
+    },
+    {
+      "minute": 5,
+      "from": "2026-10-11T07:31:11.049Z",
+      "vusMax": 160,
+      "requests": 902,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 591,
+      "p75Ms": 752,
+      "p95Ms": 1547,
+      "maxMs": 6326,
+      "over2500": 8
+    },
+    {
+      "minute": 6,
+      "from": "2026-10-11T07:32:11.049Z",
+      "vusMax": 160,
+      "requests": 913,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 574,
+      "p75Ms": 728,
+      "p95Ms": 1420,
+      "maxMs": 4148,
+      "over2500": 13
+    },
+    {
+      "minute": 7,
+      "from": "2026-10-11T07:33:11.049Z",
+      "vusMax": 160,
+      "requests": 906,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 586,
+      "p75Ms": 750,
+      "p95Ms": 1103,
+      "maxMs": 2631,
+      "over2500": 1
+    },
+    {
+      "minute": 8,
+      "from": "2026-10-11T07:34:11.049Z",
+      "vusMax": 160,
+      "requests": 901,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 591,
+      "p75Ms": 708,
+      "p95Ms": 1138,
+      "maxMs": 2793,
+      "over2500": 3
+    },
+    {
+      "minute": 9,
+      "from": "2026-10-11T07:35:11.049Z",
+      "vusMax": 160,
+      "requests": 913,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 549,
+      "p75Ms": 654,
+      "p95Ms": 986,
+      "maxMs": 2871,
+      "over2500": 1
+    },
+    {
+      "minute": 10,
+      "from": "2026-10-11T07:36:11.049Z",
+      "vusMax": 160,
+      "requests": 911,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 519,
+      "p75Ms": 571,
+      "p95Ms": 865,
+      "maxMs": 2168,
+      "over2500": 0
+    },
+    {
+      "minute": 11,
+      "from": "2026-10-11T07:37:11.049Z",
+      "vusMax": 160,
+      "requests": 914,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 488,
+      "p75Ms": 565,
+      "p95Ms": 877,
+      "maxMs": 6120,
+      "over2500": 10
+    },
+    {
+      "minute": 12,
+      "from": "2026-10-11T07:38:11.049Z",
+      "vusMax": 160,
+      "requests": 581,
+      "failed": 0,
+      "non200": 0,
+      "p50Ms": 538,
+      "p75Ms": 607,
+      "p95Ms": 926,
+      "maxMs": 1824,
+      "over2500": 0
+    }
+  ],
+  "slowest": {
+    "course-home": [
+      {
+        "ms": 7739,
+        "at": "2026-10-11T07:28:31.380Z",
+        "status": 200,
+        "secondsIntoRun": 140
+      },
+      {
+        "ms": 6722,
+        "at": "2026-10-11T07:28:31.433Z",
+        "status": 200,
+        "secondsIntoRun": 140
+      },
+      {
+        "ms": 6670,
+        "at": "2026-10-11T07:28:31.675Z",
+        "status": 200,
+        "secondsIntoRun": 141
+      },
+      {
+        "ms": 6120,
+        "at": "2026-10-11T07:37:53.155Z",
+        "status": 200,
+        "secondsIntoRun": 702
+      },
+      {
+        "ms": 3520,
+        "at": "2026-10-11T07:28:22.486Z",
+        "status": 200,
+        "secondsIntoRun": 131
+      }
+    ],
+    "dashboard": [
+      {
+        "ms": 7447,
+        "at": "2026-10-11T07:28:31.165Z",
+        "status": 200,
+        "secondsIntoRun": 140
+      },
+      {
+        "ms": 6617,
+        "at": "2026-10-11T07:28:31.661Z",
+        "status": 200,
+        "secondsIntoRun": 141
+      },
+      {
+        "ms": 6095,
+        "at": "2026-10-11T07:37:53.132Z",
+        "status": 200,
+        "secondsIntoRun": 702
+      },
+      {
+        "ms": 5237,
+        "at": "2026-10-11T07:37:52.179Z",
+        "status": 200,
+        "secondsIntoRun": 701
+      },
+      {
+        "ms": 4291,
+        "at": "2026-10-11T07:37:53.465Z",
+        "status": 200,
+        "secondsIntoRun": 702
+      }
+    ],
+    "learn": [
+      {
+        "ms": 5813,
+        "at": "2026-10-11T07:37:52.986Z",
+        "status": 200,
+        "secondsIntoRun": 702
+      },
+      {
+        "ms": 5759,
+        "at": "2026-10-11T07:37:52.807Z",
+        "status": 200,
+        "secondsIntoRun": 702
+      },
+      {
+        "ms": 3858,
+        "at": "2026-10-11T07:28:23.657Z",
+        "status": 200,
+        "secondsIntoRun": 133
+      },
+      {
+        "ms": 3213,
+        "at": "2026-10-11T07:28:23.735Z",
+        "status": 200,
+        "secondsIntoRun": 133
+      },
+      {
+        "ms": 2891,
+        "at": "2026-10-11T07:30:30.245Z",
+        "status": 200,
+        "secondsIntoRun": 259
+      }
+    ],
+    "lesson": [
+      {
+        "ms": 7143,
+        "at": "2026-10-11T07:28:31.245Z",
+        "status": 200,
+        "secondsIntoRun": 140
+      },
+      {
+        "ms": 7016,
+        "at": "2026-10-11T07:28:31.702Z",
+        "status": 200,
+        "secondsIntoRun": 141
+      },
+      {
+        "ms": 7015,
+        "at": "2026-10-11T07:28:29.915Z",
+        "status": 200,
+        "secondsIntoRun": 139
+      },
+      {
+        "ms": 6829,
+        "at": "2026-10-11T07:28:31.009Z",
+        "status": 200,
+        "secondsIntoRun": 140
+      },
+      {
+        "ms": 6828,
+        "at": "2026-10-11T07:28:32.145Z",
+        "status": 200,
+        "secondsIntoRun": 141
+      }
+    ],
+    "results": [
+      {
+        "ms": 6936,
+        "at": "2026-10-11T07:28:31.710Z",
+        "status": 200,
+        "secondsIntoRun": 141
+      },
+      {
+        "ms": 6576,
+        "at": "2026-10-11T07:28:31.265Z",
+        "status": 200,
+        "secondsIntoRun": 140
+      },
+      {
+        "ms": 5679,
+        "at": "2026-10-11T07:37:52.906Z",
+        "status": 200,
+        "secondsIntoRun": 702
+      },
+      {
+        "ms": 5033,
+        "at": "2026-10-11T07:37:51.975Z",
+        "status": 200,
+        "secondsIntoRun": 701
+      },
+      {
+        "ms": 3913,
+        "at": "2026-10-11T07:29:12.502Z",
+        "status": 200,
+        "secondsIntoRun": 181
+      }
+    ],
+    "sessions": [
+      {
+        "ms": 5641,
+        "at": "2026-10-11T07:28:29.780Z",
+        "status": 200,
+        "secondsIntoRun": 139
+      },
+      {
+        "ms": 5529,
+        "at": "2026-10-11T07:37:52.893Z",
+        "status": 200,
+        "secondsIntoRun": 702
+      },
+      {
+        "ms": 4905,
+        "at": "2026-10-11T07:28:23.768Z",
+        "status": 200,
+        "secondsIntoRun": 133
+      },
+      {
+        "ms": 3946,
+        "at": "2026-10-11T07:28:23.025Z",
+        "status": 200,
+        "secondsIntoRun": 132
+      },
+      {
+        "ms": 3063,
+        "at": "2026-10-11T07:32:44.067Z",
+        "status": 200,
+        "secondsIntoRun": 393
+      }
+    ],
+    "staff-cohort": [
+      {
+        "ms": 4148,
+        "at": "2026-10-11T07:32:44.162Z",
+        "status": 200,
+        "secondsIntoRun": 393
+      },
+      {
+        "ms": 2437,
+        "at": "2026-10-11T07:35:57.208Z",
+        "status": 200,
+        "secondsIntoRun": 586
+      },
+      {
+        "ms": 2118,
+        "at": "2026-10-11T07:29:53.796Z",
+        "status": 200,
+        "secondsIntoRun": 223
+      },
+      {
+        "ms": 2078,
+        "at": "2026-10-11T07:29:04.016Z",
+        "status": 200,
+        "secondsIntoRun": 173
+      },
+      {
+        "ms": 2048,
+        "at": "2026-10-11T07:28:48.856Z",
+        "status": 200,
+        "secondsIntoRun": 158
+      }
+    ],
+    "staff-cohorts": [
+      {
+        "ms": 3886,
+        "at": "2026-10-11T07:28:24.431Z",
+        "status": 200,
+        "secondsIntoRun": 133
+      },
+      {
+        "ms": 1742,
+        "at": "2026-10-11T07:28:31.433Z",
+        "status": 200,
+        "secondsIntoRun": 140
+      },
+      {
+        "ms": 1732,
+        "at": "2026-10-11T07:28:53.086Z",
+        "status": 200,
+        "secondsIntoRun": 162
+      },
+      {
+        "ms": 1604,
+        "at": "2026-10-11T07:26:26.826Z",
+        "status": 200,
+        "secondsIntoRun": 16
+      },
+      {
+        "ms": 1530,
+        "at": "2026-10-11T07:34:53.290Z",
+        "status": 200,
+        "secondsIntoRun": 522
+      }
+    ],
+    "staff-grading": [
+      {
+        "ms": 3248,
+        "at": "2026-10-11T07:31:10.692Z",
+        "status": 200,
+        "secondsIntoRun": 300
+      },
+      {
+        "ms": 1509,
+        "at": "2026-10-11T07:29:12.859Z",
+        "status": 200,
+        "secondsIntoRun": 182
+      },
+      {
+        "ms": 1456,
+        "at": "2026-10-11T07:29:19.672Z",
+        "status": 200,
+        "secondsIntoRun": 189
+      },
+      {
+        "ms": 1217,
+        "at": "2026-10-11T07:30:15.660Z",
+        "status": 200,
+        "secondsIntoRun": 245
+      },
+      {
+        "ms": 1210,
+        "at": "2026-10-11T07:28:48.173Z",
+        "status": 200,
+        "secondsIntoRun": 157
+      }
+    ],
+    "staff-overview": [
+      {
+        "ms": 3666,
+        "at": "2026-10-11T07:28:23.870Z",
+        "status": 200,
+        "secondsIntoRun": 133
+      },
+      {
+        "ms": 3167,
+        "at": "2026-10-11T07:31:10.814Z",
+        "status": 200,
+        "secondsIntoRun": 300
+      },
+      {
+        "ms": 2383,
+        "at": "2026-10-11T07:35:06.081Z",
+        "status": 200,
+        "secondsIntoRun": 535
+      },
+      {
+        "ms": 1984,
+        "at": "2026-10-11T07:28:20.242Z",
+        "status": 200,
+        "secondsIntoRun": 129
+      },
+      {
+        "ms": 1788,
+        "at": "2026-10-11T07:27:23.668Z",
+        "status": 200,
+        "secondsIntoRun": 73
+      }
+    ],
+    "staff-payments": [
+      {
+        "ms": 6926,
+        "at": "2026-10-11T07:28:32.049Z",
+        "status": 200,
+        "secondsIntoRun": 141
+      },
+      {
+        "ms": 5795,
+        "at": "2026-10-11T07:28:23.559Z",
+        "status": 200,
+        "secondsIntoRun": 133
+      },
+      {
+        "ms": 3074,
+        "at": "2026-10-11T07:30:31.102Z",
+        "status": 200,
+        "secondsIntoRun": 260
+      },
+      {
+        "ms": 2588,
+        "at": "2026-10-11T07:32:44.199Z",
+        "status": 200,
+        "secondsIntoRun": 393
+      },
+      {
+        "ms": 2289,
+        "at": "2026-10-11T07:31:39.203Z",
+        "status": 200,
+        "secondsIntoRun": 328
+      }
+    ],
+    "staff-support": [
+      {
+        "ms": 2353,
+        "at": "2026-10-11T07:31:38.587Z",
+        "status": 200,
+        "secondsIntoRun": 328
+      },
+      {
+        "ms": 2210,
+        "at": "2026-10-11T07:29:28.265Z",
+        "status": 200,
+        "secondsIntoRun": 197
+      },
+      {
+        "ms": 1805,
+        "at": "2026-10-11T07:38:43.845Z",
+        "status": 200,
+        "secondsIntoRun": 753
+      },
+      {
+        "ms": 1523,
+        "at": "2026-10-11T07:30:30.472Z",
+        "status": 200,
+        "secondsIntoRun": 259
+      },
+      {
+        "ms": 1443,
+        "at": "2026-10-11T07:29:01.968Z",
+        "status": 200,
+        "secondsIntoRun": 171
+      }
+    ],
+    "support": [
+      {
+        "ms": 6498,
+        "at": "2026-10-11T07:28:31.707Z",
+        "status": 200,
+        "secondsIntoRun": 141
+      },
+      {
+        "ms": 3869,
+        "at": "2026-10-11T07:28:23.985Z",
+        "status": 200,
+        "secondsIntoRun": 133
+      },
+      {
+        "ms": 3250,
+        "at": "2026-10-11T07:29:12.549Z",
+        "status": 200,
+        "secondsIntoRun": 182
+      },
+      {
+        "ms": 2924,
+        "at": "2026-10-11T07:32:44.040Z",
+        "status": 200,
+        "secondsIntoRun": 393
+      },
+      {
+        "ms": 2631,
+        "at": "2026-10-11T07:33:29.661Z",
+        "status": 200,
+        "secondsIntoRun": 439
+      }
+    ]
+  },
+  "slowestNote": "The five slowest requests per page tag, from k6's per-request output. No request took longer than 10 s, so no request came near a Netlify function time limit (ledger A16); the slowest was 7739 ms. 56 of the 120 requests slower than 2.5 s fall in the first minute of the hold (minute 2), when the load had just reached 160 users and the two probe browsers had just started; server logs of the preview are not readable from this machine, so new function instances starting is the likely cause, not an established one.",
+  "connections": {
+    "startedAt": "2026-10-11T07:26:02.930Z",
+    "everySeconds": 15,
+    "samples": 61,
+    "peakTotal": 46,
+    "peakClient": 39,
+    "peakActive": 2,
+    "idleBaseline": {
+      "total": 15,
+      "client": 8,
+      "source": "the pilot's idle samples (evidence/staging-pilot.json)"
+    },
+    "maxConnections": 901,
+    "note": "Rows of pg_stat_activity on the staging branch, sampled through the pooled address every 15 s from before k6 started until after it ended; the sampler's own connection and Neon's internal sessions are included. Peak 39 client backends against an idle baseline of 8, so the pooler held about 35 Postgres connections at most for 160 virtual users plus two probe browsers; the server allows 901. No pool timeout and no failed request was seen (ledger P-10). A 15-second sample can miss a shorter peak.",
+    "list": [
+      {
+        "at": "2026-10-11T07:26:06.416Z",
+        "total": 16,
+        "client": 9,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:26:18.164Z",
+        "total": 16,
+        "client": 9,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:26:33.372Z",
+        "total": 17,
+        "client": 10,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:26:48.160Z",
+        "total": 17,
+        "client": 10,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:27:03.369Z",
+        "total": 16,
+        "client": 9,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:27:18.159Z",
+        "total": 16,
+        "client": 9,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:27:33.361Z",
+        "total": 16,
+        "client": 9,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:27:48.169Z",
+        "total": 16,
+        "client": 9,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:28:03.383Z",
+        "total": 16,
+        "client": 9,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:28:18.224Z",
+        "total": 17,
+        "client": 10,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:28:33.409Z",
+        "total": 27,
+        "client": 20,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:28:48.224Z",
+        "total": 27,
+        "client": 20,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:29:03.428Z",
+        "total": 26,
+        "client": 19,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:29:18.172Z",
+        "total": 26,
+        "client": 19,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:29:33.409Z",
+        "total": 28,
+        "client": 21,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:29:48.164Z",
+        "total": 28,
+        "client": 21,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:30:03.397Z",
+        "total": 27,
+        "client": 20,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:30:18.200Z",
+        "total": 27,
+        "client": 20,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:30:33.375Z",
+        "total": 32,
+        "client": 25,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:30:48.205Z",
+        "total": 32,
+        "client": 25,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:31:03.369Z",
+        "total": 32,
+        "client": 25,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:31:20.218Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:31:33.172Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:31:48.372Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:32:03.157Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:32:18.352Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:32:33.152Z",
+        "total": 42,
+        "client": 35,
+        "active": 2
+      },
+      {
+        "at": "2026-10-11T07:32:48.376Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:33:03.166Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:33:18.379Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:33:33.145Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:33:48.384Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:34:03.168Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:34:18.379Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:34:33.146Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:34:48.349Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:35:03.217Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:35:18.382Z",
+        "total": 46,
+        "client": 39,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:35:33.171Z",
+        "total": 46,
+        "client": 39,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:35:48.372Z",
+        "total": 46,
+        "client": 39,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:36:03.153Z",
+        "total": 45,
+        "client": 38,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:36:18.351Z",
+        "total": 45,
+        "client": 38,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:36:35.093Z",
+        "total": 45,
+        "client": 38,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:36:48.184Z",
+        "total": 45,
+        "client": 38,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:37:03.414Z",
+        "total": 44,
+        "client": 37,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:37:18.154Z",
+        "total": 44,
+        "client": 37,
+        "active": 2
+      },
+      {
+        "at": "2026-10-11T07:37:33.379Z",
+        "total": 44,
+        "client": 37,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:37:48.156Z",
+        "total": 44,
+        "client": 37,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:38:03.385Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:38:18.159Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:38:33.369Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:38:48.170Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:39:03.377Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:39:18.161Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:39:33.378Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:39:48.152Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:40:03.376Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:40:18.161Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:40:33.369Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:40:48.146Z",
+        "total": 43,
+        "client": 36,
+        "active": 1
+      },
+      {
+        "at": "2026-10-11T07:41:03.371Z",
+        "total": 42,
+        "client": 35,
+        "active": 1
+      }
+    ]
+  },
+  "uptimeMonitor": {
+    "provider": "UptimeRobot, GET /api/health every 5 minutes",
+    "status": "Not readable from this machine (no UptimeRobot login or API key). The owner reads the monitor's log for 07:26 to 07:39 UTC on 2026-10-11.",
+    "seenFromThisMachine": "GET /api/health answered 200 at 07:11:50 UTC (before) and at 07:41 UTC (after); all 10599 k6 requests in between answered 200."
+  },
+  "usage": {
+    "neon": {
+      "before": {
+        "at": "2026-10-11T07:11:49.789Z",
+        "branch": {
+          "compute_time_seconds": 2730,
+          "active_time_seconds": 10716
+        },
+        "project": {
+          "compute_time_seconds": 244631,
+          "active_time_seconds": 897124,
+          "consumption_period_start": "2026-10-01T00:00:00Z"
+        }
+      },
+      "after": {
+        "at": "2026-10-11T07:41:38.421Z",
+        "branch": {
+          "compute_time_seconds": 2730,
+          "active_time_seconds": 10716
+        },
+        "project": {
+          "compute_time_seconds": 244631,
+          "active_time_seconds": 897124,
+          "consumption_period_start": "2026-10-01T00:00:00Z"
+        }
+      },
+      "endpoint": {
+        "type": "read_write",
+        "state": "active",
+        "min_cu": 0.25,
+        "max_cu": 2,
+        "suspend_timeout_seconds": 0,
+        "last_active": "2026-10-11T07:10:00Z",
+        "pooler_enabled": false
+      },
+      "note": "The Neon API counters did not move between the two reads (they are updated with a delay), so the compute this run used cannot be read yet. Bound: about 15 minutes of activity at 0.25 to 2 compute units is 0.06 to 0.5 compute-unit hours. The staging endpoint was already active before the run (its last-active time was one minute old): the monitor's health check every 5 minutes keeps it awake."
+    },
+    "netlify": "Not readable from this machine (no Netlify CLI and no Netlify token). The owner reads Team usage in the Netlify dashboard."
+  },
+  "ranAt": "2026-10-11T07:39:09.516Z",
+  "metrics": {
+    "http_req_duration{page:sessions}": {
+      "max": 5640.514018,
+      "p(75)": 707.80439875,
+      "p(90)": 1016.3756984000001,
+      "p(95)": 1368.2135749499967,
+      "p(99)": 2430.4105733900037,
+      "avg": 682.0509095107966,
+      "min": 408.036632,
+      "med": 569.5450545,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "vus": {
+      "value": 6,
+      "min": 6,
+      "max": 160
+    },
+    "http_req_duration{page:staff-payments}": {
+      "p(99)": 5495.478750660002,
+      "avg": 1220.5830293839285,
+      "min": 788.961411,
+      "med": 933.2057649999999,
+      "max": 6925.604887,
+      "p(75)": 1312.52821425,
+      "p(90)": 1707.1174499,
+      "p(95)": 2079.9018581499963,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_duration{page:learn}": {
+      "avg": 620.6414679162065,
+      "min": 401.340291,
+      "med": 482.578516,
+      "max": 5813.492247,
+      "p(75)": 640.322899,
+      "p(90)": 915.7655450000005,
+      "p(95)": 1207.2937493999996,
+      "p(99)": 2464.7414649199977,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_duration{page:dashboard}": {
+      "min": 411.267149,
+      "med": 587.537868,
+      "max": 7446.929928,
+      "p(75)": 751.370497,
+      "p(90)": 1142.6496798,
+      "p(95)": 1706.4202719999994,
+      "p(99)": 2844.702467559998,
+      "avg": 756.2310334395261,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_sending": {
+      "p(90)": 0.39059040000000006,
+      "p(95)": 0.437448,
+      "p(99)": 2.525074260000008,
+      "avg": 0.39894098537597944,
+      "min": 0.040911,
+      "med": 0.276922,
+      "max": 132.28634,
+      "p(75)": 0.330315
+    },
+    "http_req_tls_handshaking": {
+      "med": 0,
+      "max": 312.501604,
+      "p(75)": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 126.61861672000005,
+      "avg": 2.0172936132654034,
+      "min": 0
+    },
+    "checks": {
+      "passes": 31797,
+      "fails": 0,
+      "thresholds": {
+        "rate>0.999": false
+      },
+      "value": 1
+    },
+    "http_req_duration{page:support}": {
+      "med": 555.2542175000001,
+      "max": 6498.477235,
+      "p(75)": 710.40268925,
+      "p(90)": 989.6879023,
+      "p(95)": 1358.2210564499992,
+      "p(99)": 2112.39285487,
+      "avg": 665.403272355574,
+      "min": 397.491404,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_duration{page:course-home}": {
+      "p(75)": 792.037579,
+      "p(90)": 1109.5290326000008,
+      "p(95)": 1530.7578935999995,
+      "p(99)": 2669.73133288,
+      "avg": 773.6661908466407,
+      "min": 439.569878,
+      "med": 605.157664,
+      "max": 7739.20145,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_duration{page:staff-support}": {
+      "max": 2352.700059,
+      "p(75)": 715.67887725,
+      "p(90)": 920.9430525,
+      "p(95)": 1398.001086,
+      "p(99)": 2149.278845749998,
+      "avg": 724.9296949913797,
+      "min": 532.700116,
+      "med": 623.9615145,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_reqs": {
+      "count": 10599,
+      "rate": 13.591979127168278
+    },
+    "http_req_duration{page:results}": {
+      "p(99)": 2375.029581749992,
+      "avg": 620.8854582852462,
+      "min": 403.044403,
+      "med": 481.2328435,
+      "max": 6936.214234,
+      "p(75)": 606.32553675,
+      "p(90)": 897.1608623000002,
+      "p(95)": 1304.9689540999984,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "iteration_duration": {
+      "min": 50224.546748,
+      "med": 84405.682362,
+      "max": 109352.084687,
+      "p(75)": 90157.120903,
+      "p(90)": 95226.957615,
+      "p(95)": 98222.492629,
+      "p(99)": 103638.0147308,
+      "avg": 83607.12470766519
+    },
+    "http_req_duration": {
+      "p(75)": 715.58709,
+      "p(90)": 1030.8449522000003,
+      "p(95)": 1445.8981618,
+      "p(99)": 2565.940329020003,
+      "avg": 694.9828896616638,
+      "min": 397.28494,
+      "med": 565.743536,
+      "max": 7739.20145
+    },
+    "http_req_duration{page:lesson}": {
+      "avg": 668.3537950128206,
+      "min": 397.28494,
+      "med": 540.885756,
+      "max": 7143.280643,
+      "p(75)": 658.3078505,
+      "p(90)": 969.557321,
+      "p(95)": 1339.74895075,
+      "p(99)": 2546.6415049500024,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_duration{page:staff-overview}": {
+      "avg": 855.2963775000002,
+      "min": 531.820586,
+      "med": 672.418942,
+      "max": 3666.109135,
+      "p(75)": 881.3231999999999,
+      "p(90)": 1356.2512170999996,
+      "p(95)": 1672.8594553499993,
+      "p(99)": 3033.501863129999,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_duration{page:staff-grading}": {
+      "p(99)": 1499.80698668,
+      "avg": 726.1705697542372,
+      "min": 535.931169,
+      "med": 632.4025715,
+      "max": 3247.974766,
+      "p(75)": 746.88437375,
+      "p(90)": 979.2785589,
+      "p(95)": 1118.7215090999991,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_failed": {
+      "passes": 0,
+      "fails": 10599,
+      "thresholds": {
+        "rate<0.01": false
+      },
+      "value": 0
+    },
+    "vus_max": {
+      "max": 160,
+      "value": 160,
+      "min": 160
+    },
+    "data_received": {
+      "count": 398688675,
+      "rate": 511271.64344168105
+    },
+    "http_req_receiving": {
+      "avg": 251.31375228889496,
+      "min": 0.914976,
+      "med": 207.286927,
+      "max": 5155.584545,
+      "p(75)": 257.1706005,
+      "p(90)": 410.2182628000004,
+      "p(95)": 625.6194791000003,
+      "p(99)": 1423.8227927600012
+    },
+    "http_req_duration{page:staff-cohort}": {
+      "med": 786.0541235000001,
+      "max": 4147.579099,
+      "p(75)": 967.2633880000001,
+      "p(90)": 1401.7515055999997,
+      "p(95)": 1724.3675845999996,
+      "p(99)": 2382.93777875,
+      "avg": 940.4975307796614,
+      "min": 653.396712,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "p(75)": 715.58709,
+      "p(90)": 1030.8449522000003,
+      "p(95)": 1445.8981618,
+      "p(99)": 2565.940329020003,
+      "avg": 694.9828896616638,
+      "min": 397.28494,
+      "med": 565.743536,
+      "max": 7739.20145
+    },
+    "http_req_duration{page:staff-cohorts}": {
+      "p(95)": 1514.723213,
+      "p(99)": 1740.5875948999999,
+      "avg": 784.6199033050851,
+      "min": 531.940174,
+      "med": 651.1559460000001,
+      "max": 3886.336172,
+      "p(75)": 752.217809,
+      "p(90)": 1264.8285614,
+      "thresholds": {
+        "p(75)<2500": false
+      }
+    },
+    "http_req_connecting": {
+      "p(75)": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 126.59916360000051,
+      "avg": 3.405149347391263,
+      "min": 0,
+      "med": 0,
+      "max": 3136.169692
+    },
+    "http_req_waiting": {
+      "min": 278.667412,
+      "med": 339.921024,
+      "max": 7330.132421,
+      "p(75)": 429.5230955,
+      "p(90)": 641.8818474000002,
+      "p(95)": 899.0838142,
+      "p(99)": 1568.03458742,
+      "avg": 443.27019638739637
+    },
+    "data_sent": {
+      "count": 1985317,
+      "rate": 2545.9370907455746
+    },
+    "iterations": {
+      "count": 1281,
+      "rate": 1.6427328296917223
+    },
+    "http_req_blocked": {
+      "p(90)": 0.0013,
+      "p(95)": 0.001401,
+      "p(99)": 255.70151744000023,
+      "avg": 5.5886335184443245,
+      "min": 0.0002,
+      "med": 0.000901,
+      "max": 3368.993454,
+      "p(75)": 0.0011
+    }
+  },
+  "root_group": {
+    "checks": {
+      "status is 200": {
+        "passes": 10599,
+        "fails": 0,
+        "name": "status is 200",
+        "path": "::status is 200",
+        "id": "6210a8cd14cd70477eba5c5e4cb3fb5f"
+      },
+      "stayed signed in": {
+        "name": "stayed signed in",
+        "path": "::stayed signed in",
+        "id": "06f3b0e87108349ee2ba68741aa5ac8a",
+        "passes": 10599,
+        "fails": 0
+      },
+      "rendered without an error": {
+        "passes": 10599,
+        "fails": 0,
+        "name": "rendered without an error",
+        "path": "::rendered without an error",
+        "id": "24dd248f2986594a98d74e5f82c77b6a"
+      }
+    },
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": {}
+  }
+}

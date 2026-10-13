@@ -299,6 +299,16 @@ model User {
   email         String     @unique
   emailVerified DateTime?
   passwordHash  String?
+  // True while the account still uses a password an administrator set for it
+  // (staff account creation, R3-12). Cleared when the person chooses their own
+  // through the password reset flow. It only drives a suggestion to change it;
+  // nothing is blocked while it is true.
+  passwordIsTemporary Boolean @default(false)
+
+  // A readable, permanent reference for a learner (KQL-000482), issued in
+  // order at registration from the pattern in LearnerNumberConfig. Null for
+  // staff, and for learners who registered before a pattern was set.
+  learnerNumber String? @unique
   name          String
   phone         String?
   status        UserStatus @default(PENDING_VERIFICATION)
@@ -319,6 +329,13 @@ model User {
   updatedAt       DateTime  @updatedAt
   deactivatedAt   DateTime?
   deactivatedById String?
+
+  // D-12 / NFR-11 — set when staff anonymise the account in place. The row is
+  // never deleted; orders, grades, certificates and audit events keep pointing
+  // at it. `anonymisedAt` is also the compare-and-set guard that stops a double
+  // anonymisation (updateMany where anonymisedAt IS NULL).
+  anonymisedAt   DateTime?
+  anonymisedById String?
 
   sessions                    Session[]
   accounts                    Account[]
@@ -352,6 +369,14 @@ model User {
 
   // ATT-03 — attribution for a post-window attendance correction.
   attendanceCorrections AttendanceRecord[] @relation("AttendanceCorrectedBy")
+
+  // Phase 13 — in-app notifications and per-category email preferences.
+  notifications    Notification[]
+  emailPreferences EmailPreference[]
+
+  // Phase 14 — attribution for a licence activation (LIC-08: licence rows are
+  // never deleted by application code).
+  licenceActivations LicenceRecord[] @relation("LicenceActivatedBy")
 
   @@index([status])
   @@index([isStaff])
@@ -830,13 +855,25 @@ model LessonResource {
   // CAT-04 — resources render in order on the lesson.
   position Int @default(0)
 
+  // NFR-09 (plan 15-23) — a WebVTT caption track is a text/vtt LessonResource
+  // linked to the VIDEO resource it captions. All three columns are null for
+  // every ordinary resource; a caption row carries all three. Deleting the
+  // video resource deletes its captions.
+  captionForResourceId String?
+  captionLanguage      String? // BCP 47 language tag, e.g. en or fr-CA
+  captionLabel         String? // shown in the player's captions menu
+
   createdAt DateTime @default(now())
 
   lesson     Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   uploadedBy User?  @relation(fields: [uploadedById], references: [id])
 
+  captionFor LessonResource?  @relation("ResourceCaptions", fields: [captionForResourceId], references: [id], onDelete: Cascade)
+  captions   LessonResource[] @relation("ResourceCaptions")
+
   @@index([lessonId])
   @@index([uploadStatus])
+  @@index([captionForResourceId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1101,6 +1138,11 @@ model DomainEvent {
   occurredAt  DateTime  @default(now())
   processedAt DateTime?
 
+  // D-04 — drain retry bookkeeping. A row whose processedAt and lastError are
+  // both set is a poison-marked event (processed-with-error), no second table.
+  attempts  Int     @default(0)
+  lastError String?
+
   @@index([processedAt, occurredAt])
   @@index([type])
 }
@@ -1143,6 +1185,16 @@ model LessonWatchProgress {
 
 // LRN-07 — records which rule version was satisfied and what evidence
 // satisfied it, so a later correction can be reasoned about.
+//
+// NFR-03 / NFR-14 — at most one OPEN record per enrolment, scope and course.
+// The unique index "CompletionRecord_open_key" ON ("enrolmentId", "scope",
+// (COALESCE("courseId", ''))) WHERE "supersededAt" IS NULL lives only in
+// migration 20261006120000_grade_completion_uniqueness, because Prisma cannot
+// express a partial expression index here. Superseded records are outside it.
+// completion-service.ts applyVerdict treats the losing concurrent insert
+// (P2002) as "already completed". If `prisma migrate dev` ever proposes
+// dropping this index, delete that line from the generated migration; never
+// use `prisma db push` here.
 model CompletionRecord {
   id           String          @id @default(cuid())
   enrolmentId  String
@@ -1286,6 +1338,14 @@ model Submission {
   @@index([enrolmentId])
 }
 
+// NFR-03 / NFR-14 — one grade per submission. The partial unique index
+// "Grade_submissionId_key" ON ("submissionId") WHERE "submissionId" IS NOT NULL
+// lives only in migration 20261006120000_grade_completion_uniqueness, because
+// Prisma cannot express a partial index here (a plain @unique would be total).
+// Quiz attempt grades (submissionId null) stay outside it. grading-service.ts
+// turns the losing concurrent insert (P2002) into an update of the winner's
+// draft. If `prisma migrate dev` ever proposes dropping this index, delete that
+// line from the generated migration; never use `prisma db push` here.
 model Grade {
   id           String  @id @default(cuid())
   assessmentId String
@@ -1849,6 +1909,128 @@ model EmailDispatch {
   error             String?
   createdAt         DateTime  @default(now())
 
+  // D-03/D-05/D-06 — retry state lives on the one row so a replay can never
+  // insert a second. `status` stays a String (CHECK-constrained in SQL to
+  // QUEUED, SENDING, SENT, FAILED, SKIPPED).
+  attempts       Int       @default(0)
+  lastAttemptAt  DateTime?
+  nextAttemptAt  DateTime?
+  skipReason     String?
+  // Allow-listed non-secret render context. Stays null for token-bearing auth
+  // mails (D-10): a raw token must never reach any column.
+  templateParams Json?
+  resentCount    Int       @default(0)
+
   @@unique([template, correlationId])
   @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
+}
+
+// D-17/D-23 — in-app notification. Archive-only: no service ever deletes a
+// row; read notifications leave the drawer by archivedAt. params holds ids,
+// references and titles only, never reasons, message bodies or filenames.
+model Notification {
+  id            String    @id @default(cuid())
+  recipientId   String
+  type          String
+  targetType    String
+  targetId      String
+  params        Json
+  sourceEventId String
+  readAt        DateTime?
+  archivedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  recipient User @relation(fields: [recipientId], references: [id])
+
+  @@unique([recipientId, type, sourceEventId])
+  @@index([recipientId, archivedAt, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([recipientId, archivedAt, readAt])
+}
+
+// D-16 — one row per (user, category). Rows are upserted and never deleted; a
+// missing row means the category is not muted.
+model EmailPreference {
+  userId    String
+  category  String
+  muted     Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, category])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Software licence and deployment control
+// ---------------------------------------------------------------------------
+
+// D-13 — the deployment identifier is a value seeded in the database by the
+// migration itself (singleton row, id "deployment", generated UUID), never
+// derived from hostname, MAC or container ID, so it survives restore, scaling
+// and migration. The singleton is enforced by a CHECK in the migration.
+// The one row (id "default") that says how learner numbers are formed and
+// where the counter stands. `pattern` null means numbers are not being issued
+// yet. `nextSequence` only ever goes up, including across pattern changes, so
+// a counter value is never used twice.
+model LearnerNumberConfig {
+  id           String   @id @default("default")
+  pattern      String?
+  nextSequence Int      @default(1)
+  updatedById  String?
+  updatedAt    DateTime @updatedAt
+}
+
+model DeploymentIdentity {
+  id           String   @id @default("deployment")
+  deploymentId String   @unique @default(dbgenerated("(gen_random_uuid())::text"))
+  createdAt    DateTime @default(now())
+}
+
+// D-13 — append-only register of every successfully activated licence. `raw`
+// is the signed licence text: public signed data, never a secret (D-14). No
+// application code deletes these rows (LIC-08).
+model LicenceRecord {
+  id            String   @id @default(cuid())
+  licenceId     String   @unique
+  raw           String
+  keyId         String
+  schemaVersion Int
+  clientId      String
+  issuedAt      DateTime
+  expiresAt     DateTime
+  graceEndsAt   DateTime
+  activatedAt   DateTime @default(now())
+  activatedById String?
+
+  activatedBy User?          @relation("LicenceActivatedBy", fields: [activatedById], references: [id])
+  activeFor   LicenceState[] @relation("ActiveLicenceRecord")
+
+  @@index([issuedAt])
+}
+
+// D-13 — singleton pointer plus derived and last-known-good state (id
+// "current"). Every function instance reads this one row; a write is one
+// atomic UPDATE guarded by `version`. D-01 — the validator-shaped columns
+// (lastVerificationOutcome, attentionSince, lastGoodAt) exist so an online
+// check can be added later without a rewrite; this phase writes no validator
+// state. No application code deletes this row (LIC-08).
+model LicenceState {
+  id                      String    @id @default("current")
+  activeRecordId          String?
+  registeredClientId      String?
+  everActivated           Boolean   @default(false)
+  state                   String    @default("UNLICENSED")
+  restrictedAt            DateTime?
+  reasonCode              String?
+  lastVerifiedAt          DateTime?
+  lastVerificationOutcome String?
+  lastGoodAt              DateTime?
+  attentionSince          DateTime?
+  highWaterAt             DateTime  @default(now())
+  clockAlertAt            DateTime?
+  version                 Int       @default(0)
+  updatedAt               DateTime  @updatedAt
+
+  activeRecord LicenceRecord? @relation("ActiveLicenceRecord", fields: [activeRecordId], references: [id])
 }

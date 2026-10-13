@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UploadPanel } from "@/components/catalogue";
 
@@ -115,19 +115,34 @@ describe("UploadPanel", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("shows Upload failed and removes the row after confirmation", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("shows Upload failed and removes the row after confirming in the dialog (UX batch D: no window.confirm)", async () => {
+    const nativeConfirm = vi.spyOn(window, "confirm");
     const fetchSpy = vi.fn().mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchSpy);
     render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[errorResource]} />);
 
     expect(screen.getByText("Upload failed")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove resource" }));
+    expect(nativeConfirm).not.toHaveBeenCalled();
 
     await waitFor(() =>
       expect(fetchSpy).toHaveBeenCalledWith("/api/lesson-resources/res-error", { method: "DELETE" }),
     );
     await waitFor(() => expect(screen.queryByText(errorResource.filename)).toBeNull());
+  });
+
+  it("cancelling the dialog removes nothing", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<UploadPanel lessonId="lesson-1" lessonType="FILE" initialResources={[errorResource]} />);
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(screen.getByText(errorResource.filename)).toBeTruthy();
   });
 
   it("does not poll after upload completion", async () => {

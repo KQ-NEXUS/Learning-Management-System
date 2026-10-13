@@ -12,7 +12,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import {
   commitProgrammeCourseOrder,
   parseOrderToken,
@@ -65,7 +65,11 @@ function toOrderFailure(error: unknown): Extract<OrderActionResult, { ok: false 
     };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-    return { ok: false, reason: "DENIED", message: "Your role does not permit composing this programme." };
+    return {
+      ok: false,
+      reason: "DENIED",
+      message: refusalMessage(error, "Your role does not permit composing this programme."),
+    };
   }
   throw error;
 }
@@ -78,7 +82,11 @@ function toMembershipFailure(error: unknown): Extract<MembershipActionResult, { 
     return { ok: false, reason: "NOT_FOUND", message: "That course is not in this programme." };
   }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-    return { ok: false, reason: "DENIED", message: "Your role does not permit composing this programme." };
+    return {
+      ok: false,
+      reason: "DENIED",
+      message: refusalMessage(error, "Your role does not permit composing this programme."),
+    };
   }
   if (error instanceof z.ZodError) {
     return { ok: false, reason: "INVALID", message: "The request was malformed." };

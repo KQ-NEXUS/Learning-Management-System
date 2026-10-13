@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useLicenceRestriction } from "@/components/licence/LicenceRestrictionProvider";
+import { LicenceRefusalNote, RestrictedControlReason } from "@/components/licence/LicenceRefusalNote";
+import { isLicenceRefusalMessage } from "@/server/licence/policy";
 
 /**
  * ConfirmModal — the integrity-action primitive.
@@ -33,6 +36,13 @@ export type ConfirmModalProps = {
   pending?: boolean;
   /** Rendered as "action not applied" — the action did not take effect. */
   error?: string | null;
+  /**
+   * Licence UI mirror (14-19, D-09, courtesy only; the server is the gate). In restricted
+   * continuity mode a "write" confirm is disabled with a visible reason. Mark an action
+   * "continuity" only when the server treats it as continuity or it only discards local
+   * edits, so it is never disabled. Default "write".
+   */
+  licenceEffect?: "write" | "continuity";
   onConfirm: (reason: string) => void | Promise<void>;
   onCancel: () => void;
 };
@@ -56,10 +66,14 @@ function ConfirmDialog({
   reasonLabel = "Reason",
   pending = false,
   error = null,
+  licenceEffect = "write",
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
   const titleId = useId();
+  const restrictedReasonId = useId();
+  const { restricted, canViewLicence } = useLicenceRestriction();
+  const blockedByLicence = restricted && licenceEffect !== "continuity";
   const reasonId = useId();
   const counterId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -70,12 +84,14 @@ function ConfirmDialog({
 
   const requiresReason = typeof minReasonLength === "number";
   const reasonValid = !requiresReason || reason.trim().length >= minReasonLength;
-  const canConfirm = reasonValid && !pending;
+  const canConfirm = reasonValid && !pending && !blockedByLicence;
 
   // Move focus in, and return it to whatever opened the dialog on close.
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     (reasonRef.current ?? confirmRef.current)?.focus();
+    // A disabled confirm cannot take focus; keep it inside the dialog rather than on the page behind.
+    if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
     return () => previous?.focus();
   }, []);
 
@@ -146,17 +162,21 @@ function ConfirmDialog({
           <div className="text-sm text-muted-foreground">{description}</div>
         </div>
 
-        {error && (
-          <div
-            role="alert"
-            className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-danger">
-              Action not applied
-            </p>
-            <p className="mt-1 text-sm text-danger">{error}</p>
-          </div>
-        )}
+        {error &&
+          (isLicenceRefusalMessage(error) ? (
+            // A licence refusal is a calm warning, never a danger note (14-19, T-14-19-05).
+            <LicenceRefusalNote message={error} />
+          ) : (
+            <div
+              role="alert"
+              className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-danger">
+                Action not applied
+              </p>
+              <p className="mt-1 text-sm text-danger">{error}</p>
+            </div>
+          ))}
 
         {requiresReason && (
           <div className="flex flex-col gap-1">
@@ -200,6 +220,7 @@ function ConfirmDialog({
             ref={confirmRef}
             disabled={!canConfirm}
             aria-disabled={!canConfirm}
+            aria-describedby={blockedByLicence ? restrictedReasonId : undefined}
             onClick={() => canConfirm && onConfirm(reason.trim())}
             className={`rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${confirmClasses}`}
           >
@@ -217,6 +238,10 @@ function ConfirmDialog({
             {pending ? "ESC suppressed" : "ESC cancels"}
           </span>
         </div>
+
+        {blockedByLicence && (
+          <RestrictedControlReason id={restrictedReasonId} canViewLicence={canViewLicence} />
+        )}
       </div>
     </div>
   );

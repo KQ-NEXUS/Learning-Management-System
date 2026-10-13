@@ -12,6 +12,7 @@
 import { Buffer } from "node:buffer";
 import { describe, expect, it, vi } from "vitest";
 import { createTestWithPermission, grant } from "./support/harness";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import {
   createCertificateTemplateService,
   DefaultTemplateRequiredError,
@@ -423,5 +424,20 @@ describe("the seeded default certificate template (plan 11-05 Task 3)", () => {
     });
 
     expect(Buffer.from(bytes.subarray(0, 4)).toString("ascii")).toBe("%PDF");
+  });
+});
+
+describe("a certificate template is archived once (launch checklist W-14)", () => {
+  it("refuses a second archive and keeps the first archive time", async () => {
+    const firstArchivedAt = new Date("2026-01-01T00:00:00.000Z");
+    const { certificateTemplateService, delegate, rows, audits } = harness({
+      templateRows: [makeTemplateRow({ id: "tpl-1", isDefault: false, archivedAt: firstArchivedAt })],
+    });
+    const attempt = certificateTemplateService.archive("tpl-1", "Archiving it once more");
+    await expect(attempt).rejects.toBeInstanceOf(RecordStateError);
+    await expect(attempt).rejects.toThrow("This template is already archived.");
+    expect(delegate.update).not.toHaveBeenCalled();
+    expect(rows.get("tpl-1")?.archivedAt).toEqual(firstArchivedAt);
+    expect(audits).toHaveLength(0);
   });
 });

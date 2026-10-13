@@ -119,6 +119,12 @@ beforeAll(async () => {
 
   // MUST happen before any dynamic import below — see file header.
   process.env.DATABASE_URL = testDb.url;
+  // Auth mail renders through the template registry, which refuses to render
+  // without the deployment's sender, support and base-URL configuration.
+  vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+  vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+  vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+  vi.stubEnv("APP_BASE_URL", "https://lms.acme.test");
 
   // 07-04 — `startTestDatabase()` applies migrations only, never
   // `prisma/seed.ts`; `startCheckout` now needs an active PAYSTACK/NGN
@@ -135,6 +141,7 @@ beforeAll(async () => {
 }, TEST_DB_TIMEOUT_MS);
 
 afterAll(async () => {
+  vi.unstubAllEnvs();
   await testDb?.stop();
 }, TEST_DB_TIMEOUT_MS);
 

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
 import { courseService } from "@/server/services/course-service";
 import { assertSlugMutable, SlugFrozenError } from "@/server/services/catalogue-guards";
 import { createCourseSchema, updateCourseSchema, completionRuleFields, requiresPassingAssessments } from "./course-schema";
@@ -11,6 +11,7 @@ import {
   assertTemplateSelectable,
   TemplateNotSelectableError,
 } from "@/server/services/certificate-template-service";
+import { withFlash } from "@/lib/flash-notices";
 
 export type CourseFormError = { name: string; message: string };
 export type CourseActionResult =
@@ -78,7 +79,7 @@ function toFailure(
     return {
       ok: false,
       errors: [],
-      message: `Your role does not permit ${verb} courses.`,
+      message: refusalMessage(error, `Your role does not permit ${verb} courses.`),
     };
   }
   throw error;
@@ -105,7 +106,7 @@ export async function createCourseAction(
   }
 
   revalidatePath("/staff/courses");
-  redirect(`/staff/courses/${id}`);
+  redirect(withFlash(`/staff/courses/${id}`, "course-created"));
 }
 
 /** Blank optional text on the edit form clears the column (`null`), unlike create which omits it. */

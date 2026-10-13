@@ -18,6 +18,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
+import { RESTRICTED_CONTROL_REASON_ADMIN } from "@/server/licence/policy";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 
 const refresh = vi.fn();
@@ -151,5 +153,32 @@ describe("CohortDetailActions", () => {
       cohortId: "c1",
       expectedUpdatedAt: "2026-01-01T00:00:00.000Z",
     });
+  });
+});
+
+describe("CohortDetailActions cancel dialog in restricted continuity mode (14-19, D-09)", () => {
+  it("is a write consumer: the cancel confirm stays disabled with the Open Licence reason for an administrator, even with a valid reason", () => {
+    render(
+      <LicenceRestrictionProvider value={{ restricted: true, canViewLicence: true, stateLabel: "Restricted continuity mode" }}>
+        <CohortDetailActions
+          cohortId="c1"
+          code="SLP-2026-01"
+          status="DRAFT"
+          expectedUpdatedAt="2026-01-01T00:00:00.000Z"
+          readinessItems={readyItems()}
+          activeEnrolmentCount={3}
+          canPublish
+          canManage
+        />
+      </LicenceRestrictionProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel cohort" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "closing this cohort down" } });
+
+    const confirm = within(dialog).getByRole("button", { name: "Cancel cohort" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    const reason = document.getElementById(confirm.getAttribute("aria-describedby")!)!;
+    expect(reason.textContent).toBe(RESTRICTED_CONTROL_REASON_ADMIN);
   });
 });

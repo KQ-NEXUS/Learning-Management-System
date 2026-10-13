@@ -13,6 +13,7 @@ import type {
 import { createTemplateAction, saveTemplateLayoutAction } from "./template-actions";
 import { TemplateCanvas, pageDimensions, PENDING_UPLOAD_ASSET_KEY } from "./TemplateCanvas";
 import { ElementInspector } from "./ElementInspector";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * The certificate-template editor's chrome (UI-SPEC 7.3.2-7.3.5, D-09).
@@ -113,6 +114,7 @@ export function TemplateEditorShell({
   onCreate = createTemplateAction,
 }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, transition] = useTransition();
   const [name, setName] = useState(initial.name);
   const [pageSize, setPageSize] = useState(initial.layout.pageSize);
@@ -183,6 +185,7 @@ export function TemplateEditorShell({
           setSaveError(result.message);
           return;
         }
+        toast.success("Template saved");
         setDirty(false);
         return;
       }
@@ -191,6 +194,7 @@ export function TemplateEditorShell({
         setSaveError(result.message);
         return;
       }
+      toast.success("Certificate template created");
       setDirty(false);
       router.push(`/staff/certificates/templates/${result.id}`);
     });
@@ -405,7 +409,7 @@ export function TemplateEditorShell({
               <summary className="cursor-pointer px-0 py-3 text-sm font-semibold text-foreground">Elements</summary>
               {palettePanel()}
             </details>
-            <aside className="hidden w-64 shrink-0 border-r border-border pr-6 lg:block">
+            <aside aria-label="Elements" className="hidden w-64 shrink-0 border-r border-border pr-6 lg:block">
               {palettePanel()}
             </aside>
           </>
@@ -431,13 +435,14 @@ export function TemplateEditorShell({
           <summary className="cursor-pointer px-0 py-3 text-sm font-semibold text-foreground">Properties</summary>
           {propertiesPanel()}
         </details>
-        <aside className="hidden w-64 shrink-0 border-l border-border pl-6 lg:block">
+        <aside aria-label="Properties" className="hidden w-64 shrink-0 border-l border-border pl-6 lg:block">
           {propertiesPanel()}
         </aside>
       </div>
 
       <ConfirmModal
         open={pendingHref !== null}
+        licenceEffect="continuity"
         tone="default"
         title="Leave without saving?"
         description="You have unsaved changes to this template. Leave without saving?"

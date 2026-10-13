@@ -22,7 +22,7 @@ export default async function GradingQueuePage({ params }: { params: Promise<{ i
     throw error;
   }
   return (
-    <div className="flex flex-col gap-6">
+    <div data-primary-content className="flex flex-col gap-6">
       <PageHeader
         breadcrumbs={[
           { label: "Workspace", href: "/staff/cohorts" },

@@ -10,7 +10,7 @@ import {
 import { enrolmentCohortScope } from "@/server/services/cohort-scope";
 import { resolveActorNames } from "@/server/services/grading-service";
 import { DetailLayout, DetailFacts } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { CertificateRecordActions } from "./CertificateRecordActions";
 
 /**
@@ -100,7 +100,14 @@ export default async function CertificateDetailPage({
       mono: true,
     },
     { label: "Awarded for", value: certificate.awardTitle },
-    { label: "Issued", value: `${formatTimestamp(certificate.issuedAt)} by ${issuedByLabel}` },
+    {
+      label: "Issued",
+      value: (
+        <>
+          <LagosTime value={certificate.issuedAt} /> by {issuedByLabel}
+        </>
+      ),
+    },
     ...(supersedes
       ? [
           {
@@ -148,7 +155,7 @@ export default async function CertificateDetailPage({
           label: "Revoked",
           content: (
             <p role="alert" className="py-4 text-base text-foreground">
-              Revoked {certificate.revokedAt ? formatTimestamp(certificate.revokedAt) : "—"} by{" "}
+              Revoked <LagosTime value={certificate.revokedAt} /> by{" "}
               {revokedByName ?? "Unknown"} — &ldquo;{certificate.revocationReason}&rdquo;
             </p>
           ),
@@ -160,7 +167,7 @@ export default async function CertificateDetailPage({
             content: (
               <p className="max-w-[600px] py-4 text-base text-foreground">
                 This certificate was flagged for review on{" "}
-                {certificate.reviewFlaggedAt ? formatTimestamp(certificate.reviewFlaggedAt) : "—"}, following a
+                <LagosTime value={certificate.reviewFlaggedAt} />, following a
                 correction to the learner&apos;s grade or attendance record. Confirm it should remain active, or
                 revoke it.
               </p>

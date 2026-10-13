@@ -14,6 +14,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
+import { RESTRICTED_CONTROL_REASON_STAFF } from "@/server/licence/policy";
 import type { AssignmentRow } from "@/app/staff/users/AssignmentsPanel";
 
 vi.mock("@/app/staff/users/actions", () => ({
@@ -149,5 +151,63 @@ describe("AccountStatusControl — a rejected deactivation clears busy and keeps
     );
     expect(deactivateStaffAccountAction).toHaveBeenCalledTimes(2);
     expect(deactivateStaffAccountAction).toHaveBeenLastCalledWith("u1", "offboarding today");
+  }, 30000);
+});
+
+describe("account status and revoke controls in restricted continuity mode (14-19, D-07, A10)", () => {
+  const restricted = { restricted: true, canViewLicence: false, stateLabel: null };
+
+  it("keeps deactivation available: the confirm enables with a valid reason and shows no reason line", () => {
+    render(
+      <LicenceRestrictionProvider value={restricted}>
+        <AccountStatusControl userId="u1" userName="Dana Lee" status="ACTIVE" minReasonLength={10} />
+      </LicenceRestrictionProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "offboarding today" } });
+
+    const confirm = within(dialog).getByRole("button", { name: "Deactivate account" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    expect(screen.queryByText(RESTRICTED_CONTROL_REASON_STAFF)).toBeNull();
+  });
+
+  it("disables reactivation with a visible, associated reason", () => {
+    render(
+      <LicenceRestrictionProvider value={restricted}>
+        <AccountStatusControl userId="u1" userName="Dana Lee" status="INACTIVE" minReasonLength={10} />
+      </LicenceRestrictionProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reactivate" }));
+    const dialog = screen.getByRole("dialog");
+
+    const confirm = within(dialog).getByRole("button", { name: "Reactivate" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    const reason = document.getElementById(confirm.getAttribute("aria-describedby")!)!;
+    expect(reason.textContent).toBe(RESTRICTED_CONTROL_REASON_STAFF);
+  });
+
+  it("keeps the role-assignment revoke on the default write effect: disabled with a reason even with a valid reason typed", () => {
+    render(
+      <LicenceRestrictionProvider value={restricted}>
+        <AssignmentsPanel
+          userId="u1"
+          userName="Dana Lee"
+          userEmail="dana@example.com"
+          assignments={[assignment]}
+          roles={[{ id: "r1", name: "Instructor" }]}
+          minReasonLength={10}
+        />
+      </LicenceRestrictionProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "left the programme" } });
+
+    const confirm = within(dialog).getByRole("button", { name: "Revoke assignment" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    expect(document.getElementById(confirm.getAttribute("aria-describedby")!)!.textContent).toBe(
+      RESTRICTED_CONTROL_REASON_STAFF,
+    );
   }, 30000);
 });

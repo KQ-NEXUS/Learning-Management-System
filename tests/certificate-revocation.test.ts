@@ -17,6 +17,7 @@ import { AuthorizationError } from "@/server/permissions/with-permission";
 import {
   createCertificateService,
   RevocationReasonRequiredError,
+  CertificateNotFlaggedError,
   CertificateChangedError,
   NoCompletionRecordError,
   type CertificateServiceDeps,
@@ -414,6 +415,66 @@ describe("issueCertificateManually", () => {
       h.service.issueCertificateManually({ enrolmentId: "enr-1", scope: "COURSE" }),
     ).rejects.toBeInstanceOf(NoCompletionRecordError);
     expect(h.certificates.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// confirmFlaggedCertificate (audit A-08)
+// ---------------------------------------------------------------------------
+
+describe("confirmFlaggedCertificate", () => {
+  const FLAGGED_AT = new Date("2026-02-01T00:00:00.000Z");
+  const flagged = () => cert({ id: "cert-1", reviewFlaggedAt: FLAGGED_AT });
+  const reason = "Grade correction did not change the pass";
+
+  it("is denied without certificates.revoke", async () => {
+    const h = harness({ certificates: [flagged()], grants: [grant("certificates.view", "GLOBAL")] });
+    await expect(h.service.confirmFlaggedCertificate({ certificateId: "cert-1", reason })).rejects.toBeInstanceOf(
+      AuthorizationError,
+    );
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toEqual(FLAGGED_AT);
+  });
+
+  it.each(["", "   ", "Too short"])("requires a reason: %j writes nothing", async (short) => {
+    const h = harness({ certificates: [flagged()] });
+    await expect(h.service.confirmFlaggedCertificate({ certificateId: "cert-1", reason: short })).rejects.toBeInstanceOf(
+      RevocationReasonRequiredError,
+    );
+    expect(h.certificates.get("cert-1")?.reviewFlaggedAt).toEqual(FLAGGED_AT);
+    expect(h.audits).toHaveLength(0);
+  });
+
+  it("clears only the review flag, keeps the certificate ACTIVE, writes no event, and audits the decision with its reason", async () => {
+    const h = harness({ certificates: [flagged()] });
+
+    const after = await h.service.confirmFlaggedCertificate({ certificateId: "cert-1", reason: `  ${reason}  ` });
+
+    expect(after).toMatchObject({ id: "cert-1", status: "ACTIVE", reviewFlaggedAt: null, revokedAt: null });
+    expect(h.certificates.get("cert-1")).toMatchObject({ status: "ACTIVE", reviewFlaggedAt: null });
+    expect(h.events).toHaveLength(0);
+    expect(h.audits).toEqual([
+      expect.objectContaining({
+        action: "certificate.review_confirmed",
+        targetType: "Certificate",
+        targetId: "cert-1",
+        actorId: "user-1",
+        outcome: "SUCCESS",
+        reason,
+        before: { reviewFlaggedAt: FLAGGED_AT },
+        after: { reviewFlaggedAt: null },
+      }),
+    ]);
+  });
+
+  it.each([
+    ["an unflagged certificate", () => cert({ id: "cert-1" })],
+    ["a revoked certificate", () => cert({ id: "cert-1", status: "REVOKED", reviewFlaggedAt: FLAGGED_AT })],
+  ])("refuses %s and audits nothing", async (_name, make) => {
+    const h = harness({ certificates: [make()] });
+    await expect(h.service.confirmFlaggedCertificate({ certificateId: "cert-1", reason })).rejects.toBeInstanceOf(
+      CertificateNotFlaggedError,
+    );
+    expect(h.audits).toHaveLength(0);
   });
 });
 

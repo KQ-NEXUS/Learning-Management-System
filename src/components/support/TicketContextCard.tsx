@@ -36,7 +36,7 @@ export function TicketContextCard({ kind, reference, onRemove, locked = false }:
         <button
           type="button"
           onClick={onRemove}
-          className="min-h-11 rounded-md px-2 text-sm font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+          className="min-h-11 rounded-md px-2 text-sm font-semibold text-accent hover:underline"
         >
           Remove context
         </button>

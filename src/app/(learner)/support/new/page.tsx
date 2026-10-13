@@ -6,8 +6,11 @@ import {
   validateLearnerTicketContext,
 } from "@/server/services/ticket-learner-context-service";
 import { NewTicketForm } from "./NewTicketForm";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "New support request" };
 
 /**
  * `/support/new` — the query string is only a hint; the record is resolved and

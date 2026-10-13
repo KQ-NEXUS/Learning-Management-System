@@ -1,0 +1,62 @@
+[
+  {
+    "file": "valid-active.lic",
+    "expect": "ok",
+    "mode": "activate",
+    "description": "Valid licence, key a, FIXTURE_NOW is inside the term"
+  },
+  {
+    "file": "valid-grace.lic",
+    "expect": "ok",
+    "mode": "activate",
+    "description": "Valid signature; FIXTURE_NOW falls inside grace (expiry is not evaluated here)"
+  },
+  {
+    "file": "expired.lic",
+    "expect": "ok",
+    "mode": "activate",
+    "description": "Valid signature; FIXTURE_NOW is after grace (expiry is not evaluated here)"
+  },
+  {
+    "file": "retired-key.lic",
+    "expect": "ok",
+    "mode": "activate",
+    "description": "Signed by a retired key, which still verifies"
+  },
+  {
+    "file": "revoked-key.lic",
+    "expect": "KEY_REVOKED",
+    "mode": "activate",
+    "description": "Signed by a revoked key"
+  },
+  {
+    "file": "unknown-key.lic",
+    "expect": "UNKNOWN_KEY",
+    "mode": "activate",
+    "description": "Signed by a key that is not in the trust set"
+  },
+  {
+    "file": "wrong-deployment.lic",
+    "expect": "WRONG_DEPLOYMENT",
+    "mode": "activate",
+    "description": "Correctly signed for a different deployment"
+  },
+  {
+    "file": "tampered-payload.lic",
+    "expect": "BAD_SIGNATURE",
+    "mode": "activate",
+    "description": "One payload character changed after signing"
+  },
+  {
+    "file": "unsupported-prefix.lic",
+    "expect": "UNSUPPORTED_SCHEMA",
+    "mode": "activate",
+    "description": "Envelope prefix LMS-LIC2 with otherwise valid parts"
+  },
+  {
+    "file": "unsupported-schema.lic",
+    "expect": "UNSUPPORTED_SCHEMA",
+    "mode": "activate",
+    "description": "Correctly signed payload with schemaVersion 2"
+  }
+]

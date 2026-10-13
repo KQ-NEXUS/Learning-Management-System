@@ -11,6 +11,7 @@
  * imports no authorization wrapper — that is deliberate, not an oversight.
  */
 
+import { cache } from "react";
 import { prisma } from "@/server/db";
 import { verifyPassword } from "@/server/auth/password";
 import type { Actor } from "@/server/permissions/with-permission";
@@ -22,7 +23,8 @@ import {
 } from "@/lib/identity";
 import { type VerificationStore, type VerificationTokenRow } from "@/server/services/verification-service";
 import { verificationService } from "@/server/services/verification-service";
-import { emailDispatchService, dispatchBestEffort, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { emailDispatchService, type DispatchParams } from "@/server/services/email-dispatch-service";
+import { sendAuthEmail, sendEmailChangedNotice } from "@/server/services/auth-email-service";
 import { recordAudit } from "@/server/services/audit-service";
 import type { BusinessAuditEvent } from "@/server/services/audit-service";
 
@@ -33,6 +35,8 @@ export type ProfileUserRow = {
   phone: string | null;
   pendingEmail: string | null;
   passwordHash: string | null;
+  passwordIsTemporary?: boolean;
+  learnerNumber?: string | null;
   emailVerified?: Date | null;
 };
 
@@ -42,6 +46,8 @@ export type ProfileSnapshot = {
   email: string;
   pendingEmail: string | null;
   marketingOptIn: boolean;
+  /** `null` for staff, and for learners who registered before numbers were switched on. */
+  learnerNumber: string | null;
 };
 
 export type UpdateProfileResult =
@@ -79,10 +85,6 @@ export type ProfileStore = {
   $transaction<T>(fn: (tx: ProfileStore) => Promise<T>): Promise<T>;
 };
 
-function buildEmailChangeText(confirmUrl: string): string {
-  return `Click to confirm your new email address: ${confirmUrl}`;
-}
-
 async function readMarketingOptIn(
   store: Pick<ProfileStore, "policyAcceptance">,
   userId: string,
@@ -113,8 +115,14 @@ export function createProfileService(deps: {
   const { store, issueToken, consumeToken, dispatch, audit } = deps;
   const verify = deps.verify ?? verifyPassword;
 
+  // The signed-in shell reads the own user row twice in one render (the profile chip and the
+  // temporary-password hint). React's cache() shares one read between them for the length of that
+  // render only; outside a render it is a pass-through, so nothing is held between requests or
+  // between an update and the read that follows it (plan 15-28, NFR-02 statement budget).
+  const readOwnUserRow = cache((userId: string) => store.user.findUnique({ where: { id: userId } }));
+
   async function getOwnProfile(actor: Actor): Promise<ProfileSnapshot | null> {
-    const user = await store.user.findUnique({ where: { id: actor.userId } });
+    const user = await readOwnUserRow(actor.userId);
     if (!user) return null;
     const marketingOptIn = await readMarketingOptIn(store, user.id);
     return {
@@ -123,7 +131,18 @@ export function createProfileService(deps: {
       email: user.email,
       pendingEmail: user.pendingEmail,
       marketingOptIn,
+      learnerNumber: user.learnerNumber ?? null,
     };
+  }
+
+  /**
+   * Whether the caller is still using a password an administrator set for
+   * them (R3-12). Drives a suggestion to change it, never a gate. False for
+   * an unknown user.
+   */
+  async function isUsingTemporaryPassword(actor: Actor): Promise<boolean> {
+    const user = await readOwnUserRow(actor.userId);
+    return user?.passwordIsTemporary === true;
   }
 
   async function updateOwnProfile(
@@ -163,6 +182,7 @@ export function createProfileService(deps: {
         email: after.email,
         pendingEmail: after.pendingEmail,
         marketingOptIn,
+        learnerNumber: after.learnerNumber ?? null,
       },
     };
   }
@@ -215,16 +235,15 @@ export function createProfileService(deps: {
     });
 
     if (issued.ok) {
-      const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-      const confirmUrl = `${baseUrl}/confirm-email-change?token=${issued.token}`;
-      // G-03-3 — best-effort: a provider outage must not crash an
-      // already-authenticated learner's email-change request.
-      await dispatchBestEffort(dispatch, {
+      // G-03-3 — best-effort (inside sendAuthEmail): a provider outage must
+      // not crash an already-authenticated learner's email-change request.
+      await sendAuthEmail(dispatch, {
         template: "email-change-confirmation",
         toEmail: newEmail,
         userId: actor.userId,
-        subject: "Confirm your new email address",
-        textContent: buildEmailChangeText(confirmUrl),
+        path: "/confirm-email-change",
+        token: issued.token,
+        ttlMs: EMAIL_CHANGE_TOKEN_TTL_MS,
       });
       await audit({
         actorId: actor.userId,
@@ -290,12 +309,11 @@ export function createProfileService(deps: {
     // F-14c — tell the old address, so a hijacked change does not go
     // unnoticed. Best effort: a provider outage never undoes the change.
     if (previousEmail && newEmail) {
-      await dispatchBestEffort(dispatch, {
-        template: "email-changed-notice",
+      await sendEmailChangedNotice(dispatch, {
         toEmail: previousEmail,
         userId: confirmedUserId,
-        subject: "Your email address was changed",
-        textContent: buildEmailChangedNoticeText(maskEmail(newEmail)),
+        maskedNewEmail: maskEmail(newEmail),
+        changedAt: new Date(),
       });
     }
 
@@ -350,6 +368,7 @@ export function createProfileService(deps: {
 
   return {
     getOwnProfile,
+    isUsingTemporaryPassword,
     updateOwnProfile,
     requestEmailChange,
     confirmEmailChange,
@@ -362,14 +381,6 @@ function maskEmail(email: string): string {
   const at = email.lastIndexOf("@");
   if (at <= 0) return "•••";
   return `${email[0]}•••${email.slice(at)}`;
-}
-
-function buildEmailChangedNoticeText(maskedNewEmail: string): string {
-  return [
-    `The email address on your account was just changed to ${maskedNewEmail}.`,
-    "You have been signed out everywhere; sign in again with the new address.",
-    "If you did not make this change, reset your password straight away from the sign-in page and contact support.",
-  ].join("\n\n");
 }
 
 export const profileService = createProfileService({

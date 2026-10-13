@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ProgrammeForm } from "@/app/staff/programmes/ProgrammeForm";
 import {
   createProgrammeAction,
@@ -29,7 +23,18 @@ afterEach(() => {
 });
 
 function submit(container: HTMLElement) {
-  fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+  const form = container.querySelector("form") as HTMLFormElement;
+  // A stepped create form shows its submit button only on the last step: take "Next" until it is there.
+  for (let step = 0; step < 6 && !form.querySelector('button[type="submit"]'); step++) {
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  }
+  fireEvent.submit(form);
+}
+
+/** Opens the form's last step from its progress bar (an edit form lets any step be opened directly). */
+function openLastStep() {
+  const steps = within(screen.getByRole("navigation", { name: "Progress" })).getAllByRole("button");
+  fireEvent.click(steps[steps.length - 1]);
 }
 
 function lastFormData(mockFn: typeof createAction | typeof updateAction): FormData {
@@ -199,6 +204,7 @@ describe("ProgrammeForm — edit mode certificate settings", () => {
         templates={templates}
       />,
     );
+    openLastStep();
     expect((screen.getByRole("radio", { name: /Automatic/ }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText("Certificate template") as HTMLSelectElement).value).toBe("tpl-2");
   });
@@ -213,6 +219,7 @@ describe("ProgrammeForm — edit mode certificate settings", () => {
         templates={templates}
       />,
     );
+    openLastStep();
     fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
     fireEvent.change(screen.getByLabelText("Certificate template"), {
       target: { value: "tpl-1" },
@@ -237,6 +244,7 @@ describe("ProgrammeForm — edit mode certificate settings", () => {
         templates={templates}
       />,
     );
+    openLastStep();
     expect((screen.getByRole("radio", { name: /Automatic/ }) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole("radio", { name: /Manual/ }) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByLabelText("Certificate template") as HTMLSelectElement).disabled).toBe(true);

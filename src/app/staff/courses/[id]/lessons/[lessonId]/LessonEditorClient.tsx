@@ -1,12 +1,15 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { ConfirmModal, ResourceForm } from "@/components/primitives";
 import { LessonFormFields, type LessonFieldValues } from "@/components/catalogue";
+import type { LinkableAssessment } from "@/components/catalogue/LessonFormFields";
 import type { LessonType } from "@/lib/upload-limits";
+import { useLicenceRestriction } from "@/components/licence/LicenceRestrictionProvider";
+import { RestrictedControlReason } from "@/components/licence/LicenceRefusalNote";
 import { saveLessonAction, withdrawLessonAction, type SaveLessonState } from "./actions";
 
 const INITIAL_SAVE_STATE: SaveLessonState = { ok: null, errors: [], message: null };
@@ -26,6 +29,8 @@ type LessonEditorClientProps = {
   courseId: string;
   initialType: LessonType;
   values?: LessonFieldValues;
+  /** This course's assessments, for the Quiz/Assignment picker. */
+  assessmentOptions?: LinkableAssessment[];
 } & (
   | { mode: "create"; moduleId: string; lessonId?: undefined }
   | { mode: "edit"; lessonId: string; moduleId?: undefined }
@@ -36,6 +41,11 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
   const router = useRouter();
   const [type, setType] = useState<LessonType>(initialType);
   const [state, action, pending] = useActionState(saveLessonAction, INITIAL_SAVE_STATE);
+
+  // Licence UI mirror (14-19, D-09; courtesy only, the server is the gate). The header save button is
+  // this form's external submit control, so the form's own mirror cannot reach it (hideFooter).
+  const { restricted, canViewLicence } = useLicenceRestriction();
+  const saveReasonId = useId();
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -52,14 +62,20 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
         reason,
       });
       if (result.ok) {
+        // WR-03: release the modal before navigating, so a stalled push can
+        // never leave it on "Working…" with ESC suppressed.
+        setWithdrawing(false);
+        setWithdrawOpen(false);
         router.push(`/staff/courses/${courseId}/arrange`);
         router.refresh();
         return;
       }
       setWithdrawError(result.message);
-      setWithdrawing(false);
-    } catch {
+    } catch (error) {
+      // WR-02: hand Next.js control flow (redirect / notFound) back first.
+      unstable_rethrow(error);
       setWithdrawError("The lesson was not withdrawn.");
+    } finally {
       setWithdrawing(false);
     }
   }
@@ -88,7 +104,8 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
             <button
               type="submit"
               form="lesson-form"
-              disabled={pending}
+              disabled={pending || restricted}
+              aria-describedby={restricted ? saveReasonId : undefined}
               className="inline-flex min-h-[46px] items-center rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:opacity-50"
             >
               {pending ? "Saving…" : props.mode === "create" ? "Create lesson" : "Save lesson"}
@@ -96,6 +113,8 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
           </>
         }
       />
+
+      {restricted && <RestrictedControlReason id={saveReasonId} canViewLicence={canViewLicence} />}
 
       {state.ok === true && (
         <p
@@ -171,6 +190,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
           lessonId={props.mode === "edit" ? props.lessonId : undefined}
           values={values}
           errors={state.errors}
+          assessmentOptions={props.assessmentOptions}
         />
       </ResourceForm>
 

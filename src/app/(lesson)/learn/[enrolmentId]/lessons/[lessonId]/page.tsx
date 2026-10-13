@@ -8,7 +8,10 @@ import {
   type DecoratedLesson,
 } from "@/server/services/learner-access";
 import { getLessonContentForLearner } from "@/server/services/lesson-service";
-import { listLessonResourcesForLearner } from "@/server/services/lesson-resource-service";
+import {
+  listLessonResourcesForLearner,
+  listLessonCaptionsForLearner,
+} from "@/server/services/lesson-resource-service";
 import {
   countLessonsRelockedBy,
   getOwnWatchProgress,
@@ -74,16 +77,64 @@ export default async function LessonReadingPage({
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
-  const path = await loadLearnerPath(actor, enrolmentId);
+  // `includeCompleted` only so a COMPLETED enrolment gets its own panel below
+  // instead of the catalogue 404 (passing the final quiz completes the
+  // enrolment while the learner is still on this page). G-01 is unchanged:
+  // `assertLessonOpenable` refuses a COMPLETED path, so no content is read.
+  const path = await loadLearnerPath(actor, enrolmentId, { includeCompleted: true });
   if (!path) notFound();
 
   const openResult = assertLessonOpenable(path, lessonId);
   if (!openResult.ok) {
-    // "not-found" and "locked" both resolve to notFound() — a learner who
-    // typed the URL for a locked lesson learns nothing they could not
-    // already see on the list page, and a distinct "locked" screen here
-    // would be a second lock surface to keep in sync (T-09-34).
-    if (openResult.reason !== "access-window-closed") notFound();
+    // "not-found" and "locked" share ONE generic in-course state (UX batch B).
+    // The enrolment is already proven to be the caller's own (`path` above),
+    // so this reveals nothing about anyone else. It names no blocker and no
+    // lesson — the course page stays the only lock surface (T-09-34) — but
+    // it keeps the learner inside their course instead of the catalogue 404.
+    if (openResult.reason !== "access-window-closed") {
+      return (
+        <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
+          <div className="flex flex-col items-start gap-3 border-t border-foreground py-12">
+            <p className="text-base font-semibold text-foreground">This lesson isn&apos;t available right now</p>
+            <p className="max-w-prose text-sm text-muted-foreground">
+              It may still be locked until you finish an earlier lesson, or the link may be out of date.
+              Your course page shows what to do next.
+            </p>
+            <Link
+              href={`/learn/${enrolmentId}`}
+              className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+            >
+              Back to your course
+            </Link>
+          </div>
+        </LessonFrame>
+      );
+    }
+
+    if (path.enrolment.status === "COMPLETED") {
+      return (
+        <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
+          <div className="flex flex-col items-start gap-3 border-t border-foreground py-12">
+            <p className="text-base font-semibold text-foreground">You&apos;ve completed this course</p>
+            <p className="max-w-prose text-sm text-muted-foreground">
+              Lessons are closed now that the course is complete. Your progress, results and certificate stay on
+              record.
+            </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              >
+                View your certificate
+              </Link>
+              <Link href={`/learn/${enrolmentId}/results`} className="text-sm font-semibold text-accent hover:underline">
+                View results
+              </Link>
+            </div>
+          </div>
+        </LessonFrame>
+      );
+    }
 
     // D-03's ended-access panel renders INSTEAD of content — no lesson
     // title, module structure, or body text leaks through this branch
@@ -103,7 +154,7 @@ export default async function LessonReadingPage({
   // The full content body (`body`/`embedUrl`/`linkUrl`) lives on the LIVE
   // Lesson row, not on `learner-access.ts`'s decorated (obligation-focused)
   // lesson — see `getLessonContentForLearner`'s own doc comment for why.
-  const content = await getLessonContentForLearner(actor, lessonId);
+  const content = await getLessonContentForLearner(actor, lessonId, { verifiedPath: path });
   if (!content) notFound();
 
   const flat = flattenPath(path);
@@ -112,7 +163,7 @@ export default async function LessonReadingPage({
   const prev = index > 0 ? flat[index - 1] : null;
   const next = index >= 0 && index < flat.length - 1 ? flat[index + 1] : null;
 
-  const resources = await listLessonResourcesForLearner(actor, lessonId);
+  const resources = await listLessonResourcesForLearner(actor, lessonId, { verifiedPath: path });
   const shapedResources = resources.map((resource) => ({
     id: resource.id,
     title: resource.title,
@@ -123,6 +174,10 @@ export default async function LessonReadingPage({
     sizeBytes: resource.sizeBytes.toString(),
     uploadStatus: resource.uploadStatus,
   }));
+
+  // NFR-09: READY caption tracks only, and only for a VIDEO lesson.
+  const captions =
+    content.type === "VIDEO" ? await listLessonCaptionsForLearner(actor, lessonId, { verifiedPath: path }) : [];
 
   const relockCount = countLessonsRelockedBy(path, lessonId);
   const quiz = content.type === "QUIZ" ? await loadLearnerQuiz(actor, { enrolmentId, lessonId }) : null;
@@ -137,18 +192,21 @@ export default async function LessonReadingPage({
     : 0;
 
   const lessonContent = (
-    <LessonContent
-      lesson={{
-        id: content.id,
-        title: content.title,
-        type: content.type,
-        body: content.body,
-        embedUrl: content.embedUrl,
-        linkUrl: content.linkUrl,
-        withdrawnAt: content.withdrawnAt,
-      }}
-      resources={shapedResources}
-    />
+    <div data-primary-content>
+      <LessonContent
+        lesson={{
+          id: content.id,
+          title: content.title,
+          type: content.type,
+          body: content.body,
+          embedUrl: content.embedUrl,
+          linkUrl: content.linkUrl,
+          withdrawnAt: content.withdrawnAt,
+        }}
+        resources={shapedResources}
+        captions={captions}
+      />
+    </div>
   );
 
   const outlineCourses = path.courses.map((course) => ({
@@ -224,6 +282,7 @@ export default async function LessonReadingPage({
         completed={openResult.lesson.completed}
         completedSource={openResult.lesson.completedSource}
         allowManualComplete={openResult.lesson.allowManualComplete}
+        lessonType={content.type}
         relockCount={relockCount}
       />
 

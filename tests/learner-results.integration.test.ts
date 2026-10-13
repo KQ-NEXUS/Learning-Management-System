@@ -595,3 +595,46 @@ describe("ASM-07 — a COMPLETED learner keeps their results (visible, not opera
     await expect(attemptSvc.startAttempt(actor, { assessmentId: f.quizId, startNew: true })).rejects.toThrow();
   });
 });
+
+describe("COH-07 — staff read a learner's quiz results from the cohort (real Postgres)", () => {
+  it("a cohort-scoped grader sees the learner's submitted quiz score; another course's grant sees nothing", async () => {
+    const { createStaffLearnerResultsService } = await import("@/server/services/staff-learner-results-service");
+    const f = await seedResultsFixture();
+    const { resultsSvc, attemptSvc } = buildResultsService();
+    const learner = { userId: f.learner1.userId };
+
+    const attempt = await attemptSvc.startAttempt(learner, { assessmentId: f.quizId });
+    await attemptSvc.submitAttempt(learner, {
+      attemptId: attempt.id,
+      responses: [{ questionId: f.question.id, selectedOptionIds: [f.question.correctOptionId] }],
+    });
+
+    const { enrolmentCohortScope } = createCohortScopeResolvers({
+      cohort: testDb.prisma.cohort as unknown as CohortScopeDelegate,
+      session: testDb.prisma.scheduledSession as unknown as SessionScopeDelegate,
+      enrolment: testDb.prisma.enrolment as unknown as EnrolmentScopeDelegate,
+    });
+    function staffRead(grants: Parameters<typeof createTestWithPermission>[0]) {
+      const { withPermission } = createTestWithPermission(grants, { userId: "staff-1" });
+      return createStaffLearnerResultsService({
+        withPermission,
+        enrolmentScope: async (id) => enrolmentCohortScope(id),
+        enrolmentOwner: (id) => testDb.prisma.enrolment.findUnique({ where: { id }, select: { userId: true } }),
+        grantsFor: async () => grants,
+        getOwnResults: resultsSvc.getOwnResults,
+      }).loadLearnerResultsForStaff;
+    }
+
+    const cohortGrader = staffRead([grant("submissions.view", "COHORT", f.cohortId)]);
+    const results = await cohortGrader({ enrolmentId: f.learner1.enrolmentId });
+    const quiz = results.find((r) => r.assessmentId === f.quizId);
+    expect(quiz).toBeDefined();
+    expect(quiz!.courseId).toBe(f.courseId);
+    expect(quiz!.effectiveScore).not.toBeNull();
+    expect(quiz!.history.length).toBe(1);
+
+    // A grant for a course this cohort doesn't deliver never reaches the learner.
+    const otherCourse = staffRead([grant("submissions.view", "COURSE", "some-other-course")]);
+    await expect(otherCourse({ enrolmentId: f.learner1.enrolmentId })).rejects.toThrow();
+  });
+});

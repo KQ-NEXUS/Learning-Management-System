@@ -8,6 +8,8 @@ import {
   type Column,
   type SortState,
 } from "@/components/primitives";
+import { humanizeCode } from "@/lib/humanize";
+import { LagosTime } from "@/components/time/LagosTime";
 
 /**
  * The Cohorts index row shape (COH-02). Kept intentionally flat — dates are
@@ -60,16 +62,6 @@ const DELIVERY_LABEL: Record<string, string> = {
   BLENDED: "Blended",
 };
 
-/** "12 Oct 2026", in the cohort's own timezone. */
-function formatInZone(iso: string, timezone: string): string {
-  const opts = { day: "numeric", month: "short", year: "numeric" } as const;
-  try {
-    return new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: timezone }).format(new Date(iso));
-  } catch {
-    return new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: "UTC" }).format(new Date(iso));
-  }
-}
-
 const columns: Column<CohortRow>[] = [
   {
     key: "code",
@@ -82,14 +74,14 @@ const columns: Column<CohortRow>[] = [
   {
     key: "starts",
     header: "Starts",
-    render: (c) => formatInZone(c.startsAt, c.timezone),
+    render: (c) => <LagosTime value={c.startsAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" />,
     subtitle: (c) => c.timezone,
     width: "12%",
   },
   {
     key: "deliveryMode",
     header: "Format",
-    render: (c) => DELIVERY_LABEL[c.deliveryMode] ?? c.deliveryMode,
+    render: (c) => DELIVERY_LABEL[c.deliveryMode] ?? humanizeCode(c.deliveryMode),
     width: "14%",
   },
   {
@@ -122,7 +114,7 @@ const columns: Column<CohortRow>[] = [
     key: "status",
     header: "Status",
     render: (c) => (
-      <StatusPill label={STATUS_LABEL[c.status] ?? c.status} tone={STATUS_TONE[c.status] ?? "neutral"} />
+      <StatusPill label={STATUS_LABEL[c.status] ?? humanizeCode(c.status)} tone={STATUS_TONE[c.status] ?? "neutral"} />
     ),
     width: "14%",
   },

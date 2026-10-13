@@ -9,14 +9,24 @@ import type { PublicCohort } from "@/server/services/public-catalogue-service";
 
 afterEach(cleanup);
 
-// The start date as the card prints it: "10 November 2026", in a pinned locale.
-function expectedStart(startsAt: Date): string {
-  return `Starts ${new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(startsAt)}`;
+// The start date as the card prints it: the Lagos calendar day, "10 Nov 2026" (D-17).
+const LAGOS_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function lagosDay(startsAt: Date): string {
+  const lagos = new Date(startsAt.getTime() + 60 * 60 * 1000); // WAT is UTC+1 all year
+  return `${lagos.getUTCDate()} ${LAGOS_MONTHS[lagos.getUTCMonth()]} ${lagos.getUTCFullYear()}`;
+}
+
+/** The <time> element a start date renders in, with its text and ISO instant. */
+function startTime(container: HTMLElement): HTMLTimeElement {
+  const el = container.querySelector("time");
+  if (!el) throw new Error("no time element rendered");
+  return el as HTMLTimeElement;
 }
 
 function cohort(overrides: Partial<PublicCohort> & { id: string }): PublicCohort {
   return {
     startsAt: new Date("2026-10-01T12:00:00Z"),
+    hasStarted: false,
     endsAt: new Date("2026-10-05T12:00:00Z"),
     enrolmentOpensAt: new Date("2026-09-01T00:00:00Z"),
     enrolmentClosesAt: new Date("2026-09-30T00:00:00Z"),
@@ -47,7 +57,7 @@ describe("CohortCards", () => {
   it("renders a working Pay in NGN with Paystack control and the seat count when seatsAvailable is 1 (the last-seat boundary)", () => {
     render(<CohortCards cohorts={[cohort({ id: "c1", seatsAvailable: 1 })]} />);
     expect(screen.getByRole("button", { name: "Pay in NGN with Paystack" })).toBeTruthy();
-    expect(screen.getByText("1 seats left")).toBeTruthy();
+    expect(screen.getByText("1 seat left")).toBeTruthy();
     const hidden = document.querySelector('input[name="cohortId"]') as HTMLInputElement | null;
     expect(hidden?.value).toBe("c1");
   });
@@ -75,7 +85,10 @@ describe("CohortCards", () => {
         ]}
       />,
     );
-    expect(screen.getByText(expectedStart(startsAt))).toBeTruthy();
+    const time = startTime(document.body);
+    expect(time.textContent).toBe(lagosDay(startsAt));
+    expect(time.getAttribute("datetime")).toBe(startsAt.toISOString());
+    expect(time.parentElement?.textContent).toMatch(/^Starts /);
     expect(screen.getByText("Self-paced")).toBeTruthy();
     expect(screen.getByText(usd(250))).toBeTruthy();
   });
@@ -218,5 +231,24 @@ describe("CohortCards", () => {
       const anchors = Array.from(document.querySelectorAll("a"));
       expect(anchors.every((a) => !(a.getAttribute("href") ?? "").includes("/enrol/"))).toBe(true);
     });
+  });
+
+  it("a cohort that has already started but is still enrolling reads 'Started ... still enrolling', with its pay control (R3-07)", () => {
+    render(<CohortCards cohorts={[cohort({ id: "started", hasStarted: true })]} />);
+
+    const started = new Date("2026-10-01T12:00:00Z");
+    expect(startTime(document.body).textContent).toBe(lagosDay(started));
+    expect(startTime(document.body).parentElement?.textContent).toMatch(/^Started /);
+    expect(screen.getByText(/still enrolling/)).toBeTruthy();
+    expect(screen.queryByText(/^Starts /)).toBeNull();
+    expect(document.querySelector('input[name="cohortId"][value="started"]')).toBeTruthy();
+  });
+
+  it("shows the Lagos day for a cohort starting just before midnight UTC (day boundary)", () => {
+    const startsAt = new Date("2026-10-05T23:30:00Z");
+    render(<CohortCards cohorts={[cohort({ id: "late", startsAt })]} />);
+    const time = startTime(document.body);
+    expect(time.textContent).toBe("6 Oct 2026");
+    expect(time.getAttribute("datetime")).toBe("2026-10-05T23:30:00.000Z");
   });
 });

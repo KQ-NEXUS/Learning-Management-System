@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { BrandMark } from "@/components/shell/BrandMark";
+import { MAIN_CONTENT_ID, SkipLink } from "@/components/shell/SkipLink";
 
 /**
  * LessonFrame — the lesson screen's own chrome, drawn as the mockup's lesson board: a navy
@@ -30,6 +31,7 @@ export function LessonFrame({
 
   return (
     <div className="flex min-h-screen">
+      <SkipLink />
       {outline && (
         <aside className="on-navy hidden w-[340px] shrink-0 flex-col overflow-y-auto pb-6 lg:flex">
           <div className="flex h-16 items-center px-6">
@@ -79,7 +81,7 @@ export function LessonFrame({
           </details>
         )}
 
-        <main className="flex grow justify-center rounded-t-[28px] bg-surface pt-2 lg:rounded-tr-none lg:rounded-tl-[28px]">
+        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="flex grow justify-center rounded-t-[28px] bg-surface pt-2 focus:outline-none lg:rounded-tr-none lg:rounded-tl-[28px]">
           <div className="flex w-full max-w-[768px] flex-col gap-6 px-6 pt-12 pb-16">{children}</div>
         </main>
       </div>

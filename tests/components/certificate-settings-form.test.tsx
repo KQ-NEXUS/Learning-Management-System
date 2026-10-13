@@ -66,7 +66,12 @@ afterEach(() => {
 });
 
 function submit(container: HTMLElement) {
-  fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+  const form = container.querySelector("form") as HTMLFormElement;
+  // A stepped create form shows its submit button only on the last step: take "Next" until it is there.
+  for (let step = 0; step < 6 && !form.querySelector('button[type="submit"]'); step++) {
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  }
+  fireEvent.submit(form);
 }
 
 describe("CertificateSettingsFields", () => {

@@ -39,6 +39,7 @@ import type { Permission } from "@/server/permissions/catalogue";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import type { ResourceAuditEntry } from "@/server/services/resource-service";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import {
@@ -77,6 +78,31 @@ export class PublishTargetNotFoundError extends Error {
   constructor(message = "That record no longer exists.") {
     super(message);
     this.name = "PublishTargetNotFoundError";
+  }
+}
+
+/**
+ * An un-archive was asked of a record that is not archived. Un-archiving moves a
+ * record to DRAFT and unlists it, so on a live (published) record it would quietly
+ * do what `unpublish` does, with only the weaker archive permission and without the
+ * running-cohort check (Phase 15, plan 15-26, NFR-05 record state).
+ */
+export class NotArchivedError extends Error {
+  constructor(message = "Only an archived record can be restored.") {
+    super(message);
+    this.name = "NotArchivedError";
+  }
+}
+
+/**
+ * A publish was asked of an archived record. D-16: restoring an archived record returns it to
+ * DRAFT and unlisted, and "re-publishing is deliberate" afterwards, so a record that is still
+ * archived cannot be published directly (Phase 15, plan 15-26, NFR-05 record state).
+ */
+export class ArchivedRecordError extends Error {
+  constructor(message = "An archived record must be restored before it can be published.") {
+    super(message);
+    this.name = "ArchivedRecordError";
   }
 }
 
@@ -156,6 +182,8 @@ export type CoursePublishAggregate = {
       type: string;
       assessmentId: string | null;
       withdrawnAt: Date | string | null;
+      /** NFR-09 (plan 15-24): at least one READY caption track. Read by readiness only. */
+      hasCleanCaptions?: boolean;
     }>;
   }>;
 };
@@ -305,6 +333,7 @@ export function createPublishService(deps: PublishServiceDeps) {
       async (input, ctx) => {
         const agg = await cfg.load(input.id);
         if (!agg) throw new PublishTargetNotFoundError(`${cfg.kind} ${input.id} not found.`);
+        if ((agg as unknown as { status?: unknown }).status === "ARCHIVED") throw new ArchivedRecordError();
 
         const migrateCohortIds = input.migrateCohortIds ?? [];
         const reason =
@@ -807,6 +836,8 @@ export function createPublishService(deps: PublishServiceDeps) {
     const reason = requireReason(input.reason);
     const agg = await deps.loadCourse(input.id);
     if (!agg) throw new PublishTargetNotFoundError();
+    // W-14: a second archive would add a second `course.archived` audit row for no change.
+    if (agg.status === "ARCHIVED") throw new RecordStateError("This course is already archived.");
 
     await deps.assertNoRunningCohorts({ courseId: input.id }); // D-14
 
@@ -838,6 +869,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     const reason = requireReason(input.reason);
     const agg = await deps.loadProgramme(input.id);
     if (!agg) throw new PublishTargetNotFoundError();
+    if (agg.status === "ARCHIVED") throw new RecordStateError("This programme is already archived.");
 
     await deps.assertNoRunningCohorts({ programmeId: input.id }); // D-14 / D-18
 
@@ -870,6 +902,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     const reason = requireReason(input.reason);
     const agg = await deps.loadCourse(input.id);
     if (!agg) throw new PublishTargetNotFoundError();
+    if (agg.status !== "ARCHIVED") throw new NotArchivedError();
 
     // D-16: always back to DRAFT + unlisted, NEVER straight to PUBLISHED or
     // on sale. Re-publishing and re-listing are deliberate, separate acts
@@ -895,6 +928,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     const reason = requireReason(input.reason);
     const agg = await deps.loadProgramme(input.id);
     if (!agg) throw new PublishTargetNotFoundError();
+    if (agg.status !== "ARCHIVED") throw new NotArchivedError();
 
     await deps.updateProgramme(input.id, { status: "DRAFT", publiclyListed: false });
 
@@ -982,6 +1016,13 @@ async function loadCourseAggregate(
               type: true,
               assessmentId: true,
               withdrawnAt: true,
+              // NFR-09 (plan 15-24): one READY caption row is enough to count as
+              // captioned. Mapped to `hasCleanCaptions` below; the raw rows are not kept.
+              resources: {
+                where: { captionForResourceId: { not: null }, uploadStatus: "READY" },
+                select: { id: true },
+                take: 1,
+              },
             },
           },
         },
@@ -999,6 +1040,15 @@ async function loadCourseAggregate(
     completionRule: course.completionRule ?? null,
     completionRuleVersion: course.completionRuleVersion,
     upcomingCohortCount,
+    modules: course.modules.map(
+      (moduleRow: { lessons: Array<{ resources: unknown[] } & Record<string, unknown>> } & Record<string, unknown>) => ({
+        ...moduleRow,
+        lessons: moduleRow.lessons.map(({ resources, ...lessonRow }) => ({
+          ...lessonRow,
+          hasCleanCaptions: resources.length > 0,
+        })),
+      }),
+    ) as CoursePublishAggregate["modules"],
   };
 }
 

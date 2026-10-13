@@ -1,7 +1,7 @@
 import { ListChecks, ClipboardList } from "lucide-react";
 import { GetSupportLink } from "@/components/support/GetSupportLink";
 import { StatusPill } from "@/components/primitives/ResourceTable";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import type { LearnerResultCard } from "@/server/services/learner-results-service";
 
 /**
@@ -89,8 +89,10 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
           <p className="mt-4 text-sm text-warning">You&apos;ve used all your attempts for {result.title}.</p>
         ) : (
           <p className="mt-4 text-sm text-warning">
-            You haven&apos;t yet passed {result.title}. {result.attemptsRemaining ?? "Unlimited"} attempt(s)
-            remaining.
+            You haven&apos;t yet passed {result.title}.{" "}
+            {result.attemptsRemaining == null
+              ? "You can try again."
+              : `${result.attemptsRemaining} ${result.attemptsRemaining === 1 ? "attempt" : "attempts"} remaining.`}
           </p>
         ))}
 
@@ -120,8 +122,8 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
           {result.history.map((entry) => (
             <tr key={entry.ref} className="border-b border-border">
               <td className="h-14 pr-4 font-mono">{entry.number}</td>
-              <td className="pr-4 font-mono tabular-nums">
-                {formatTimestamp(new Date(entry.at))}
+              <td className="pr-4 font-mono tabular-nums whitespace-nowrap">
+                <LagosTime value={entry.at} />
                 {entry.isLate && (
                   <span data-tone="warning" className="ml-2 font-sans font-medium text-warning">
                     · Late
@@ -144,7 +146,7 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
             {result.overrides.map((override, index) => (
               <li key={index} className="text-sm text-muted-foreground">
                 Overridden from {override.previousScore} to {override.newScore} by{" "}
-                {override.actorName ?? "a staff member"}, {formatTimestamp(new Date(override.at)).slice(0, 10)} — &quot;
+                {override.actorName ?? "a staff member"}, <LagosTime value={override.at} variant="date" /> — &quot;
                 {override.reason}&quot;
               </li>
             ))}

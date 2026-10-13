@@ -33,11 +33,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { cohortService, updateCohort, OfferLockedError } from "@/server/services/cohort-service";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { isValidTimeZone } from "@/lib/timezone";
 import { parseCohortDateTime } from "@/lib/cohort-datetime";
+import { withFlash } from "@/lib/flash-notices";
 
 export type CohortFormError = { name: string; message: string };
 export type CohortActionResult =
@@ -214,6 +216,10 @@ function toFailure(error: unknown): Extract<CohortActionResult, { ok: false }> {
         "Changing it needs an approved migration.",
     };
   }
+  // W-13: a cancelled cohort is not edited.
+  if (error instanceof RecordStateError) {
+    return { ok: false, errors: [], message: error.message };
+  }
   if (error instanceof StaleOrderError) {
     return {
       ok: false,
@@ -227,7 +233,7 @@ function toFailure(error: unknown): Extract<CohortActionResult, { ok: false }> {
     return {
       ok: false,
       errors: [],
-      message: "Your role does not permit creating or editing cohorts.",
+      message: refusalMessage(error, "Your role does not permit creating or editing cohorts."),
     };
   }
   throw error;
@@ -268,7 +274,7 @@ export async function createCohortAction(
     return toFailure(error);
   }
   revalidatePath("/staff/cohorts");
-  redirect(`/staff/cohorts/${id}`);
+  redirect(withFlash(`/staff/cohorts/${id}`, "cohort-created"));
 }
 
 const updateSchema = baseSchema.extend({

@@ -28,7 +28,9 @@ import { ResourceTable, StatusPill, type Column, type ResourceTableState } from 
 import type { AttendanceComponent } from "@/server/services/attendance-component";
 import type { DeferredColumn, TrackedProgress } from "@/server/services/roster-service";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "./EnrolmentActionModals";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { EnrolmentRowActions } from "./EnrolmentRowActions";
+import { LagosTime } from "@/components/time/LagosTime";
+import { humanizeCode } from "@/lib/humanize";
 
 export type RosterTransitionView = {
   action: string;
@@ -42,6 +44,7 @@ export type RosterRowView = {
   learnerId: string;
   learnerName: string;
   learnerEmail: string;
+  learnerNumber: string | null;
   enrolmentId: string;
   status: string;
   transitionCount: number;
@@ -62,8 +65,6 @@ export type RosterTabProps = {
   denied?: { permission: string };
   /** Cohorts of the same course/programme (D-13) — the transfer target picker. */
   siblingCohorts?: { id: string; code: string }[];
-  /** Learners eligible for a comped/corporate add — best-effort. */
-  candidateLearners?: { id: string; name: string; email: string }[];
   /** Show the enrolment actions (needs enrolments.manage). Default true. */
   canManage?: boolean;
 };
@@ -90,10 +91,11 @@ const STATUS_LABEL: Record<string, string> = {
  *  off. Never computed via a template so the strings are physically present
  *  in this file, not merely producible at runtime. */
 const DEFERRED_LABEL: Record<9 | 10 | 11 | 12, string> = {
-  9: "not tracked yet · Phase 9",
-  10: "not tracked yet · Phase 10",
-  11: "not tracked yet · Phase 11",
-  12: "not tracked yet · Phase 12",
+  // Progress is deferred when the cohort's offer has no published version pinned yet.
+  9: "No published content yet",
+  10: "Not tracked",
+  11: "Not tracked",
+  12: "Not tracked",
 };
 
 function DeferredCell({ column }: { column: DeferredColumn }) {
@@ -147,14 +149,11 @@ function AttendanceCell({ attendance }: { attendance: AttendanceComponent }) {
   );
 }
 
-const ACTION_BTN = "text-xs font-semibold underline underline-offset-2";
-
 export function RosterTab({
   cohortId,
   rows,
   denied,
   siblingCohorts,
-  candidateLearners,
   canManage = true,
 }: RosterTabProps) {
   const router = useRouter();
@@ -176,7 +175,7 @@ export function RosterTab({
           {r.learnerName}
         </Link>
       ),
-      subtitle: (r) => r.learnerEmail,
+      subtitle: (r) => (r.learnerNumber ? `${r.learnerNumber} · ${r.learnerEmail}` : r.learnerEmail),
       width: "28%",
     },
     {
@@ -184,7 +183,7 @@ export function RosterTab({
       header: "Enrolment",
       render: (r) => (
         <span className="flex flex-col gap-1">
-          <StatusPill label={STATUS_LABEL[r.status] ?? r.status} tone={STATUS_TONE[r.status] ?? "neutral"} />
+          <StatusPill label={STATUS_LABEL[r.status] ?? humanizeCode(r.status)} tone={STATUS_TONE[r.status] ?? "neutral"} />
           <details className="text-xs">
             <summary className="cursor-pointer text-accent underline underline-offset-2 [&::-webkit-details-marker]:hidden">
               history{r.transitionCount > 0 ? ` (${r.transitionCount})` : ""}
@@ -192,8 +191,8 @@ export function RosterTab({
             <div className="mt-1 flex flex-col gap-1 text-muted-foreground">
               {r.latestTransition ? (
                 <span>
-                  Latest: {r.latestTransition.action} by {r.latestTransition.actorName ?? "system"} on{" "}
-                  {formatTimestamp(new Date(r.latestTransition.at))}
+                  Latest: {humanizeCode(r.latestTransition.action).toLowerCase()} by {r.latestTransition.actorName ?? "system"} on{" "}
+                  <LagosTime value={r.latestTransition.at} />
                   {r.latestTransition.reason ? ` — "${r.latestTransition.reason}"` : ""}
                 </span>
               ) : (
@@ -228,65 +227,15 @@ export function RosterTab({
       header: "Actions",
       render: (r) => {
         if (!canManage) return "—";
-        const open = (t: EnrolmentActionTarget) => setTarget(t);
-        if (r.status === "PENDING_PAYMENT") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() =>
-                  open({ action: "approve", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() =>
-                  open({ action: "cancel", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        if (r.status === "ACTIVE") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() =>
-                  open({ action: "transfer", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Transfer
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() =>
-                  open({ action: "withdraw", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Withdraw
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() =>
-                  open({ action: "cancel", cohortId, enrolmentId: r.enrolmentId, learnerName: r.learnerName })
-                }
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        return "—";
+        return (
+          <EnrolmentRowActions
+            status={r.status}
+            cohortId={cohortId}
+            enrolmentId={r.enrolmentId}
+            learnerName={r.learnerName}
+            onOpen={setTarget}
+          />
+        );
       },
       width: "16%",
     },
@@ -329,7 +278,6 @@ export function RosterTab({
         onClose={() => setTarget(null)}
         onSuccess={onSuccess}
         siblingCohorts={siblingCohorts}
-        candidateLearners={candidateLearners}
       />
     </div>
   );

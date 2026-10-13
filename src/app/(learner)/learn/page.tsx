@@ -4,6 +4,9 @@ import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { EnrolmentRow } from "@/components/learner/EnrolmentRow";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { loadLearnerDashboard } from "@/server/services/enrolment-dashboard-service";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "My learning" };
 
 /**
  * `/learn` — "My learning": every course and programme cohort the signed-in learner is enrolled
@@ -22,7 +25,7 @@ export default async function MyLearningPage() {
   const completed = cards.filter((c) => c.enrolmentStatus === "COMPLETED");
 
   return (
-    <div className="flex flex-col gap-10">
+    <div data-primary-content className="flex flex-col gap-10">
       <LearnerPageHeader
         size="hero"
         title="My learning"
@@ -68,6 +71,11 @@ export default async function MyLearningPage() {
               </div>
             </section>
           )}
+          <p className="text-sm text-muted-foreground">
+            <Link href="/learn/calendar" className="font-semibold text-accent hover:underline">
+              See your sessions on a calendar
+            </Link>
+          </p>
           <p className="text-sm text-muted-foreground">
             Looking for something else?{" "}
             <Link href="/courses" className="font-semibold text-accent hover:underline">

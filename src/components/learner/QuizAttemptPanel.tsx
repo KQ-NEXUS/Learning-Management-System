@@ -3,7 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Clock, ListChecks } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { ConfirmModal } from "@/components/primitives/ConfirmModal";
+import { LagosTime } from "@/components/time/LagosTime";
 import type { LearnerQuizView, SafeQuizAttempt } from "@/server/services/learner-quiz-service";
 import type { AttemptResultView } from "@/server/services/attempt-service";
 import { startAttemptAction, submitAttemptAction, saveAttemptAnswersAction } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/assessment-actions";
@@ -13,6 +14,18 @@ type Props = LearnerQuizView & {
   onStart?: typeof startAttemptAction; onSubmit?: typeof submitAttemptAction; onSave?: typeof saveAttemptAnswersAction;
 };
 const BUTTON = "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast disabled:opacity-50";
+
+/**
+ * The submit confirmation's wording. `remainingAfterThis` is the server's `attemptsRemaining` while
+ * an attempt is open: the limit minus every attempt started, INCLUDING this one. So 0 means this is
+ * the last attempt, and 1 means one more is left afterwards, not that this is the last (R3-09).
+ */
+export function submitConfirmationText(remainingAfterThis: number | null): string {
+  const lead = "Your answers are scored as soon as you submit.";
+  if (remainingAfterThis == null) return `${lead} You can start another attempt afterwards.`;
+  if (remainingAfterThis <= 0) return `${lead} This is your last attempt.`;
+  return `${lead} You'll have ${remainingAfterThis} more ${remainingAfterThis === 1 ? "attempt" : "attempts"} after this one.`;
+}
 
 export function QuizAttemptPanel(props: Props) {
   const [active, setActive] = useState<SafeQuizAttempt | null>(null);
@@ -24,6 +37,7 @@ export function QuizAttemptPanel(props: Props) {
   const [pending, transition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [competing, setCompeting] = useState(false);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const closed = props.availableUntil != null && now >= new Date(props.availableUntil).getTime();
@@ -77,12 +91,13 @@ export function QuizAttemptPanel(props: Props) {
       <div><dt>Attempts</dt><dd>{props.maxAttempts ?? "Unlimited"}</dd></div>
       <div><dt>Remaining</dt><dd>{remaining ?? "Unlimited"}</dd></div>
       <div><dt>Pass mark</dt><dd>{props.passMark ?? "No threshold"}</dd></div>
-      {props.availableFrom && <div><dt>Opens</dt><dd className="font-mono">{formatTimestamp(new Date(props.availableFrom))}</dd></div>}
-      {props.availableUntil && <div><dt className="flex items-center gap-1"><Clock aria-hidden size={16} />Closes</dt><dd className="font-mono">{formatTimestamp(new Date(props.availableUntil))}</dd></div>}
+      {props.availableFrom && <div><dt>Opens</dt><dd className="font-mono"><LagosTime value={props.availableFrom} /></dd></div>}
+      {props.availableUntil && <div><dt className="flex items-center gap-1"><Clock aria-hidden size={16} />Closes</dt><dd className="font-mono"><LagosTime value={props.availableUntil} /></dd></div>}
     </dl>
 
-    {active ? <form onSubmit={e => { e.preventDefault(); submit(); }} className="flex flex-col gap-6">
-      <div role="status" className="sticky top-0 z-10 bg-surface py-3 font-semibold">
+    {active ? <form onSubmit={e => { e.preventDefault(); setConfirmSubmit(true); }} className="flex flex-col gap-6">
+      {/* Not a live region: it would announce on every answer. */}
+      <div className="sticky top-0 z-10 bg-surface py-3 font-semibold">
         <span className="text-accent">{answered} of {active.questions.length} answered</span>
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-accent-wash"><div className="h-full rounded-full bg-progress-fill" style={{ width: `${Math.round((answered / Math.max(1, active.questions.length)) * 100)}%` }} /></div>
       </div>
@@ -99,14 +114,25 @@ export function QuizAttemptPanel(props: Props) {
           </label>)}
         </fieldset>)}
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-foreground pt-6">
-          <span className="text-sm text-muted-foreground">Your answers save as you go. Submit when every question is answered.</span>
+          <span className="text-sm text-muted-foreground">Answers are kept only when you save or submit. Select Save answers before leaving this page.</span>
           <div className="flex gap-3">
             <button type="button" onClick={save} className="inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-5 text-sm font-semibold text-foreground hover:bg-surface-2">Save answers</button>
-            <button type="submit" className={BUTTON} disabled={pending || answered !== active.questions.length}>{pending ? "Saving…" : "Submit quiz"}</button>
+            <button type="submit" className={BUTTON} disabled={pending || answered !== active.questions.length}>{pending ? "Submitting…" : "Submit quiz"}</button>
           </div>
         </div>
         {saved && <p role="status" className="text-sm text-muted-foreground">Answers saved.</p>}
       </fieldset>
+      <ConfirmModal
+        open={confirmSubmit}
+        eyebrow="Submit quiz"
+        title="Submit your answers?"
+        tone="default"
+        description={submitConfirmationText(remaining)}
+        confirmLabel="Submit quiz"
+        pending={pending}
+        onCancel={() => setConfirmSubmit(false)}
+        onConfirm={() => { setConfirmSubmit(false); submit(); }}
+      />
     </form> : <>
       {result && <div className="flex flex-col gap-4">
         {result.expired && <p className="flex gap-2 text-sm text-warning"><AlertTriangle aria-hidden size={20} />This assessment&apos;s availability window has closed. Your answers as submitted were scored automatically.</p>}
@@ -138,7 +164,7 @@ export function QuizAttemptPanel(props: Props) {
     </>}
     {error && <div role="alert" className="flex flex-col gap-2 text-sm text-danger"><p>{error.message}</p>{error.body && <p>{error.body}</p>}{active && <button disabled={pending} onClick={submit} className={BUTTON}>Try again</button>}</div>}
     {history.length > 0 && <div className="flex flex-col gap-2"><h3 className="text-sm font-semibold">Attempt history</h3><ul className="flex flex-col gap-2">{history.map(a => <li key={a.attemptId} className="flex flex-wrap items-center gap-2 text-sm">
-      <span>Attempt {a.attemptNumber}</span><span className="font-mono">{a.submittedAt ? formatTimestamp(new Date(a.submittedAt)) : "—"}</span>
+      <span>Attempt {a.attemptNumber}</span><span className="font-mono"><LagosTime value={a.submittedAt} /></span>
       <StatusPill tone={a.status === "ABANDONED" ? "neutral" : a.passed ? "success" : "warning"} label={a.status === "ABANDONED" ? "Abandoned" : a.passed ? "Passed" : "Not yet passed"} />
       <span className="font-mono">{a.status === "ABANDONED" ? "—" : `${a.score} / ${a.maxScore}`}</span>
     </li>)}</ul></div>}

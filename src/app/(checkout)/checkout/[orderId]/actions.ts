@@ -2,6 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { getCurrentActor } from "@/server/auth/current-actor";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
+import { StripeNotConfiguredError } from "@/server/payments/providers/stripe/client";
+import { MissingSettlementAccountError } from "@/server/payments/settlement-config";
 import {
   initiateStripePayment,
   initiatePaystackPayment,
@@ -71,6 +74,11 @@ export async function payAction(formData: FormData): Promise<void> {
     ) {
       redirect(`/checkout/${orderId}`);
     }
+    // D-08 / OQ8 — restricted continuity mode: the neutral catalogue notice, not
+    // the "nothing was charged, try again" banner, and no operator error log.
+    if (err instanceof LicenceWriteBlockedError) {
+      redirect("/courses?notice=unavailable");
+    }
     if (err instanceof OrderNotPayableError) {
       const order = await getOwnOrder(actor, orderId);
       redirect(order ? `/orders/${order.reference}` : "/courses");
@@ -79,6 +87,11 @@ export async function payAction(formData: FormData): Promise<void> {
       redirect("/courses");
     }
     console.error(`[checkout] could not start payment for order ${orderId}`, err);
+    // A missing provider key or settlement account is the deployment's problem, not something a
+    // retry can fix, so say so instead of "try again".
+    if (err instanceof StripeNotConfiguredError || err instanceof MissingSettlementAccountError) {
+      redirect(`/checkout/${orderId}?payment=not-set-up`);
+    }
     redirect(`/checkout/${orderId}?payment=unavailable`);
   }
 

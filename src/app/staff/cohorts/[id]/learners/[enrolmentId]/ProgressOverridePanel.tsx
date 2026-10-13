@@ -18,8 +18,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmModal } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import { overrideLessonProgressAction } from "../../progress-actions";
+import { humanizeCode } from "@/lib/humanize";
+import { useToast } from "@/components/feedback/Toaster";
 
 export type ProgressLessonRow = {
   id: string;
@@ -27,7 +29,7 @@ export type ProgressLessonRow = {
   moduleTitle: string;
   required: boolean;
   completed: boolean;
-  /** `"MANUAL" | "AUTO_VIDEO" | "STAFF_OVERRIDE"`, or `null` when never completed. */
+  /** `"MANUAL" | "AUTO_VIDEO" | "AUTO_ASSESSMENT" | "STAFF_OVERRIDE"`, or `null` when never completed. */
   completedSource: string | null;
   /** ISO instant, or `null` when never completed. */
   completedAt: string | null;
@@ -49,6 +51,7 @@ export type ProgressOverridePanelProps = {
 const SOURCE_LABEL: Record<string, string> = {
   MANUAL: "Marked by learner",
   AUTO_VIDEO: "Auto-completed (video)",
+  AUTO_ASSESSMENT: "Auto-completed (quiz passed or assignment submitted)",
   STAFF_OVERRIDE: "Staff override",
 };
 
@@ -63,6 +66,7 @@ export function ProgressOverridePanel({
   canOverride,
 }: ProgressOverridePanelProps) {
   const router = useRouter();
+  const toast = useToast();
   const [target, setTarget] = useState<OverrideTarget | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +92,7 @@ export function ProgressOverridePanel({
     const result = await overrideLessonProgressAction(formData);
     setPending(false);
     if (result.ok) {
+      toast.success(target.currentlyComplete ? "Lesson marked not complete" : "Lesson marked complete");
       close();
       router.refresh();
     } else {
@@ -114,11 +119,14 @@ export function ProgressOverridePanel({
                   {lesson.moduleTitle} · {lesson.required ? "Required" : "Optional"}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {lesson.completed
-                    ? `${SOURCE_LABEL[lesson.completedSource ?? ""] ?? lesson.completedSource} · ${
-                        lesson.completedAt ? formatTimestamp(new Date(lesson.completedAt)) : "—"
-                      }`
-                    : "Not completed"}
+                  {lesson.completed ? (
+                    <>
+                      {SOURCE_LABEL[lesson.completedSource ?? ""] ?? humanizeCode(lesson.completedSource)} ·{" "}
+                      <LagosTime value={lesson.completedAt} />
+                    </>
+                  ) : (
+                    "Not completed"
+                  )}
                 </span>
               </div>
               {canOverride && (
@@ -143,12 +151,13 @@ export function ProgressOverridePanel({
 
       <ConfirmModal
         open={target !== null}
+        licenceEffect="continuity"
         title={
           target
             ? `${target.currentlyComplete ? "Mark incomplete" : "Mark complete"}: ${target.lessonTitle}?`
             : ""
         }
-        description="This overrides the learner's own progress record. The reason is audited (D-14)."
+        description="This overrides the learner's own progress record. The reason is recorded in the audit log."
         confirmLabel={target?.currentlyComplete ? "Mark incomplete" : "Mark complete"}
         tone="default"
         minReasonLength={MIN_REASON_LENGTH}

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startTestDatabase, TEST_DB_TIMEOUT_MS, type TestDatabase } from "./support/pg";
 import type { createExportService as CreateService } from "@/server/services/export-service";
 import { seedCohortFixture, seedLearnerFixture } from "./support/cohort-fixtures";
@@ -104,6 +104,35 @@ describe("immutable export transaction", () => {
     ] });
     const exportService = makeService({ db: database.prisma, actor: async () => ({ userId: staff.id }), producers: { registrations: async () => [{ id: "safe" }] }, now: () => NOW });
     await expect(exportService.requestExport({ dataset: "registrations", columns: ["id", "learnerName"], reason: "Case review" })).rejects.toThrow();
+  });
+
+  it("refuses a payments export without payments.view, and with a payments.view grant narrower than the report scope (A-02)", async () => {
+    const { cohortId } = await seedCohortFixture(database.prisma);
+    const produced = vi.fn(async () => [{ reference: "ORD-1" }]);
+    const reportRole = await database.prisma.role.create({ data: { name: "A-02 report-only role", permissions: ["reports.view", "reports.export"] } });
+    const paymentsRole = await database.prisma.role.create({ data: { name: "A-02 payments role", permissions: ["payments.view"] } });
+
+    const reportOnly = await database.prisma.user.create({ data: { email: "a02-report-only@test.invalid", name: "Report only", status: "ACTIVE" } });
+    await database.prisma.assignment.create({ data: { userId: reportOnly.id, roleId: reportRole.id, scopeType: "GLOBAL" } });
+    const asReportOnly = makeService({ db: database.prisma, actor: async () => ({ userId: reportOnly.id }), producers: { payments: produced, registrations: async () => [{ id: "safe" }] }, now: () => NOW });
+    await expect(asReportOnly.requestExport({ dataset: "payments" })).rejects.toThrow();
+    // The same role still exports a dataset that has no module of its own.
+    await expect(asReportOnly.requestExport({ dataset: "registrations", idempotencyKey: nextKey() })).resolves.toMatchObject({ jobId: expect.any(String) });
+
+    const narrow = await database.prisma.user.create({ data: { email: "a02-narrow@test.invalid", name: "Narrow", status: "ACTIVE" } });
+    await database.prisma.assignment.createMany({ data: [
+      { userId: narrow.id, roleId: reportRole.id, scopeType: "GLOBAL" },
+      { userId: narrow.id, roleId: paymentsRole.id, scopeType: "COHORT", scopeId: cohortId },
+    ] });
+    const asNarrow = makeService({ db: database.prisma, actor: async () => ({ userId: narrow.id }), producers: { payments: produced }, now: () => NOW });
+    await expect(asNarrow.requestExport({ dataset: "payments" })).rejects.toThrow();
+
+    expect(produced).not.toHaveBeenCalled();
+    expect(await database.prisma.exportJob.count({ where: { dataset: "payments", requestedById: { in: [reportOnly.id, narrow.id] } } })).toBe(0);
+
+    // The seeded role holds payments.view GLOBAL alongside the report grants.
+    await expect(service({ payments: produced }).requestExport({ dataset: "payments", idempotencyKey: nextKey() })).resolves.toMatchObject({ jobId: expect.any(String) });
+    expect(produced).toHaveBeenCalledOnce();
   });
 
   it("keeps failed source and frozen rows on linked retry; expired rerun gets current rows", async () => {

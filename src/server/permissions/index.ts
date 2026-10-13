@@ -9,6 +9,7 @@
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { loadGrantsForUser } from "@/server/services/grant-service";
 import { recordAuthorizationAudit } from "@/server/services/audit-service";
+import { licenceService } from "@/server/services/licence-service";
 import { createWithPermission } from "./with-permission";
 import { hasPermission, isGrantActive, type ResourceScope } from "./scope";
 import { collectionScopeFromGrants, type CollectionScopeSnapshot } from "./collection-scope";
@@ -18,6 +19,13 @@ export const withPermission = createWithPermission({
   getActor: getCurrentActor,
   loadGrants: loadGrantsForUser,
   audit: recordAuthorizationAudit,
+  // D-09: restricted-state enforcement lives in the choke point. The guard runs
+  // after authorization and only for write-effect operations; the service audits
+  // the enforcement itself (licence.restriction_enforced).
+  licence: {
+    check: async ({ permission, actorId }) =>
+      licenceService.checkWriteGate({ operation: permission, actorId }),
+  },
 });
 
 /**
@@ -61,7 +69,8 @@ export async function canAnywhere(permission: Permission): Promise<boolean> {
   return (await collectionScopeFor(permission)) !== null;
 }
 
-export { AuthenticationError, AuthorizationError } from "./with-permission";
+export { AuthenticationError, AuthorizationError, LicenceRestrictedError } from "./with-permission";
+export { refusalMessage, isLicenceRestricted } from "./refusal";
 export type { Actor, AuthorizedContext } from "./with-permission";
 export { PERMISSIONS, isPermission, isGlobalOnly } from "./catalogue";
 export type { Permission } from "./catalogue";

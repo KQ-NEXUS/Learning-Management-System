@@ -125,6 +125,14 @@ export class BatchTooLargeError extends Error {
   }
 }
 
+/** The Prisma error code (`P2002` unique violation, `P2025` record not found), or null. */
+function prismaErrorCode(error: unknown): string | null {
+  if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Row / delegate shapes
 // ---------------------------------------------------------------------------
@@ -588,20 +596,24 @@ export function createGradingService(deps: GradingServiceDeps) {
         releasedAt: null,
       };
 
-      let after: GradeRow;
-      if (existing) {
+      const updateDraft = async (gradeId: string): Promise<GradeRow> => {
         try {
           // Atomic predicate closes the read/write race with a staff release.
           // A released row cannot be rewritten or downgraded to a draft.
-          after = await deps.grade.update({ where: { id: existing.id, status: "DRAFT" }, data });
+          return await deps.grade.update({ where: { id: gradeId, status: "DRAFT" }, data });
         } catch (error) {
-          if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") {
-            throw new GradeAlreadyReleasedError(existing.id);
-          }
+          if (prismaErrorCode(error) === "P2025") throw new GradeAlreadyReleasedError(gradeId);
           throw error;
         }
+      };
+
+      let before: GradeRow | null = existing;
+      let after: GradeRow;
+      if (existing) {
+        after = await updateDraft(existing.id);
       } else {
-        after = await deps.grade.create({
+        try {
+          after = await deps.grade.create({
             data: {
               ...data,
               assessmentId: submission.assessmentId,
@@ -609,6 +621,20 @@ export function createGradingService(deps: GradingServiceDeps) {
               submissionId: submission.id,
             },
           });
+        } catch (error) {
+          // NFR-03 / NFR-14 — a concurrent save for the same submission won
+          // the insert; the partial unique index "Grade_submissionId_key"
+          // refused this one (P2002). This create is not inside a transaction,
+          // so the connection is still usable: resolve against the winner's
+          // row with the same rule the update path uses. A released winner is
+          // the existing GradeAlreadyReleasedError, never a raw database error.
+          if (prismaErrorCode(error) !== "P2002") throw error;
+          const winner = await deps.grade.findFirst({ where: { submissionId: submission.id } });
+          if (!winner) throw error;
+          if (winner.status === "RELEASED") throw new GradeAlreadyReleasedError(winner.id);
+          before = winner;
+          after = await updateDraft(winner.id);
+        }
       }
 
       // No domain event — a draft grade is not a lifecycle event; nothing
@@ -621,7 +647,7 @@ export function createGradingService(deps: GradingServiceDeps) {
         actorId: ctx.actor.userId,
         outcome: "SUCCESS",
         reason: null,
-        before: existing ? { score: existing.score, feedback: existing.feedback, status: existing.status } : null,
+        before: before ? { score: before.score, feedback: before.feedback, status: before.status } : null,
         after: { score: after.score, feedback: after.feedback, status: after.status },
       });
 

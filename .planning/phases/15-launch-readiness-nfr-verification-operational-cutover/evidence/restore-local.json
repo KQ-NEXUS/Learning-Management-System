@@ -1,0 +1,108 @@
+{
+  "route": "docker",
+  "sourceHost": "localhost",
+  "sourceTarget": "local",
+  "serverMajor": 16,
+  "image": "postgres:16-alpine",
+  "restoreContainerPort": 5440,
+  "startedAt": "2026-10-07T21:29:52.335Z",
+  "dumpStartedAt": "2026-10-07T21:30:25.681Z",
+  "dumpFinishedAt": "2026-10-07T21:31:24.090Z",
+  "restoreFinishedAt": "2026-10-07T21:32:27.813Z",
+  "integrityFinishedAt": "2026-10-07T21:33:09.646Z",
+  "dumpBytes": 208364,
+  "dumpSeconds": 58.4,
+  "restoreSeconds": 63.7,
+  "integritySeconds": 41.8,
+  "rtoSeconds": 197.3,
+  "rtoTargetSeconds": 28800,
+  "withinRtoTarget": true,
+  "rpoTargetSeconds": 86400,
+  "latestRestorablePoint": "2026-10-07T21:30:25.681Z",
+  "rowCountsMatch": true,
+  "rowCounts": {
+    "User": {
+      "source": 11,
+      "restored": 11
+    },
+    "Enrolment": {
+      "source": 9,
+      "restored": 9
+    },
+    "Order": {
+      "source": 3,
+      "restored": 3
+    },
+    "PaymentAttempt": {
+      "source": 2,
+      "restored": 2
+    },
+    "Grade": {
+      "source": 2,
+      "restored": 2
+    },
+    "CompletionRecord": {
+      "source": 3,
+      "restored": 3
+    },
+    "Certificate": {
+      "source": 3,
+      "restored": 3
+    },
+    "AuditEvent": {
+      "source": 48,
+      "restored": 48
+    }
+  },
+  "integrityPassed": true,
+  "integrity": [
+    {
+      "id": "paid-order-has-successful-payment",
+      "label": "Paid orders have a successful payment",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "active-enrolment-has-paid-order",
+      "label": "Active enrolments have a paid order",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-live-enrolment-per-learner-cohort",
+      "label": "One live enrolment per learner and cohort",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-open-completion-per-enrolment-course",
+      "label": "One open completion record per enrolment and course",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "one-grade-per-submission",
+      "label": "One grade per submission",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "active-certificate-has-completion",
+      "label": "Active certificates have a completion record",
+      "status": "passed",
+      "violationCount": 0
+    },
+    {
+      "id": "cohort-within-capacity",
+      "label": "Cohorts are within capacity",
+      "status": "passed",
+      "violationCount": 0
+    }
+  ],
+  "passed": true,
+  "notes": [
+    "startedAt stands in for the incident start; RTO = integrityFinishedAt - startedAt.",
+    "RPO for this route = incident time - latestRestorablePoint (the dump start); the schedule of real dumps sets it.",
+    "Neon point-in-time branch restore (route A) and object storage backup are proven separately (plan 15-30 and the launch checklist)."
+  ]
+}

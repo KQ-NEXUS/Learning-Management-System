@@ -1,0 +1,237 @@
+{
+  "generatedAt": "2026-10-10T10:22:55.080Z",
+  "runId": "mv28w6ei",
+  "journeys": [
+    "public",
+    "learner",
+    "staff"
+  ],
+  "stops": 279,
+  "failures": 0,
+  "runs": [
+    {
+      "name": "public",
+      "stops": 63,
+      "pages": [
+        {
+          "page": "catalogue",
+          "stops": 12
+        },
+        {
+          "page": "catalogue (skip link)",
+          "stops": 5
+        },
+        {
+          "page": "course page",
+          "stops": 2
+        },
+        {
+          "page": "course page (fresh load)",
+          "stops": 6
+        },
+        {
+          "page": "sign-in page",
+          "stops": 19
+        },
+        {
+          "page": "register page",
+          "stops": 10
+        },
+        {
+          "page": "certificate check",
+          "stops": 9
+        }
+      ],
+      "steps": [
+        "on catalogue",
+        "first Tab is the skip link",
+        "Tab through the catalogue header and first cards: 11 stops",
+        "on catalogue (skip link)",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab to the journey course card (3 presses)",
+        "on course page",
+        "Tab through the course page after a link was followed: 2 stops",
+        "on course page (fresh load)",
+        "first Tab is the skip link",
+        "Tab to the Sign in link (5 presses)",
+        "on sign-in page",
+        "Tab to the email field (2 presses)",
+        "Tab to the password field (2 presses)",
+        "Tab to the Sign in button (2 presses)",
+        "sign-in: focus moves to the alert after a failed submit",
+        "Tab through the sign-in page after the failure: 6 stops",
+        "Tab to the Create an account link (7 presses)",
+        "on register page",
+        "Tab through the register form: 10 stops",
+        "on certificate check",
+        "first Tab is the skip link",
+        "Tab to the reference field (7 presses)",
+        "Tab through the certificate check form: 1 stops"
+      ],
+      "problems": []
+    },
+    {
+      "name": "learner",
+      "stops": 98,
+      "pages": [
+        {
+          "page": "sign-in page",
+          "stops": 6
+        },
+        {
+          "page": "dashboard",
+          "stops": 14
+        },
+        {
+          "page": "dashboard (skip link)",
+          "stops": 6
+        },
+        {
+          "page": "dashboard (navigation)",
+          "stops": 4
+        },
+        {
+          "page": "my learning",
+          "stops": 8
+        },
+        {
+          "page": "my learning (course link)",
+          "stops": 3
+        },
+        {
+          "page": "course home",
+          "stops": 10
+        },
+        {
+          "page": "course home (skip link)",
+          "stops": 11
+        },
+        {
+          "page": "dashboard (resume lesson)",
+          "stops": 10
+        },
+        {
+          "page": "lesson",
+          "stops": 9
+        },
+        {
+          "page": "lesson (skip link)",
+          "stops": 3
+        },
+        {
+          "page": "new support request",
+          "stops": 14
+        }
+      ],
+      "steps": [
+        "on sign-in page",
+        "Tab to the email field (2 presses)",
+        "Tab to the password field (2 presses)",
+        "Tab to the Sign in button (2 presses)",
+        "on dashboard",
+        "first Tab is the skip link",
+        "Tab through the dashboard header and navigation: 13 stops",
+        "on dashboard (skip link)",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab through the dashboard content: 4 stops",
+        "on dashboard (navigation)",
+        "Tab to the My learning link (4 presses)",
+        "on my learning",
+        "Tab through my learning: 8 stops",
+        "on my learning (course link)",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab to a course link (1 press)",
+        "on course home",
+        "Tab through the course home: 10 stops",
+        "on course home (skip link)",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab through the course home content: 9 stops",
+        "on dashboard (resume lesson)",
+        "Tab to the Resume lesson link (10 presses)",
+        "on lesson",
+        "Tab through the lesson page: 9 stops",
+        "on lesson (skip link)",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab through the lesson content: 1 stops",
+        "on new support request",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab to the Create ticket button (6 presses)",
+        "new support request: focus moves to the alert after a failed submit",
+        "Tab through the form after the failure: 6 stops"
+      ],
+      "problems": []
+    },
+    {
+      "name": "staff",
+      "stops": 118,
+      "pages": [
+        {
+          "page": "sign-in page",
+          "stops": 6
+        },
+        {
+          "page": "staff overview",
+          "stops": 18
+        },
+        {
+          "page": "staff overview (skip link)",
+          "stops": 10
+        },
+        {
+          "page": "staff overview (navigation)",
+          "stops": 5
+        },
+        {
+          "page": "enrolments",
+          "stops": 21
+        },
+        {
+          "page": "new course form",
+          "stops": 9
+        },
+        {
+          "page": "new role form",
+          "stops": 49
+        }
+      ],
+      "steps": [
+        "on sign-in page",
+        "Tab to the email field (2 presses)",
+        "Tab to the password field (2 presses)",
+        "Tab to the Sign in button (2 presses)",
+        "on staff overview",
+        "first Tab is the skip link",
+        "Tab through the staff sidebar and header: 17 stops",
+        "on staff overview (skip link)",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab through the staff overview content: 8 stops",
+        "on staff overview (navigation)",
+        "Tab to the Delivery group button (3 presses)",
+        "Tab to the Enrolments link (2 presses)",
+        "on enrolments",
+        "Tab to a row actions button (15 presses)",
+        "row actions: opening the menu focuses the first item",
+        "row actions menu, Escape: focus returns to \"Actions for Segun Alade\"",
+        "row actions: End moves to \"Cancel enrolment\"",
+        "confirmation dialog: focus moves into the dialog",
+        "confirmation dialog, Escape: focus returns to \"Actions for Segun Alade\"",
+        "on new course form",
+        "first Tab is the skip link",
+        "Enter on the skip link moves focus into main",
+        "Tab through the new course form: 7 stops",
+        "on new role form",
+        "Tab to the submit button (39 presses)",
+        "new role form: focus moves to the alert after a failed submit",
+        "Tab through the new role form after the failure: 10 stops"
+      ],
+      "problems": []
+    }
+  ]
+}

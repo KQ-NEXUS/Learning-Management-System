@@ -11,6 +11,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { permissionPhrase } from "@/lib/humanize";
 
 /**
  * ResourceTable — the list primitive.
@@ -318,7 +319,7 @@ export function ResourceTable<T>({
               filter.kind === "select" && filter.variant !== "select" && filter.options.length <= 4;
 
             return (
-              <div key={filter.name} className="flex items-center gap-2">
+              <div key={filter.name} className="flex max-w-full items-center gap-2">
                 <label
                   htmlFor={isSegmented ? undefined : filterId}
                   className={filter.kind === "search" ? "sr-only" : "text-[13px] text-muted-foreground"}
@@ -326,7 +327,7 @@ export function ResourceTable<T>({
                   {filter.label}
                 </label>
                 {filter.kind === "search" ? (
-                  <div className="relative flex items-center">
+                  <div className="relative flex min-w-0 items-center">
                     <Search
                       aria-hidden
                       className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground"
@@ -427,19 +428,20 @@ export function ResourceTable<T>({
         )}
         <Panel>
           <span className="font-mono text-sm text-muted-foreground">403</span>
-          <h2 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
-            You do not have access to {noun}
-          </h2>
+          {/* One h2 per page: under a titled table this is the h3. */}
+          {(() => {
+            const Heading = title ? "h3" : "h2";
+            return (
+              <Heading className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
+                You do not have access to {noun}
+              </Heading>
+            );
+          })()}
           <p className="max-w-prose text-base text-foreground-soft">
-            Your role does not include{" "}
-            {state.permission ? (
-              <code className="rounded-sm bg-accent-wash px-2 font-mono text-sm">
-                {state.permission}
-              </code>
-            ) : (
-              "the required permission"
-            )}{" "}
-            at this scope. Ask a workspace administrator to grant it.
+            {state.permission
+              ? `Your role doesn't include permission to ${permissionPhrase(state.permission)} here.`
+              : "Your role doesn't include the permission this needs here."}{" "}
+            Ask a workspace administrator if you need it.
           </p>
         </Panel>
       </div>
@@ -577,8 +579,9 @@ export function ResourceTable<T>({
       )}
 
       {/* Table — hidden below 640px in favour of the stacked row list; scrolls
-          sideways inside its own box rather than the page if it ever overflows. */}
-      <div className="hidden overflow-x-auto sm:block">
+          sideways inside its own box rather than the page if it ever overflows.
+          The box is a labelled, focusable region so a keyboard user can scroll it (WCAG 2.1.1). */}
+      <div role="region" aria-label={`${noun} table`} tabIndex={0} className="hidden overflow-x-auto sm:block">
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">
             {loading ? `Loading ${noun}` : `${rows.length} ${noun}`}

@@ -23,7 +23,7 @@ export const REPORT_DATASETS = Object.freeze([
 ] as const);
 
 export type ReportDataset = (typeof REPORT_DATASETS)[number];
-export type ExportDataset = ReportDataset | "reconciliation-refunds" | "audit";
+export type ExportDataset = ReportDataset | "reconciliation-refunds" | "audit" | "learner-subject";
 export type ReportGroup = "ADMISSIONS_FINANCE" | "LEARNING_DELIVERY" | "OUTCOMES_SUPPORT";
 export type ReportAvailability = "AVAILABLE" | "NOT_AVAILABLE_YET";
 export type ReportScopePolicy = "COLLECTION" | "GLOBAL";
@@ -42,6 +42,13 @@ export type ReportDefinition = Readonly<{
   group: ReportGroup;
   availability: ReportAvailability;
   permission: Permission;
+  /**
+   * The permission that guards the underlying records in their own module,
+   * required IN ADDITION to `permission` wherever the dataset is read, exported
+   * or downloaded. Without it a report would hand row-level data to a role the
+   * module itself refuses (audit A-02: payments via `reports.view` alone).
+   */
+  dataPermission?: Permission;
   scopePolicy: "COLLECTION";
   definition: string;
   businessDateLabel: string;
@@ -56,6 +63,16 @@ export type ExportDefinition = Readonly<{
   id: ExportDataset;
   version: string;
   permission: Permission;
+  /** See `ReportDefinition.dataPermission`. */
+  dataPermission?: Permission;
+  /**
+   * True when `permission` is the ONLY grant the dataset needs: the generic
+   * `reports.export` grant and the `users.view` identity grant are not
+   * required, because the dataset's own permission already covers both
+   * (`learner-subject` is gated by `privacy.manage` alone, 15-DECISIONS.md).
+   * Requesting, listing and downloading all apply the same rule.
+   */
+  standalone?: true;
   scopePolicy: ReportScopePolicy;
   filterSchema: ZodType;
   safeColumns: readonly ReportColumn[];
@@ -82,6 +99,11 @@ const supportFilters = z
     priority: z.enum(SUPPORT_PRIORITIES).optional(),
     queue: z.enum(SUPPORT_QUEUES).optional(),
     owner: optionalId,
+  })
+  .strict();
+const learnerSubjectFilters = z
+  .object({
+    userId: z.string().trim().min(1).max(128),
   })
   .strict();
 const auditFilters = z
@@ -132,6 +154,7 @@ export const REPORT_REGISTRY: readonly ReportDefinition[] = Object.freeze([
     group: "ADMISSIONS_FINANCE",
     availability: "AVAILABLE",
     permission: "reports.view",
+    dataPermission: "payments.view",
     definition: "Confirmed learner payments grouped by provider and exact currency.",
     businessDateLabel: "Payment confirmation date",
     safeColumns: safe(["reference", "Reference", "TEXT"], ["confirmedAt", "Confirmed", "DATE"], ["amountMinor", "Learner total", "MONEY_MINOR"], ["currency", "Currency", "TEXT"]),
@@ -256,6 +279,7 @@ const reportExportDefinitions = REPORT_REGISTRY.map((definition): ExportDefiniti
     id: definition.id,
     version: definition.version,
     permission: definition.permission,
+    ...(definition.dataPermission ? { dataPermission: definition.dataPermission } : {}),
     scopePolicy: definition.scopePolicy,
     filterSchema: definition.filterSchema,
     safeColumns: definition.safeColumns,
@@ -282,6 +306,21 @@ export const EXPORT_DATASET_REGISTRY: readonly ExportDefinition[] = Object.freez
     filterSchema: auditFilters,
     safeColumns: safe(["eventId", "Event", "TEXT"], ["createdAt", "Created", "DATE"], ["actorType", "Actor type", "TEXT"], ["action", "Action", "TEXT"], ["targetType", "Target type", "TEXT"], ["targetId", "Target", "TEXT"], ["outcome", "Outcome", "TEXT"], ["correlationId", "Correlation", "TEXT"], ["context", "Changed fields", "TEXT"]),
     sensitiveColumns: identityColumns.map((column) => Object.freeze({ ...column, key: column.key === "learnerName" ? "actorName" : "actorEmail", label: column.key === "learnerName" ? "Actor name" : "Actor email" })),
+  }),
+  Object.freeze({
+    id: "learner-subject" as const,
+    version: "1.0",
+    // D-12 / NFR-11 (plan 15-21): one learner's personal data, never a bulk
+    // report. Gated by privacy.manage at Global scope and by nothing else.
+    permission: "privacy.manage" as const,
+    standalone: true as const,
+    scopePolicy: "GLOBAL" as const,
+    filterSchema: learnerSubjectFilters,
+    // Long format: one row per field of one record. `recordedAt` stays in the
+    // safe list and `value` (the personal data itself) in the sensitive list,
+    // so a reason is always required.
+    safeColumns: safe(["section", "Section", "TEXT"], ["recordType", "Record type", "TEXT"], ["recordId", "Record", "TEXT"], ["field", "Field", "TEXT"], ["recordedAt", "Recorded at", "DATE"]),
+    sensitiveColumns: Object.freeze([Object.freeze({ key: "value", label: "Value", valueType: "TEXT" as const, permission: "users.view" as const })]),
   }),
 ]);
 

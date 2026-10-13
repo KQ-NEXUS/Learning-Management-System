@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { CheckoutNotice } from "@/app/(public)/CheckoutNotice";
 import { ArrowRight } from "lucide-react";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 import { DELIVERY_MODE_LABEL, formatPrice } from "@/app/(public)/CohortCards";
+import { LagosTime } from "@/components/time/LagosTime";
 import { listPublicCourses, type PublicCohort } from "@/server/services/public-catalogue-service";
 
 // Rendered per request, never prerendered. 04-15's `<planner_decisions>`
@@ -15,13 +17,6 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Courses" };
 
-/** "30 Nov 2026" — pinned locale so server and browser agree. */
-function shortDate(value: Date): string {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
-    new Date(value),
-  );
-}
-
 /** The soonest cohort's headline price: Naira when offered, else dollars. */
 function headlinePrice(cohort: PublicCohort | null): string | null {
   if (!cohort) return null;
@@ -30,12 +25,29 @@ function headlinePrice(cohort: PublicCohort | null): string | null {
   return null;
 }
 
-export default async function PublicCoursesPage() {
+export default async function PublicCoursesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const courses = await listPublicCourses();
+  const { notice } = await searchParams;
 
   return (
     <div className="flex flex-col gap-6">
-      <LearnerPageHeader size="hero" title="Courses" subtitle="Professional training you can enrol on." />
+      <LearnerPageHeader
+        size="hero"
+        title="Courses"
+        subtitle={
+          <>
+            Professional training an employer can verify.{" "}
+            <Link href="/verify-certificate" className="font-semibold text-white underline underline-offset-4">
+              Verify a certificate
+            </Link>
+          </>
+        }
+      />
+      <CheckoutNotice notice={notice} />
       {courses.length === 0 ? (
         <p className="border-t border-foreground py-12 text-sm text-muted-foreground">
           No courses are listed right now.
@@ -54,7 +66,7 @@ export default async function PublicCoursesPage() {
               <li key={course.slug} className="border-b border-border">
                 <Link
                   href={`/courses/${course.slug}`}
-                  className="grid gap-3 py-8 text-foreground hover:bg-surface-2/60 md:grid-cols-[minmax(0,1fr)_220px_150px_28px] md:items-center md:gap-8"
+                  className="grid gap-3 py-8 text-foreground hover:bg-surface-2/60 md:grid-cols-[minmax(0,1fr)_200px_140px_auto] md:items-center md:gap-8"
                 >
                   <div className="min-w-0">
                     <div className="text-[24px] leading-[1.2] font-semibold tracking-[-0.025em] break-words">
@@ -67,13 +79,24 @@ export default async function PublicCoursesPage() {
                   <div>
                     {format && <div className="text-[13px] text-muted-foreground">{format}</div>}
                     <div className={`mt-1 font-semibold ${course.nextCohort ? "" : "text-muted-foreground"}`}>
-                      {course.nextCohort ? `Next start ${shortDate(course.nextCohort.startsAt)}` : "No dates scheduled"}
+                      {course.nextCohort
+                        ? course.nextCohort.hasStarted
+                          ? "Enrolling now"
+                          : <>
+                            Next start <LagosTime value={course.nextCohort.startsAt} variant="date" />
+                          </>
+                        : "No dates scheduled"}
                     </div>
                   </div>
                   <div className="font-mono text-[16px] font-medium tabular-nums md:text-right">
-                    {price ?? <span className="text-muted-foreground">—</span>}
+                    {price ?? (
+                      <span className="font-sans text-[13px] font-normal text-muted-foreground">Price shown with dates</span>
+                    )}
                   </div>
-                  <ArrowRight aria-hidden className="hidden size-5 text-accent md:block" />
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-accent">
+                    View course
+                    <ArrowRight aria-hidden className="size-5" />
+                  </span>
                 </Link>
               </li>
             );

@@ -18,6 +18,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ResourceTable, StatusPill, type Column, type ResourceTableState } from "@/components/primitives";
 import { EnrolmentActionModals, type EnrolmentActionTarget } from "@/app/staff/cohorts/[id]/EnrolmentActionModals";
+import { EnrolmentRowActions } from "@/app/staff/cohorts/[id]/EnrolmentRowActions";
+import { LagosTime } from "@/components/time/LagosTime";
+import { humanizeCode } from "@/lib/humanize";
 
 /** Dates are ISO strings — converted once at the RSC boundary in `page.tsx`,
  *  the same way `CohortsTable`/`SessionsTab` do. */
@@ -26,6 +29,7 @@ export type EnrolmentListRow = {
   status: string;
   learnerName: string;
   learnerEmail: string;
+  learnerNumber: string | null;
   cohortId: string;
   cohortCode: string;
   offerTitle: string;
@@ -62,12 +66,13 @@ const STATUS_OPTIONS = [
   { value: "COMPLETED", label: "Completed" },
 ];
 
-function formatAccessWindow(startsAt: string | null, endsAt: string | null): string {
-  const fmt = (iso: string | null) => (iso ? new Date(iso).toISOString().slice(0, 10) : "—");
-  return `${fmt(startsAt)} → ${fmt(endsAt)}`;
+function AccessWindow({ startsAt, endsAt }: { startsAt: string | null; endsAt: string | null }) {
+  return (
+    <>
+      <LagosTime value={startsAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" /> → <LagosTime value={endsAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" />
+    </>
+  );
 }
-
-const ACTION_BTN = "text-xs font-semibold underline underline-offset-2";
 
 export function EnrolmentsTable({
   rows,
@@ -102,6 +107,7 @@ export function EnrolmentsTable({
         (!needle ||
           r.learnerName.toLowerCase().includes(needle) ||
           r.learnerEmail.toLowerCase().includes(needle) ||
+          (r.learnerNumber ?? "").toLowerCase().includes(needle) ||
           r.cohortCode.toLowerCase().includes(needle)) &&
         (!status || r.status === status) &&
         (!cohortId || r.cohortId === cohortId),
@@ -121,7 +127,7 @@ export function EnrolmentsTable({
       key: "learner",
       header: "Learner",
       render: (r) => r.learnerName,
-      subtitle: (r) => r.learnerEmail,
+      subtitle: (r) => (r.learnerNumber ? `${r.learnerNumber} · ${r.learnerEmail}` : r.learnerEmail),
       width: "18%",
     },
     {
@@ -149,21 +155,21 @@ export function EnrolmentsTable({
       key: "status",
       header: "Status",
       render: (r) => (
-        <StatusPill label={STATUS_LABEL[r.status] ?? r.status} tone={STATUS_TONE[r.status] ?? "neutral"} />
+        <StatusPill label={STATUS_LABEL[r.status] ?? humanizeCode(r.status)} tone={STATUS_TONE[r.status] ?? "neutral"} />
       ),
       width: "12%",
     },
     {
       key: "accessWindow",
       header: "Access window",
-      render: (r) => formatAccessWindow(r.accessStartsAt, r.accessEndsAt),
+      render: (r) => <AccessWindow startsAt={r.accessStartsAt} endsAt={r.accessEndsAt} />,
       mono: true,
       width: "14%",
     },
     {
       key: "createdAt",
       header: "Created",
-      render: (r) => new Date(r.createdAt).toISOString().slice(0, 10),
+      render: (r) => <LagosTime value={r.createdAt} variant="date" className="font-mono text-[13px] whitespace-nowrap" />,
       mono: true,
       width: "10%",
       hideOnMobile: true,
@@ -171,57 +177,15 @@ export function EnrolmentsTable({
     {
       key: "actions",
       header: "Actions",
-      render: (r) => {
-        const open = (t: EnrolmentActionTarget) => setTarget(t);
-        if (r.status === "PENDING_PAYMENT") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() => open({ action: "approve", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() => open({ action: "cancel", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        if (r.status === "ACTIVE") {
-          return (
-            <span className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-accent`}
-                onClick={() => open({ action: "transfer", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Transfer
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() => open({ action: "withdraw", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Withdraw
-              </button>
-              <button
-                type="button"
-                className={`${ACTION_BTN} text-danger`}
-                onClick={() => open({ action: "cancel", cohortId: r.cohortId, enrolmentId: r.id, learnerName: r.learnerName })}
-              >
-                Cancel
-              </button>
-            </span>
-          );
-        }
-        return "—";
-      },
+      render: (r) => (
+        <EnrolmentRowActions
+          status={r.status}
+          cohortId={r.cohortId}
+          enrolmentId={r.id}
+          learnerName={r.learnerName}
+          onOpen={setTarget}
+        />
+      ),
       width: "18%",
     },
   ];

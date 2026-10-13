@@ -12,13 +12,16 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AuthenticationError, AuthorizationError } from "@/server/permissions";
+import { AuthenticationError, AuthorizationError, refusalMessage } from "@/server/permissions";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { StaleOrderError } from "@/server/services/reorder-service";
 import { RunningCohortError, type BlockingCohort } from "@/server/services/catalogue-guards";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import {
+  ArchivedRecordError,
   archiveCatalogueRecord,
   ListingNotReadyError,
+  NotArchivedError,
   publishProgramme,
   ReadinessRefusedError,
   ReasonRequiredError,
@@ -76,8 +79,22 @@ function toFailure(error: unknown): CommonFailure {
   if (error instanceof PublishTargetNotFoundError) {
     return { ok: false, reason: "NOT_FOUND", message: "This programme could not be found." };
   }
+  if (error instanceof ArchivedRecordError) {
+    return { ok: false, reason: "INVALID", message: "This programme is archived. Restore it first, then publish it." };
+  }
+  // W-14: an archived record is not archived again.
+  if (error instanceof RecordStateError) {
+    return { ok: false, reason: "INVALID", message: error.message };
+  }
+  if (error instanceof NotArchivedError) {
+    return { ok: false, reason: "INVALID", message: "This programme is not archived, so there is nothing to restore." };
+  }
   if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
-    return { ok: false, reason: "DENIED", message: "Your role does not permit this action on this programme." };
+    return {
+      ok: false,
+      reason: "DENIED",
+      message: refusalMessage(error, "Your role does not permit this action on this programme."),
+    };
   }
   throw error;
 }

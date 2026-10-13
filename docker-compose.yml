@@ -148,8 +148,12 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
-      EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-Professional Training LMS}
-      EMAIL_SENDER_ADDRESS: ${EMAIL_SENDER_ADDRESS:-no-reply@example.com}
+      # COM-04 / D-14: the sender identity is deployment configuration with no
+      # injected default. Unset passes through empty and the app refuses to send.
+      EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-}
+      EMAIL_SENDER_ADDRESS: ${EMAIL_SENDER_ADDRESS:-}
+      SUPPORT_CONTACT_EMAIL: ${SUPPORT_CONTACT_EMAIL:-}
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
       # Payment providers. Empty values keep the app booting, but checkout
       # refuses to start a payment on a rail whose keys are missing.

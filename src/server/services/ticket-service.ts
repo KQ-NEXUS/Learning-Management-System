@@ -456,6 +456,15 @@ export function createTicketService(deps: TicketServiceDeps) {
     return { ...detail, context };
   });
 
+  /**
+   * NFR-05 record state (plan 15-26): a closed ticket's chronology is read-only (the staff page
+   * hides the composer and says so), and CLOSED has no onward transition. A command that is not
+   * itself a transition must therefore refuse it on the server too, not just in the UI.
+   */
+  function assertTicketNotClosed(ticket: TicketRecord): void {
+    if (ticket.status === "CLOSED") throw new UserInputError("This ticket is closed and cannot be changed.");
+  }
+
   async function mutateStaffTicket(
     input: { reference: string; expectedVersion: number },
     operation: (ticket: TicketRecord, tx: TicketRepository, actor: Actor) => Promise<void> | void,
@@ -572,6 +581,7 @@ export function createTicketService(deps: TicketServiceDeps) {
   async function addPublicReply(input: { reference: string; expectedVersion: number; body: string }) {
     let messageId = "";
     const summary = await mutateStaffTicket(input, async (ticket, tx, actor) => {
+      assertTicketNotClosed(ticket);
       const body = trimBounded(input.body, "Reply", 1, 5_000);
       const before = ticket.status;
       const after = statusAfterPublicReply(ticket.status);
@@ -592,6 +602,7 @@ export function createTicketService(deps: TicketServiceDeps) {
   async function addInternalNote(input: { reference: string; expectedVersion: number; body: string }) {
     let messageId = "";
     const summary = await mutateStaffTicket(input, async (ticket, tx, actor) => {
+      assertTicketNotClosed(ticket);
       const body = trimBounded(input.body, "Internal note", 1, 5_000);
       const message = await tx.createMessage({ ticketId: ticket.id, authorId: actor.userId, kind: "INTERNAL_NOTE", visibility: "INTERNAL", body });
       messageId = message.id;
@@ -609,7 +620,7 @@ export function createTicketService(deps: TicketServiceDeps) {
     return mutateStaffTicket(input, async (ticket, tx, actor) => {
       const reason = trimBounded(input.reason ?? "", "Queue reason", 1, 1_000);
       if (ticket.status === "RESOLVED" || ticket.status === "CLOSED") {
-        throw new Error("A resolved or closed ticket cannot be moved.");
+        throw new UserInputError("A resolved or closed ticket cannot be moved.");
       }
       const before = ticket.queue;
       ticket.queue = input.queue;
@@ -632,6 +643,7 @@ export function createTicketService(deps: TicketServiceDeps) {
     reason?: string | null;
   }) {
     return mutateStaffTicket(input, async (ticket, tx, actor) => {
+      assertTicketNotClosed(ticket);
       assertPriorityReason(input.priority, input.reason);
       const before = ticket.priority;
       ticket.priority = input.priority;

@@ -4,6 +4,7 @@ import { AuthenticationError, AuthorizationError, can } from "@/server/permissio
 import { TicketNotFoundError } from "@/server/services/ticket-service";
 import { getStaffTicketWorkspace, listTicketAssignees } from "@/server/services/ticket-staff-queue-service";
 import { StaffTicketDetail } from "./StaffTicketDetail";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Support ticket" };
 
@@ -14,7 +15,7 @@ export default async function StaffTicketPage({ params }: { params: Promise<{ re
     workspace = await getStaffTicketWorkspace(reference);
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       return <DetailLayout title="Support ticket" sections={[]} state={{ status: "denied", permission: "tickets.view" }} />;

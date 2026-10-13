@@ -50,7 +50,7 @@ it.each(["courseIds", "programmeId"])("uses resolved %s ancestry for detail cont
   mocks.scope.mockResolvedValue(resource);
   mocks.can.mockImplementation(async (_permission, scope) => Boolean(scope[ancestor]));
   const page = await DetailPage({ params: Promise.resolve({ id: "cohort-1" }), searchParams: Promise.resolve({}) });
-  expect(page.props.actions.props).toMatchObject({ canPublish: true, canManage: true });
+  expect(page.props.children.props.actions.props).toMatchObject({ canPublish: true, canManage: true });
   expect(mocks.scope).toHaveBeenCalledWith("cohort-1");
   expect(mocks.can).toHaveBeenCalledWith("cohorts.manage", resource);
   expect(mocks.can).toHaveBeenCalledWith("cohorts.publish", resource);
@@ -61,14 +61,14 @@ it.each(["courseIds", "programmeId"])("uses resolved %s ancestry for detail cont
 type FactRow = { label: string; value: string };
 
 function overviewFacts(page: Awaited<ReturnType<typeof DetailPage>>): FactRow[] {
-  const overviewSection = page.props.sections[0];
+  const overviewSection = page.props.children.props.sections[0];
   const overviewContent = overviewSection.content;
   // children[0] is the "Cohort details" section: heading, then a div wrapping <DetailFacts>.
   return overviewContent.props.children[0].props.children[1].props.children.props.facts as FactRow[];
 }
 
 function readinessItemsProp(page: Awaited<ReturnType<typeof DetailPage>>) {
-  const overviewSection = page.props.sections[0];
+  const overviewSection = page.props.children.props.sections[0];
   const overviewContent = overviewSection.content;
   // children[1] is the right-hand column: readiness panel first, then instructors.
   return overviewContent.props.children[1].props.children[1].props.items as Array<{ id: string; state: string; label: string }>;

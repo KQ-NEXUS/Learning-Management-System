@@ -10,6 +10,7 @@
 import {
   createWithPermission,
   type AuditEntry,
+  type LicenceGuardDep,
   type RawGrant,
 } from "@/server/permissions/with-permission";
 
@@ -37,7 +38,7 @@ export function grant(
  */
 export function createTestWithPermission(
   grants: RawGrant[],
-  opts?: { userId?: string },
+  opts?: { userId?: string; licence?: LicenceGuardDep },
 ) {
   const audits: AuditEntry[] = [];
 
@@ -47,6 +48,7 @@ export function createTestWithPermission(
     audit: async (entry) => {
       audits.push(entry);
     },
+    licence: opts?.licence,
   });
 
   return { withPermission, audits };

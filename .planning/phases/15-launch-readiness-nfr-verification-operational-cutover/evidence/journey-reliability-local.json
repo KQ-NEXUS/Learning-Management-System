@@ -1,0 +1,76 @@
+{
+  "project": "chromium",
+  "runs": 20,
+  "passed": 20,
+  "failed": 0,
+  "passRate": 1,
+  "failures": [],
+  "ranAt": "2026-10-09T01:22:02.611Z",
+  "priorBatches": [
+    {
+      "project": "chromium",
+      "runs": 20,
+      "passed": 19,
+      "failed": 1,
+      "passRate": 0.95,
+      "failures": [
+        {
+          "attempt": 4,
+          "step": "learn: complete both reading lessons",
+          "error": "Test timeout of 360000ms exceeded."
+        }
+      ]
+    }
+  ],
+  "integrity": [
+    {
+      "id": "paid-order-has-successful-payment",
+      "label": "Paid orders have a successful payment",
+      "status": "passed",
+      "violationCount": 0,
+      "sampleIds": []
+    },
+    {
+      "id": "active-enrolment-has-paid-order",
+      "label": "Active enrolments have a paid order",
+      "status": "passed",
+      "violationCount": 0,
+      "sampleIds": []
+    },
+    {
+      "id": "one-live-enrolment-per-learner-cohort",
+      "label": "One live enrolment per learner and cohort",
+      "status": "passed",
+      "violationCount": 0,
+      "sampleIds": []
+    },
+    {
+      "id": "one-open-completion-per-enrolment-course",
+      "label": "One open completion record per enrolment and course",
+      "status": "passed",
+      "violationCount": 0,
+      "sampleIds": []
+    },
+    {
+      "id": "one-grade-per-submission",
+      "label": "One grade per submission",
+      "status": "passed",
+      "violationCount": 0,
+      "sampleIds": []
+    },
+    {
+      "id": "active-certificate-has-completion",
+      "label": "Active certificates have a completion record",
+      "status": "passed",
+      "violationCount": 0,
+      "sampleIds": []
+    },
+    {
+      "id": "cohort-within-capacity",
+      "label": "Cohorts are within capacity",
+      "status": "passed",
+      "violationCount": 0,
+      "sampleIds": []
+    }
+  ]
+}

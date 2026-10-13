@@ -90,6 +90,12 @@ type WithPermission = ReturnType<typeof createWithPermission>;
 // Row shapes
 // ---------------------------------------------------------------------------
 
+/** What `resolveOwnCertificateForDownload` found for the caller (W-15). */
+export type OwnCertificateDownload =
+  | { kind: "served"; certificate: CertificateRow }
+  | { kind: "owner-refused" }
+  | { kind: "not-owner" };
+
 export type CertificateRow = {
   id: string;
   enrolmentId: string;
@@ -196,6 +202,14 @@ export class RevocationReasonRequiredError extends Error {
   constructor() {
     super("Explain the correction using at least 10 characters.");
     this.name = "RevocationReasonRequiredError";
+  }
+}
+
+/** `confirmFlaggedCertificate` was called on a certificate that is not an ACTIVE, flagged one. */
+export class CertificateNotFlaggedError extends Error {
+  constructor() {
+    super("This certificate is not waiting for review.");
+    this.name = "CertificateNotFlaggedError";
   }
 }
 
@@ -446,11 +460,26 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     actor: { userId: string },
     certificateId: string,
   ): Promise<CertificateRow | null> {
+    const own = await resolveOwnCertificateForDownload(actor, certificateId);
+    return own.kind === "served" ? own.certificate : null;
+  }
+
+  /**
+   * The same predicate in one lookup, but it also says WHY nothing is served (W-15).
+   * `owner-refused` means the caller owns the certificate and it is `REVOKED` or
+   * `SUPERSEDED`: a refusal by the record's state, not by a missing permission.
+   * `not-owner` covers an unknown id and somebody else's certificate alike, so the answer
+   * never tells a stranger whether an id exists. For the download route only: the
+   * distinction decides whether the audited staff check runs, never what the response is.
+   */
+  async function resolveOwnCertificateForDownload(
+    actor: { userId: string },
+    certificateId: string,
+  ): Promise<OwnCertificateDownload> {
     const row = await deps.delegate.findUnique({ where: { id: certificateId } });
-    if (!row) return null;
-    if (row.userId !== actor.userId) return null;
-    if (row.status !== "ACTIVE") return null;
-    return row;
+    if (!row || row.userId !== actor.userId) return { kind: "not-owner" };
+    if (row.status !== "ACTIVE") return { kind: "owner-refused" };
+    return { kind: "served", certificate: row };
   }
 
   // -------------------------------------------------------------------------
@@ -633,6 +662,51 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     return result.after;
   });
 
+  /**
+   * The other outcome of a CRD-06 review (audit A-08): staff looked at a
+   * flagged certificate and decided it stands. Clears `reviewFlaggedAt` and
+   * nothing else, with the same permission and mandatory reason as the
+   * alternative outcome, revocation, since it is the same decision taken the
+   * other way. The enrolment is left as the flag left it; completion is
+   * re-evaluated by the learner's own next progress, grade or attendance
+   * write, as always. Compare-and-set, so a certificate revoked or already
+   * confirmed in the meantime is refused, never silently "confirmed".
+   */
+  const confirmFlaggedCertificate = deps.withPermission<{ certificateId: string; reason: string }>(
+    "certificates.revoke",
+    (input) => toScope(input.certificateId),
+  )(async (input, ctx) => {
+    const reason = input.reason.trim();
+    if (reason.length < 10) throw new RevocationReasonRequiredError();
+
+    const result = await deps.runInTransaction(async (tx) => {
+      const before = await tx.certificate.findUnique({ where: { id: input.certificateId } });
+      if (!before) throw new Error("Certificate not found.");
+      if (before.status !== "ACTIVE" || before.reviewFlaggedAt == null) throw new CertificateNotFlaggedError();
+
+      const update = await tx.certificate.updateMany({
+        where: { id: before.id, status: "ACTIVE", reviewFlaggedAt: { not: null } },
+        data: { reviewFlaggedAt: null },
+      });
+      if (update.count !== 1) throw new CertificateChangedError();
+
+      return { before, after: { ...before, reviewFlaggedAt: null } as CertificateRow };
+    });
+
+    await deps.audit({
+      action: "certificate.review_confirmed",
+      targetType: "Certificate",
+      targetId: input.certificateId,
+      actorId: ctx.actor.userId,
+      outcome: "SUCCESS",
+      reason,
+      before: { reviewFlaggedAt: result.before.reviewFlaggedAt },
+      after: { reviewFlaggedAt: null },
+    });
+
+    return result.after;
+  });
+
   // -------------------------------------------------------------------------
   // 4c. reissueCertificate — mandatory reason, ordered compare-and-set,
   //     delegates to the single issuance implementation, links via
@@ -749,10 +823,12 @@ export function createCertificateService(deps: CertificateServiceDeps) {
     certificateService,
     listPendingIssuance,
     getOwnCertificateForDownload,
+    resolveOwnCertificateForDownload,
     getCertificateIssuer,
     listCertificateIssuanceSources,
     issueCertificateManually,
     revokeCertificate,
+    confirmFlaggedCertificate,
     reissueCertificate,
   };
 }
@@ -782,8 +858,10 @@ const built = createCertificateService({
 export const certificateService = built.certificateService;
 export const listPendingIssuance = built.listPendingIssuance;
 export const getOwnCertificateForDownload = built.getOwnCertificateForDownload;
+export const resolveOwnCertificateForDownload = built.resolveOwnCertificateForDownload;
 export const getCertificateIssuer = built.getCertificateIssuer;
 export const listCertificateIssuanceSources = built.listCertificateIssuanceSources;
 export const issueCertificateManually = built.issueCertificateManually;
 export const revokeCertificate = built.revokeCertificate;
+export const confirmFlaggedCertificate = built.confirmFlaggedCertificate;
 export const reissueCertificate = built.reissueCertificate;

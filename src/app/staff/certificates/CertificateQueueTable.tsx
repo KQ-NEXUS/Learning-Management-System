@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { ResourceTable } from "@/components/primitives/ResourceTable";
 import { ConfirmModal } from "@/components/primitives/ConfirmModal";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import type { PendingIssuanceRow } from "@/server/services/certificate-service";
 import { issueCertificateAction } from "./certificate-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * The pending-issuance queue table (D-04, UI-SPEC §7.1).
@@ -20,6 +21,7 @@ type Props = { rows: PendingIssuanceRow[]; onIssue?: typeof issueCertificateActi
 
 export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertificateAction }: Props) {
   const [rows, setRows] = useState(initialRows);
+  const toast = useToast();
   const [target, setTarget] = useState<PendingIssuanceRow | null>(null);
   const [pending, transition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertif
         setRows((prev) => prev.filter((r) => r.enrolmentId !== row.enrolmentId || r.scope !== row.scope));
         setTarget(null);
         setNotice(`Certificate issued for ${row.learnerName}.`);
+        toast.success(`Certificate issued for ${row.learnerName}`);
       } catch {
         setError("This certificate could not be issued. Reload the queue and try again.");
       }
@@ -61,7 +64,7 @@ export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertif
             key: "eligibleSince",
             header: "Eligible since",
             mono: true,
-            render: (row) => formatTimestamp(row.eligibleSince),
+            render: (row) => <LagosTime value={row.eligibleSince} className="font-mono text-[13px] whitespace-nowrap" />,
           },
           {
             key: "action",
@@ -97,6 +100,7 @@ export function CertificateQueueTable({ rows: initialRows, onIssue = issueCertif
       )}
       <ConfirmModal
         open={target !== null}
+        licenceEffect="continuity"
         tone="default"
         title="Issue this certificate?"
         confirmLabel="Issue certificate"

@@ -156,6 +156,13 @@ function buildService(
 
   const presignDownload = vi.fn(async ({ key }: { key: string }) => `https://download.example/${key}`);
   const canWorkOnAssessment = vi.fn(async () => opts.lessonOpen ?? true);
+  const completeAssessmentLessons = vi.fn(
+    async (tx: unknown, args: { enrolmentId: string; assessmentId: string; now: Date }) => {
+      void tx;
+      void args;
+      track.push("complete-lessons");
+    },
+  );
 
   const service = createSubmissionService({
     delegate,
@@ -171,10 +178,11 @@ function buildService(
       events.push(event as unknown as Record<string, unknown>);
     },
     runInTransaction: async (fn) => fn({ submission: { update: delegate.update } } as unknown as SubmissionTxClient),
+    completeAssessmentLessons,
     now: () => NOW,
   });
 
-  return { service, rows, storage, audits, events, presignDownload, delegate, track, canWorkOnAssessment };
+  return { service, rows, storage, audits, events, presignDownload, delegate, track, canWorkOnAssessment, completeAssessmentLessons };
 }
 
 const uploadInput = { assessmentId: "a1", filename: "essay.pdf", mimeType: "application/pdf", sizeBytes: 1000 };
@@ -339,10 +347,28 @@ describe("completeSubmissionUpload — happy path", () => {
     expect(receipt.receiptId).toBe("receipt-abc");
   });
 
+  it("completes the assignment's lesson inside the READY transaction, once, for the submission's own enrolment (A-01)", async () => {
+    const { service, rows, track, completeAssessmentLessons } = buildService({ submissions: [staged] });
+    await service.completeSubmissionUpload(learner, { submissionId: "sub1" });
+
+    expect(completeAssessmentLessons).toHaveBeenCalledTimes(1);
+    expect(completeAssessmentLessons.mock.calls[0]![1]).toEqual({
+      enrolmentId: rows[0].enrolmentId,
+      assessmentId: rows[0].assessmentId,
+      now: NOW,
+    });
+    // After the READY write, never before the file is verified and promoted.
+    expect(track.indexOf("complete-lessons")).toBeGreaterThan(track.lastIndexOf("update"));
+    expect(track.indexOf("complete-lessons")).toBeGreaterThan(track.indexOf("promote"));
+
+    await service.completeSubmissionUpload(learner, { submissionId: "sub1" });
+    expect(completeAssessmentLessons).toHaveBeenCalledTimes(1);
+  });
+
   it("resolves inspect before calling promote, and writes the READY update after promote", async () => {
     const { service, track } = buildService({ submissions: [staged] });
     await service.completeSubmissionUpload(learner, { submissionId: "sub1" });
-    expect(track).toEqual(["inspect", "promote", "update"]);
+    expect(track).toEqual(["inspect", "promote", "update", "complete-lessons"]);
   });
 
   it("called twice returns the same receipt and calls promote only once", async () => {

@@ -20,9 +20,18 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ProgrammeMemberRow } from "@/server/services/programme-service";
 
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh }),
-}));
+const rethrowSpy = vi.fn();
+// The real `unstable_rethrow` runs behind a spy (see arrange-client.test.tsx).
+vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+  return {
+    useRouter: () => ({ refresh }),
+    unstable_rethrow: (error: unknown) => {
+      rethrowSpy(error);
+      actual.unstable_rethrow(error);
+    },
+  };
+});
 
 vi.mock("@/app/staff/programmes/[id]/arrange/actions", () => ({
   saveProgrammeCourseOrderAction: vi.fn(),
@@ -36,6 +45,11 @@ import {
   removeCourseAction,
 } from "@/app/staff/programmes/[id]/arrange/actions";
 import { ProgrammeArrangeClient } from "@/app/staff/programmes/[id]/arrange/ProgrammeArrangeClient";
+import {
+  captureUnhandledRejection,
+  nextNotFoundError,
+  nextRedirectError,
+} from "./control-flow-helpers";
 
 afterEach(() => {
   cleanup();
@@ -159,5 +173,66 @@ describe("ProgrammeArrangeClient — rejected remove course recovers", () => {
 
     expect(removeCourseAction).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+/**
+ * WR-02 (04.1-REVIEW-2, folded into plan 15-08) — each of the three catch
+ * blocks hands Next.js control flow back via `unstable_rethrow` before its
+ * generic-error handling, and its `finally` still releases the busy state.
+ */
+describe("ProgrammeArrangeClient — framework control flow passes through every catch", () => {
+  it("a redirect thrown through save order propagates instead of becoming the generic alert", async () => {
+    const redirectError = await nextRedirectError();
+    vi.mocked(saveProgrammeCourseOrderAction).mockRejectedValueOnce(redirectError);
+    renderClient();
+
+    fireEvent.click(btn("Move Course One down"));
+    const reason = await captureUnhandledRejection(() => fireEvent.click(btn("Save order")));
+    await flush();
+
+    expect(reason).toBe(redirectError);
+    expect(rethrowSpy).toHaveBeenCalledWith(redirectError);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Saving…" })).toBeNull();
+  });
+
+  it("a redirect thrown through add course propagates and releases the Adding… state", async () => {
+    const redirectError = await nextRedirectError();
+    vi.mocked(addCourseAction).mockRejectedValueOnce(redirectError);
+    renderClient();
+
+    const reason = await captureUnhandledRejection(() => fireEvent.click(btn("Add")));
+    await flush();
+
+    expect(reason).toBe(redirectError);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(btn("Add").disabled).toBe(false);
+  });
+
+  it("a notFound thrown through remove course propagates and releases the row", async () => {
+    const notFoundError = await nextNotFoundError();
+    vi.mocked(removeCourseAction).mockRejectedValueOnce(notFoundError);
+    renderClient();
+
+    const remove = () => btn("Remove Course One from this programme");
+    const reason = await captureUnhandledRejection(() => fireEvent.click(remove()));
+    await flush();
+
+    expect(reason).toBe(notFoundError);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(remove().disabled).toBe(false);
+  });
+
+  it("an ordinary application error is offered to unstable_rethrow first, then shown generically", async () => {
+    const appError = new Error("wire-detail");
+    vi.mocked(addCourseAction).mockRejectedValueOnce(appError);
+    renderClient();
+
+    fireEvent.click(btn("Add"));
+    await flush();
+
+    expect(rethrowSpy).toHaveBeenCalledWith(appError);
+    expect(screen.getByRole("alert").textContent ?? "").toMatch(/try again/i);
   });
 });

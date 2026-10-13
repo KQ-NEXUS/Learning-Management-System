@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { AlertTriangle, ClipboardList, Clock, FileCheck, Upload } from "lucide-react";
 import { StatusPill } from "@/components/primitives/ResourceTable";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import type { AssignmentSubmissionClientView } from "@/app/(lesson)/learn/[enrolmentId]/lessons/[lessonId]/submission-actions";
 import {
   beginSubmissionUploadAction,
@@ -74,7 +74,7 @@ function SubmissionHistoryRow({ submission }: { submission: SubmissionRow }) {
       <span className="text-muted-foreground">{submission.filename}</span>
       <span className="font-mono text-muted-foreground">{humanSize(submission.sizeBytes)}</span>
       <span className="font-mono text-muted-foreground">
-        {formatTimestamp(new Date(submission.submittedAt))}
+        <LagosTime value={submission.submittedAt} />
       </span>
     </li>
   );
@@ -236,7 +236,7 @@ export function AssignmentSubmissionPanel(props: Props) {
               <Clock aria-hidden size={16} />
               Due
             </dt>
-            <dd className="font-mono">{formatTimestamp(new Date(props.dueAt))}</dd>
+            <dd className="font-mono"><LagosTime value={props.dueAt} /></dd>
           </div>
         )}
         <div>

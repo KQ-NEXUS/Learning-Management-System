@@ -26,13 +26,13 @@ Phase numbers below are sequential for planning purposes only. Each phase's **De
 - [x] **Phase 5: Cohorts, Scheduling, Enrolment Operations & Attendance** *(Track B, parallel-eligible with Phases 2–3)* - Staff stand up Cohorts, schedule sessions, manage enrolment lifecycle and capacity, mark and correct attendance. (completed 2026-09-07)
 - [x] **Phase 6: Registration, Checkout & Stripe Payments** *(Convergence: Track A + Track B outputs)* - A visitor selects a Cohort, creates one traceable order, and pays via Stripe with server-verified settlement. (completed 2026-09-12)
 - [x] **Phase 7: Multi-Gateway Payments — Paystack, Manual & Refunds** *(Track A)* - Paystack and manual payment join Stripe behind one state machine; manual confirmation and refunds are staff-operable and audited.
-- [ ] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available.
+- [x] **Phase 8: Finance Reconciliation, Dashboards & Reporting Exports** *(Track A)* - Finance reconciles payments/refunds across providers; scoped dashboards and CSV/async exports are available. (completed 2026-09-30)
 - [x] **Phase 9: Learning Delivery & Progress Tracking** *(Track B, depends on Phases 5–6)* - Enrolled learners work through ordered content with tracked, rule-based progress and completion. (completed 2026-09-15)
 - [x] **Phase 10: Assessment — Quizzes, Assignments & Grading** *(Track B)* - Instructors build assessments, learners attempt/submit, graders score and release results with auditable overrides. (completed 2026-09-16)
 - [x] **Phase 11: Certificates & Completion Lifecycle** *(Track B)* - Course/Programme certificates issue, verify publicly, and get revoked/reissued/re-evaluated correctly. (completed 2026-09-19)
 - [x] **Phase 12: Support Tickets** *(Track B, depends on Phase 2)* - Learners raise tickets; staff (including a non-Administrator Support role) triage, reply, escalate, and report. (completed 2026-09-25)
 - [ ] **Phase 13: Transactional Communications & Notifications** *(Shared, depends on Phases 3, 5, 6, 7, 10, 11, 12)* - Every lifecycle event across the system sends exactly one deduplicated transactional email; in-product alerts surface important state.
-- [ ] **Phase 14: Software Licence & Deployment Control** *(Track A, depends on Phase 2; contingent — see note below)* - Provider-signed licence verification, status visibility, and expiry-driven read-only enforcement.
+- [ ] **Phase 14: Software Licence & Deployment Control** *(Track A, depends on Phase 2; contingent — see note below)* - Provider-signed licence verification, status visibility, and expiry-driven restricted continuity mode enforcement.
 - [ ] **Phase 15: Launch Readiness — NFR Verification & Operational Cutover** *(Shared, depends on all prior phases)* - Availability, performance, security, accessibility, backup/recovery, and the full unassisted learner+operator journey are verified against the PRD §14.3 launch gates.
 
 ## Phase Details
@@ -688,6 +688,7 @@ Wave 13 *(blocked on Wave 12; human-only)*
 - Every protected read and mutation is server-authorized, while contextual records independently re-check their own domain permissions.
 - Lifecycle mutations use version-guarded transactions that atomically persist state, attributable ticket history, security audit, and minimal redacted Phase 13 events.
 - Ticket attachments use private storage, strict type/count/size verification, denial-parity downloads, and bounded cleanup; no malware-scanner capability is implied.
+
 **UI hint**: yes
 
 ---
@@ -703,7 +704,48 @@ Wave 13 *(blocked on Wave 12; human-only)*
   2. Retried or replayed events never produce duplicate messages within the same correlation. (COM-02)
   3. Important in-product notifications surface unread/current state to the right user and fail safely on stale or inaccessible links. (COM-03)
 
-**Plans**: TBD
+**Plans**: 13/13 plans executed
+
+**Wave 1**
+
+- [x] 13-01-PLAN.md — additive communications schema, [BLOCKING] schema push, payment.failed/payment.refunded event types, and the shared communications vocabulary.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 13-02-PLAN.md — one approved sender identity, Brevo HTML+text transport with stub mode, and the 27 typed branded email templates.
+- [x] 13-03-PLAN.md — owner-scoped notification services, unread/list/preferences endpoints, and the email preference store.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 13-04-PLAN.md — deduplicated dispatch with stable keys, retry/backoff Pass 2, audited resend, and the auth mails moved onto it.
+- [x] 13-05-PLAN.md — access-checked notification links with one indistinguishable stale outcome, and the 90-day archive job.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 13-06-PLAN.md — bell, slide-over drawer and learner email-preferences panel in the learner and staff headers.
+- [x] 13-07-PLAN.md — the outbox drain: per-event claim, fan-out, poison handling, recipient gating, and the scheduled Netlify task.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 13-08-PLAN.md — enrolment/payment coverage: one combined enrolment mail, direct checkout sends removed, payment.failed and payment.refunded.
+- [x] 13-12-PLAN.md — staff delivery log with audited Resend.
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 13-09-PLAN.md — enrolment status, session change and cohort cancellation mail with coalescing and precedence.
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 13-10-PLAN.md — result, certificate and learner ticket mail carrying references only.
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 13-11-PLAN.md — staff alerts from live permission and scope, assignee/escalation/payment mail, and the failed-email administrator alert.
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 13-13-PLAN.md — opt-in live Brevo smoke test, phase invariants, and a real-Postgres acceptance run of the success criteria.
+
 **UI hint**: yes
 
 ---
@@ -718,10 +760,33 @@ Wave 13 *(blocked on Wave 12; human-only)*
 
   1. The LMS verifies a provider-signed licence at startup, on a scheduled cadence, and before high-impact mutations, rejecting altered/expired/wrong-client/wrong-deployment licences. (LIC-01, LIC-04)
   2. Users with `licence.view` see current state, licence ID, client, dates, and validation result without exposed signing secrets; only the narrow `licence.activate` permission can activate a provider-issued licence — nothing can forge or self-extend one. (LIC-02, LIC-03)
-  3. On reaching the expiry/grace threshold, the system enforces a read-only state server-side and in the UI without deleting client data. (LIC-05, LIC-08)
+  3. On reaching the expiry/grace threshold, the system enforces restricted continuity mode server-side and in the UI without deleting client data. (LIC-05, LIC-08)
   4. Every licence event (activation, validation outcome, state transition, restriction enforcement) is audited and triggers the appropriate Administrator notification. (LIC-06, LIC-07)
 
 **Plans**: TBD
+
+- [x] 14-01-PLAN.md
+- [x] 14-02-PLAN.md
+- [x] 14-03-PLAN.md
+- [x] 14-04-PLAN.md
+- [x] 14-05-PLAN.md
+- [x] 14-06-PLAN.md
+- [x] 14-07-PLAN.md
+- [x] 14-08-PLAN.md
+- [x] 14-09-PLAN.md
+- [x] 14-10-PLAN.md
+- [x] 14-11-PLAN.md
+- [x] 14-12-PLAN.md
+- [x] 14-13-PLAN.md
+- [x] 14-14-PLAN.md
+- [x] 14-15-PLAN.md
+- [x] 14-16-PLAN.md
+- [x] 14-17-PLAN.md
+- [x] 14-18-PLAN.md
+- [x] 14-19-PLAN.md
+- [x] 14-20-PLAN.md
+- [x] 14-21-PLAN.md
+
 **UI hint**: yes
 
 ---
@@ -739,7 +804,79 @@ Wave 13 *(blocked on Wave 12; human-only)*
   4. Security/business events remain auditable and observable, and a backup/restore rehearsal meets RPO 24h / RTO 8h. (NFR-07, NFR-08)
   5. Core public/learner/staff journeys meet WCAG 2.2 AA, work responsively across the agreed viewport range, follow the approved privacy/data-lifecycle policy, and support the agreed browser matrix. (NFR-09, NFR-10, NFR-11, NFR-12)
 
-**Plans**: TBD
+**Plans**: 32/33 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 15-01-PLAN.md — Owner decisions (captions for NFR-09, privacy permission and retention), adopted-assumptions ledger, shared UI ownership, coverage index
+- [x] 15-02-PLAN.md — Next.js 16.3.8 audit fix, GitHub Actions CI, Dependabot, ignore entries (D-10)
+- [x] 15-03-PLAN.md — Rate limits on register, forgot password, resend, certificate check and support requests (D-11)
+- [x] 15-06-PLAN.md — Public /api/health and onRequestError structured log (D-18, NFR-01)
+- [x] 15-07-PLAN.md — Database-target guard and seven read-only integrity checks (NFR-14)
+- [x] 15-08-PLAN.md — Three latent async-mutation fixes in catalogue clients (folded todo)
+- [x] 15-09-PLAN.md — Support queue in SQL (folded todo), request-scoped actor and grants, paged payments (NFR-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 15-04-PLAN.md — Neutral sign-in with quiet verification resend (D-16, U-11) and sign-in audit events
+- [x] 15-05-PLAN.md — Lagos time formatter and LagosTime, learner support off UTC (D-17, U-12)
+- [x] 15-11-PLAN.md — Docker restore rehearsal and deployment, rollback, restore, job-recovery, incident runbooks
+- [x] 15-12-PLAN.md — Concurrency proofs and grade and completion uniqueness migration with schema push
+- [x] 15-14-PLAN.md — Pilot load seeding and k6 scripts with local smoke and webhook replay
+- [x] 15-15-PLAN.md — Playwright harness, email capture seam, task runner, journey leg one
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 15-10-PLAN.md — Lagos time sweep, slice 1: staff support, audit, overview, order detail, cohorts, export history, email log and enrolments (D-17)
+- [x] 15-13-PLAN.md — Staff operations status page (D-18)
+- [x] 15-16-PLAN.md — Privacy permission, anonymisation service and migration with schema push (D-12)
+- [x] 15-17-PLAN.md — Full unassisted journey, 20-run reliability and browser matrix (D-08)
+- [x] 15-32-PLAN.md — Lagos time sweep, slice 2: staff certificates, grading, learner progress, users and publish dialog (D-17)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 15-21-PLAN.md — Learner data export through the export job pipeline (D-12)
+- [x] 15-23-PLAN.md — Caption tracks: data model, authorised delivery and player (NFR-09, if approved)
+- [x] 15-33-PLAN.md — Lagos time sweep, slice 3: learner, checkout, notification, public and certificate-check screens, with the whole-tree guard (D-17)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 15-18-PLAN.md — Time-to-usable probe and primary-content hooks on 13 core views (D-03)
+- [x] 15-22-PLAN.md — Staff learner privacy screens (S2, S3)
+- [x] 15-24-PLAN.md — Caption authoring and publication warning (NFR-09, if approved)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 15-19-PLAN.md — Screens manifest, axe sweep and nightly e2e workflow (D-13)
+- [x] 15-25-PLAN.md — Authorization registry, inventory guard and persona bypass matrix (D-09)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 15-20-PLAN.md — Responsive and zoom sweep, keyboard journeys, manual check protocol (D-13, D-14, D-15)
+- [x] 15-26-PLAN.md — Wrong-scope, wrong-state and revocation matrix (D-09)
+- [x] 15-27-PLAN.md — Private files and reports proof, CSV denial parity (NFR-06)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 15-28-PLAN.md — Local rehearsal: statement budgets, pilot load with probe, final regression (D-01)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 15-29-PLAN.md — Staging setup, seeding and Neon point-in-time restore rehearsal (D-01, D-04)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [x] 15-30-PLAN.md — Signed staging run and manual unassisted journey (D-01, D-02)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [ ] 15-31-PLAN.md — Launch report and launch checklist with named owners (D-05, D-06, D-07)
+
+**Cross-cutting constraints:**
+
+- No CSV or export file content, certificate PDF output or licence-module formatter changes
+
 **UI hint**: yes
 
 ## Progress
@@ -756,11 +893,11 @@ Phase 1 → {Phase 2, 3} and {Phase 4, 5} in parallel → Phase 6 (convergence) 
 | 5. Cohorts, Scheduling, Enrolment Operations & Attendance | 16/16 | Complete | 2026-09-07 |
 | 6. Registration, Checkout & Stripe Payments | 9/9 | Complete    | 2026-09-12 |
 | 7. Multi-Gateway Payments — Paystack, Manual & Refunds | 12/12 | Complete | 2026-09-14 |
-| 8. Finance Reconciliation, Dashboards & Reporting Exports | 0/TBD | Not started | - |
+| 8. Finance Reconciliation, Dashboards & Reporting Exports | 12/12 | Complete | 2026-09-30 |
 | 9. Learning Delivery & Progress Tracking | 14/14 | Complete   | 2026-09-15 |
 | 10. Assessment — Quizzes, Assignments & Grading | 17/17 | Complete    | 2026-09-16 |
 | 11. Certificates & Completion Lifecycle | 34/34 | Complete    | 2026-09-19 |
 | 12. Support Tickets | 9/9 | Complete    | 2026-09-25 |
-| 13. Transactional Communications & Notifications | 0/TBD | Not started | - |
-| 14. Software Licence & Deployment Control | 0/TBD | Not started | - |
-| 15. Launch Readiness — NFR Verification & Operational Cutover | 0/TBD | Not started | - |
+| 13. Transactional Communications & Notifications | 13/13 | In Progress|  |
+| 14. Software Licence & Deployment Control | 21/21 | In Progress|  |
+| 15. Launch Readiness — NFR Verification & Operational Cutover | 32/33 | In Progress|  |

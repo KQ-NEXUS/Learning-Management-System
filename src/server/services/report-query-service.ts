@@ -494,13 +494,17 @@ export function createReportQueryService(deps: ReportQueryServiceDeps) {
       const tickets = await deps.authorizeCollection("tickets.view");
       if (tickets.scope.kind !== "GLOBAL") throw new AuthorizationError("tickets.view");
     }
+    // A-02: a dataset built on another module's records needs that module's
+    // own grant as well, and its rows are limited to the cohorts BOTH grants
+    // cover. Neither grant is inferred from the other.
+    const data = definition.dataPermission ? await deps.authorizeCollection(definition.dataPermission) : null;
     const asOf = now();
     return Object.freeze({
       dataset,
       version: definition.version,
       filters,
       scope: authorization.scope,
-      cohortWhere: authorization.cohortWhere,
+      cohortWhere: data ? { AND: [authorization.cohortWhere, data.cohortWhere] } : authorization.cohortWhere,
       asOf,
     });
   }

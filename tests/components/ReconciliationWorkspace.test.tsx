@@ -153,7 +153,15 @@ describe("ReconciliationCaseDetailView", () => {
     render(<ReconciliationCaseDetailView detail={detail} />);
     expect(screen.getByText(/reopened because new provider evidence/i)).toBeTruthy();
     expect(screen.getByText("Earlier resolution")).toBeTruthy();
-    expect(screen.getByText(/enrolment\.approved/)).toBeTruthy();
+    // UX batch C: codes read as words.
+    expect(screen.getByText(/Enrolment approved · Enrolment/)).toBeTruthy();
+    expect(screen.queryByText(/enrolment\.approved/)).toBeNull();
+    expect(screen.getByText("Paid")).toBeTruthy();
+    expect(screen.getByText(/Finance A · Accepted variance/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/ACCEPTED_VARIANCE|PAYSTACK/);
+    // Evidence is labelled facts; the raw JSON is still one click away.
+    expect(screen.getAllByText("Issue").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Show raw evidence").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Review payment facts" }).getAttribute("href")).toBe(detail.links.paymentHref);
     expect(screen.getByRole("link", { name: "Open refund controls" }).getAttribute("href")).toBe(detail.links.refundHref);
     expect(screen.getByRole("link", { name: "Open cohort enrolments" }).getAttribute("href")).toBe(detail.links.cohortHref);

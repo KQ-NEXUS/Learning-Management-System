@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { ResourceTable, StatusPill, type Column } from "@/components/primitives";
 import { ConfirmModal } from "@/components/primitives";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { LagosTime } from "@/components/time/LagosTime";
 import {
   archiveTemplateAction,
   setDefaultTemplateAction,
 } from "./template-actions";
+import { useToast } from "@/components/feedback/Toaster";
 
 /**
  * The certificate-template library table (UI-SPEC 7.3.1).
@@ -49,6 +50,7 @@ export function TemplatesTable({
 }: Props) {
   const [pending, transition] = useTransition();
   const [defaultBusyId, setDefaultBusyId] = useState<string | null>(null);
+  const toast = useToast();
   const [defaultError, setDefaultError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<TemplateRow | null>(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function TemplatesTable({
         setArchiveError(result.message);
         return;
       }
+      toast.success("Template archived");
       setArchiveTarget(null);
       setArchiveError(null);
     });
@@ -93,7 +96,7 @@ export function TemplatesTable({
       key: "updatedAt",
       header: "Last edited",
       mono: true,
-      render: (row) => formatTimestamp(row.updatedAt),
+      render: (row) => <LagosTime value={row.updatedAt} className="font-mono text-[13px] whitespace-nowrap" />,
       width: "18%",
     },
     {

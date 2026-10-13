@@ -62,12 +62,18 @@ export async function canAccessExportJob(
   const original = storedScope(job.scopeSnapshot);
   if (!original) return false;
   const domain = collectionScopeFromGrants(grants, definition.permission, now);
-  const exporting = collectionScopeFromGrants(grants, job.dataset === "audit" ? "audit.export" : "reports.export", now);
+  // A standalone dataset (learner-subject) needs its own permission only.
+  const exporting = definition.standalone ? domain : collectionScopeFromGrants(grants, job.dataset === "audit" ? "audit.export" : "reports.export", now);
   if (!domain || !exporting || !(await covers(deps, original, domain)) || !(await covers(deps, original, exporting))) return false;
   if (definition.scopePolicy === "GLOBAL" && (original.kind !== "GLOBAL" || domain.kind !== "GLOBAL" || exporting.kind !== "GLOBAL")) return false;
+  if (definition.dataPermission) {
+    // A-02: losing the records' own module grant withdraws the file too.
+    const data = collectionScopeFromGrants(grants, definition.dataPermission, now);
+    if (!data || !(await covers(deps, original, data))) return false;
+  }
   const columns = Array.isArray(job.columnSnapshot) ? job.columnSnapshot : [];
   const sensitive = columns.some((column) => column && typeof column === "object" && !Array.isArray(column) && (column as { permission?: unknown }).permission === "users.view");
-  if (sensitive) {
+  if (sensitive && !definition.standalone) {
     const identity = collectionScopeFromGrants(grants, "users.view", now);
     if (!identity || !(await covers(deps, original, identity))) return false;
     if (definition.scopePolicy === "GLOBAL" && identity.kind !== "GLOBAL") return false;

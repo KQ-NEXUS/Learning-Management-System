@@ -98,6 +98,12 @@ export const PERMISSION_GROUPS: readonly PermissionGroup[] = [
     noun: "licence",
     permissions: ["licence.view", "licence.activate"],
   },
+  {
+    id: "privacy",
+    label: "Privacy",
+    noun: "learner privacy tools",
+    permissions: ["privacy.manage"],
+  },
 ] as const;
 
 export function groupOf(permission: Permission): PermissionGroup | undefined {

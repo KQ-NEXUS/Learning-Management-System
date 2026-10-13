@@ -30,6 +30,8 @@ import {
   resolveTicketAction,
   sendPublicReplyAction,
 } from "./actions";
+import { humanizeCode } from "@/lib/humanize";
+import { useToast } from "@/components/feedback/Toaster";
 
 const QUEUE_LABEL: Record<string, string> = Object.fromEntries(QUEUE_OPTIONS.map((o) => [o.value, o.label]));
 const KIND_LABEL: Record<string, string> = {
@@ -87,6 +89,7 @@ function StaffContextCard({ context }: { context: NonNullable<StaffTicketWorkspa
 
 export function StaffTicketDetail({ workspace, canManage, assignees = [] }: StaffTicketDetailProps) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState<{ public: boolean; internal: boolean }>({ public: false, internal: false });
   const [dialog, setDialog] = useState<ActionVariant | null>(null);
   const [direct, setDirect] = useState<"claim" | "accept" | null>(null);
@@ -116,6 +119,7 @@ export function StaffTicketDetail({ workspace, canManage, assignees = [] }: Staf
     if (result.ok) {
       setBanner(null);
       setAnnouncement(DONE_MESSAGE[doneKey]);
+      toast.success(DONE_MESSAGE[doneKey]);
       reload();
       return;
     }
@@ -156,6 +160,7 @@ export function StaffTicketDetail({ workspace, canManage, assignees = [] }: Staf
     if (result.ok) {
       setBanner(null);
       setAnnouncement(DONE_MESSAGE[variant]);
+      toast.success(DONE_MESSAGE[variant]);
       reload();
     } else if (result.kind === "conflict") {
       reload();
@@ -205,7 +210,7 @@ export function StaffTicketDetail({ workspace, canManage, assignees = [] }: Staf
     { label: "Learner", value: <span className="break-words [overflow-wrap:anywhere]">{learner ? `${learner.name} (${learner.email})` : "Unknown learner"}</span> },
     { label: "Category", value: ticketCategoryLabel(workspace.category) },
     { label: "Current owner", value: owner },
-    { label: "Queue", value: QUEUE_LABEL[workspace.queue] ?? workspace.queue },
+    { label: "Queue", value: QUEUE_LABEL[workspace.queue] ?? humanizeCode(workspace.queue) },
     { label: "Created", value: <TicketTime value={workspace.createdAt} /> },
     { label: "Last activity", value: <TicketTime value={workspace.updatedAt} /> },
     ...(workspace.resolvedAt ? [{ label: "Resolved", value: <TicketTime value={workspace.resolvedAt} /> }] : []),

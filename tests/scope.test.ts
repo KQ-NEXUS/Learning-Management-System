@@ -167,6 +167,38 @@ describe("isGrantActive", () => {
       ),
     ).toBe(true);
   });
+
+  // G-06: the written rule (plan 15-26: "a grant whose end instant equals the
+  // request time is treated as ended"). The grant ends AT `endsAt`; the start is
+  // inclusive, so the window is [startsAt, endsAt).
+  describe("at the edges of its window", () => {
+    const edge = new Date("2026-09-01T12:00:00.000Z");
+    const windowed = (startsAt: Date | null, endsAt: Date | null) => ({ active: true, revokedAt: null, startsAt, endsAt });
+
+    it("holds one millisecond before its end", () => {
+      expect(isGrantActive(windowed(null, edge), new Date(edge.getTime() - 1))).toBe(true);
+    });
+
+    it("has ended at the exact end instant", () => {
+      expect(isGrantActive(windowed(null, edge), edge)).toBe(false);
+    });
+
+    it("has ended one millisecond after its end", () => {
+      expect(isGrantActive(windowed(null, edge), new Date(edge.getTime() + 1))).toBe(false);
+    });
+
+    it("has not started one millisecond before its start", () => {
+      expect(isGrantActive(windowed(edge, null), new Date(edge.getTime() - 1))).toBe(false);
+    });
+
+    it("holds from the exact start instant", () => {
+      expect(isGrantActive(windowed(edge, null), edge)).toBe(true);
+    });
+
+    it("is never in force when it starts and ends at the same instant", () => {
+      expect(isGrantActive(windowed(edge, edge), edge)).toBe(false);
+    });
+  });
 });
 
 describe("assertScopeAllowed", () => {

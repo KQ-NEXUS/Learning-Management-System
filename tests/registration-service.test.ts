@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { guardFindUnique } from "./support/prisma-contract";
 import { POLICY_TYPE, POLICY_VERSIONS, MIN_PASSWORD_LENGTH } from "@/lib/identity";
 import {
   createRegistrationService,
   REGISTRATION_ACCEPTED,
   REGISTRATION_INVALID_INPUT,
+  REGISTRATION_UNAVAILABLE,
   type RegistrationStore,
   type RegisteredUserRow,
   type RegistrationInput,
@@ -17,6 +18,20 @@ import {
   type VerificationStore,
   type VerificationTokenRow,
 } from "@/server/services/verification-service";
+import { LicenceWriteBlockedError } from "@/server/licence/errors";
+import { LEARNER_REFUSAL_MESSAGE } from "@/server/licence/policy";
+import { buildAuthCorrelationId, type DispatchParams } from "@/server/services/email-dispatch-service";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function stubEmailEnv() {
+  vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+  vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+  vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+  vi.stubEnv("APP_BASE_URL", "https://lms.acme.test");
+}
 
 type PolicyAcceptanceRow = {
   userId: string;
@@ -39,12 +54,19 @@ class SimulatedProviderOutage extends Error {
 
 /** One fake store backing both registration-service and verification-service, so an
  * end-to-end test can drive registerLearner and then verifyEmail against the same data. */
-function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
+function sharedHarness(
+  options: {
+    rejectDispatch?: boolean;
+    skipEmailEnv?: boolean;
+    licence?: { assertWriteAllowed(input: { operation: string; actorId?: string | null }): Promise<void> };
+  } = {},
+) {
   const rejectDispatch = options.rejectDispatch ?? false;
+  if (!options.skipEmailEnv) stubEmailEnv();
   const users: RegisteredUserRow[] = [];
   const policyAcceptances: PolicyAcceptanceRow[] = [];
   const tokens: VerificationTokenRow[] = [];
-  const dispatched: { toEmail: string; textContent: string; subject: string }[] = [];
+  const dispatched: DispatchParams[] = [];
   let userIdCounter = 0;
   let hashCallCount = 0;
 
@@ -148,11 +170,7 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
     store: store as unknown as VerificationStore,
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({
-        toEmail: params.toEmail,
-        subject: params.subject,
-        textContent: params.textContent,
-      });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -163,15 +181,12 @@ function sharedHarness(options: { rejectDispatch?: boolean } = {}) {
 
   const registrationService = createRegistrationService({
     store: store as unknown as RegistrationStore,
+    licence: options.licence,
     issueToken: (params) => verificationService.issueToken(params),
     resendVerification: (email) => verificationService.resendVerification(email),
     dispatch: async (params) => {
       if (rejectDispatch) throw new SimulatedProviderOutage();
-      dispatched.push({
-        toEmail: params.toEmail,
-        subject: params.subject,
-        textContent: params.textContent,
-      });
+      dispatched.push(params);
       return { ok: true };
     },
     audit: async (event) => {
@@ -260,6 +275,22 @@ describe("registerLearner — brand-new email", () => {
     expect(dispatched[0].toEmail).toBe("learner@example.com");
   });
 
+  it("dispatches under template email-verification with a correlationId starting with auth: that equals buildAuthCorrelationId(token), htmlContent containing the verify url, and never the raw token in correlationId", async () => {
+    const { registrationService, dispatched } = sharedHarness();
+    await registrationService.registerLearner(BASE_INPUT);
+
+    expect(dispatched).toHaveLength(1);
+    const params = dispatched[0];
+    expect(params.template).toBe("email-verification");
+    expect(params.correlationId).toBeDefined();
+    expect(params.correlationId!.startsWith("auth:")).toBe(true);
+
+    const token = extractToken(params.textContent);
+    expect(params.correlationId).toBe(buildAuthCorrelationId(token));
+    expect(params.correlationId).not.toContain(token);
+    expect(params.htmlContent).toContain("https://lms.acme.test/verify?token=");
+  });
+
   it("leaves zero User rows when the PolicyAcceptance write throws, proving both writes share one transaction", async () => {
     const { registrationService, store, users } = sharedHarness();
     store.policyAcceptance.create = vi.fn(async () => {
@@ -293,6 +324,30 @@ describe("registerLearner — rejecting transport (G-03-3 regression)", () => {
 
     expect(result).toBe(REGISTRATION_ACCEPTED);
     expect(dispatched).toHaveLength(0); // the transport really did reject
+    expect(users).toHaveLength(1); // the account was still committed
+
+    const created = audits.filter((a) => (a as { action: string }).action === "user.created");
+    expect(created).toHaveLength(1);
+  });
+});
+
+// D-08/IAM-06: an unconfigured base URL in production must not surface any
+// differently than a rejecting transport — sendAuthEmail's own try/catch
+// swallows the EmailConfigError from buildAbsoluteUrl exactly like a send
+// failure, so the frozen result and the committed account are unaffected.
+describe("registerLearner — unconfigured base URL in production mode", () => {
+  it("still returns the frozen accepted value and still commits the account when APP_BASE_URL is unset in production", async () => {
+    const { registrationService, audits, users, dispatched } = sharedHarness({ skipEmailEnv: true });
+    vi.stubEnv("EMAIL_SENDER_NAME", "Acme Academy");
+    vi.stubEnv("EMAIL_SENDER_ADDRESS", "no-reply@acme.test");
+    vi.stubEnv("SUPPORT_CONTACT_EMAIL", "help@acme.test");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_BASE_URL", "");
+
+    const result = await registrationService.registerLearner({ ...BASE_INPUT, email: "unconfigured@example.com" });
+
+    expect(result).toBe(REGISTRATION_ACCEPTED);
+    expect(dispatched).toHaveLength(0); // buildAbsoluteUrl threw before any dispatch call
     expect(users).toHaveLength(1); // the account was still committed
 
     const created = audits.filter((a) => (a as { action: string }).action === "user.created");
@@ -553,5 +608,152 @@ describe("F-14a — verification links are stored hashed", () => {
     expect(stored).toBe(createHash("sha256").update(raw, "utf8").digest("hex"));
     await expect(verificationService.verifyEmail(stored)).resolves.toEqual({ ok: false });
     await expect(verificationService.verifyEmail(raw)).resolves.toEqual({ ok: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 14 (D-06, D-09, A12, OQ8) — registration guard in restricted continuity mode
+// ---------------------------------------------------------------------------
+
+const registerActionMock = vi.hoisted(() => ({ registerLearner: vi.fn() }));
+
+vi.mock("@/server/services/registration-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/services/registration-service")>();
+  return { ...actual, registrationService: { registerLearner: registerActionMock.registerLearner } };
+});
+// D-11 (plan 15-03): the action now consults the per-device limiter first;
+// it is mocked here so this file never reaches a database.
+vi.mock("@/server/services/rate-limit-service", () => ({
+  rateLimitService: { consume: async () => ({ limited: false, windowMinutes: 15 }) },
+}));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
+
+import { registerAction } from "@/app/(auth)/register/actions";
+
+describe("Phase 14 — registerLearner licence guard (D-06, D-09, A12)", () => {
+  function switchableGuard(blocked: boolean) {
+    const state = { blocked };
+    const assertWriteAllowed = vi.fn<(input: { operation: string; actorId?: string | null }) => Promise<void>>(async () => {
+      if (state.blocked) throw new LicenceWriteBlockedError();
+    });
+    return { state, licence: { assertWriteAllowed }, assertWriteAllowed };
+  }
+
+  it("a blocking guard returns the frozen REGISTRATION_UNAVAILABLE with no store call and no dispatch", async () => {
+    const guard = switchableGuard(true);
+    const { registrationService, store, dispatched, hashCallCount, users } = sharedHarness({ licence: guard.licence });
+
+    const result = await registrationService.registerLearner(BASE_INPUT);
+
+    expect(result).toBe(REGISTRATION_UNAVAILABLE);
+    expect(result).toEqual({ ok: false, reason: "UNAVAILABLE" });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(guard.assertWriteAllowed).toHaveBeenCalledWith({ operation: "registration", actorId: null });
+    expect(store.user.findUnique).not.toHaveBeenCalled();
+    expect(store.user.create).not.toHaveBeenCalled();
+    expect(store.policyAcceptance.create).not.toHaveBeenCalled();
+    expect(dispatched).toHaveLength(0);
+    expect(hashCallCount()).toBe(0);
+    expect(users).toHaveLength(0);
+  });
+
+  it("the refusal is identical for an email that exists and one that does not (IAM-06, no enumeration oracle)", async () => {
+    const guard = switchableGuard(false);
+    const { registrationService, users, dispatched } = sharedHarness({ licence: guard.licence });
+    // The existing account is created while the deployment is still allowed.
+    expect(await registrationService.registerLearner(BASE_INPUT)).toBe(REGISTRATION_ACCEPTED);
+    const usersBefore = users.length;
+    const dispatchedBefore = dispatched.length;
+
+    guard.state.blocked = true;
+    const existing = await registrationService.registerLearner(BASE_INPUT);
+    const brandNew = await registrationService.registerLearner({ ...BASE_INPUT, email: "someone.else@example.com" });
+
+    expect(existing).toEqual(brandNew);
+    expect(existing).toBe(REGISTRATION_UNAVAILABLE);
+    expect(brandNew).toBe(REGISTRATION_UNAVAILABLE);
+    expect(users).toHaveLength(usersBefore);
+    expect(dispatched).toHaveLength(dispatchedBefore);
+  });
+
+  it("invalid input still returns INVALID_INPUT even when the guard would block (validation first)", async () => {
+    const guard = switchableGuard(true);
+    const { registrationService } = sharedHarness({ licence: guard.licence });
+
+    const result = await registrationService.registerLearner({ ...BASE_INPUT, acceptedTerms: false });
+
+    expect(result).toBe(REGISTRATION_INVALID_INPUT);
+    expect(guard.assertWriteAllowed).not.toHaveBeenCalled();
+  });
+
+  it("only LicenceWriteBlockedError is mapped; any other guard failure propagates", async () => {
+    const licence = {
+      assertWriteAllowed: vi.fn(async () => {
+        throw new Error("licence read exploded");
+      }),
+    };
+    const { registrationService } = sharedHarness({ licence });
+
+    await expect(registrationService.registerLearner(BASE_INPUT)).rejects.toThrow("licence read exploded");
+  });
+
+  it("with an allowing guard registration behaves exactly as before", async () => {
+    const guard = switchableGuard(false);
+    const { registrationService, users, dispatched } = sharedHarness({ licence: guard.licence });
+
+    expect(await registrationService.registerLearner(BASE_INPUT)).toBe(REGISTRATION_ACCEPTED);
+    expect(users).toHaveLength(1);
+    expect(dispatched).toHaveLength(1);
+    expect(guard.assertWriteAllowed).toHaveBeenCalledTimes(1);
+  });
+
+  it("with no guard injected registration behaves exactly as before", async () => {
+    const { registrationService, users } = sharedHarness();
+    expect(await registrationService.registerLearner(BASE_INPUT)).toBe(REGISTRATION_ACCEPTED);
+    expect(users).toHaveLength(1);
+  });
+});
+
+describe("Phase 14 — registerAction maps UNAVAILABLE to the neutral learner sentence (OQ8, A12)", () => {
+  function registerForm() {
+    const fd = new FormData();
+    fd.set("email", "learner@example.com");
+    fd.set("password", "correcthorsebattery");
+    fd.set("name", "Ada Lovelace");
+    fd.set("acceptTerms", "on");
+    fd.set("acceptPrivacy", "on");
+    return fd;
+  }
+
+  it("returns exactly the neutral sentence with sent false, naming no licence state", async () => {
+    registerActionMock.registerLearner.mockResolvedValue(REGISTRATION_UNAVAILABLE);
+
+    const state = await registerAction({ error: null, sent: false }, registerForm());
+
+    // A refusal also echoes the typed name and email back to the form (R3-05); never the password.
+    expect(state).toEqual({
+      error: "Enrolment is temporarily unavailable. Please contact support.",
+      sent: false,
+      values: { name: "Ada Lovelace", email: "learner@example.com" }, attempt: 1,
+    });
+    expect(JSON.stringify(state)).not.toMatch(/password/i);
+    expect(state.error).toBe(LEARNER_REFUSAL_MESSAGE);
+    expect(state.error).not.toMatch(/licen[cs]e|restricted|expir/i);
+  });
+
+  it("every other failure keeps its current text", async () => {
+    registerActionMock.registerLearner.mockResolvedValue(REGISTRATION_INVALID_INPUT);
+    expect(await registerAction({ error: null, sent: false }, registerForm())).toEqual({
+      error: "Something went wrong. Nothing was saved — try again.",
+      sent: false,
+      values: { name: "Ada Lovelace", email: "learner@example.com" }, attempt: 1,
+    });
+
+    registerActionMock.registerLearner.mockResolvedValue(REGISTRATION_ACCEPTED);
+    expect(await registerAction({ error: null, sent: false }, registerForm())).toEqual({
+      error: null,
+      sent: true,
+      email: "learner@example.com",
+    });
   });
 });

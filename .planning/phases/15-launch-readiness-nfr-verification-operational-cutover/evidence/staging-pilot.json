@@ -1,0 +1,1221 @@
+{
+  "label": "STAGING PILOT at about one tenth of the agreed load (plan 15-30 Task 1). NOT the signed NFR-02 number; the signed numbers come from the full run after the owner's approval.",
+  "target": {
+    "previewUrl": "https://deploy-preview-16--kqnexuslms.netlify.app",
+    "previewCommit": "9a68b7a for the k6 pilot, the probe, the quiet resend and journey attempts 1 to 3 (head of pull request 16, branch LAUNCH, read from GitHub on 2026-10-11). Journey attempts 4 to 7 ran against 9be7af3 (see journey.attempts[3].previewServed; attempts 6 and 7 on the deploy reported ready at 09:00:47Z; attempt 8, the one that passed, on the deploy reported ready at 09:24:07Z).",
+    "neonBranch": "staging-phase 15 (br-icy-river-axqpwts7)",
+    "hostsCheckedThroughNeonApi": true,
+    "ownerConfirmation": {
+      "date": "2026-10-11",
+      "verbatim": [
+        "They are test keys",
+        "Every thing is for test remember the client will set by them selfs most likely"
+      ]
+    }
+  },
+  "k6": {
+    "image": "grafana/k6:2.3.0",
+    "mode": "PILOT=1: learners ramp to 15 over 30 s, hold 3 min, ramp down 15 s; 1 staff; think time 5 to 15 s; documents only",
+    "startedAt": "2026-10-11T05:08:34.681426325Z",
+    "endedAt": "2026-10-11T05:12:41.010825827Z",
+    "exitCode": 0,
+    "requests": 342,
+    "dataReceivedBytes": 12736147,
+    "p75ByPage": {
+      "course-home": {
+        "p75Ms": 1490,
+        "passed": true,
+        "requests": 44,
+        "maxMs": 6723
+      },
+      "dashboard": {
+        "p75Ms": 1030,
+        "passed": true,
+        "requests": 44,
+        "maxMs": 7865
+      },
+      "learn": {
+        "p75Ms": 1230,
+        "passed": true,
+        "requests": 44,
+        "maxMs": 7677
+      },
+      "lesson": {
+        "p75Ms": 928,
+        "passed": true,
+        "requests": 85,
+        "maxMs": 5788
+      },
+      "results": {
+        "p75Ms": 701,
+        "passed": true,
+        "requests": 37,
+        "maxMs": 2449
+      },
+      "sessions": {
+        "p75Ms": 735,
+        "passed": true,
+        "requests": 35,
+        "maxMs": 4427
+      },
+      "staff-cohort": {
+        "p75Ms": 1080,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 1562
+      },
+      "staff-cohorts": {
+        "p75Ms": 1550,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 3944
+      },
+      "staff-grading": {
+        "p75Ms": 1710,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 2680
+      },
+      "staff-overview": {
+        "p75Ms": 2300,
+        "passed": true,
+        "requests": 4,
+        "maxMs": 6654
+      },
+      "staff-payments": {
+        "p75Ms": 1980,
+        "passed": true,
+        "requests": 3,
+        "maxMs": 2177
+      },
+      "staff-support": {
+        "p75Ms": 2120,
+        "passed": true,
+        "requests": 3,
+        "maxMs": 3182
+      },
+      "support": {
+        "p75Ms": 692,
+        "passed": true,
+        "requests": 31,
+        "maxMs": 1889
+      }
+    },
+    "note": "p75 values are the ones k6 printed for its thresholds. The staff pages have 3 or 4 requests each (one staff virtual user), so their percentiles are indicative only.",
+    "metrics": {
+      "http_req_receiving": {
+        "max": 5832.91331,
+        "p(90)": 739.7507693000007,
+        "p(95)": 1428.1608735499995,
+        "avg": 371.70259305847947,
+        "min": 2.374755,
+        "med": 206.821058
+      },
+      "http_req_duration{page:support}": {
+        "p(90)": 1537.955781,
+        "p(95)": 1764.031433,
+        "avg": 710.5976651612904,
+        "min": 420.375477,
+        "med": 514.561481,
+        "max": 1889.248072,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_blocked": {
+        "avg": 69.69608816374266,
+        "min": 0.0003,
+        "med": 0.000901,
+        "max": 6187.719715,
+        "p(90)": 0.0012,
+        "p(95)": 0.0026699999999999936
+      },
+      "http_req_duration": {
+        "avg": 1073.3282875204684,
+        "min": 402.00019,
+        "med": 587.0813415,
+        "max": 7865.21473,
+        "p(90)": 2171.4966692000016,
+        "p(95)": 3180.5197055
+      },
+      "http_req_waiting": {
+        "avg": 701.0182771315793,
+        "min": 285.245586,
+        "med": 370.8547,
+        "max": 7578.078236,
+        "p(90)": 1230.0197596000005,
+        "p(95)": 2343.4736637499996
+      },
+      "data_received": {
+        "count": 12736147,
+        "rate": 49950.48280478636
+      },
+      "http_req_duration{page:staff-payments}": {
+        "avg": 1591.16723,
+        "min": 807.996984,
+        "med": 1788.904001,
+        "max": 2176.600705,
+        "p(90)": 2099.0613642,
+        "p(95)": 2137.8310346,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:staff-cohort}": {
+        "med": 825.668717,
+        "max": 1562.18349,
+        "p(90)": 1371.417027,
+        "p(95)": 1466.8002584999997,
+        "avg": 976.7712314999999,
+        "min": 693.564002,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_failed": {
+        "passes": 0,
+        "fails": 342,
+        "thresholds": {
+          "rate<0.01": false
+        },
+        "value": 0
+      },
+      "http_req_tls_handshaking": {
+        "avg": 23.912768181286545,
+        "min": 0,
+        "med": 0,
+        "max": 3664.383671,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "vus": {
+        "max": 16,
+        "value": 2,
+        "min": 1
+      },
+      "http_reqs": {
+        "count": 342,
+        "rate": 1.341305586315621
+      },
+      "http_req_duration{page:learn}": {
+        "avg": 1190.7235535,
+        "min": 409.482634,
+        "med": 525.382353,
+        "max": 7677.009776,
+        "p(90)": 2684.721178800001,
+        "p(95)": 3614.2143720000013,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:results}": {
+        "p(90)": 1338.925641,
+        "p(95)": 2036.6526729999998,
+        "avg": 762.0347543513511,
+        "min": 427.306836,
+        "med": 556.890035,
+        "max": 2449.301116,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:sessions}": {
+        "avg": 898.9403204857144,
+        "min": 425.446586,
+        "med": 565.103238,
+        "max": 4427.485015,
+        "p(90)": 1956.9803602000006,
+        "p(95)": 2378.8329851999983,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:dashboard}": {
+        "p(90)": 1792.9513690000006,
+        "p(95)": 6417.795352400004,
+        "avg": 1302.7955066818183,
+        "min": 438.940089,
+        "med": 688.5993945,
+        "max": 7865.21473,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:course-home}": {
+        "max": 6723.437823,
+        "p(90)": 2390.9433095000018,
+        "p(95)": 4780.930971500002,
+        "avg": 1335.4734672272727,
+        "min": 528.022752,
+        "med": 687.0617179999999,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "iteration_duration": {
+        "avg": 87547.63804245454,
+        "min": 60455.963538,
+        "med": 89216.623999,
+        "max": 104464.018159,
+        "p(90)": 96958.7248592,
+        "p(95)": 100064.0688516
+      },
+      "iterations": {
+        "rate": 0.12942422324098096,
+        "count": 33
+      },
+      "data_sent": {
+        "count": 91776,
+        "rate": 359.9405306716445
+      },
+      "http_req_duration{page:staff-overview}": {
+        "avg": 2210.6954985,
+        "min": 566.102093,
+        "med": 811.5437425,
+        "max": 6653.592416,
+        "p(90)": 4913.411588900001,
+        "p(95)": 5783.502002449998,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_connecting": {
+        "avg": 35.053736692982454,
+        "min": 0,
+        "med": 0,
+        "max": 3232.2126,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "http_req_sending": {
+        "avg": 0.6074173304093562,
+        "min": 0.083408,
+        "med": 0.294637,
+        "max": 56.373627,
+        "p(90)": 0.39156100000000005,
+        "p(95)": 0.44403869999999995
+      },
+      "vus_max": {
+        "value": 16,
+        "min": 16,
+        "max": 16
+      },
+      "http_req_duration{page:lesson}": {
+        "avg": 977.8170050823521,
+        "min": 402.00019,
+        "med": 556.213894,
+        "max": 5787.913439,
+        "p(90)": 2529.579815,
+        "p(95)": 2984.8749563999995,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "checks": {
+        "fails": 0,
+        "passes": 1026,
+        "thresholds": {
+          "rate>0.999": false
+        },
+        "value": 1
+      },
+      "http_req_duration{page:staff-cohorts}": {
+        "avg": 1489.5438884999999,
+        "min": 585.735192,
+        "med": 714.005187,
+        "max": 3944.429988,
+        "p(90)": 2987.2793859000003,
+        "p(95)": 3465.8546869499987,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:staff-support}": {
+        "avg": 1603.304403666667,
+        "min": 568.976558,
+        "med": 1058.600105,
+        "max": 3182.336548,
+        "p(90)": 2757.5892594,
+        "p(95)": 2969.9629037,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{page:staff-grading}": {
+        "min": 635.798369,
+        "med": 1097.1887785,
+        "max": 2679.799645,
+        "p(90)": 2294.1941341,
+        "p(95)": 2486.9968895499997,
+        "avg": 1377.49389275,
+        "thresholds": {
+          "p(75)<2500": false
+        }
+      },
+      "http_req_duration{expected_response:true}": {
+        "p(90)": 2171.4966692000016,
+        "p(95)": 3180.5197055,
+        "avg": 1073.3282875204684,
+        "min": 402.00019,
+        "med": 587.0813415,
+        "max": 7865.21473
+      }
+    },
+    "root_group": {
+      "checks": {
+        "status is 200": {
+          "path": "::status is 200",
+          "id": "6210a8cd14cd70477eba5c5e4cb3fb5f",
+          "passes": 342,
+          "fails": 0,
+          "name": "status is 200"
+        },
+        "stayed signed in": {
+          "passes": 342,
+          "fails": 0,
+          "name": "stayed signed in",
+          "path": "::stayed signed in",
+          "id": "06f3b0e87108349ee2ba68741aa5ac8a"
+        },
+        "rendered without an error": {
+          "name": "rendered without an error",
+          "path": "::rendered without an error",
+          "id": "24dd248f2986594a98d74e5f82c77b6a",
+          "passes": 342,
+          "fails": 0
+        }
+      },
+      "name": "",
+      "path": "",
+      "id": "d41d8cd98f00b204e9800998ecf8427e",
+      "groups": {}
+    }
+  },
+  "probe": {
+    "note": "5 samples per view (1 cold, 4 warm), Regular 4G emulation, run after the k6 pilot with no background load",
+    "generatedAt": "2026-10-11T05:25:34.454Z",
+    "baseUrl": "https://deploy-preview-16--kqnexuslms.netlify.app",
+    "network": {
+      "name": "Regular 4G",
+      "downloadMbps": 4,
+      "uploadMbps": 3,
+      "latencyMs": 20
+    },
+    "samplesRequested": 5,
+    "method": "Chromium, CDP network emulation, navigation waitUntil commit, performance.now() when [data-primary-content] is visible; first sample per view is cold (fresh context), the rest are warm; nearest-rank percentiles over warm samples.",
+    "seed": 1416934983,
+    "budgetMs": 2500,
+    "views": [
+      {
+        "name": "staff-cohort",
+        "persona": "staff",
+        "path": "/staff/cohorts/:id",
+        "runOrder": 1,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 6542,
+        "p50": 892,
+        "p75": 2109,
+        "p95": 2695,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 940,
+          "p75": 2168,
+          "p95": 2768
+        },
+        "allMs": [
+          6542,
+          823,
+          892,
+          2695,
+          2109
+        ]
+      },
+      {
+        "name": "dashboard",
+        "persona": "learner",
+        "path": "/dashboard",
+        "runOrder": 2,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 3307,
+        "p50": 832,
+        "p75": 861,
+        "p95": 1008,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 880,
+          "p75": 944,
+          "p95": 1064
+        },
+        "allMs": [
+          3307,
+          832,
+          1008,
+          763,
+          861
+        ]
+      },
+      {
+        "name": "staff-cohorts",
+        "persona": "staff",
+        "path": "/staff/cohorts",
+        "runOrder": 3,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2261,
+        "p50": 979,
+        "p75": 1025,
+        "p95": 1318,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 1036,
+          "p75": 1076,
+          "p95": 1384
+        },
+        "allMs": [
+          2261,
+          1025,
+          979,
+          1318,
+          741
+        ]
+      },
+      {
+        "name": "staff-payments",
+        "persona": "staff",
+        "path": "/staff/payments",
+        "runOrder": 4,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1835,
+        "p50": 949,
+        "p75": 1075,
+        "p95": 1177,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 1048,
+          "p75": 1168,
+          "p95": 1256
+        },
+        "allMs": [
+          1835,
+          1075,
+          949,
+          850,
+          1177
+        ]
+      },
+      {
+        "name": "staff-support",
+        "persona": "staff",
+        "path": "/staff/support",
+        "runOrder": 5,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2146,
+        "p50": 599,
+        "p75": 633,
+        "p95": 681,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 636,
+          "p75": 652,
+          "p95": 744
+        },
+        "allMs": [
+          2146,
+          633,
+          476,
+          599,
+          681
+        ]
+      },
+      {
+        "name": "results",
+        "persona": "learner",
+        "path": "/learn/:id/results",
+        "runOrder": 6,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1416,
+        "p50": 716,
+        "p75": 753,
+        "p95": 921,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 776,
+          "p75": 796,
+          "p95": 988
+        },
+        "allMs": [
+          1416,
+          921,
+          716,
+          753,
+          491
+        ]
+      },
+      {
+        "name": "staff-overview",
+        "persona": "staff",
+        "path": "/staff",
+        "runOrder": 7,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1818,
+        "p50": 772,
+        "p75": 818,
+        "p95": 891,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 820,
+          "p75": 892,
+          "p95": 956
+        },
+        "allMs": [
+          1818,
+          818,
+          524,
+          891,
+          772
+        ]
+      },
+      {
+        "name": "staff-grading",
+        "persona": "staff",
+        "path": "/staff/cohorts/:id/grading/:id",
+        "runOrder": 8,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2203,
+        "p50": 626,
+        "p75": 684,
+        "p95": 914,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 560,
+          "p75": 720,
+          "p95": 972
+        },
+        "allMs": [
+          2203,
+          684,
+          914,
+          626,
+          606
+        ]
+      },
+      {
+        "name": "learn",
+        "persona": "learner",
+        "path": "/learn",
+        "runOrder": 9,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1407,
+        "p50": 547,
+        "p75": 735,
+        "p95": 773,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 584,
+          "p75": 800,
+          "p95": 840
+        },
+        "allMs": [
+          1407,
+          735,
+          773,
+          452,
+          547
+        ]
+      },
+      {
+        "name": "course-home",
+        "persona": "learner",
+        "path": "/learn/:id",
+        "runOrder": 10,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2169,
+        "p50": 544,
+        "p75": 589,
+        "p95": 760,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 580,
+          "p75": 640,
+          "p95": 820
+        },
+        "allMs": [
+          2169,
+          544,
+          589,
+          435,
+          760
+        ]
+      },
+      {
+        "name": "lesson",
+        "persona": "learner",
+        "path": "/learn/:id/lessons/:id",
+        "runOrder": 11,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1962,
+        "p50": 596,
+        "p75": 747,
+        "p95": 998,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 604,
+          "p75": 776,
+          "p95": 1064
+        },
+        "allMs": [
+          1962,
+          596,
+          747,
+          998,
+          553
+        ]
+      },
+      {
+        "name": "support",
+        "persona": "learner",
+        "path": "/support",
+        "runOrder": 12,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 2276,
+        "p50": 558,
+        "p75": 565,
+        "p95": 647,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 600,
+          "p75": 608,
+          "p95": 672
+        },
+        "allMs": [
+          2276,
+          565,
+          647,
+          558,
+          485
+        ]
+      },
+      {
+        "name": "sessions",
+        "persona": "learner",
+        "path": "/learn/:id/sessions",
+        "runOrder": 13,
+        "samples": 5,
+        "warmSamples": 4,
+        "coldMs": 1892,
+        "p50": 484,
+        "p75": 505,
+        "p95": 834,
+        "budgetMs": 2500,
+        "withinBudget": true,
+        "lcp": {
+          "samples": 4,
+          "p50": 520,
+          "p75": 548,
+          "p95": 856
+        },
+        "allMs": [
+          1892,
+          834,
+          484,
+          465,
+          505
+        ]
+      }
+    ]
+  },
+  "journeyPassed": true,
+  "journeyPassedNote": "True since attempt 8 (2026-10-11, 09:27 to 09:30 UTC, learner 144): a real, un-routed browser upload with the diagnostic off. Attempts 1 to 7 failed and are kept below as history.",
+  "journey": {
+    "test": "e2e/journey.spec.ts \"staging journey\", chromium, headed",
+    "attempts": [
+      {
+        "at": "2026-10-11T05:26:55Z",
+        "result": "failed",
+        "reason": "The test's own first assertion looked for the heading \"Your dashboard\"; a learner who already has a course is greeted by name. Test corrected; the product was not at fault. No enrolment was made."
+      },
+      {
+        "at": "2026-10-11T05:29:10Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 150",
+        "reason": "The browser's direct upload (PUT to a presigned link) was blocked by the storage bucket's CORS policy: the preflight for the preview's origin answers 403 with no Access-Control-Allow-Origin. The same preflight answers 204 for the production site's origin and for http://localhost:3000."
+      },
+      {
+        "at": "2026-10-11T07:49:11Z",
+        "endedAt": "2026-10-11T07:50:58Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 149",
+        "headed": true,
+        "after": "The owner reported the bucket CORS change as done (\"Done\", 2026-10-11).",
+        "preflightBeforeRun": {
+          "at": "2026-10-11T07:48:30Z",
+          "request": "OPTIONS to the bucket with Access-Control-Request-Method PUT and Access-Control-Request-Headers content-type",
+          "previewOrigin": {
+            "status": 204,
+            "allowOrigin": "https://deploy-preview-16--kqnexuslms.netlify.app",
+            "allowMethods": "PUT",
+            "allowHeaders": "content-type"
+          },
+          "productionOrigin": {
+            "status": 204
+          },
+          "localhost3000": {
+            "status": 204
+          }
+        },
+        "reason": "The CORS setting is now right: the browser's preflight passed. The upload itself (PUT to the presigned link) still failed. The browser reports that the PUT's answer carries no Access-Control-Allow-Origin, and no longer says the preflight failed (the 05:29 attempt did). The page showed \"Your file couldn't be uploaded\".",
+        "probableCause": "Not confirmed. The presigned link carries x-amz-checksum-crc32=AAAAAA== (the CRC32 of an EMPTY body) and x-amz-sdk-checksum-algorithm=CRC32; the 05:29 link carried the same. The AWS SDK in use (client-s3 and s3-request-presigner 3.1125.0) adds these by default and src/server/services/storage-service.ts does not turn that off. The uploaded file is not empty, so the storage service most likely rejects the PUT for a checksum mismatch, and its error answers carry no CORS headers (a PUT with no signature answers 400 with no Access-Control-Allow-Origin for the preview, the production and the localhost origins alike), which the browser shows as a CORS block. Local MinIO accepts the same kind of link (the local full journey passed).",
+        "notConfirmedBecause": "The storage service's real answer to the PUT could not be read: the browser hides it, and replaying the request outside the browser was not permitted in this session.",
+        "scope": "A product fault in the upload link, not a test fault and not the CORS setting. It would affect uploads from the production address too. Not fixed here: a fix changes src/server/services/storage-service.ts and reaches the preview only through a push and a rebuild."
+      },
+      {
+        "at": "2026-10-11T08:35:58Z",
+        "endedAt": "2026-10-11T08:37:56Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 148",
+        "headed": true,
+        "after": "The owner committed and pushed 9be7af3 \"fix(storage): stop signing an empty-body checksum into upload links\" (makeClient sets requestChecksumCalculation and responseChecksumValidation to WHEN_REQUIRED). Netlify rebuilt the deploy preview.",
+        "previewServed": {
+          "commit": "9be7af3",
+          "how": "At 08:34:59Z GitHub reported 9be7af331a431e9c75b34e912ee4c19744d59f00 as the head of pull request 16 and the Netlify checks for that commit (deploy-preview, Header rules, Redirect rules) as passed; /api/health answered 200. The deployed commit was not read from Netlify itself. The upload link issued during this attempt no longer carries a checksum parameter, which only the new build does.",
+          "ciOnThatCommit": "Not part of this plan: at the time of the run the GitHub checks \"Integration tests (shard 2 of 4)\" and \"(shard 4 of 4)\" had failed on 9be7af3 and \"Unit and component tests\" was still running. The cause was not read."
+        },
+        "uploadLinkObserved": {
+          "note": "Read from the browser trace; the link itself is not recorded here.",
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ],
+          "checksumParameterPresent": false,
+          "contentSha256": "UNSIGNED-PAYLOAD",
+          "signedHeaders": "host",
+          "expiresSeconds": 900,
+          "addressStyle": "bucket name in the host name (virtual-hosted style), S3 API of the storage provider"
+        },
+        "uploadRequestObserved": {
+          "at": "2026-10-11T08:37:31.599Z",
+          "method": "PUT",
+          "requestContentType": "text/plain",
+          "browserResult": "net::ERR_FAILED, no status and no response headers visible to the browser",
+          "browserConsole": "Access to fetch ... has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+          "pageMessage": "Your file couldn't be uploaded (the receipt \"Submitted - receipt\" never appeared; the test waited 20 s)"
+        },
+        "preflightAfterRun": {
+          "at": "2026-10-11T08:38:44Z",
+          "request": "OPTIONS to the same object address as the failed upload (no query string), Access-Control-Request-Method PUT, Access-Control-Request-Headers content-type, for the preview's origin",
+          "status": 204,
+          "allowOrigin": "https://deploy-preview-16--kqnexuslms.netlify.app",
+          "allowMethods": "PUT",
+          "allowHeaders": "content-type"
+        },
+        "reason": "The checksum fix is deployed and works as designed: the link has no checksum parameter. The storage service still refuses the browser's PUT, and the answer still carries no Access-Control-Allow-Origin, so the browser hides the status and the body. The empty-body checksum was therefore not the cause, or not the only cause.",
+        "causeNotEstablished": "The storage service's real answer to the PUT was not read in this attempt either (the browser hides it; the request was not replayed outside the browser). What is known: CORS preflight passes for the exact object address; the link is a plain SigV4 presigned PutObject with only the host header signed; storage error answers carry no CORS headers whatever the reason (shown in the 07:49 session with an unsigned PUT). Candidates that fit, none tested: the storage credentials on the preview being refused (wrong secret, or a token without write permission on this bucket), or a bucket or endpoint value on the preview that does not match. To tell them apart someone must read the status and error code of the PUT: the Network tab of the browser on the preview shows the status code, or one server-side storage call with the preview's credentials.",
+        "notWorkedAround": true
+      },
+      {
+        "at": "2026-10-11T08:46:34Z",
+        "endedAt": "2026-10-11T08:49:23Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 147",
+        "headed": true,
+        "previewServed": "9be7af3 (head of pull request 16 on GitHub at the time; /api/health 200)",
+        "diagnostic": {
+          "switch": "STAGING_UPLOAD_DIAG=1 (e2e/support/upload-diagnostic.ts, off by default)",
+          "how": "The journey's own PUT to the storage host was sent from Playwright's Node side (route.fetch, where CORS does not apply) and handed back to the page unchanged. Authorised by the owner through the orchestrator. Only names, the status, the content type and the masked error code and message were recorded; the link was not.",
+          "at": "2026-10-11T08:48:54.499Z",
+          "status": 400,
+          "errorCode": "InvalidArgument",
+          "errorMessage": "Credential access key has length 0, should be 32",
+          "responseContentType": "application/xml",
+          "responseBodyBytes": 148,
+          "responseHeaderNames": ["cf-ray", "connection", "content-length", "content-type", "date", "server"],
+          "allowOriginPresent": false,
+          "requestHeaderNames": [
+            "accept",
+            "accept-language",
+            "content-type",
+            "origin",
+            "referer",
+            "sec-ch-ua",
+            "sec-ch-ua-mobile",
+            "sec-ch-ua-platform",
+            "user-agent"
+          ],
+          "requestContentType": "text/plain",
+          "requestBodyBytes": 42,
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ],
+          "signedHeaders": "host"
+        },
+        "cause": "The upload link is signed with an empty access key id: the preview's server has no value in S3_ACCESS_KEY_ID (makeClient in src/server/services/storage-service.ts falls back to an empty string). The storage service refuses at that first check, and its error answer carries no CORS header, so the browser reported a CORS block.",
+        "kind": "Configuration of the Netlify deploy preview, not the bucket CORS setting, not the checksum, not the test.",
+        "notTested": "Whether S3_SECRET_ACCESS_KEY is right on the preview and whether the token may write to the bucket (the storage service stops at the empty key). Whether the production context has the same gap.",
+        "ownerAction": "In Netlify set S3_ACCESS_KEY_ID (and check S3_SECRET_ACCESS_KEY) for the Deploy Previews context with the Functions scope, check Production too, redeploy the preview, then run the journey with STAGING_JOURNEY_LEARNER=146 and the diagnostic off.",
+        "note": "A run with the diagnostic on is not proof that uploads work; journeyPassed stays false."
+      },
+      {
+        "at": "2026-10-11T09:03:25Z",
+        "endedAt": "2026-10-11T09:05:22Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 146",
+        "headed": true,
+        "diagnostic": "off (a real, un-routed browser upload)",
+        "after": "The owner reported (\"Done\", 2026-10-11) that S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY were set for the Deploy Previews context in Netlify and the deploy retried.",
+        "previewServed": {
+          "commit": "9be7af3 (head of pull request 16 on GitHub; /api/health 200)",
+          "netlifyStatus": "GitHub shows a new status \"Deploy Preview ready!\" for netlify/kqnexuslms/deploy-preview on that commit at 2026-10-11T09:00:47Z (the one before it was at 08:33:07Z), so a new deploy finished about three minutes before this run. Which variables that deploy carried cannot be read from this machine."
+        },
+        "uploadRequestObserved": {
+          "note": "Read from the browser trace; the link itself is not recorded here. Only the LENGTH of the access key id part of X-Amz-Credential was read.",
+          "at": "2026-10-11T09:04:57.543Z",
+          "method": "PUT",
+          "browserResult": "net::ERR_FAILED, no status and no response headers visible to the browser",
+          "browserConsole": "Access to fetch ... has been blocked by CORS policy (same wording as attempts 3 and 4)",
+          "accessKeyIdLengthInLink": 0,
+          "credentialScopeAfterDate": "auto/s3/aws4_request",
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ]
+        },
+        "reason": "The upload link issued by the new deploy is still signed with an EMPTY access key id. The owner's change has not reached the preview's functions.",
+        "notWorkedAround": true
+      },
+      {
+        "at": "2026-10-11T09:06:13Z",
+        "endedAt": "2026-10-11T09:08:00Z",
+        "result": "failed at step: submit: the learner uploads the assignment",
+        "learner": "Load Learner 145",
+        "headed": true,
+        "previewServed": "9be7af3, the deploy reported ready at 09:00:47Z",
+        "diagnostic": {
+          "switch": "STAGING_UPLOAD_DIAG=1 (e2e/support/upload-diagnostic.ts, off by default)",
+          "at": "2026-10-11T09:07:34.664Z",
+          "status": 400,
+          "errorCode": "InvalidArgument",
+          "errorMessage": "Credential access key has length 0, should be 32",
+          "responseContentType": "application/xml",
+          "responseBodyBytes": 148,
+          "responseHeaderNames": ["cf-ray", "connection", "content-length", "content-type", "date", "server"],
+          "allowOriginPresent": false,
+          "requestContentType": "text/plain",
+          "requestBodyBytes": 42,
+          "signedHeaders": "host"
+        },
+        "cause": "Unchanged from attempt 5, byte for byte: the storage service refuses the PUT because the access key id in the link is empty. S3_ACCESS_KEY_ID still has no value in the functions of the deploy preview.",
+        "notTested": "Whether S3_SECRET_ACCESS_KEY is right on the preview, whether the token may write to the bucket, and whether the Production context has the keys (the storage service stops at the empty key).",
+        "ownerAction": "See 15-30-SUMMARY \"Third close-out session\": check the variable's exact name, its Functions scope and its Deploy Previews value in Netlify, then start a NEW build with \"Clear cache and deploy site\" (or push a commit), not \"Retry\" of the old deploy. Next run: STAGING_JOURNEY_LEARNER=144, diagnostic off.",
+        "note": "A run with the diagnostic on is not proof that uploads work; journeyPassed stays false."
+      },
+      {
+        "at": "2026-10-11T09:27:26Z",
+        "endedAt": "2026-10-11T09:30:31Z",
+        "result": "passed",
+        "learner": "Load Learner 144",
+        "headed": true,
+        "diagnostic": "off (a real, un-routed browser upload; STAGING_UPLOAD_DIAG was not set)",
+        "playwright": "1 passed (2.8 min; the test itself 2.3 min), exit 0, no retry",
+        "after": "The owner reported (2026-10-11) that the earlier Netlify change \"did not save before\"; S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY were then saved for the preview, the cache cleared and the site redeployed (\"Published\").",
+        "previewServed": {
+          "commit": "9be7af3 (head of pull request 16 on GitHub and local LAUNCH head; /api/health 200 at 09:26Z)",
+          "netlifyStatus": "GitHub shows a new status \"Deploy Preview ready!\" for netlify/kqnexuslms/deploy-preview on that commit at 2026-10-11T09:24:07Z (the ones before it at 09:00:47Z and 08:33:07Z). The deployed commit and its variables were not read from Netlify itself."
+        },
+        "steps": [
+          { "step": "sign in: a seeded, verified load learner signs in through the form", "result": "passed", "seconds": 8 },
+          { "step": "enrol: choose the cohort and reach the order page", "result": "passed", "seconds": 3 },
+          { "step": "pay: staff confirm the manual payment, drain-domain-events --target staging", "result": "passed", "seconds": 42 },
+          { "step": "learn: open the course", "result": "passed", "seconds": 6 },
+          { "step": "learn: complete both reading lessons", "result": "passed", "seconds": 4 },
+          { "step": "attend: staff mark the learner present", "result": "passed", "seconds": 4 },
+          { "step": "submit: the learner uploads the assignment", "result": "passed", "seconds": 7 },
+          { "step": "grade: staff grade and release", "result": "passed", "seconds": 6 },
+          { "step": "complete: drain background work until the certificate is available", "result": "passed", "seconds": 45 },
+          { "step": "certificate: download the PDF through a short-lived link", "result": "passed", "seconds": 6 },
+          { "step": "verify: the public check reports the certificate as valid", "result": "passed", "seconds": 3 }
+        ],
+        "uploadRequestObserved": {
+          "note": "Read from the browser trace; the link itself is not recorded here. Only names, the status and the LENGTH of the access key id part of X-Amz-Credential were read.",
+          "at": "2026-10-11T09:29:19.470Z",
+          "method": "PUT",
+          "status": 200,
+          "requestContentType": "text/plain",
+          "allowOriginPresent": true,
+          "accessKeyIdLengthInLink": 32,
+          "credentialScopeAfterDate": "auto/s3/aws4_request",
+          "queryParameterNames": [
+            "X-Amz-Algorithm",
+            "X-Amz-Content-Sha256",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-Signature",
+            "X-Amz-SignedHeaders",
+            "x-id"
+          ],
+          "checksumParameterPresent": false,
+          "traceOddity": "The trace entry for this PUT carries status 200 and also a failure text net::ERR_ABORTED. The cause of that marker was not looked into. The step passed on the page's own evidence: the receipt \"Submitted - receipt\" appeared, which the page shows only after the server has verified the stored file, and the later steps (grading the submission, completion) depend on it."
+        },
+        "certificateDownloadObserved": {
+          "note": "Read from the browser trace and the test's own assertions; the link is not recorded here.",
+          "downloadRoute": { "at": "2026-10-11T09:30:16.570Z", "status": 302 },
+          "presignedGet": { "at": "2026-10-11T09:30:20.115Z", "status": 200, "accessKeyIdLengthInLink": 32, "contentType": "application/pdf (asserted by the test, with the %PDF- file header)" }
+        },
+        "whatThisProves": "On the deploy preview a browser upload to hosted storage succeeds, the server reads the stored file back, a certificate PDF is in storage and is downloaded through a link the preview presigned, and the public verification page reports it valid. So the storage key and secret now reach the preview's functions, belong together, and may read and write the bucket. Which request wrote the PDF was not traced; the task runner on this machine had no S3 variables in its environment (names checked, not values), so the write is taken to have been made by the preview's own functions (inference).",
+        "whatThisDoesNotProve": "Nothing about the Production context in Netlify (its storage keys are not verified). It is one run by a test, not the unassisted manual journey by a person (D-08)."
+      }
+    ],
+    "stepsPassed": [
+      "sign in through the form",
+      "enrol: choose the cohort and reach the order page",
+      "pay: staff confirm the manual payment, drain-domain-events --target staging",
+      "learn: open the course",
+      "learn: complete both reading lessons",
+      "attend: staff mark the learner present",
+      "submit: the learner uploads the assignment",
+      "grade and release",
+      "complete and certificate issued",
+      "certificate download",
+      "public verification"
+    ],
+    "stepsNotReached": [],
+    "stepsNote": "stepsPassed and stepsNotReached describe attempt 8. In attempts 2 to 7 the first six steps passed, \"submit\" failed and the last four were not reached.",
+    "blocker": null,
+    "blockerResolved": "Resolved at 09:29 UTC on 2026-10-11 (attempt 8): the upload link is signed with a 32-character access key id and the storage service answered the browser's PUT with 200.",
+    "formerBlocker": "The storage service refuses the browser's upload with 400 InvalidArgument, \"Credential access key has length 0, should be 32\" (read in attempt 5): the preview has no value in S3_ACCESS_KEY_ID. STILL SO after the owner's Netlify change and a new deploy (attempts 6 and 7, 09:03 to 09:08 UTC): the link's access key id is still empty and the storage answer is the same. Next step: the owner checks the variable's name, scope (Functions) and Deploy Previews value in Netlify and starts a new build, then one more run with another load learner (STAGING_JOURNEY_LEARNER=144; learners 145 to 150 are part-way through the journey course).",
+    "stepsPassedNote": "The same six steps passed in the 05:29 attempt (learner 150), the 07:49 attempt (learner 149), the 08:35 attempt (learner 148), the 08:46 attempt (learner 147), the 09:03 attempt (learner 146) and the 09:06 attempt (learner 145).",
+    "localFullJourney": {
+      "note": "The LOCAL \"full journey\" (same shared steps, refactored in this plan), run once after the refactor. Local Docker Postgres (licence_test) and a throwaway local MinIO; not the staging target.",
+      "at": "2026-10-11T07:53:25Z",
+      "result": "passed",
+      "project": "chromium, headed",
+      "durationSeconds": 34.3
+    }
+  },
+  "quietResend": {
+    "before": 1,
+    "after": 2,
+    "neutralMessageShown": true,
+    "secondsBetweenRegistrationAndSignIn": 68,
+    "note": "A fresh account was registered through the preview; the sign-in with the right password came 68 s later (the resend has a 60 s per-address cooldown), showed the neutral message and stayed on /signin; 10 s after the response a second verification token existed. after() runs on Netlify (ledger A15).",
+    "ranAt": "2026-10-11T05:34:31.807Z"
+  },
+  "connections": {
+    "duringPilot": {
+      "startedAt": "2026-10-11T05:08:43.635Z",
+      "everySeconds": 15,
+      "samples": 19,
+      "peakTotal": 16,
+      "peakClient": 9,
+      "peakActive": 1,
+      "list": [
+        {
+          "at": "2026-10-11T05:08:46.647Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:08:58.905Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:14.104Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:28.899Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:44.104Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:09:58.869Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:14.072Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:28.894Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:44.110Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:10:58.896Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:14.054Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:28.883Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:44.058Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:11:58.858Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:14.053Z",
+          "total": 16,
+          "client": 9,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:28.860Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:44.053Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:12:58.852Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        },
+        {
+          "at": "2026-10-11T05:13:14.094Z",
+          "total": 15,
+          "client": 8,
+          "active": 1
+        }
+      ]
+    },
+    "idleAfterwards": {
+      "samples": 3,
+      "peakTotal": 15,
+      "peakClient": 8
+    },
+    "maxConnections": 901,
+    "note": "Counts are rows of pg_stat_activity on the staging branch and include the sampler's own connection and Neon's internal sessions. Idle: 8 client backends (4 held by the pooler, 3 Neon internal, 1 sampler). Pilot peak: 9, so the pooler held at most 5 Postgres connections for 16 virtual users. The pooled URL carries no connection_limit or pool_timeout setting (ledger P-10)."
+  },
+  "usage": {
+    "neon": {
+      "before": {
+        "at": "2026-10-11T05:06:37.964Z",
+        "branch": {
+          "compute_time_seconds": 689,
+          "active_time_seconds": 2712
+        },
+        "project": {
+          "compute_time_seconds": 240544,
+          "active_time_seconds": 881060,
+          "consumption_period_start": "2026-10-01T00:00:00Z"
+        }
+      },
+      "after": {
+        "at": "2026-10-11T05:34:52.182Z",
+        "branch": {
+          "compute_time_seconds": 689,
+          "active_time_seconds": 2712
+        },
+        "project": {
+          "compute_time_seconds": 240544,
+          "active_time_seconds": 881060,
+          "consumption_period_start": "2026-10-01T00:00:00Z"
+        }
+      },
+      "note": "The Neon API counters did not move in the 28 minutes between the two reads (they are updated with a delay), so the pilot's compute cannot be read yet. Bound: the staging endpoint scales between 0.25 and 2 compute units."
+    },
+    "netlify": "Not readable from this machine (no Netlify CLI and no Netlify token). The owner reads Team usage in the Netlify dashboard."
+  },
+  "ranAt": "2026-10-11T05:35:48.810Z"
+}

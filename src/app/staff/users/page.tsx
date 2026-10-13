@@ -1,6 +1,7 @@
 import { staffAccountService } from "@/server/services/staff-account-service";
 import { AuthorizationError, AuthenticationError, can } from "@/server/permissions";
 import { UsersTable, type StaffUserRow } from "./UsersTable";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 export const metadata = { title: "Staff accounts" };
 
@@ -11,7 +12,7 @@ export default async function UsersPage() {
     users = await staffAccountService.list();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       return <UsersTable denied={{ permission: "users.view" }} />;

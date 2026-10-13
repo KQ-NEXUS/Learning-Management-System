@@ -418,10 +418,39 @@ describe("CertificateRecordActions — four action states (UI-SPEC §7.4)", () =
     expect(screen.queryByRole("button", { name: /Reissue certificate/ })).toBeNull();
   });
 
-  it("renders only 'Revoke certificate' for active, flagged — the banner carries the framing", () => {
+  it("offers both outcomes of the review for active, flagged: keep it active, or revoke it (A-08)", () => {
     render(<CertificateRecordActions certificateId="cert-1" displayStatus="flagged" />);
+    expect(screen.getByRole("button", { name: /Keep certificate active/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Revoke certificate/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Reissue certificate/ })).toBeNull();
+  });
+
+  it("'Keep certificate active' appears only on a flagged certificate, and only with the revoke permission", () => {
+    const { unmount } = render(<CertificateRecordActions certificateId="cert-1" displayStatus="active" />);
+    expect(screen.queryByRole("button", { name: /Keep certificate active/ })).toBeNull();
+    unmount();
+
+    const { container } = render(
+      <CertificateRecordActions certificateId="cert-1" displayStatus="flagged" canRevoke={false} />,
+    );
+    expect(container.querySelectorAll("button").length).toBe(0);
+  });
+
+  it("keeping a flagged certificate sends the id and the typed reason to the confirm action", async () => {
+    const confirmFlagged = vi.fn(async () => ({ ok: true as const }));
+    render(<CertificateRecordActions certificateId="cert-1" displayStatus="flagged" confirmFlagged={confirmFlagged} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Keep certificate active/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/clears the review flag and leaves the certificate valid/i)).toBeTruthy();
+    const confirmBtn = within(dialog).getByRole("button", { name: "Keep certificate active" });
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Correction did not change the pass" } });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() =>
+      expect(confirmFlagged).toHaveBeenCalledWith({ certificateId: "cert-1", reason: "Correction did not change the pass" }),
+    );
   });
 
   it("renders only 'Reissue certificate' for revoked", () => {

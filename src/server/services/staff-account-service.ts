@@ -223,6 +223,9 @@ export function createStaffAccountService(deps: {
             name: input.name,
             email,
             passwordHash,
+            // An administrator chose or generated this password and handed it
+            // over; the account holder is prompted to replace it (R3-12).
+            passwordIsTemporary: true,
             status: "ACTIVE",
             isStaff: true,
             // An administrator vouched for the address (D-40's temp-password
@@ -286,6 +289,7 @@ export function createStaffAccountService(deps: {
   const deactivateInternal = authorize<{ userId: string; reason: string }>(
     "users.manage",
     () => userScope(),
+    { licence: "continuity", reason: "Deactivation is security administration and stays available (D-07, A10)" },
   )(async (input, ctx) => {
     const reason = input.reason.trim();
     if (reason.length < MIN_REASON_LENGTH) {

@@ -106,6 +106,44 @@ type Audit = (entry: ResourceAuditEntry) => Promise<void>;
  * publicly. Deciding the certificate stays a separate, deliberate act by
  * someone with `certificates.revoke`; this never revokes on its own.
  */
+/**
+ * Several learners were chosen for one add and the cohort cannot seat them all
+ * (owner decision, 2026-10-05: add none and say so, rather than add as many as
+ * fit). Its message is written for the person on the page.
+ */
+export class EnrolmentBatchCapacityError extends UserInputError {
+  constructor(
+    readonly seatsLeft: number,
+    readonly chosen: number,
+  ) {
+    super(
+      seatsLeft <= 0
+        ? "This cohort is full, so nobody was added. Raise the capacity or withdraw an enrolment, then try again."
+        : `Only ${seatsLeft} ${seatsLeft === 1 ? "seat is" : "seats are"} left in this cohort and ${chosen} learners were chosen, so nobody was added. ` +
+            `Remove ${chosen - seatsLeft} ${chosen - seatsLeft === 1 ? "learner" : "learners"} or raise the capacity, then try again.`,
+    );
+    this.name = "EnrolmentBatchCapacityError";
+  }
+}
+
+/** One of the learners chosen for a batch add already holds a place: the whole add is refused. */
+export class EnrolmentBatchAlreadyEnrolledError extends UserInputError {
+  constructor(
+    readonly userId: string,
+    chosen: number,
+  ) {
+    super(
+      chosen === 1
+        ? "This learner already has a place in this cohort. Open that enrolment to transfer or withdraw it."
+        : "One of the chosen learners already has a place in this cohort, so nobody was added. Choose the learners again: anyone already enrolled is marked in the list.",
+    );
+    this.name = "EnrolmentBatchAlreadyEnrolledError";
+  }
+}
+
+/** A batch add runs in one transaction; this is how long it may take before it is abandoned. */
+const BATCH_ADD_TX_TIMEOUT_MS = 60_000;
+
 export class LiveCertificateError extends UserInputError {
   readonly enrolmentId: string;
   readonly verificationRef: string;
@@ -394,7 +432,11 @@ export async function revokeAccessForOrder(
 
 export type EnrolmentServiceDeps = {
   db: {
-    $transaction: <R>(fn: (tx: EnrolmentTxClient) => Promise<R>) => Promise<R>;
+    $transaction: <R>(
+      fn: (tx: EnrolmentTxClient) => Promise<R>,
+      /** Only the batch add passes this: many rows in one transaction need longer than the default. */
+      options?: { timeout: number },
+    ) => Promise<R>;
   };
   enrolment: {
     findUnique(args: { where: { id: string } }): Promise<EnrolmentRow | null>;
@@ -508,6 +550,121 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
       });
 
       return { id: created.id, status: input.target, heldSeat: takesSeat };
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // addEnrolments — several comp / corporate learners in one go (owner request,
+  // 2026-10-05). One target status and one reason for all of them; each learner
+  // still gets their own enrolment row, their own `enrolment.created` event and
+  // their own audit entry carrying that reason.
+  //
+  // All or nothing. Everything happens in ONE transaction under the cohort lock:
+  // if the cohort cannot seat every learner chosen, or one of them already holds
+  // a place, nobody is added. The capacity check is made once, up front, against
+  // the whole batch, so the refusal can say how many seats are left rather than
+  // fail part-way through.
+  // -------------------------------------------------------------------------
+
+  const addEnrolments = withPermission<{
+    cohortId: string;
+    userIds: string[];
+    target: "ACTIVE" | "PENDING_PAYMENT";
+    reason: string;
+  }>("enrolments.manage", (input) => deps.cohortScope(input.cohortId))(
+    async (input, ctx) => {
+      const reason = requireReason(input.reason);
+      const userIds = [...new Set(input.userIds)];
+      if (userIds.length === 0) throw new UserInputError("Choose at least one learner.");
+
+      const cohort = await deps.cohort.findUnique({ where: { id: input.cohortId } });
+      if (!cohort) throw new CohortNotFoundError(input.cohortId);
+
+      const holdExpiresAt = input.target === "PENDING_PAYMENT" ? holdExpiryFrom(cohort.holdMinutes, now()) : null;
+      // D-02, exactly as for a single add: a hold-less pending enrolment takes no seat yet.
+      const takesSeat = input.target === "ACTIVE" || holdExpiresAt !== null;
+      const activatedAt = now();
+
+      const created = await db.$transaction(
+        async (tx) => {
+          const locked = await lockOpenCohort(tx, input.cohortId);
+          if (takesSeat && locked.seatsTaken + userIds.length > locked.capacity) {
+            throw new EnrolmentBatchCapacityError(locked.capacity - locked.seatsTaken, userIds.length);
+          }
+
+          const rows: { id: string; userId: string }[] = [];
+          for (const userId of userIds) {
+            let row: { id: string };
+            try {
+              row = await tx.enrolment.create({
+                data: {
+                  cohortId: input.cohortId,
+                  userId,
+                  status: input.target,
+                  orderId: null,
+                  reason,
+                  ...(input.target === "ACTIVE" ? { activatedAt } : {}),
+                  ...(holdExpiresAt ? { holdExpiresAt } : {}),
+                },
+                select: { id: true },
+              });
+            } catch (error) {
+              // The partial unique index: this learner already holds an ACTIVE or COMPLETED place.
+              if ((error as { code?: unknown } | null)?.code === "P2002") {
+                throw new EnrolmentBatchAlreadyEnrolledError(userId, userIds.length);
+              }
+              throw error;
+            }
+            await writeDomainEvent(tx, {
+              type: "enrolment.created",
+              payload: {
+                enrolmentId: row.id,
+                cohortId: input.cohortId,
+                userId,
+                status: input.target,
+                actorId: ctx.actor.userId,
+              },
+            });
+            rows.push({ id: row.id, userId });
+          }
+
+          if (takesSeat) {
+            await tx.cohort.update({
+              where: { id: input.cohortId },
+              data: { seatsTaken: { increment: rows.length } },
+            });
+          }
+          return rows;
+        },
+        { timeout: BATCH_ADD_TX_TIMEOUT_MS },
+      );
+
+      for (const row of created) {
+        await deps.audit({
+          action: "enrolment.created",
+          targetType: "Enrolment",
+          targetId: row.id,
+          actorId: ctx.actor.userId,
+          outcome: "SUCCESS",
+          reason,
+          before: null,
+          after: {
+            status: input.target,
+            cohortId: input.cohortId,
+            userId: row.userId,
+            heldSeat: takesSeat,
+            batchSize: created.length,
+          },
+        });
+        await deps.correlateReconciliationEvidence?.({
+          action: "enrolment.created",
+          enrolmentId: row.id,
+          cohortId: input.cohortId,
+          evidence: { status: input.target, heldSeat: takesSeat },
+        });
+      }
+
+      return { added: created.length, enrolmentIds: created.map((row) => row.id), status: input.target, heldSeat: takesSeat };
     },
   );
 
@@ -778,6 +935,7 @@ export function createEnrolmentService(deps: EnrolmentServiceDeps) {
 
   return {
     addEnrolment,
+    addEnrolments,
     approveEnrolment,
     transferEnrolment,
     withdrawEnrolment,
@@ -839,8 +997,8 @@ export function createPrismaBackedEnrolmentService(
   });
   return createEnrolmentService({
     db: {
-      $transaction: (fn) =>
-        client.$transaction((tx: unknown) => fn(tx as EnrolmentTxClient)),
+      $transaction: (fn, options) =>
+        client.$transaction((tx: unknown) => fn(tx as EnrolmentTxClient), options),
     },
     enrolment: {
       findUnique: (args) =>
@@ -874,6 +1032,7 @@ const built = createPrismaBackedEnrolmentService(prisma, liveWithPermission, liv
 });
 
 export const addEnrolment = built.addEnrolment;
+export const addEnrolments = built.addEnrolments;
 export const approveEnrolment = built.approveEnrolment;
 export const transferEnrolment = built.transferEnrolment;
 export const withdrawEnrolment = built.withdrawEnrolment;

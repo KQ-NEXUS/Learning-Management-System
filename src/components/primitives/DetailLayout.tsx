@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { permissionPhrase } from "@/lib/humanize";
 
 /**
  * DetailLayout — the record primitive.
@@ -76,15 +77,10 @@ export function DetailLayout({
           You do not have access to this record
         </h2>
         <p className="max-w-prose text-base text-foreground-soft">
-          Your role does not include{" "}
-          {state.permission ? (
-            <code className="rounded-sm bg-accent-wash px-2 font-mono text-sm">
-              {state.permission}
-            </code>
-          ) : (
-            "the required permission"
-          )}{" "}
-          at this scope. Ask a workspace administrator to grant it.
+          {state.permission
+            ? `Your role doesn't include permission to ${permissionPhrase(state.permission)} here.`
+            : "Your role doesn't include the permission this needs here."}{" "}
+          Ask a workspace administrator if you need it.
         </p>
       </div>
     );

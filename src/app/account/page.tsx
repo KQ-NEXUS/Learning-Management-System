@@ -16,6 +16,13 @@ export default async function AccountPage() {
   return (
     <div className="flex flex-col gap-6">
       <LearnerPageHeader size="hero" title="Your account" subtitle="Details, sign-in and communication preferences." />
+      {profile.learnerNumber && (
+        <p className="text-sm text-muted-foreground">
+          Your learner number is{" "}
+          <span className="font-mono font-semibold text-foreground">{profile.learnerNumber}</span>. Quote it when you
+          contact us.
+        </p>
+      )}
       <ProfileForm
         name={profile.name}
         phone={profile.phone}

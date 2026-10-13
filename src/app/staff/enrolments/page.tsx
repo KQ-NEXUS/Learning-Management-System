@@ -1,6 +1,7 @@
 import { loadStaffEnrolments } from "@/server/services/roster-service";
 import { AuthenticationError, AuthorizationError } from "@/server/permissions";
 import { EnrolmentsTable, type EnrolmentListRow } from "./EnrolmentsTable";
+import { SessionEnded } from "@/components/shell/SessionEnded";
 
 /**
  * The `/staff/enrolments` list (UI-SPEC line 186).
@@ -23,6 +24,7 @@ export default async function EnrolmentsPage() {
       status: e.status,
       learnerName: e.learnerName,
       learnerEmail: e.learnerEmail,
+      learnerNumber: e.learnerNumber,
       cohortId: e.cohortId,
       cohortCode: e.cohortCode,
       offerTitle: e.offerTitle,
@@ -32,7 +34,7 @@ export default async function EnrolmentsPage() {
     }));
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return <p className="text-sm text-foreground">Your session has ended. Sign in again.</p>;
+      return <SessionEnded />;
     }
     if (error instanceof AuthorizationError) {
       // Identical copy whether or not any enrolment exists (RBAC-06).

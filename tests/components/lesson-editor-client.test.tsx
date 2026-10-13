@@ -13,14 +13,26 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { LicenceRestrictionProvider } from "@/components/licence/LicenceRestrictionProvider";
+import { RESTRICTED_CONTROL_REASON_STAFF } from "@/server/licence/policy";
 
 const routerPush = vi.fn();
 const routerRefresh = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: routerPush, refresh: routerRefresh }),
-}));
+const rethrowSpy = vi.fn();
+
+// The real `unstable_rethrow` runs behind a spy (see arrange-client.test.tsx).
+vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+  return {
+    useRouter: () => ({ push: routerPush, refresh: routerRefresh }),
+    unstable_rethrow: (error: unknown) => {
+      rethrowSpy(error);
+      actual.unstable_rethrow(error);
+    },
+  };
+});
 
 vi.mock("@/components/catalogue", () => ({
   LessonFormFields: () => null,
@@ -33,6 +45,7 @@ vi.mock("@/app/staff/courses/[id]/lessons/[lessonId]/actions", () => ({
 
 import { withdrawLessonAction } from "@/app/staff/courses/[id]/lessons/[lessonId]/actions";
 import { LessonEditorClient } from "@/app/staff/courses/[id]/lessons/[lessonId]/LessonEditorClient";
+import { captureUnhandledRejection, nextRedirectError } from "./control-flow-helpers";
 
 const REASON = "Superseded by the 2026 rewrite";
 
@@ -117,5 +130,88 @@ describe("LessonEditorClient withdraw modal — no stale error on reopen", () =>
 
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+/** Open the withdraw modal, type a valid reason, and press its confirm button. */
+function openAndConfirmWithdraw() {
+  fireEvent.click(withdrawTrigger());
+  const dialog = screen.getByRole("dialog");
+  fireEvent.change(
+    within(dialog).getByRole("textbox", { name: /Reason for withdrawal/i }),
+    { target: { value: REASON } },
+  );
+  return within(dialog).getByRole("button", { name: "Withdraw lesson" });
+}
+
+describe("LessonEditorClient withdraw — success releases the modal (WR-03) and control flow passes through (WR-02)", () => {
+  it("closes the modal after a successful withdraw even if router.push never completes", async () => {
+    // `routerPush` is an inert mock: navigation never happens, exactly like a
+    // stalled push. The modal must not be left on "Working…" with ESC suppressed.
+    vi.mocked(withdrawLessonAction).mockResolvedValue({ ok: true });
+    renderEditor();
+
+    fireEvent.click(openAndConfirmWithdraw());
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/staff/courses/course-1/arrange"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("button", { name: "Working…" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a redirect thrown through withdraw propagates instead of becoming 'The lesson was not withdrawn.'", async () => {
+    const redirectError = await nextRedirectError();
+    vi.mocked(withdrawLessonAction).mockRejectedValue(redirectError);
+    renderEditor();
+
+    const confirm = openAndConfirmWithdraw();
+    const reason = await captureUnhandledRejection(() => fireEvent.click(confirm));
+
+    expect(reason).toBe(redirectError);
+    expect(rethrowSpy).toHaveBeenCalledWith(redirectError);
+    expect(routerPush).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Working…" })).toBeNull(),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("an ordinary rejection is offered to unstable_rethrow first, then shown generically and stays retryable", async () => {
+    const appError = new Error("network down");
+    vi.mocked(withdrawLessonAction).mockRejectedValue(appError);
+    renderEditor();
+
+    fireEvent.click(openAndConfirmWithdraw());
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/The lesson was not withdrawn\./);
+    expect(alert.textContent).not.toMatch(/network down/);
+    expect(rethrowSpy).toHaveBeenCalledWith(appError);
+    const confirm = within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Withdraw lesson",
+    }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+  });
+});
+
+describe("LessonEditorClient header save in restricted continuity mode (14-19, D-09)", () => {
+  it("disables the external lesson-form submit with a visible, associated reason", () => {
+    render(
+      <LicenceRestrictionProvider value={{ restricted: true, canViewLicence: false, stateLabel: null }}>
+        <LessonEditorClient mode="edit" lessonId="lesson-1" courseId="course-1" initialType="TEXT" />
+      </LicenceRestrictionProvider>,
+    );
+    const save = screen.getByRole("button", { name: "Save lesson" }) as HTMLButtonElement;
+    expect(save.getAttribute("form")).toBe("lesson-form");
+    expect(save.disabled).toBe(true);
+    const reason = document.getElementById(save.getAttribute("aria-describedby")!)!;
+    expect(reason.textContent).toBe(RESTRICTED_CONTROL_REASON_STAFF);
+  });
+
+  it("leaves the header save enabled when the deployment is not restricted", () => {
+    render(<LessonEditorClient mode="edit" lessonId="lesson-1" courseId="course-1" initialType="TEXT" />);
+    const save = screen.getByRole("button", { name: "Save lesson" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    expect(save.hasAttribute("aria-describedby")).toBe(false);
   });
 });

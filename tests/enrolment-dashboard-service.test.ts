@@ -159,6 +159,7 @@ function assessmentObligation(overrides: Partial<AssessmentObligation> = {}): As
 function resultCard(overrides: Partial<LearnerResultCard> = {}): LearnerResultCard {
   return {
     assessmentId: "assessment-1",
+    courseId: "course-1",
     title: "Module Quiz",
     type: "QUIZ",
     effectiveScore: 8,
@@ -585,7 +586,7 @@ describe("loadLearnerDashboard", () => {
     expect(activeCard.nextAction.kind).toBe("session");
   });
 
-  it("G-01 - learnerResults reads are never called for a COMPLETED card, but are for an ACTIVE one", async () => {
+  it("G-01 / R3-10 - a COMPLETED card reads its released results but never assessment obligations; an ACTIVE one reads both", async () => {
     const getOwnAssessmentObligations = vi.fn(async () => [] as AssessmentObligation[]);
     const getOwnResults = vi.fn(async () => [] as LearnerResultCard[]);
     const svc = makeService(
@@ -598,9 +599,17 @@ describe("loadLearnerDashboard", () => {
     const { cards } = await svc.loadLearnerDashboard(actorA);
     expect(cards).toHaveLength(2);
     expect(getOwnAssessmentObligations).toHaveBeenCalledTimes(1);
-    expect(getOwnAssessmentObligations).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" });
-    expect(getOwnResults).toHaveBeenCalledTimes(1);
-    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" });
+    // Plan 15-28: the card's own path is handed in so it is not loaded a second time.
+    const withPath = { path: expect.objectContaining({ courses: expect.any(Array) }) };
+    expect(getOwnAssessmentObligations).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" }, withPath);
+    expect(getOwnResults).toHaveBeenCalledTimes(2);
+    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-live" }, withPath);
+    expect(getOwnResults).toHaveBeenCalledWith(actorA, { enrolmentId: "enrolment-done" }, withPath);
+
+    const done = cards.find((card) => card.enrolmentId === "enrolment-done")!;
+    // Tracked (possibly empty), never the deferred "No results yet." placeholder.
+    expect(done.results).toEqual({ kind: "tracked", recent: [] });
+    expect(done.assessmentObligations.kind).toBe("deferred");
   });
 
   it("orders ACTIVE cards before COMPLETED cards, and never lists another learner's COMPLETED enrolment (T-11-73)", async () => {

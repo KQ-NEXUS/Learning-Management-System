@@ -17,7 +17,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AuditRow } from "@/server/services/audit-read-service";
 import { AuditTable } from "@/app/staff/audit/AuditTable";
-import { formatTimestamp } from "@/lib/format-timestamp";
+import { formatTimestampWithSeconds } from "@/lib/format-timestamp";
 
 const auditExportAction = vi.hoisted(() => vi.fn());
 vi.mock("@/app/staff/audit/actions", () => ({ requestAuditExportAction: auditExportAction }));
@@ -106,9 +106,13 @@ describe("AuditTable — mobile detail card (task 1)", () => {
     const card = within(cards[0]);
     expect(card.getByText("Ada Lovelace")).toBeTruthy();
     expect(card.getByText("ada.lovelace@example.com")).toBeTruthy();
-    expect(card.getByText("course.publish")).toBeTruthy();
+    expect(card.getByText("Course publish")).toBeTruthy(); // UX batch C: same words as the desktop row
     expect(card.getByText(LONG_TARGET_ID)).toBeTruthy();
-    expect(card.getByText(formatTimestamp(row.createdAt))).toBeTruthy();
+    // S6: Lagos time with seconds, inside a time element carrying the ISO UTC instant.
+    const stamp = card.getByText(formatTimestampWithSeconds(row.createdAt));
+    expect(stamp.tagName).toBe("TIME");
+    expect(stamp.getAttribute("datetime")).toBe("2026-01-15T10:30:00.000Z");
+    expect(stamp.textContent).toBe("15 Jan 2026, 11:30:00 WAT");
   });
 
   it("keeps the full target identifier in the mobile card rather than clipping it", () => {
@@ -223,7 +227,7 @@ describe("AuditTable — state parity and narrow text (task 2)", () => {
     expect(target.className).toMatch(/overflow-wrap:anywhere/);
     expect(target.closest("[class*='min-w-0']")).toBeTruthy();
 
-    const action = card.getByText("role.assignment.create");
+    const action = card.getByText("Role assignment create");
     expect(action.className).toMatch(/overflow-wrap:anywhere/);
     expect(action.className).toMatch(/min-w-0/);
   });

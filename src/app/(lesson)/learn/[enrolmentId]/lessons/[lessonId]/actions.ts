@@ -111,6 +111,11 @@ export async function undoLessonCompleteAction(formData: FormData): Promise<void
     await undoLessonComplete(actor, { enrolmentId, lessonId });
   } catch (error) {
     if (error instanceof LessonNotOpenableError) redirectForNotOpenable(error);
+    // A quiz/assignment lesson's completion is not the learner's to undo (A-01);
+    // the control is not rendered for it, so this is a stale or crafted submit.
+    if (error instanceof ManualCompletionNotPermittedError) {
+      redirect(lessonPath(enrolmentId, lessonId));
+    }
     throw error;
   }
 

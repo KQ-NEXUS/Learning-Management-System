@@ -10,7 +10,7 @@ import {
   resolveCourseIdForLesson,
   type LessonRecord,
 } from "@/server/services/lesson-service";
-import { listLessonResources } from "@/server/services/lesson-resource-service";
+import { listLessonCaptions, listLessonResources } from "@/server/services/lesson-resource-service";
 import { LessonContent } from "@/components/catalogue/LessonContent";
 
 export const metadata = { title: "Learner view preview" };
@@ -33,6 +33,7 @@ export default async function LearnerLessonPreviewPage({
   let lesson: LessonRecord | null;
   let tree: Awaited<ReturnType<typeof loadCourseTree>>;
   let resources: Awaited<ReturnType<typeof listLessonResources>>;
+  let captionRows: Awaited<ReturnType<typeof listLessonCaptions>>;
   try {
     // `courseService.get` establishes courses.view on the parent; both
     // sub-loads inherit the same scope.
@@ -48,6 +49,10 @@ export default async function LearnerLessonPreviewPage({
     if ((await resolveCourseIdForLesson(lessonId)) !== id) notFound();
     tree = await loadCourseTree(id);
     resources = await listLessonResources(lessonId);
+    // NFR-09 (W-09): the preview offers the captions the learner player offers.
+    // Read through the same `courses.view` check as the resources, only for a
+    // VIDEO lesson, and only after the cross-course check above.
+    captionRows = lesson?.type === "VIDEO" ? await listLessonCaptions(lessonId) : [];
   } catch (error) {
     if (error instanceof AuthorizationError || error instanceof AuthenticationError) notFound();
     throw error;
@@ -74,6 +79,19 @@ export default async function LearnerLessonPreviewPage({
     sizeBytes: resource.sizeBytes.toString(),
     uploadStatus: resource.uploadStatus,
   }));
+
+  // READY (scanned) tracks only, exactly what a learner is offered: the staff
+  // list also carries uploads in progress and failed ones, for the authoring
+  // panel. The file itself is served by `/api/lesson-resources/[id]/captions`,
+  // which checks `courses.view` again and serves READY tracks only.
+  const previewCaptions = captionRows
+    .filter((caption) => caption.uploadStatus === "READY")
+    .map(({ id: captionId, videoResourceId, language, label }) => ({
+      id: captionId,
+      videoResourceId,
+      language,
+      label,
+    }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -105,6 +123,7 @@ export default async function LearnerLessonPreviewPage({
           withdrawnAt: lesson.withdrawnAt,
         }}
         resources={previewResources}
+        captions={previewCaptions}
       />
 
       <nav className="flex items-center justify-between border-t border-border pt-4 text-sm">

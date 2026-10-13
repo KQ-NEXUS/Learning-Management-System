@@ -13,7 +13,8 @@ import { GET } from "../src/app/api/staff/reports/exports/[jobId]/download/route
 
 const now = new Date("2026-09-16T12:00:00.000Z");
 const globalGrant = (permission: RawGrant["permission"]): RawGrant => ({ permission, scopeType: "GLOBAL", scopeId: null, active: true, revokedAt: null, startsAt: null, endsAt: null });
-const grants = [globalGrant("reports.view"), globalGrant("reports.export")];
+// The fixture job is a payments export, so its requester also needs the payments module's own grant (A-02).
+const grants = [globalGrant("reports.view"), globalGrant("reports.export"), globalGrant("payments.view")];
 const job = (changes: Partial<ExportJob> = {}) => ({
   id: "job-1", requestedById: "staff-1", dataset: "payments", datasetVersion: "1.0", filters: { currency: "NGN" },
   asOf: now, timezone: "Africa/Lagos", scopeSnapshot: { kind: "GLOBAL", programmeIds: [], courseIds: [], cohortIds: [] },
@@ -48,11 +49,13 @@ describe("current authorization for export downloads", () => {
   it.each([
     { name: "missing", input: { record: null } },
     { name: "different owner", input: { record: job({ requestedById: "staff-2" }) } },
-    { name: "revoked export permission", input: { permissions: [globalGrant("reports.view")] } },
+    { name: "revoked export permission", input: { permissions: [globalGrant("reports.view"), globalGrant("payments.view")] } },
+    { name: "revoked payments.view (A-02)", input: { permissions: [globalGrant("reports.view"), globalGrant("reports.export")] } },
+    { name: "payments.view narrowed below the exported scope (A-02)", input: { permissions: [globalGrant("reports.view"), globalGrant("reports.export"), { ...globalGrant("payments.view"), scopeType: "COHORT" as const, scopeId: "cohort-1" }] } },
     { name: "expired at exact boundary", input: { record: job({ expiresAt: now }) } },
     { name: "failed", input: { record: job({ status: "FAILED" }) } },
     { name: "sensitive identity revoked", input: { record: job({ columnSnapshot: [{ key: "learnerEmail", label: "Learner email", permission: "users.view" }] }) } },
-    { name: "original global scope narrowed", input: { permissions: [{ ...globalGrant("reports.view"), scopeType: "COHORT" as const, scopeId: "cohort-1" }, globalGrant("reports.export")] } },
+    { name: "original global scope narrowed", input: { permissions: [{ ...globalGrant("reports.view"), scopeType: "COHORT" as const, scopeId: "cohort-1" }, globalGrant("reports.export"), globalGrant("payments.view")] } },
     { name: "signed out", input: { user: null } },
   ])("denies $name identically without minting a URL", async ({ input }) => {
     const { service, audit, presign } = download(input);

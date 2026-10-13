@@ -18,6 +18,7 @@ import { withPermission } from "@/server/permissions";
 import type { ResourceScope } from "@/server/permissions/scope";
 import type { createWithPermission } from "@/server/permissions/with-permission";
 import { recordAudit } from "@/server/services/audit-service";
+import { RecordStateError } from "@/server/errors/record-state-error";
 import { nextAppendPosition, parkedWithdrawnPosition } from "@/lib/positions";
 import {
   createResourceService,
@@ -91,6 +92,17 @@ export function createModuleService(deps: CreateModuleServiceDeps) {
     withPermission: deps.withPermission,
     audit: deps.audit,
     runInTransaction: deps.runInTransaction,
+    // W-14: a withdrawal is not repeated (it would move the parked slot and overwrite the
+    // withdrawal time), a live module is not "restored" (it would jump to the end of the order),
+    // and a withdrawn module is restored before it is changed.
+    assertWritable: (operation, before) => {
+      const withdrawn = before.withdrawnAt !== null;
+      if (operation === "archive" && withdrawn) throw new RecordStateError("This module is already withdrawn.");
+      if (operation === "restore" && !withdrawn) throw new RecordStateError("Only a withdrawn module can be restored.");
+      if (operation === "update" && withdrawn) {
+        throw new RecordStateError("This module is withdrawn. Restore it before you change it.");
+      }
+    },
     // The two qualifiers below are different on purpose — the asymmetry is
     // the whole mechanism, read twice before changing either.
     //
