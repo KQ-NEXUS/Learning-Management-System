@@ -4,6 +4,8 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReadinessItem } from "@/server/services/readiness-service";
 import { LagosTime } from "@/components/time/LagosTime";
 import { ReadinessSummary } from "./ReadinessPanel";
+import { useLicenceRestriction } from "@/components/licence/LicenceRestrictionProvider";
+import { RestrictedControlReason } from "@/components/licence/LicenceRefusalNote";
 
 /**
  * The publish confirmation (D-06).
@@ -135,7 +137,10 @@ function PublishDialogBody({
   ).length;
   const reasonRequired = migrateCohortIds.length > 0;
   const reasonValid = !reasonRequired || reason.trim().length >= MIN_REASON;
-  const canPublish = blockingCount === 0 && reasonValid && !pending;
+  // Publishing is a write the server refuses in restricted continuity mode (D-06); the button says so up front.
+  const { restricted, canViewLicence } = useLicenceRestriction();
+  const restrictedReasonId = useId();
+  const canPublish = blockingCount === 0 && reasonValid && !pending && !restricted;
 
   function toggle(id: string) {
     // Cohort selection is frozen while a publish is in flight — the submitted
@@ -303,6 +308,7 @@ function PublishDialogBody({
           <button
             type="button"
             disabled={!canPublish}
+            aria-describedby={restricted ? restrictedReasonId : undefined}
             onClick={submit}
             className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -317,6 +323,7 @@ function PublishDialogBody({
             Cancel
           </button>
         </div>
+        {restricted && <RestrictedControlReason id={restrictedReasonId} canViewLicence={canViewLicence} />}
       </div>
     </div>
   );

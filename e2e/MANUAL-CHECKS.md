@@ -130,16 +130,16 @@ These are the checks no tool can do for us: a real screen reader, a real Safari,
 
 | Step | Tester | Device | Operating system and version | Browser and version | Assistive technology and version | Date | Pass or fail | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| KB-01 | | | | | | | | |
-| KB-02 | | | | | | | | |
-| KB-03 | | | | | | | | |
-| KB-04 | | | | | | | | |
-| KB-05 | | | | | | | | |
-| KB-06 | | | | | | | | |
-| KB-07 | | | | | | | | |
-| KB-08 | | | | | | | | |
-| KB-09 | | | | | | | | |
-| KB-10 | | | | | | | | |
+| KB-01 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Skip link appeared and Enter moved into the main area. |
+| KB-02 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Course, register and sign-in reached by keyboard; wrong-password step done. Focus-on-error answer not separately given. |
+| KB-03 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Not-found result read: "We couldn't find a certificate with this reference." |
+| KB-04 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Done as learner4 (the seed data had no enrolled learner with an assignment, so one waiting enrolment was activated on the local test database). Assignment is a file upload; a PDF was uploaded and submitted. Tester said "submitted"; reaching the result message by Tab was not separately confirmed. |
+| KB-05 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Empty form showed the error summary and a message per field; a ticket was created and opened. Whether focus moved to the summary was not separately confirmed. |
+| KB-06 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Staff menu, cohorts, a cohort and its tabs reachable. |
+| KB-07 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Menu, dialog, Escape and focus return worked. |
+| KB-08 | Claude (assistant) | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright), version not recorded | None, keyboard events from a script | 2026-10-13 | Pass | Run by the assistant in a headed Chromium window (Playwright), not by a person, and on the reconciliation cases table at 800 px wide, not the learner results table: Tab focused the box (solid outline), the arrow keys scrolled it. The audit log table fitted at that width. Not run on the learner results table. |
+| KB-09 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | No place found where Tab stopped working. |
+| KB-10 | Disu Kuwam | Windows laptop | Windows 11 Pro 10.0.26200 | Chrome or Edge, version not recorded | None, keyboard only | 2026-10-13 | Pass | Operations page and privacy lookup reachable; confirmation named the learner; cancel returned focus. |
 
 ---
 
@@ -167,17 +167,17 @@ These are the checks no tool can do for us: a real screen reader, a real Safari,
 
 | Step | Tester | Device | Operating system and version | Browser and version | Assistive technology and version | Date | Pass or fail | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LC-01 | | | | | | | | |
-| LC-02 | | | | | | | | |
-| LC-03 | | | | | | | | |
-| LC-04 | | | | | | | | |
-| LC-05 | | | | | | | | |
-| LC-06 | | | | | | | | |
-| LC-07 | | | | | | | | |
-| LC-08 | | | | | | | | |
-| LC-09 | | | | | | | | |
-| LC-10 | | | | | | | | |
-| LC-11 | | | | | | | | |
+| LC-01 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | Run by the assistant with keyboard events. Every control on the licence page was reached in reading order (copy button, file choice, paste box, diagnostic download) with a solid focus outline. FAULT FOUND: the copy button's check mark and "Copied" never went back to the copy icon (expected: after a moment). Fixed in the working tree (2 s reset, test added). |
+| LC-02 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | Activation is not one dialog: choose a file, "Check licence", then "Activate licence" opens the confirmation dialog. Focus moved into the dialog, Tab and Shift+Tab stayed inside, Escape and Cancel closed it and returned focus to the "Activate licence" button. |
+| LC-03 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | A copy with one character of the signature changed showed "The signature on this licence could not be verified ... Nothing was changed." and took focus. The good file showed a preview that does not contain the file text, and activation updated the state to Active, with licence id and client, without a reload. The file choice itself was set by the script, not by the Windows file window. |
+| LC-04 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Not done | Needs NVDA and VoiceOver and a person. Partial, from the accessibility tree only: the banner is a status region with its state in words; the page has one h1; the paste box is labelled; the file field is named "Choose file" and described by "Licence file"; the signature error is an alert. The dialog's spoken title and the preview announcements were not checked. |
+| LC-05 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | At 320 px (and 768 px) the page did not scroll sideways, the right-hand rail sat below the content, and a 199-character client name and a 113-character renewal email wrapped inside their boxes (the issuer was given 199 and 113, not 200 and 120). At 1280 px the rail sat beside the content. |
+| LC-06 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | At 1280 px wide with 200 percent zoom (640 px layout width) and 400 percent (320 px) the page reflowed to one column, nothing was cut off, no control sat outside the screen. Layout widths were simulated with the window size, not the browser zoom control. |
+| LC-07 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | Restricted deployment, staff screens (cohorts, enrolments, payments, audit): the banner sits between the header and the page with the state label and an icon; at 320 px and 200 percent the link wraps onto its own line; the link has a focus ring; an instructor (no licence view) sees no banner. Banner text: "Restricted continuity mode is active. New enrolments, checkout, publishing and settings changes are blocked. Your data is kept." |
+| LC-08 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | A file with a 120-character name showed truncated with an ellipsis and did not widen the 234 px field or the page. (First attempt failed only because Windows could not open the test file: path too long.) |
+| LC-09 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass with notes | Cancel cohort: confirm disabled with the reason line ("Open Licence" for an administrator, "Ask an administrator" for staff without licence view). Add enrolment: Continue disabled with a reason line, but an administrator is shown the "Ask an administrator" wording. Refund dialog and Deactivate (a learner) worked; after deactivating, Reactivate was disabled with the reason. PUBLISH was not disabled: the click went to the server and the screen answered "Not published" with the restriction sentence. Fixed in the working tree (button disabled with the reason, tests added). Manual payment dialog opened normally. Not exercised: attendance (the only session is in the future, "Nothing to mark yet") and grade release (no scored submission). |
+| LC-10 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass | Registration answered "Enrolment is temporarily unavailable. Please contact support." and so did starting a payment from a course page. No learner screen, including the dashboard and course page, mentioned the licence or showed signing material. |
+| LC-11 | Claude (assistant), driving the browser | Windows laptop | Windows 11 Pro 10.0.26200 | Chromium (Playwright, visible window), version not recorded | None | 2026-10-13 | Pass with note | Instructor: no Licence item in the menu, no banner, and the refusal panel (403, "Your role doesn't include permission to view licence here."). It had NO page heading (h2 only). Fixed for this page in the working tree (h1 added, test added). The same gap is in the support ticket and reconciliation case refusal screens (see checklist W-18). |
 
 ---
 

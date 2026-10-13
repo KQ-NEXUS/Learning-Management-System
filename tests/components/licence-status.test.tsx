@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { LicenceStatusView } from "@/app/staff/licence/LicenceStatusView";
 import { DAY_MS } from "@/server/licence/constants";
 import { RESTRICTED_CAPABILITIES } from "@/server/licence/effects";
@@ -267,7 +267,11 @@ describe("LicenceStatusView: notes and states", () => {
     for (const hidden of ["LIC-2026-0001", "fixture-deployment-0001", "Fixture Training Academy", "182", "What works"]) {
       expect(screen.queryByText(hidden), hidden).toBeNull();
     }
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    // The refusal panel draws no page title, so the screen's h1 comes from the page header (W-08).
+    expect(screen.getAllByRole("heading", { level: 1 }).map((h) => h.textContent)).toEqual(["Licence & System Status"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      "You do not have access to this record",
+    ]);
   });
 
   it("error renders the load-error copy and none of the licence detail", () => {
@@ -320,6 +324,30 @@ describe("CopyButton on the deployment ID", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy deployment ID" }));
     expect(writeText).toHaveBeenCalledWith("fixture-deployment-0001");
     await waitFor(() => expect(screen.getByText("Copied")).toBeTruthy());
+  });
+
+  it("goes back to the copy icon after a moment, so a second copy is announced again", async () => {
+    vi.useFakeTimers();
+    try {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      const { container } = render(<LicenceStatusView vm={viewModel()} canActivate />);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Copy deployment ID" }));
+      });
+      expect(screen.getByText("Copied")).toBeTruthy();
+      expect(container.querySelector("svg.lucide-check")).not.toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(2500);
+      });
+      expect(screen.queryByText("Copied")).toBeNull();
+      expect(container.querySelector("svg.lucide-check")).toBeNull();
+      expect(container.querySelector("svg.lucide-copy")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("is absent when there is no deployment ID", () => {

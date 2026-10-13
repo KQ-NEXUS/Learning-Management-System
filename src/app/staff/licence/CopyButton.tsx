@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 
 /**
@@ -8,8 +8,18 @@ import { Check, Copy } from "lucide-react";
  * Licence details row). The accessible name names what is copied; the confirmation is
  * announced through a polite live region and never relies on the icon swap alone.
  */
+/** How long the check mark stays before the button goes back to the copy icon. */
+const COPIED_MS = 2000;
+
 export function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
+
+  // The check mark and the "Copied" announcement go back after a moment, so a second copy is announced again.
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   async function copy() {
     try {

@@ -9,6 +9,7 @@ import {
   type DetailSection,
 } from "@/components/primitives";
 import { NOTE, NOTE_WARNING } from "@/components/primitives/controls";
+import { PageHeader } from "@/components/shell/PageHeader";
 import {
   ACTIVATION_PERMISSION_NOTE,
   BLOCKED_HEADING,
@@ -55,12 +56,26 @@ export function LicenceStatusView({
   activationSlot,
   diagnosticSlot,
 }: LicenceStatusViewProps) {
+  // The refusal and error panels draw no page title of their own, so the screen would have no h1 (W-08).
+  // The loading state is drawn by loading.tsx and keeps the layout's own skeleton.
   if (state && state.status !== "ready") {
-    return <DetailLayout title={TITLE} sections={[]} mode="stacked" state={state} />;
+    return state.status === "denied" || state.status === "error" ? (
+      <>
+        <PageHeader title={TITLE} />
+        <DetailLayout title={TITLE} sections={[]} mode="stacked" state={state} />
+      </>
+    ) : (
+      <DetailLayout title={TITLE} sections={[]} mode="stacked" state={state} />
+    );
   }
   if (!vm) {
     // Defensive: a ready state with no view model is a load failure, never an empty screen.
-    return <DetailLayout title={TITLE} sections={[]} mode="stacked" state={{ status: "error" }} />;
+    return (
+      <>
+        <PageHeader title={TITLE} />
+        <DetailLayout title={TITLE} sections={[]} mode="stacked" state={{ status: "error" }} />
+      </>
+    );
   }
 
   const sections: DetailSection[] = [
