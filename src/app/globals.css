@@ -1,114 +1,104 @@
 @import "tailwindcss";
 
 /*
- * Design tokens — three-tier chain (primitive / pill / sidebar / semantic).
+ * Design tokens — the IETC look (ietc-redesign): direction "Delegate", layout "Bands", colour
+ * "Soft", approved 9 October 2026. Reference: design/mockups/system.css.
  *
- * Redesign (ui-redesign branch): navy rail + header band, white content sheet, one blue
- * accent, Schibsted Grotesk + JetBrains Mono. The mockup canvas is the reference:
- * https://claude.ai/artifact/TXEVNafyQtshRLECRWNLgg
+ * Two tiers. The IETC tier holds the raw values; the semantic tier names roles. Component code
+ * reads colours only through the utilities generated below (bg-ground, text-ink, bg-accent,
+ * text-muted-foreground, bg-pill-green-bg…) and never writes a raw hex outside this file.
  *
- * Component code MUST consume only the semantic tier (or the pill/sidebar tiers where
- * documented) via the @theme inline block below — never a primitive token directly, and
- * never a raw hex outside this file. Semantic names are unchanged from the previous
- * theme so existing utilities (bg-surface, text-muted-foreground, border-border,
- * bg-accent…) re-skin the whole app without a find-and-replace.
+ * The semantic names predate the redesign (accent, surface, the pill tones, the "sidebar"
+ * frame), so ~300 existing components re-skinned without a find-and-replace. Their meaning in
+ * the IETC look: the one action colour is ink; orange is kept for what is current or urgent;
+ * the old navy frame is IETC black (sign-in panel, black strips, the lesson outline).
  */
 
 :root {
-  /* ---- Primitive tier: raw values. Never referenced directly by components. ---- */
-  --primitive-white: #ffffff;
-  --primitive-ink: #0f1730;
-  --primitive-ink-2: #2b3350;
-  --primitive-muted: #5b6478; /* 5.9:1 on white — text-safe */
-  --primitive-line: #e3e7f1; /* hairlines, structural dividers */
-  --primitive-field: #7c869b; /* 3.6:1 on white — interactive-control borders (WCAG 1.4.11) */
-  --primitive-paper: #f3f5f9;
-  --primitive-surface-2: #f3f5f9;
+  /* ---- IETC tier: raw values. ---- */
+  --ietc-ink: #141414;
+  --ietc-ink-soft: #57534e; /* secondary text, 7.3:1 on white */
+  --ietc-ink-hover: #2b2b2b; /* a solid ink button under the pointer */
+  --ietc-ground: #f4f2ee; /* the page */
+  --ietc-paper: #ffffff;
+  --ietc-rule: #ddd9d2;
+  --ietc-field: #8a857c; /* input borders, 3.7:1 on white (WCAG 1.4.11) */
+  --ietc-placeholder: #77726a; /* input placeholder, 4.6:1 on white */
+  --ietc-orange: #ff8200; /* solid only for what is current, urgent or the key word */
+  --ietc-orange-text: #a85200; /* orange that is safe as small text on white, 5.1:1 */
+  --ietc-peach: #ffe8cc;
+  --ietc-peach-text: #6b3a00; /* text on the peach band, 8.6:1 */
+  --ietc-tint-text: #3d3a35; /* secondary text on a class tint */
+  --ietc-on-ink-soft: #c9c4bc; /* secondary text on black */
+  --ietc-line-on-ink: #3a3a3a; /* hairlines on black */
+  --ietc-chip-on-ink: #5a5650; /* outlined chips on black */
 
-  --primitive-navy: #0a1024;
-  --primitive-navy-2: #141c3a;
+  /* Class tints: one pale colour per course, chosen automatically, always dark text on top. */
+  --ietc-tint-1: #ffe8cc;
+  --ietc-tint-2: #dce7ff;
+  --ietc-tint-3: #e7defa;
+  --ietc-tint-4: #e7e4de;
+  --ietc-tint-5: #ddf0e3;
+  --ietc-tint-6: #fadfe6;
+  --ietc-tint-7: #d8efef;
+  --ietc-tint-8: #fbf0c4;
 
-  --primitive-brand: #2d4bff; /* 5.9:1 against white */
-  --primitive-brand-deep: #1f36c7;
-  --primitive-brand-light: #8fa0ff; /* the accent on navy */
-  --primitive-brand-wash: #eef1ff;
-  --primitive-glow: rgba(45, 75, 255, 0.18);
+  /* ---- Semantic tier: role names. ---- */
+  --background: var(--ietc-ground);
+  --foreground: var(--ietc-ink);
+  --foreground-soft: #2f2c28;
+  --surface: var(--ietc-paper);
+  --surface-2: var(--ietc-ground);
+  --muted-foreground: var(--ietc-ink-soft);
+  --border: var(--ietc-rule);
+  --input-border: var(--ietc-field);
 
-  --primitive-amber-700: #8a5a00; /* text-safe amber, 5.8:1 on white */
-  --primitive-amber-500: #f79009;
-  --primitive-amber-50: #fff7e6;
+  --accent: var(--ietc-ink);
+  --accent-deep: var(--ietc-ink-hover);
+  --accent-light: var(--ietc-orange);
+  --accent-wash: var(--ietc-peach);
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(255, 130, 0, 0.2);
 
-  --primitive-red-700: #b4231a;
-  --primitive-red-50: #fdf3f1;
+  /* Progress fill and its caption text. */
+  --progress-fill: var(--ietc-ink);
+  --progress-text: var(--ietc-orange-text);
 
-  --primitive-green-700: #1e6b3a;
+  --warning: #8a5a00; /* text-safe amber, 5.8:1 on white */
+  --warning-fill: #e08a00;
+  --warning-surface: #fff2d1;
+  --danger: #b4231a;
+  --danger-surface: #fbe9e7;
+  --success: #1f7a47;
 
-  /* Pill-tone tier: StatusPill renders coloured text with a leading dot — no tinted
-     background. The -bg values remain for the few places that still tint (leading
-     tiles, banners); components map a tone prop to a named triple, never a hex. */
-  --pill-green-bg: #eaf5ee;
-  --pill-green-ink: #1e6b3a;
-  --pill-green-dot: #1e6b3a;
-  --pill-blue-bg: #eef1ff;
-  --pill-blue-ink: #2d4bff;
-  --pill-blue-dot: #2d4bff;
-  --pill-amber-bg: #fff7e6;
-  --pill-amber-ink: #8a5a00;
+  /* Status tags are tinted pills with dark text (StatusPill, the mockups' .tag). */
+  --pill-green-bg: #e3f3e9;
+  --pill-green-ink: #0f3d24;
+  --pill-green-dot: #1f7a47;
+  --pill-blue-bg: var(--ietc-peach);
+  --pill-blue-ink: var(--ietc-peach-text);
+  --pill-blue-dot: var(--ietc-orange);
+  --pill-amber-bg: #fff2d1;
+  --pill-amber-ink: #4a3200;
   --pill-amber-dot: #8a5a00;
-  --pill-grey-bg: #f3f5f9;
-  --pill-grey-ink: #5b6478;
-  --pill-grey-dot: #8b95ab;
-  --pill-red-bg: #fdf3f1;
-  --pill-red-ink: #b4231a;
+  --pill-grey-bg: var(--ietc-tint-4);
+  --pill-grey-ink: var(--ietc-tint-text);
+  --pill-grey-dot: var(--ietc-field);
+  --pill-red-bg: #fbe9e7;
+  --pill-red-ink: #5c120d;
   --pill-red-dot: #b4231a;
 
-  /* Navy frame tier — the staff rail, the header bands and the auth panel. */
-  --sidebar-bg: #0a1024;
-  --sidebar-fg: #c9d0e6;
-  --sidebar-accent: #2d4bff;
-  --sidebar-hover: #141c3a;
-  --sidebar-border: rgba(255, 255, 255, 0.12);
-  --sidebar-muted: #8e99bb; /* 6.4:1 on navy */
-  --sidebar-soft: #a9b2cc; /* secondary text on navy, 8:1 */
-  --sidebar-line: #2a3560;
-
-  /* Status text on the navy band: the light counterparts of the pill inks. */
-  --on-navy-green: #7fd3a0;
-  --on-navy-amber: #f2c572;
-  --on-navy-red: #ff9b8f;
-  --on-navy-blue: #8fa0ff;
-  --on-navy-grey: #a9b2cc;
-
-  /* ---- Semantic tier: role names. Component code consumes ONLY these (or the pill/sidebar ---- */
-  /* ---- tiers above), via the @theme block below.                                          ---- */
-  --background: var(--primitive-white);
-  --foreground: var(--primitive-ink);
-  --foreground-soft: var(--primitive-ink-2);
-  --surface: var(--primitive-white);
-  --surface-2: var(--primitive-paper);
-  --muted-foreground: var(--primitive-muted);
-  --border: var(--primitive-line);
-  --input-border: var(--primitive-field);
-
-  --accent: var(--primitive-brand);
-  --accent-deep: var(--primitive-brand-deep);
-  --accent-light: var(--primitive-brand-light);
-  --accent-wash: var(--primitive-brand-wash);
-  --accent-contrast: var(--primitive-white);
-  --accent-glow: var(--primitive-glow);
-
-  /* Progress fill and its caption text: the single accent, named for the role. */
-  --progress-fill: var(--primitive-brand);
-  --progress-text: var(--primitive-brand);
-
-  --warning: var(--primitive-amber-700);
-  --warning-fill: var(--primitive-amber-500);
-  --warning-surface: var(--primitive-amber-50);
-
-  --danger: var(--primitive-red-700);
-  --danger-surface: var(--primitive-red-50);
-
-  --success: var(--primitive-green-700);
+  /* The black frame (named "sidebar" for history): the sign-in panel, black strips, the
+     lesson outline. Text on it is light; orange marks what is current. */
+  --sidebar-bg: var(--ietc-ink);
+  --sidebar-fg: #e9e6e0;
+  --sidebar-accent: var(--ietc-orange);
+  --sidebar-hover: var(--ietc-ink-hover);
+  --sidebar-border: rgba(255, 255, 255, 0.14);
+  --sidebar-muted: #a9a49c; /* 7.4:1 on black */
+  --sidebar-soft: var(--ietc-on-ink-soft);
+  --sidebar-line: var(--ietc-line-on-ink);
+  --on-navy-blue: #ffa64d; /* a done mark on the black outline */
 }
 
 @theme inline {
@@ -164,57 +154,86 @@
   --color-sidebar-line: var(--sidebar-line);
   --color-on-navy-blue: var(--on-navy-blue);
 
-  /* Radii: tighter than before. Controls are 6px, panels 8 to 10px. */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
+  /* IETC utilities: bg-ground, text-ink, text-ink-soft, border-rule, bg-tint-3, font-ietc… */
+  --color-ink: var(--ietc-ink);
+  --color-ink-soft: var(--ietc-ink-soft);
+  --color-ink-hover: var(--ietc-ink-hover);
+  --color-ground: var(--ietc-ground);
+  --color-paper: var(--ietc-paper);
+  --color-rule: var(--ietc-rule);
+  --color-field: var(--ietc-field);
+  --color-placeholder: var(--ietc-placeholder);
+  --color-orange: var(--ietc-orange);
+  --color-orange-text: var(--ietc-orange-text);
+  --color-peach: var(--ietc-peach);
+  --color-peach-text: var(--ietc-peach-text);
+  --color-tint-text: var(--ietc-tint-text);
+  --color-on-ink-soft: var(--ietc-on-ink-soft);
+  --color-line-on-ink: var(--ietc-line-on-ink);
+  --color-tint-1: var(--ietc-tint-1);
+  --color-tint-2: var(--ietc-tint-2);
+  --color-tint-3: var(--ietc-tint-3);
+  --color-tint-4: var(--ietc-tint-4);
+  --color-tint-5: var(--ietc-tint-5);
+  --color-tint-6: var(--ietc-tint-6);
+  --color-tint-7: var(--ietc-tint-7);
+  --color-tint-8: var(--ietc-tint-8);
 
-  /* Shadows: the redesign separates content with whitespace and hairlines, so shadows
-     are near-flat. shadow-card is kept (32 call sites) but is now a whisper. */
   --shadow-xs: none;
-  --shadow-card: 0 1px 2px rgba(15, 23, 48, 0.05);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 16px 30px -18px rgba(0, 0, 0, 0.3);
+  --shadow-ietc-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 16px 30px -18px rgba(0, 0, 0, 0.3);
+  --shadow-ietc-card-hover: 0 1px 2px rgba(0, 0, 0, 0.08), 0 22px 36px -18px rgba(0, 0, 0, 0.42);
 
-  --font-sans: var(--font-schibsted-grotesk);
-  --font-mono: var(--font-jetbrains-mono);
+  /* Radii: 10px controls, 14px panels, 18px cards. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  /* One typeface. Archivo's width axis gives the condensed headings and figures (font-stretch
+     78%) from the same file as the body text; font-mono resolves to it too. */
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-archivo);
+  --font-ietc: var(--font-archivo);
 }
 
-/* StatusPill inside the navy band (PageHeader meta). Keyed on the data-tone attribute. */
-.on-navy [data-tone="success"] { color: var(--on-navy-green); }
-.on-navy [data-tone="warning"] { color: var(--on-navy-amber); }
-.on-navy [data-tone="danger"] { color: var(--on-navy-red); }
-.on-navy [data-tone="accent"] { color: var(--on-navy-blue); }
-.on-navy [data-tone="neutral"] { color: var(--on-navy-grey); }
-
-body {
+/* The page. `ietc` is on <body> so the heading rule below outranks a heading's own utility
+   weight, the way the mockups set every heading in the condensed display cut. */
+.ietc {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), "Segoe UI Variable", system-ui, sans-serif;
-  font-size: 14.5px;
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.ietc ::selection {
+  background: var(--ietc-ink);
+  color: #fff;
+}
+/* Headings everywhere take the condensed display cut; sizes stay with each component. */
+.ietc :is(h1, h2, h3) {
+  font-stretch: 78%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.ietc-display {
+  font-stretch: 78%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 0.95;
+  text-wrap: balance;
 }
 
-/* Display tracking (UI-SPEC 4.2, D-07). Applied as a base rule so ~50 files that already
-   render h1/h2/h3 without a shared component get consistent tracking automatically. */
-h1,
-h2,
-h3 {
-  letter-spacing: -0.035em;
-}
-h1 {
-  letter-spacing: -0.045em;
-}
-
-/* Focus reads as a glow in this system per the mockup's own comment, but the mechanism
-   stays an outline — do not swap to a box-shadow-only focus indicator without
-   re-verifying it survives Windows High Contrast Mode. */
+/* Focus is an orange outline (never a box-shadow alone), so it survives Windows High
+   Contrast Mode. It uses the text-safe orange: the bright one is under 3:1 on white (WCAG
+   1.4.11), the darker one clears 3:1 on paper, ground, peach and black alike. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid var(--ietc-orange-text);
   outline-offset: 3px;
 }
 
-/* The quiet attention marker beside "Needs attention": a solid dot with a slow expanding ring.
-   The reduced-motion rule below switches the ring off. */
 /* A confirmation card arriving in the corner. The reduced-motion rule below removes the movement. */
 @keyframes toast-in {
   from {
@@ -230,6 +249,8 @@ h1 {
   animation: toast-in 180ms ease-out;
 }
 
+/* The quiet attention marker: a solid dot with a slow expanding ring. The reduced-motion rule
+   below switches the ring off. */
 @keyframes alert-ping {
   0% { transform: scale(0.7); opacity: 0.5; }
   80%, 100% { transform: scale(2.6); opacity: 0; }
