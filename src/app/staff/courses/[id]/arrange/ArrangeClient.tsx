@@ -313,10 +313,10 @@ export function ArrangeClient({
         className="flex flex-col gap-8 lg:border-l lg:border-border lg:pl-10"
       >
         <section>
-          <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+          <h2 className="pb-4 ietc-display text-[25px] leading-none md:text-[28px]">
             Outline
           </h2>
-          <dl className="border-t border-foreground">
+          <dl className="border-t-2 border-ink">
             {(
               [
                 ["Modules", modules.length],

@@ -20,9 +20,9 @@ const NOTICES = {
 export function CheckoutNotice({ notice }: { notice: string | string[] | undefined }) {
   if (notice === "enrolled") {
     return (
-      <p role="status" className="border-l-2 border-warning bg-warning-surface px-4 py-3 text-sm text-foreground">
+      <p role="status" className="rounded-xl bg-warning-surface px-4 py-3.5 text-[15px] text-pill-amber-ink">
         You&apos;re already enrolled in that cohort.{" "}
-        <Link href="/dashboard" className="font-semibold text-accent underline underline-offset-2">
+        <Link href="/dashboard" className="font-bold underline underline-offset-4">
           Go to your dashboard
         </Link>
       </p>
@@ -30,7 +30,7 @@ export function CheckoutNotice({ notice }: { notice: string | string[] | undefin
   }
   if (typeof notice !== "string" || !Object.hasOwn(NOTICES, notice)) return null;
   return (
-    <p role="status" className="border-l-2 border-warning bg-warning-surface px-4 py-3 text-sm text-foreground">
+    <p role="status" className="rounded-xl bg-warning-surface px-4 py-3.5 text-[15px] text-pill-amber-ink">
       {NOTICES[notice as keyof typeof NOTICES]}
     </p>
   );

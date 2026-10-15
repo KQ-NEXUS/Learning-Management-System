@@ -238,7 +238,7 @@ export default async function LearnerProgressPage({
                           <span>
                             {rosterRow.progress.completed} of {rosterRow.progress.total}
                           </span>
-                          <span aria-hidden className="h-1 w-36 overflow-hidden rounded-full bg-accent-wash">
+                          <span aria-hidden className="h-2 w-36 overflow-hidden rounded-full bg-rule">
                             <span
                               className="block h-full rounded-full bg-progress-fill"
                               style={{

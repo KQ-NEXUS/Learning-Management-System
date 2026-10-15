@@ -261,7 +261,7 @@ export function LearnerTicketDetail({
       )}
 
       {resolved && ticket.canReopen && ticket.autoCloseAt && (
-        <section aria-labelledby="resolved-heading" className="flex flex-col gap-4 border-t border-foreground pt-6">
+        <section aria-labelledby="resolved-heading" className="flex flex-col gap-4 border-t-2 border-ink pt-6">
           <h2 id="resolved-heading" className="text-base font-semibold text-foreground">
             Did this solve the issue?
           </h2>
@@ -282,7 +282,7 @@ export function LearnerTicketDetail({
       )}
 
       {(closed || (resolved && !ticket.canReopen)) && (
-        <section className="flex flex-col gap-4 border-t border-foreground pt-6">
+        <section className="flex flex-col gap-4 border-t-2 border-ink pt-6">
           <p className="text-sm text-foreground">
             This ticket is closed. Create a new ticket if you need more help.
           </p>

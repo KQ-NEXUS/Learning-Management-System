@@ -5,7 +5,7 @@ import { profileService } from "@/server/services/profile-service";
 import { notificationService } from "@/server/services/notification-service";
 import { LearnerShell } from "@/components/shell/LearnerShell";
 import { LEARNER_NAV } from "@/components/shell/learner-nav";
-import { LearnerAccountSlot } from "@/components/shell/LearnerAccountSlot";
+import { LearnerAccountSlot, PhoneMenuSignOut } from "@/components/shell/LearnerAccountSlot";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { deriveAvatarDisplay } from "@/lib/avatar-display";
 
@@ -55,7 +55,7 @@ export default async function LearnerDeliveryLayout({
   );
 
   return (
-    <LearnerShell nav={LEARNER_NAV} homeHref="/dashboard" rightSlot={rightSlot}>
+    <LearnerShell nav={LEARNER_NAV} homeHref="/dashboard" rightSlot={rightSlot} mobileMenuExtra={<PhoneMenuSignOut signOut={signOutAction} />}>
       {children}
     </LearnerShell>
   );

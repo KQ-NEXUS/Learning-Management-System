@@ -109,7 +109,7 @@ export function AnonymiseSection({
   // After the outcome: the success note (until navigation) and the server's record of what happened.
   if (anonymised || done) {
     return (
-      <section aria-label="Anonymise account" className="flex flex-col gap-4 border-t border-foreground pt-8">
+      <section aria-label="Anonymise account" className="flex flex-col gap-4 border-t-2 border-ink pt-8">
         {done && (
           <p ref={noteRef} role="status" tabIndex={-1} className={NOTE_SUCCESS}>
             Account anonymised. The learner has been signed out everywhere and can no longer sign in.
@@ -129,7 +129,7 @@ export function AnonymiseSection({
     <section aria-labelledby="anonymise-account-heading" className="flex flex-col gap-4 border-t-2 border-danger pt-8">
       <h2
         id="anonymise-account-heading"
-        className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground"
+        className="ietc-display text-[22px] leading-[1.05]"
       >
         Anonymise account
       </h2>

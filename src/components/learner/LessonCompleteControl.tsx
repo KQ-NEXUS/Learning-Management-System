@@ -57,10 +57,10 @@ export function undoRelockNotice(relockCount: number): string {
 }
 
 const BTN_MARK_COMPLETE =
-  "inline-flex h-[38px] w-fit items-center justify-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-12 w-fit items-center justify-center rounded-[10px] bg-ink px-[22px] text-[15.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-55";
 
 const UNDO_LINK =
-  "w-fit text-sm font-semibold text-muted-foreground underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "w-fit text-[14.5px] font-bold text-ink underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-55";
 
 function MarkCompleteButton() {
   const { pending } = useFormStatus();

@@ -175,7 +175,7 @@ export function CoursesTable({
         canCreate ? (
           <Link
             href="/staff/courses/new"
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+            className="inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
           >
             New course
           </Link>

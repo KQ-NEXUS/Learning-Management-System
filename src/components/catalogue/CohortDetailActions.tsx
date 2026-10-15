@@ -46,9 +46,9 @@ export type CohortDetailActionsProps = {
 };
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50";
 // Danger secondary — kept as its own string, not `${BTN} text-danger`, so the
 // destructive colour isn't left to Tailwind source order against BTN's own
 // `text-foreground` / `border-input-border`.
@@ -249,7 +249,7 @@ function PublishCohortDialogBody({
   const canPublish = blocking.length === 0 && !pending;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4">
       <div
         role="dialog"
         aria-modal="true"
@@ -280,7 +280,7 @@ function PublishCohortDialogBody({
 
         {error && (
           <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-danger">Action not applied</p>
+            <p className="text-[15px] font-bold text-danger">Action not applied</p>
             <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}

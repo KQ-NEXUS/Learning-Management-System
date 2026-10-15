@@ -5,7 +5,7 @@ import { getCurrentActor } from "@/server/auth/current-actor";
 /**
  * The `(lesson)` route-group layout — `/learn/[enrolmentId]/lessons/[lessonId]` only.
  *
- * A lesson is a focus screen: it draws its own frame (a navy course outline beside a white
+ * A lesson is a focus screen: it draws its own frame (a black course outline beside the lesson
  * reading sheet) instead of the learner shell's top bar, so it lives in its own group. The
  * group's parentheses keep the URL exactly `/learn/[enrolmentId]/lessons/[lessonId]`.
  *
@@ -16,5 +16,5 @@ export default async function LessonGroupLayout({ children }: { children: ReactN
   const actor = await getCurrentActor();
   if (!actor) redirect("/signin");
 
-  return <div className="min-h-screen bg-sidebar-bg">{children}</div>;
+  return <div className="min-h-screen bg-ground">{children}</div>;
 }

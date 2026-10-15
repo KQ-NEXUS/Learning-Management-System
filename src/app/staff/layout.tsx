@@ -17,7 +17,7 @@ import { StaffShell, type StaffIdentity, type StaffNavItem } from "./StaffShell"
 /**
  * The admin workspace shell entry point.
  *
- * Rebuilt around the navy sidebar (D-19, D-20) — see `StaffShell.tsx` for the
+ * The IETC top bar with one menu per nav group — see `StaffShell.tsx` for the
  * chrome itself. This file stays a plain async Server Component so the guard
  * below runs, in order, before anything renders.
  *
@@ -103,7 +103,7 @@ export default async function StaffLayout({
     <form action={signOutAction}>
       <button
         type="submit"
-        className="rounded-md px-2 py-2 text-sm font-medium text-sidebar-soft hover:text-white"
+        className="min-h-10 font-semibold text-ink hover:underline hover:underline-offset-4"
       >
         Sign out
       </button>

@@ -33,14 +33,14 @@ export default async function MyLearningPage() {
       />
 
       {cards.length === 0 ? (
-        <div className="flex flex-col items-start gap-3 border-t border-foreground pt-5">
+        <div className="flex flex-col items-start gap-3 border-t-2 border-ink pt-5">
           <p className="text-[16px] font-semibold text-foreground">You&apos;re not enrolled on anything yet</p>
           <p className="text-sm text-muted-foreground">
             Find a course or programme in the catalogue and it will appear here once you&apos;ve enrolled.
           </p>
           <Link
             href="/courses"
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+            className="w-fit inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
           >
             Browse the catalogue
           </Link>
@@ -49,10 +49,10 @@ export default async function MyLearningPage() {
         <>
           {active.length > 0 && (
             <section aria-label="In progress">
-              <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+              <h2 className="pb-4 ietc-display text-[25px] leading-none md:text-[28px]">
                 In progress
               </h2>
-              <div className="border-t border-foreground">
+              <div className="border-t-2 border-ink">
                 {active.map((card) => (
                   <EnrolmentRow key={card.enrolmentId} card={card} />
                 ))}
@@ -61,10 +61,10 @@ export default async function MyLearningPage() {
           )}
           {completed.length > 0 && (
             <section aria-label="Completed">
-              <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+              <h2 className="pb-4 ietc-display text-[25px] leading-none md:text-[28px]">
                 Completed
               </h2>
-              <div className="border-t border-foreground">
+              <div className="border-t-2 border-ink">
                 {completed.map((card) => (
                   <EnrolmentRow key={card.enrolmentId} card={card} openCompleted />
                 ))}

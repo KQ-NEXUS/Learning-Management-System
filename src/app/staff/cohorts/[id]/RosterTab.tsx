@@ -116,7 +116,7 @@ function DeferredCell({ column }: { column: DeferredColumn }) {
 function TrackedProgressCell({ progress }: { progress: TrackedProgress }) {
   return (
     <span className="flex items-center gap-3">
-      <span aria-hidden className="h-1 w-24 overflow-hidden rounded-full bg-accent-wash">
+      <span aria-hidden className="h-2 w-24 overflow-hidden rounded-full bg-rule">
         <span
           className="block h-full rounded-full bg-progress-fill"
           style={{ width: `${Math.min(100, Math.round((progress.completed / Math.max(progress.total, 1)) * 100))}%` }}
@@ -265,7 +265,7 @@ export function RosterTab({
             <button
               type="button"
               onClick={() => setTarget({ action: "add", cohortId })}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
             >
               Add enrolment
             </button>

@@ -123,7 +123,7 @@ export function FormStep({ title, description, children }: FormStepProps) {
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+        <h3 className="ietc-display text-[22px] leading-[1.05] text-ink">{title}</h3>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       {children}
@@ -188,9 +188,9 @@ function answerOf(field: AnswerField): string {
 }
 
 const BTN =
-  "inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-5 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-12 items-center justify-center rounded-[10px] px-[22px] text-[15.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-55";
 const BTN_PRIMARY =
-  "inline-flex min-h-[46px] items-center rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-12 items-center justify-center rounded-[10px] bg-ink px-[22px] text-[15.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-55";
 
 export function ResourceForm({
   title,
@@ -435,7 +435,7 @@ export function ResourceForm({
 
   if (state.status === "denied") {
     return (
-      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 border-t border-foreground py-12">
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 border-t-2 border-ink py-12">
         <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
         <p className="text-sm font-semibold text-foreground">Editing needs additional permission</p>
         <p className="max-w-prose text-sm text-muted-foreground">
@@ -455,7 +455,7 @@ export function ResourceForm({
 
   if (state.status === "error") {
     return (
-      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 border-t border-foreground py-12">
+      <div className="mx-auto flex w-full max-w-[700px] flex-col items-start gap-2 border-t-2 border-ink py-12">
         <p className="text-sm font-semibold text-foreground">Could not load this record</p>
         {state.message && isLicenceRefusalMessage(state.message) ? (
           <LicenceRefusalNote message={state.message} />
@@ -477,7 +477,7 @@ export function ResourceForm({
     return (
       <div
         aria-busy
-        className="mx-auto flex w-full max-w-[700px] flex-col gap-4 border-t border-foreground pt-5"
+        className="mx-auto flex w-full max-w-[700px] flex-col gap-4 border-t-2 border-ink pt-5"
       >
         <span className="h-4 w-48 animate-pulse rounded-sm bg-surface-2" />
         {Array.from({ length: 5 }, (_, i) => (
@@ -515,7 +515,7 @@ export function ResourceForm({
         ) : (
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div className="flex flex-col gap-1">
-              <h2 className="text-[20px] font-semibold tracking-[-0.015em] text-foreground">{title}</h2>
+              <h2 className="ietc-display text-[25px] leading-none text-ink md:text-[28px]">{title}</h2>
               {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
             </div>
           </div>
@@ -529,7 +529,7 @@ export function ResourceForm({
             role="alert"
             aria-labelledby={summaryId}
             tabIndex={-1}
-            className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
+            className="rounded-xl bg-danger-surface px-4 py-3.5"
           >
             <p id={summaryId} className="text-sm font-semibold text-danger">
               {summaryErrors.length} {summaryErrors.length === 1 ? "issue needs" : "issues need"}{" "}
@@ -576,14 +576,14 @@ export function ResourceForm({
                       >
                         <span
                           aria-hidden
-                          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                          className={`inline-flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-extrabold ${
                             isFlagged
                               ? "border-danger bg-danger text-accent-contrast"
                               : isCurrent
-                                ? "border-accent bg-accent text-accent-contrast"
+                                ? "border-ink bg-ink text-white"
                                 : isDone
-                                  ? "border-accent bg-accent-wash text-accent"
-                                  : "border-input-border bg-surface text-muted-foreground"
+                                  ? "border-orange bg-orange text-ink"
+                                  : "border-rule bg-transparent text-ink-soft"
                           }`}
                         >
                           {isFlagged ? "!" : isDone ? <Check className="size-4" /> : index + 1}
@@ -601,7 +601,7 @@ export function ResourceForm({
                       {index < lastIndex && (
                         <span
                           aria-hidden
-                          className={`mx-2 h-px w-4 sm:mx-3 sm:w-12 ${index < currentStep ? "bg-accent" : "bg-border"}`}
+                          className={`mx-2 h-0.5 w-4 sm:mx-3 sm:w-9 ${index < currentStep ? "bg-ink" : "bg-rule"}`}
                         />
                       )}
                     </li>
@@ -619,7 +619,7 @@ export function ResourceForm({
                 role="alert"
                 aria-labelledby={`${summaryId}-issues`}
                 tabIndex={-1}
-                className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
+                className="rounded-xl bg-danger-surface px-4 py-3.5"
               >
                 <p id={`${summaryId}-issues`} className="text-sm font-semibold text-danger">
                   {issues.length} {issues.length === 1 ? "thing needs" : "things need"} fixing before you continue
@@ -650,7 +650,7 @@ export function ResourceForm({
                   <h3
                     ref={index === currentStep ? stepHeadingRef : undefined}
                     tabIndex={-1}
-                    className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground outline-none"
+                    className="ietc-display text-[22px] leading-[1.05] text-ink outline-none"
                   >
                     {step.props.title}
                   </h3>
@@ -666,7 +666,7 @@ export function ResourceForm({
                   <h3
                     ref={stepHeadingRef}
                     tabIndex={-1}
-                    className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground outline-none"
+                    className="ietc-display text-[22px] leading-[1.05] text-ink outline-none"
                   >
                     Review and create
                   </h3>
@@ -705,7 +705,7 @@ export function ResourceForm({
       </div>
 
       <div
-        className={`mt-8 flex flex-wrap items-center gap-4 border-t border-foreground pt-6 ${
+        className={`mt-8 flex flex-wrap items-center gap-4 border-t border-rule pt-6 ${
           stepped ? "sticky bottom-0 z-10 bg-surface pb-4" : ""
         } ${hideFooter ? "hidden" : ""}`}
       >
@@ -766,9 +766,9 @@ export function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-6 border-t border-border py-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-14">
+    <section className="grid gap-4 border-t border-rule py-7 first-of-type:border-t-2 first-of-type:border-ink lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-7">
       <div className="flex flex-col gap-2">
-        <h3 className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+        <h3 className="ietc-display text-[22px] leading-[1.05] text-ink">{title}</h3>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       <div className="flex flex-col gap-5">{children}</div>
@@ -818,7 +818,7 @@ export function FormField({
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-semibold text-foreground">
+      <label htmlFor={id} className="text-[15px] font-bold text-ink">
         {label}
         {required && (
           <span className="ml-1 text-xs font-normal text-muted-foreground" aria-hidden>
@@ -835,12 +835,12 @@ export function FormField({
       })}
 
       {hint && !error && (
-        <p id={hintId} className="text-xs text-muted-foreground">
+        <p id={hintId} className="text-[14.5px] text-ink-soft">
           {hint}
         </p>
       )}
       {error && (
-        <p id={errorId} role="alert" className="text-sm text-danger">
+        <p id={errorId} role="alert" className="text-[14.5px] font-semibold text-danger">
           {error}
         </p>
       )}
@@ -856,7 +856,7 @@ export function TextInput(
   return (
     <input
       {...rest}
-      className={`h-12 rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger ${
+      className={`min-h-[52px] rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base font-medium text-ink placeholder:text-placeholder hover:border-ink aria-[invalid=true]:border-danger ${
         mono ? "font-mono tabular-nums" : ""
       } ${className ?? ""}`}
     />

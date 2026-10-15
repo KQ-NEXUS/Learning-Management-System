@@ -117,7 +117,7 @@ export function StaffTicketTimeline({
       {entries.map((entry) => {
         if (entry.kind === "EVENT") {
           return (
-            <li key={entry.id} className="flex min-w-0 flex-wrap items-baseline justify-between gap-2 border-l-2 border-border bg-surface-2 px-4 py-2">
+            <li key={entry.id} className="flex min-w-0 flex-wrap items-baseline justify-between gap-2 rounded-xl bg-surface-2 px-4 py-3.5">
               <span className="min-w-0 text-[13px] break-words text-muted-foreground [overflow-wrap:anywhere]">
                 {describeTicketEvent(entry.event, names)}
                 {entry.event.reason ? <> — <span className="whitespace-pre-wrap">Reason: {entry.event.reason}</span></> : null}

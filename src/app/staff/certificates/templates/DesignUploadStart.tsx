@@ -175,7 +175,7 @@ export function DesignUploadStart({
         subtitle="Use your own certificate artwork as the background. You'll place the learner's name, the award, the date and the verification reference on top of it."
       />
 
-      <div className="grid gap-x-16 gap-y-8 border-t border-foreground pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid gap-x-16 gap-y-8 border-t-2 border-ink pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-6">
           <label className={FIELD}>
             Certificate design

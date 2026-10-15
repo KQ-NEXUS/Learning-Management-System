@@ -94,7 +94,7 @@ export default async function LessonReadingPage({
     if (openResult.reason !== "access-window-closed") {
       return (
         <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
-          <div className="flex flex-col items-start gap-3 border-t border-foreground py-12">
+          <div className="flex flex-col items-start gap-3 border-t-2 border-ink py-12">
             <p className="text-base font-semibold text-foreground">This lesson isn&apos;t available right now</p>
             <p className="max-w-prose text-sm text-muted-foreground">
               It may still be locked until you finish an earlier lesson, or the link may be out of date.
@@ -102,7 +102,7 @@ export default async function LessonReadingPage({
             </p>
             <Link
               href={`/learn/${enrolmentId}`}
-              className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              className="inline-flex min-h-10 items-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
             >
               Back to your course
             </Link>
@@ -114,7 +114,7 @@ export default async function LessonReadingPage({
     if (path.enrolment.status === "COMPLETED") {
       return (
         <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
-          <div className="flex flex-col items-start gap-3 border-t border-foreground py-12">
+          <div className="flex flex-col items-start gap-3 border-t-2 border-ink py-12">
             <p className="text-base font-semibold text-foreground">You&apos;ve completed this course</p>
             <p className="max-w-prose text-sm text-muted-foreground">
               Lessons are closed now that the course is complete. Your progress, results and certificate stay on
@@ -123,7 +123,7 @@ export default async function LessonReadingPage({
             <div className="flex flex-wrap items-center gap-4">
               <Link
                 href="/dashboard"
-                className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+                className="inline-flex min-h-10 items-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
               >
                 View your certificate
               </Link>
@@ -141,7 +141,7 @@ export default async function LessonReadingPage({
     // (T-09-38).
     return (
       <LessonFrame backHref={`/learn/${enrolmentId}`} backLabel="Back to course">
-        <div className="flex flex-col gap-2 border-t border-foreground py-12">
+        <div className="flex flex-col gap-2 border-t-2 border-ink py-12">
           <p className="text-base font-semibold text-foreground">Your access window has ended</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             You can no longer open lesson content, but your progress and results stay on record.
@@ -243,10 +243,10 @@ export default async function LessonReadingPage({
   }
 
   const NAV_BTN =
-    "inline-flex min-h-[46px] items-center gap-2 rounded-md border border-input-border bg-surface px-5 text-sm font-semibold text-foreground hover:bg-surface-2";
+    "inline-flex min-h-12 items-center gap-2.5 rounded-[10px] px-[22px] text-[15.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5";
   const NAV_BTN_PRIMARY =
-    "inline-flex min-h-[46px] items-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
-  const NAV_BTN_OFF = "inline-flex min-h-[46px] items-center gap-2 px-5 text-sm text-muted-foreground";
+    "inline-flex min-h-12 items-center gap-2.5 rounded-[10px] bg-ink px-[22px] text-[15.5px] font-bold text-white hover:bg-ink-hover";
+  const NAV_BTN_OFF = "inline-flex min-h-12 items-center gap-2.5 px-[22px] text-[15px] text-ink-soft";
 
   return (
     <LessonFrame
@@ -255,10 +255,10 @@ export default async function LessonReadingPage({
       progress={requiredTotal > 0 ? { done: requiredDone, total: requiredTotal } : undefined}
       outline={<LessonOutline enrolmentId={enrolmentId} courses={outlineCourses} currentLessonId={lessonId} />}
     >
-      <p className="text-sm text-muted-foreground">
+      <p className="text-[14.5px] font-semibold text-ink-soft">
         {moduleTitle ? `${moduleTitle} · ` : ""}Lesson {lessonNumber} of {lessonsInModule}
       </p>
-      <h1 className="text-[36px] leading-[1.06] font-bold tracking-[-0.04em] break-words text-foreground md:text-[48px]">
+      <h1 className="ietc-display text-[clamp(38px,4.4vw,52px)] break-words">
         {content.title}
       </h1>
 
@@ -276,17 +276,19 @@ export default async function LessonReadingPage({
 
       {quiz && <QuizAttemptPanel {...quiz} enrolmentId={enrolmentId} lessonId={lessonId} />}
       {assignment && <AssignmentSubmissionPanel {...assignment} />}
-      <LessonCompleteControl
-        enrolmentId={enrolmentId}
-        lessonId={lessonId}
-        completed={openResult.lesson.completed}
-        completedSource={openResult.lesson.completedSource}
-        allowManualComplete={openResult.lesson.allowManualComplete}
-        lessonType={content.type}
-        relockCount={relockCount}
-      />
+      <div className="rounded-[18px] bg-paper p-5 empty:hidden">
+        <LessonCompleteControl
+          enrolmentId={enrolmentId}
+          lessonId={lessonId}
+          completed={openResult.lesson.completed}
+          completedSource={openResult.lesson.completedSource}
+          allowManualComplete={openResult.lesson.allowManualComplete}
+          lessonType={content.type}
+          relockCount={relockCount}
+        />
+      </div>
 
-      <nav className="flex items-center justify-between pt-4 text-sm">
+      <nav aria-label="Lessons" className="flex items-center justify-between gap-3 pt-4">
         {prev ? (
           <Link href={`/learn/${enrolmentId}/lessons/${prev.lesson.id}`} className={NAV_BTN}>
             ← Previous lesson

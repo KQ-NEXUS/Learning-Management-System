@@ -82,7 +82,7 @@ export function ExportSection({
     <section aria-labelledby="export-data-heading" className="flex flex-col gap-4">
       <h2
         id="export-data-heading"
-        className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground"
+        className="ietc-display text-[22px] leading-[1.05]"
       >
         Export data
       </h2>

@@ -164,7 +164,7 @@ function ResultCard({ result }: { result: LearnerResultCard }) {
 
 export function ResultsList({ results }: Props) {
   return (
-    <div className="border-t border-foreground">
+    <div className="border-t-2 border-ink">
       {results.map((result) => (
         <ResultCard key={result.assessmentId} result={result} />
       ))}

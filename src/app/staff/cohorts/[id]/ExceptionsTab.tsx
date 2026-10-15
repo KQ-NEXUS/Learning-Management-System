@@ -118,7 +118,7 @@ function sessionHref(cohortId: string, row: AttendanceExceptionView): string | n
 }
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5";
 
 export function ExceptionsTab({
   cohortId,
@@ -202,7 +202,7 @@ export function ExceptionsTab({
     <div className="flex flex-col gap-4">
       {!denied && (
         <div className="flex flex-wrap items-center gap-4 border-b border-border py-3">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-[15px] font-bold text-ink">
             Category
           </span>
           {EXCEPTION_CATEGORY_OPTIONS.map((option) => (

@@ -13,7 +13,7 @@ import { Eye, EyeOff } from "lucide-react";
  * `aria-pressed`, and the field starts hidden on every mount.
  */
 const DEFAULT_INPUT_CLASS =
-  "h-12 w-full rounded-md border border-input-border bg-surface px-4 text-sm text-foreground placeholder:text-muted-foreground";
+  "min-h-[52px] rounded-[10px] border-[1.5px] border-field bg-paper px-4 text-base font-medium text-ink placeholder:text-placeholder hover:border-ink";
 
 export function PasswordInput({
   className,
@@ -22,18 +22,18 @@ export function PasswordInput({
   const [visible, setVisible] = useState(false);
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       <input
         {...rest}
         type={visible ? "text" : "password"}
-        className={`${className ?? DEFAULT_INPUT_CLASS} pr-12`}
+        className={`${className ?? DEFAULT_INPUT_CLASS} w-full pr-14`}
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Hide password" : "Show password"}
         aria-pressed={visible}
-        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+        className="absolute inset-y-1 right-1 flex w-11 items-center justify-center rounded-[7px] text-ink-soft hover:bg-ground hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-orange"
       >
         {visible ? <EyeOff aria-hidden className="size-5" /> : <Eye aria-hidden className="size-5" />}
       </button>

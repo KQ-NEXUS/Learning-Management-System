@@ -196,7 +196,7 @@ export default async function PaymentDetailPage({
           content: (
             <div className="flex flex-col gap-4">
               {detail.settlementState === "EXCEPTION" && (
-                <div role="alert" className="flex flex-col gap-1 border-l-2 border-warning py-1 pl-4">
+                <div role="alert" className="flex flex-col gap-1 rounded-xl bg-warning-surface px-4 py-3.5 text-pill-amber-ink">
                   <p className="text-sm font-semibold text-warning">
                     Settlement doesn&apos;t match the expected amount
                   </p>
@@ -248,7 +248,7 @@ export default async function PaymentDetailPage({
           aside: true,
           content: alreadyPaid ? (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1 border-l-2 border-warning py-1 pl-4">
+              <div className="flex flex-col gap-1 rounded-xl bg-warning-surface px-4 py-3.5 text-pill-amber-ink">
                 <p className="text-sm font-semibold text-warning">
                   {detail.existingAttempt ? "This order is already paid" : "This order can’t be confirmed manually"}
                 </p>

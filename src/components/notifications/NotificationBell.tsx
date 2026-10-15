@@ -119,14 +119,14 @@ export function NotificationBell({
         aria-expanded={open}
         aria-label={bellAriaLabel(unread)}
         onClick={() => setOpen((value) => !value)}
-        className="relative flex size-11 shrink-0 items-center justify-center rounded-md text-sidebar-fg hover:bg-sidebar-hover"
+        className="relative flex size-11 shrink-0 items-center justify-center rounded-[10px] text-ink hover:bg-ground"
       >
         <Bell aria-hidden className="size-5" />
         {badge && (
           <span
             aria-hidden
             data-testid="notification-badge"
-            className="absolute top-0.5 right-0.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1 text-[14px] font-semibold text-accent-contrast"
+            className="absolute top-0.5 right-0 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-orange px-1 text-[11px] font-extrabold text-ink"
           >
             {badge}
           </span>

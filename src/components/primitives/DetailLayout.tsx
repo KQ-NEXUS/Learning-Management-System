@@ -71,9 +71,9 @@ export function DetailLayout({
 
   if (state.status === "denied") {
     return (
-      <div className="flex max-w-[680px] flex-col items-start gap-3 border-t border-foreground pt-12 pb-3">
+      <div className="flex max-w-[680px] flex-col items-start gap-3 border-t-2 border-ink pt-12 pb-3">
         <span className="font-mono text-sm text-muted-foreground">403</span>
-        <h2 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
+        <h2 className="ietc-display text-[clamp(30px,3.4vw,46px)] text-foreground">
           You do not have access to this record
         </h2>
         <p className="max-w-prose text-base text-foreground-soft">
@@ -88,7 +88,7 @@ export function DetailLayout({
 
   if (state.status === "error") {
     return (
-      <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
+      <div className="flex flex-col items-start gap-2 border-t-2 border-ink py-12">
         <p className="text-sm font-semibold text-foreground">Could not load this record</p>
         <p className="max-w-prose text-sm text-muted-foreground">
           {state.message ?? "The request failed. Nothing has been changed."}
@@ -97,7 +97,7 @@ export function DetailLayout({
           <button
             type="button"
             onClick={state.onRetry}
-            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+            className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
           >
             Retry
           </button>
@@ -110,7 +110,7 @@ export function DetailLayout({
     return (
       <div
         aria-busy
-        className="flex flex-col gap-6 border-t border-foreground pt-5"
+        className="flex flex-col gap-6 border-t-2 border-ink pt-5"
       >
         <span className="h-5 w-64 animate-pulse rounded-sm bg-surface-2" />
         <span className="h-3 w-40 animate-pulse rounded-sm bg-surface-2" />
@@ -232,11 +232,11 @@ function StackedSection({ section }: { section: DetailSection }) {
     <section aria-labelledby={`heading-${section.id}`} className="flex flex-col gap-4">
       <h2
         id={`heading-${section.id}`}
-        className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground"
+        className="ietc-display text-[25px] leading-none md:text-[28px]"
       >
         {section.label}
       </h2>
-      <div className="border-t border-foreground">
+      <div className="border-t-2 border-ink">
         <SectionBody section={section} />
       </div>
     </section>
@@ -257,7 +257,7 @@ function SectionBody({ section }: { section: DetailSection }) {
         <button
           type="button"
           onClick={section.error.onRetry}
-          className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+          className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
         >
           Retry
         </button>

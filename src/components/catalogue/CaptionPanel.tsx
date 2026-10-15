@@ -203,9 +203,9 @@ export function CaptionPanel({
   }
 
   return (
-    <div className="flex w-full flex-col gap-2 border-t border-border pt-4">
-      <p className="flex items-center gap-2 text-sm font-semibold">
-        <Captions aria-hidden className="size-4 text-muted-foreground" />
+    <div className="flex w-full flex-col gap-2.5 rounded-xl bg-ground px-4 py-3.5">
+      <p className="flex items-center gap-2 font-bold">
+        <Captions aria-hidden className="size-[19px]" />
         Captions
       </p>
 

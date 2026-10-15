@@ -86,8 +86,8 @@ export default async function CoursePublicPreviewPage({
       {facts.length > 0 && (
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {facts.map(([label, value]) => (
-            <div key={label} className="flex min-w-0 flex-col gap-1 border-t border-foreground pt-5">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+            <div key={label} className="flex min-w-0 flex-col gap-1 border-t-2 border-ink pt-5">
+              <dt className="text-[15px] font-bold text-ink">{label}</dt>
               <dd className="break-words text-sm text-foreground">{value}</dd>
             </div>
           ))}

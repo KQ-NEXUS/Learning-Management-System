@@ -141,7 +141,7 @@ function Filters({ report }: { report: ClientAvailableDatasetReport }) {
       <label className={FIELD}>{labelText}<select className={CONTROL} name={name} defaultValue={(filters as Record<string, string | undefined>)[name] ?? ""}><option value="">{all}</option>{values.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
     );
     return (
-      <form method="get" aria-label="Report filters" className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-2 xl:grid-cols-4">
+      <form method="get" aria-label="Report filters" className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 border-t-2 border-ink pt-5 sm:grid-cols-2 xl:grid-cols-4">
         <label className={FIELD}>Date from<input className={CONTROL} type="date" name="from" defaultValue={filters.from ?? ""} /></label>
         <label className={FIELD}>Date to<input className={CONTROL} type="date" name="to" defaultValue={filters.to ?? ""} /></label>
         {select("category", "Category", "All categories", SUPPORT_CATEGORIES.map((value) => [value, label(value)] as const))}
@@ -160,7 +160,7 @@ function Filters({ report }: { report: ClientAvailableDatasetReport }) {
     <form
       method="get"
       aria-label="Report filters"
-      className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-2 xl:grid-cols-4"
+      className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 border-t-2 border-ink pt-5 sm:grid-cols-2 xl:grid-cols-4"
     >
       {filters.status && <input type="hidden" name="status" value={filters.status} />}
       <label className={FIELD}>Date from<input className={CONTROL} type="date" name="from" defaultValue={filters.from ?? ""} /></label>
@@ -184,9 +184,9 @@ function Filters({ report }: { report: ClientAvailableDatasetReport }) {
 /** A label and value on the navy band. */
 function BandFact({ label, children, first }: { label: string; children: React.ReactNode; first?: boolean }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${first ? "" : "lg:border-l lg:border-sidebar-line lg:pl-6"}`}>
-      <dt className="text-sm text-sidebar-soft">{label}</dt>
-      <dd className="text-base text-white break-words">{children}</dd>
+    <div className={`flex min-w-0 flex-col gap-1 ${first ? "" : "lg:border-l lg:border-rule lg:pl-7"}`}>
+      <dt className="text-sm text-ink-soft">{label}</dt>
+      <dd className="text-base font-bold text-ink break-words">{children}</dd>
     </div>
   );
 }
@@ -238,8 +238,8 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
         <BandFact label="Data as of">{dateTime(request.asOf)}</BandFact>
       </dl>
       {definition.id === "support" ? (
-        <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ? filterDate(request.filters.from) : "30 days before data time"} to {request.filters.to ? filterDate(request.filters.to) : "data as of"}; {request.filters.category ? label(request.filters.category) : "all categories"}; {request.filters.priority ? label(request.filters.priority) : "all priorities"}; {request.filters.queue ? label(request.filters.queue) : "all queues"}; {request.filters.owner ? (request.filters.owner === "UNASSIGNED" ? "unassigned" : "selected owner") : "all owners"}{request.filters.status ? `; ${label(request.filters.status)}` : ""}. Current health counts every open ticket now; performance uses the range shown.</p>
-      ) : <p className="text-sm break-words text-sidebar-soft">Filters: {request.filters.from ? filterDate(request.filters.from) : "All dates"} to {request.filters.to ? filterDate(request.filters.to) : "data as of"}; {request.filters.programmeId ? "selected programme" : "all authorised programmes"}; {request.filters.cohortId ? "selected cohort" : "all authorised cohorts"}{request.filters.provider ? `; ${providerLabel(request.filters.provider)}` : ""}{request.filters.currency ? `; ${request.filters.currency}` : ""}{request.filters.status ? `; ${humanizeCode(request.filters.status)}` : ""}</p>}
+        <p className="text-sm break-words text-ink-soft">Filters: {request.filters.from ? filterDate(request.filters.from) : "30 days before data time"} to {request.filters.to ? filterDate(request.filters.to) : "data as of"}; {request.filters.category ? label(request.filters.category) : "all categories"}; {request.filters.priority ? label(request.filters.priority) : "all priorities"}; {request.filters.queue ? label(request.filters.queue) : "all queues"}; {request.filters.owner ? (request.filters.owner === "UNASSIGNED" ? "unassigned" : "selected owner") : "all owners"}{request.filters.status ? `; ${label(request.filters.status)}` : ""}. Current health counts every open ticket now; performance uses the range shown.</p>
+      ) : <p className="text-sm break-words text-ink-soft">Filters: {request.filters.from ? filterDate(request.filters.from) : "All dates"} to {request.filters.to ? filterDate(request.filters.to) : "data as of"}; {request.filters.programmeId ? "selected programme" : "all authorised programmes"}; {request.filters.cohortId ? "selected cohort" : "all authorised cohorts"}{request.filters.provider ? `; ${providerLabel(request.filters.provider)}` : ""}{request.filters.currency ? `; ${request.filters.currency}` : ""}{request.filters.status ? `; ${humanizeCode(request.filters.status)}` : ""}</p>}
     </div>
   );
 
@@ -262,7 +262,7 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
       />
 
       {!report.available ? (
-        <section className="border-t border-foreground pt-5">
+        <section className="border-t-2 border-ink pt-5">
           <h2 className={SECTION_TITLE}>Not available yet</h2>
           <p className="mt-2 max-w-prose text-sm break-words text-muted-foreground">This report will become available when {definition.unavailableReason} starts collecting authoritative data.</p>
         </section>
@@ -289,7 +289,7 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
           {failedSections.includes("filters") ? <SectionError section="filters" onRetry={retry} /> : <Filters report={report} />}
           {failedSections.includes("metrics") ? <SectionError section="metrics" onRetry={retry} /> : (
             definition.id === "support" ? <SupportMetrics report={report} /> :
-            <section aria-label="Report metrics" className="grid grid-cols-2 gap-x-6 gap-y-8 border-t border-foreground pt-5 lg:grid-cols-5">
+            <section aria-label="Report metrics" className="grid grid-cols-2 gap-x-6 gap-y-8 border-t-2 border-ink pt-5 lg:grid-cols-5">
               {report.metrics.map((metric, index) => (
                 <Link
                   key={metric.id}
@@ -308,7 +308,7 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
           {report.breakdown.length > 0 && definition.id !== "support" && (failedSections.includes("breakdown") ? <SectionError section="breakdown" onRetry={retry} /> : (
             <section aria-labelledby="breakdown-heading">
               <h2 id="breakdown-heading" className={`${SECTION_TITLE} pb-4`}>Breakdown</h2>
-              <ul className="flex flex-wrap gap-x-8 gap-y-3 border-t border-foreground pt-4">
+              <ul className="flex flex-wrap gap-x-8 gap-y-3 border-t-2 border-ink pt-4">
                 {report.breakdown.map((item) => (
                   <li key={item.id}>
                     <Link href={item.href} className="inline-flex min-h-10 items-center gap-2 text-sm text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
@@ -324,7 +324,7 @@ export function ReportDashboard({ report, sectionErrors = [] }: { report: Client
             <section id="rows" aria-labelledby="rows-heading" className="flex min-w-0 flex-col gap-4">
               <h2 id="rows-heading" className={SECTION_TITLE}>Matching rows ({count(report.totalRows)})</h2>
               {report.totalRows === 0 ? (
-                <div className="border-t border-foreground pt-5">
+                <div className="border-t-2 border-ink pt-5">
                   <h3 className="text-base font-semibold text-foreground">No {definition.id} match these filters</h3>
                   <p className="mt-2 text-sm text-muted-foreground">The report was checked using the filters and scope shown above. Adjust or clear filters to broaden the result.</p>
                 </div>
@@ -345,7 +345,7 @@ function SupportMetrics({ report }: { report: ClientAvailableDatasetReport }) {
   return (
     <>
       {groups.map(([title, section, note]) => (
-        <section key={section} aria-label={title} className="flex flex-col gap-4 border-t border-foreground pt-5">
+        <section key={section} aria-label={title} className="flex flex-col gap-4 border-t-2 border-ink pt-5">
           <div>
             <h2 className={SECTION_TITLE}>{title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{note}</p>
@@ -372,7 +372,7 @@ function SupportBreakdown({ report }: { report: ClientAvailableDatasetReport }) 
     <section aria-labelledby="breakdown-heading" className="flex flex-col gap-5">
       <h2 id="breakdown-heading" className={`${SECTION_TITLE} pb-1`}>Breakdowns</h2>
       {groups.map((group) => (
-        <div key={group} className="border-t border-foreground pt-4">
+        <div key={group} className="border-t-2 border-ink pt-4">
           <h3 className="text-sm font-semibold text-foreground">{group}</h3>
           <ul className="mt-2 flex flex-wrap gap-x-8 gap-y-3">
             {report.breakdown.filter((item) => (item.group ?? "Breakdown") === group).map((item) => (
@@ -403,7 +403,7 @@ function Rows({ report }: { report: ClientAvailableDatasetReport }) {
   const headers = report.rows[0] ? rowFields(report.rows[0]).map(([label]) => label) : [];
   return (
     <>
-      <div role="region" tabIndex={0} aria-label="Scrollable matching rows" className="hidden min-w-0 overflow-x-auto border-t border-foreground sm:block">
+      <div role="region" tabIndex={0} aria-label="Scrollable matching rows" className="hidden min-w-0 overflow-x-auto border-t-2 border-ink sm:block">
         <table className="min-w-max border-collapse text-sm">
           <caption className="sr-only">Matching {report.definition.id} rows</caption>
           <thead>
@@ -418,7 +418,7 @@ function Rows({ report }: { report: ClientAvailableDatasetReport }) {
           </tbody>
         </table>
       </div>
-      <ul className="flex flex-col border-t border-foreground sm:hidden">
+      <ul className="flex flex-col border-t-2 border-ink sm:hidden">
         {report.rows.map((row) => (
           <li key={row.id} className="min-w-0 border-b border-border py-4">
             <dl className="grid grid-cols-1 gap-3">

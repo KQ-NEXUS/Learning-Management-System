@@ -217,7 +217,7 @@ export function AttendanceMarkClient({
       )}
 
       {roster.length === 0 ? (
-        <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
+        <div className="flex flex-col items-start gap-2 border-t-2 border-ink py-12">
           <p className="text-sm font-semibold text-foreground">Nothing to mark yet</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             Attendance opens when the session starts. Before then you can only mark excused or
@@ -256,13 +256,13 @@ export function AttendanceMarkClient({
               return (
                 <li
                   key={row.enrolmentId}
-                  className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-foreground pt-5"
+                  className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t-2 border-ink pt-5"
                 >
                   <fieldset className="flex flex-col gap-1">
                     <legend className="text-sm font-semibold text-foreground">{row.learnerName}</legend>
                     <span className="text-[13px] text-muted-foreground">{row.learnerEmail}</span>
                     {row.isCorrection && (
-                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span className="text-[15px] font-bold text-ink">
                         Corrected
                       </span>
                     )}
@@ -305,7 +305,7 @@ export function AttendanceMarkClient({
                 type="button"
                 onClick={handleSave}
                 disabled={!dirty || saving}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save attendance"}
               </button>

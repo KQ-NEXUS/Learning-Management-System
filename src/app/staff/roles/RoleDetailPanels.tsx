@@ -143,7 +143,7 @@ export function RolePermissionsPanel({
 }
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5";
 const BTN_DANGER =
   "rounded-md border border-danger/30 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface";
 

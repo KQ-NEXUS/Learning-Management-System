@@ -210,7 +210,7 @@ export function AssignmentSubmissionPanel(props: Props) {
 
   return (
     <section
-      className="flex flex-col gap-4 border-t border-foreground pt-5"
+      className="flex flex-col gap-4 border-t-2 border-ink pt-5"
       aria-label="Assignment submission"
     >
       <h2 className="flex items-center gap-2 text-lg font-semibold">

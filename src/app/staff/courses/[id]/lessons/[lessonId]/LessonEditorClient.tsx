@@ -90,14 +90,14 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
             {props.mode === "edit" && (
               <Link
                 href={`/staff/courses/${courseId}/preview/lessons/${props.lessonId}`}
-                className="inline-flex min-h-[46px] items-center rounded-md border border-sidebar-line px-5 text-sm font-semibold text-white hover:bg-sidebar-hover"
+                className="inline-flex min-h-12 items-center justify-center rounded-[10px] px-[22px] text-[15.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
               >
                 Preview
               </Link>
             )}
             <Link
               href={`/staff/courses/${courseId}/arrange`}
-              className="inline-flex min-h-[46px] items-center rounded-md border border-sidebar-line px-5 text-sm font-semibold text-white hover:bg-sidebar-hover"
+              className="inline-flex min-h-12 items-center justify-center rounded-[10px] px-[22px] text-[15.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               Cancel
             </Link>
@@ -195,7 +195,7 @@ export function LessonEditorClient(props: LessonEditorClientProps) {
       </ResourceForm>
 
       {props.mode === "edit" && (
-        <div className="flex flex-col items-start gap-2 border-t border-foreground pt-5">
+        <div className="flex flex-col items-start gap-2 border-t-2 border-ink pt-5">
           <p className="text-sm font-semibold">Withdraw this lesson</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             A withdrawn lesson leaves published cohorts untouched and can be restored from the

@@ -275,7 +275,7 @@ export function CohortForm(
                   onChange={(e) =>
                     setOfferKind(e.target.value as "" | "COURSE" | "PROGRAMME")
                   }
-                  className="h-12 rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground aria-[invalid=true]:border-danger"
+                  className="h-12 min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink aria-[invalid=true]:border-danger"
                 >
                   <option value="">Choose a kind…</option>
                   <option value="COURSE">Course</option>
@@ -296,7 +296,7 @@ export function CohortForm(
                     {...field}
                     required
                     defaultValue={values.courseId ?? ""}
-                    className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+                    className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
                   >
                     <option value="">Choose a course…</option>
                     {props.courses.map((c) => (
@@ -321,7 +321,7 @@ export function CohortForm(
                     {...field}
                     required
                     defaultValue={values.programmeId ?? ""}
-                    className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+                    className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
                   >
                     <option value="">Choose a programme…</option>
                     {props.programmes.map((p) => (
@@ -351,7 +351,7 @@ export function CohortForm(
                   {...field}
                   required
                   defaultValue={values.deliveryMode ?? ""}
-                  className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+                  className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
                 >
                   <option value="" disabled>
                     Choose a delivery mode…
@@ -377,7 +377,7 @@ export function CohortForm(
                   {...field}
                   required
                   defaultValue={selectedTimezone}
-                  className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+                  className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>

@@ -279,7 +279,7 @@ export function NotificationDrawer({
     <div
       onKeyDown={onKeyDown}
       onClick={() => closeDrawer(true)}
-      className="fixed inset-0 z-50 bg-foreground/40"
+      className="fixed inset-0 z-50 bg-ink/45"
     >
       <div
         ref={panelRef}

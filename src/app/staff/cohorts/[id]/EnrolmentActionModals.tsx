@@ -66,7 +66,7 @@ const ENROLMENT_SUCCESS: Record<string, string> = {
   cancel: "Enrolment cancelled",
 };
 
-const FIELD_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+const FIELD_LABEL = "text-[15px] font-bold text-ink";
 const FIELD_INPUT = "rounded-md border border-input-border bg-surface px-2 py-1 text-sm text-foreground";
 
 export function EnrolmentActionModals({

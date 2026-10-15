@@ -22,7 +22,7 @@ const BTN_PRIMARY =
 // Each section is one row: a 280px title + description column beside the form, over a hairline.
 const CARD = "grid gap-6 border-t border-border py-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-14";
 const CARD_HEADER = "flex flex-col gap-2";
-const CARD_TITLE = "text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground";
+const CARD_TITLE = "ietc-display text-[22px] leading-[1.05]";
 const CARD_SUBCOPY = "text-sm text-muted-foreground";
 const CARD_BODY = "flex max-w-[420px] flex-col gap-4";
 const ERROR_BANNER =

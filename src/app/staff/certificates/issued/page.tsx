@@ -43,7 +43,7 @@ export default async function IssuedCertificatesPage({
         title="All certificates"
         breadcrumbs={[{ label: "Certificates", href: "/staff/certificates" }, { label: "All certificates" }]}
         actions={
-          <Link href="/staff/certificates" className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover">
+          <Link href="/staff/certificates" className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5">
             Pending issuance
           </Link>
         }

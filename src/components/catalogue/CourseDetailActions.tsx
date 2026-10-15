@@ -44,9 +44,9 @@ export type CourseDetailActionsProps = {
 type Feedback = { tone: "success" | "danger"; text: string } | null;
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50";
 // Accent / danger secondaries — their own strings, not `${BTN} text-accent`, so the
 // colour isn't left to Tailwind source order against BTN's own `text-foreground`
 // / `border-input-border` (which wins, leaving the button ink-coloured).

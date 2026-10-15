@@ -149,17 +149,17 @@ export type ResourceTableProps<T> = {
   emptyHeading?: string;
 };
 
-const CELL = "px-3 py-4 align-middle first:pl-0 last:pr-0 lg:px-4";
+const CELL = "py-3.5 pr-4 align-middle last:pr-0";
 const HEAD =
-  "px-3 py-3 text-left text-[13px] font-medium text-muted-foreground first:pl-0 last:pr-0 lg:px-4";
+  "py-2.5 pr-4 text-left text-[13.5px] font-bold whitespace-nowrap text-ink-soft last:pr-0";
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover";
 
 function Panel({ children }: { children: ReactNode }) {
   return (
-    <div className="flex max-w-[640px] flex-col items-start gap-3 border-t border-foreground pt-12 pb-3">
+    <div className="flex max-w-[640px] flex-col items-start gap-3 border-t-2 border-ink pt-12 pb-3">
       {children}
     </div>
   );
@@ -254,7 +254,7 @@ export function ResourceTable<T>({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex flex-col gap-1">
               {title && (
-                <h2 className="text-base font-semibold tracking-tight text-foreground">
+                <h2 className="ietc-display text-[25px] leading-none md:text-[28px]">
                   {title}
                 </h2>
               )}
@@ -289,9 +289,9 @@ export function ResourceTable<T>({
                   type="button"
                   aria-pressed={active}
                   onClick={() => onFilterChange?.(filter.name, option.value)}
-                  className={`-mb-px shrink-0 border-b-2 pb-3 font-medium whitespace-nowrap ${
+                  className={`-mb-px shrink-0 border-b-[3px] pb-3 font-bold whitespace-nowrap ${
                     active
-                      ? "border-accent font-semibold text-foreground"
+                      ? "border-orange text-ink"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -330,7 +330,7 @@ export function ResourceTable<T>({
                   <div className="relative flex min-w-0 items-center">
                     <Search
                       aria-hidden
-                      className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground"
+                      className="pointer-events-none absolute left-3 size-4 text-ink-soft"
                     />
                     <input
                       id={filterId}
@@ -340,14 +340,14 @@ export function ResourceTable<T>({
                       onChange={(e) =>
                         onFilterChange?.(filter.name, e.target.value)
                       }
-                      className="h-11 w-[340px] max-w-full rounded-md border border-input-border bg-surface py-1 pr-2 pl-8 text-sm"
+                      className="min-h-11 w-[340px] max-w-full rounded-[10px] border-[1.5px] border-field bg-paper py-1 pr-3 pl-9 text-base hover:border-ink"
                     />
                   </div>
                 ) : isSegmented ? (
                   <div
                     role="group"
                     aria-label={filter.label}
-                    className="flex h-8 max-w-full items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden rounded-md border border-input-border bg-surface-2 p-1"
+                    className="flex max-w-full items-center gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden rounded-[10px] bg-paper p-[3px] shadow-[inset_0_0_0_1.5px_var(--ietc-field)]"
                   >
                     {filter.options.map((option) => {
                       const active = option.value === filter.value;
@@ -359,9 +359,9 @@ export function ResourceTable<T>({
                           onClick={() =>
                             onFilterChange?.(filter.name, option.value)
                           }
-                          className={`shrink-0 rounded-md px-2 py-1 text-sm font-semibold whitespace-nowrap ${
+                          className={`shrink-0 rounded-[7px] px-3 py-[7px] text-[14.5px] font-semibold whitespace-nowrap ${
                             active
-                              ? "bg-surface text-foreground shadow-xs"
+                              ? "bg-ink text-white"
                               : "text-muted-foreground hover:text-foreground"
                           }`}
                         >
@@ -377,7 +377,7 @@ export function ResourceTable<T>({
                     onChange={(e) =>
                       onFilterChange?.(filter.name, e.target.value)
                     }
-                    className="h-[38px] rounded-md border border-input-border bg-surface px-2 py-1 text-sm"
+                    className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-3 text-base hover:border-ink"
                   >
                     {filter.options.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -432,7 +432,7 @@ export function ResourceTable<T>({
           {(() => {
             const Heading = title ? "h3" : "h2";
             return (
-              <Heading className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
+              <Heading className="ietc-display text-[clamp(30px,3.4vw,46px)] text-foreground">
                 You do not have access to {noun}
               </Heading>
             );
@@ -488,7 +488,7 @@ export function ResourceTable<T>({
       <div className="flex flex-col gap-4">
         {header}
         <Panel>
-          <h2 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">
+          <h2 className="ietc-display text-[clamp(30px,3.4vw,46px)] text-foreground">
             {filtered ? `No ${noun} match these filters` : (emptyHeading ?? `No ${noun} yet`)}
           </h2>
           <p className="max-w-[480px] text-base text-muted-foreground">
@@ -582,7 +582,7 @@ export function ResourceTable<T>({
           sideways inside its own box rather than the page if it ever overflows.
           The box is a labelled, focusable region so a keyboard user can scroll it (WCAG 2.1.1). */}
       <div role="region" aria-label={`${noun} table`} tabIndex={0} className="hidden overflow-x-auto sm:block">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full border-collapse text-[15px]">
           <caption className="sr-only">
             {loading ? `Loading ${noun}` : `${rows.length} ${noun}`}
           </caption>
@@ -592,7 +592,7 @@ export function ResourceTable<T>({
               <col key={c.key} style={c.width ? { width: c.width } : undefined} />
             ))}
           </colgroup>
-          <thead className="border-b border-foreground">
+          <thead className="border-b-2 border-ink">
             <tr>
               {selection && (
                 <th scope="col" className={HEAD}>
@@ -664,7 +664,7 @@ export function ResourceTable<T>({
           <tbody aria-busy={loading || undefined}>
             {loading
               ? Array.from({ length: 5 }, (_, i) => (
-                  <tr key={i} className="border-t border-border">
+                  <tr key={i} className="border-t border-rule">
                     {selection && (
                       <td className={CELL}>
                         <span className="block size-3.5 animate-pulse rounded-sm bg-surface-2" />
@@ -685,7 +685,7 @@ export function ResourceTable<T>({
                   return (
                     <tr
                       key={id}
-                      className="border-t border-border hover:bg-surface-2"
+                      className="border-t border-rule hover:bg-paper"
                     >
                       {selection && (
                         <td className={CELL}>
@@ -837,10 +837,9 @@ export function ResourceTable<T>({
 }
 
 /**
- * Status — coloured text with a leading dot, no tinted background. The label
- * carries the meaning; the dot only reinforces it (and inherits the text
- * colour via `currentColor`). Every tone's ink clears 4.5:1 on white. The
- * component keeps its old name and props so its 30+ call sites need no change.
+ * Status — a tinted pill with dark text (design/mockups/system.css `.tag`). The label carries
+ * the meaning; the tint only reinforces it, and every tone keeps its text above 7:1 on its
+ * tint. The component keeps its old name and props so its 30+ call sites need no change.
  */
 export function StatusPill({
   label,
@@ -849,20 +848,19 @@ export function StatusPill({
   label: string;
   tone?: "neutral" | "success" | "warning" | "danger" | "accent";
 }) {
-  const ink = {
-    neutral: "text-pill-grey-ink",
-    success: "text-pill-green-ink",
-    warning: "text-pill-amber-ink",
-    danger: "text-pill-red-ink",
-    accent: "text-pill-blue-ink",
+  const colours = {
+    neutral: "bg-pill-grey-bg text-pill-grey-ink",
+    success: "bg-pill-green-bg text-pill-green-ink",
+    warning: "bg-pill-amber-bg text-pill-amber-ink",
+    danger: "bg-pill-red-bg text-pill-red-ink",
+    accent: "bg-pill-blue-bg text-pill-blue-ink",
   }[tone];
 
   return (
     <span
       data-tone={tone}
-      className={`inline-flex items-center text-sm font-medium whitespace-nowrap ${ink}`}
+      className={`inline-flex w-fit items-center rounded-full px-2.5 py-[3px] text-sm font-bold whitespace-nowrap ${colours}`}
     >
-      <span aria-hidden className="mr-2 size-[7px] shrink-0 rounded-full bg-current" />
       {label}
     </span>
   );

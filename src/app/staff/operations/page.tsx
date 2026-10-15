@@ -57,9 +57,9 @@ export default async function OperationsStatusPage() {
             Refresh status
           </Link>
         }
-        band={<OperationsBand summary={summary} checkedAt={status.checkedAt} maxSendAttempts={MAX_SEND_ATTEMPTS} />}
       />
-      <div className="mt-4">
+      <OperationsBand summary={summary} checkedAt={status.checkedAt} maxSendAttempts={MAX_SEND_ATTEMPTS} />
+      <div className="mt-10">
         <OperationsSections status={status} summary={summary} />
       </div>
     </div>

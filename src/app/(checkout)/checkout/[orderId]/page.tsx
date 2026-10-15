@@ -83,7 +83,7 @@ export default async function CheckoutOrderPage({
       // contradictory "Review your order" h1), and recovery is a real button.
       <div className="flex flex-col gap-8">
         <LearnerPageHeader title="Your seat hold has expired" />
-      <div className="flex w-full max-w-[640px] flex-col items-start gap-4 border-t border-foreground py-8">
+      <div className="flex w-full max-w-[640px] flex-col items-start gap-4 border-t-2 border-ink py-8">
         <AlertCircle aria-hidden className="size-6 text-danger" />
         <p className="max-w-prose text-sm text-muted-foreground">
           This seat was only held for a limited time and it&apos;s no longer available. Nothing was
@@ -180,7 +180,7 @@ export default async function CheckoutOrderPage({
         </div>
       )}
 
-      <section className="flex flex-col gap-4 border-t border-foreground pt-5">
+      <section className="flex flex-col gap-4 border-t-2 border-ink pt-5">
         <dl className="grid grid-cols-1 gap-0">
           {facts.map(([label, value]) => (
             <div

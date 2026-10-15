@@ -37,11 +37,11 @@ function humanizeAction(action: string): string {
 const DESKTOP_COLS = "grid w-full grid-cols-[190px_190px_230px_minmax(0,1fr)] gap-4 px-4 py-4 text-left";
 const CELL = "px-4 py-2 align-middle";
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5";
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
+    <div className="flex flex-col items-start gap-2 border-t-2 border-ink py-12">
       {children}
     </div>
   );
@@ -240,7 +240,7 @@ export function AuditTable({
       {filterOptions && filters && (
         <div className="flex flex-wrap items-center gap-4 border-b border-border py-3">
           <label className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[15px] font-bold text-ink">
               Actor
             </span>
             <select
@@ -258,7 +258,7 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[15px] font-bold text-ink">
               Action
             </span>
             <select
@@ -276,7 +276,7 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[15px] font-bold text-ink">
               From
             </span>
             <input
@@ -288,7 +288,7 @@ export function AuditTable({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[15px] font-bold text-ink">
               To
             </span>
             <input
@@ -362,7 +362,7 @@ export function AuditTable({
             <p className="text-sm">Safe columns: {auditColumns.safeColumns.map((column) => column.label).join(", ")}</p>
             {canExportSensitive && <label className="flex items-center gap-3 text-sm"><input type="checkbox" className="size-4 accent-accent" checked={includeIdentity} onChange={(event) => setIncludeIdentity(event.target.checked)} /> Include actor name and email</label>}
             {canExportSensitive && includeIdentity && <label className={FIELD}>Operational reason<textarea value={exportReason} onChange={(event) => setExportReason(event.target.value)} maxLength={2000} className={TEXTAREA} /></label>}
-            {exportMessage && <p role="alert" className="border-l-2 border-danger py-1 pl-4 text-sm text-danger">{exportMessage}</p>}
+            {exportMessage && <p role="alert" className="rounded-xl bg-danger-surface px-4 py-3.5 text-[15px] text-pill-red-ink">{exportMessage}</p>}
             <div className="flex flex-wrap justify-end gap-3">
               <button type="button" className={DIALOG_BTN} onClick={() => { setExportOpen(false); queueMicrotask(() => exportButton.current?.focus()); }}>Cancel</button>
               <button type="button" className={DIALOG_BTN_PRIMARY} disabled={exportPending || (includeIdentity && !exportReason.trim())} onClick={queueAuditExport}>{exportPending ? "Queuing audit export…" : "Queue audit export"}</button>
@@ -473,7 +473,7 @@ export function AuditTable({
               ? Array.from({ length: 5 }, (_, i) => (
                   <li
                     key={i}
-                    className="border-t border-foreground pt-5"
+                    className="border-t-2 border-ink pt-5"
                   >
                     <span className="block h-3 w-full max-w-[16rem] animate-pulse rounded-sm bg-surface-2" />
                   </li>

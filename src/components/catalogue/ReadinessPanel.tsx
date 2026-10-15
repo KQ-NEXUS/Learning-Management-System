@@ -105,7 +105,7 @@ export function ReadinessPanel({ items }: { items: ReadinessItem[] }) {
     >
       <div className="flex flex-col gap-1">
         <h2
-          className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground"
+          className="ietc-display text-[25px] leading-none md:text-[28px]"
         >
           Publishing
         </h2>

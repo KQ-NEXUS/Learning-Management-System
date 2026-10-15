@@ -29,7 +29,7 @@ export function LessonOutline({
 
   return (
     <nav aria-label="Course outline" className="flex flex-col">
-      <h2 className="px-6 pt-6 pb-3 text-[12px] font-semibold tracking-[0.06em] text-sidebar-muted uppercase">
+      <h2 className="px-6 pt-6 pb-3 text-[22px] leading-none text-white">
         Course outline
       </h2>
 
@@ -59,7 +59,7 @@ export function LessonOutline({
                       const current = lesson.id === currentLessonId;
                       const label = `${mi + 1}.${li + 1} ${lesson.title}`;
                       const icon = current ? (
-                        <Play aria-hidden fill="currentColor" className={`${ICON} text-white`} />
+                        <Play aria-hidden fill="currentColor" className={`${ICON} text-ink`} />
                       ) : lesson.completed ? (
                         <CheckCircle2 aria-hidden className={`${ICON} text-on-navy-blue`} />
                       ) : lesson.locked ? (
@@ -68,7 +68,7 @@ export function LessonOutline({
                         <Circle aria-hidden className={`${ICON} text-sidebar-muted`} />
                       );
                       const row = `flex items-start gap-3 rounded-md px-3 py-2 ${
-                        current ? "bg-accent font-semibold text-white" : "text-sidebar-fg"
+                        current ? "bg-orange font-bold text-ink" : "text-sidebar-fg"
                       }`;
                       return (
                         <li key={lesson.id}>

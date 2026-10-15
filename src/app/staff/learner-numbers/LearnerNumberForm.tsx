@@ -95,8 +95,8 @@ export function LearnerNumberForm({
   return (
     <div className="flex max-w-[760px] flex-col gap-8">
       <section className="flex flex-col gap-3">
-        <h2 className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">Status</h2>
-        <dl className="grid gap-4 border-t border-foreground pt-4 sm:grid-cols-3">
+        <h2 className="ietc-display text-[22px] leading-[1.05]">Status</h2>
+        <dl className="grid gap-4 border-t-2 border-ink pt-4 sm:grid-cols-3">
           <div>
             <dt className="text-sm text-muted-foreground">Numbering</dt>
             <dd className="text-base font-semibold text-foreground">{settings.pattern ? "On" : "Off"}</dd>
@@ -162,7 +162,7 @@ export function LearnerNumberForm({
           if (parsed.ok && !unchanged) submit();
         }}
       >
-        <h2 className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">Pattern</h2>
+        <h2 className="ietc-display text-[22px] leading-[1.05]">Pattern</h2>
 
         {error && (
           <p role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2 text-sm text-danger">
@@ -240,7 +240,7 @@ export function LearnerNumberForm({
           <li>Learners who registered before a pattern was saved get a number only if you choose to give them one.</li>
         </ul>
 
-        <div className="flex items-center gap-3 border-t border-foreground pt-6">
+        <div className="flex items-center gap-3 border-t-2 border-ink pt-6">
           <button type="submit" disabled={pending || !parsed.ok || unchanged} className={BTN}>
             {pending ? "Saving…" : settings.pattern ? "Save pattern" : "Turn on learner numbers"}
           </button>

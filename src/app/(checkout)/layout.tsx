@@ -4,7 +4,7 @@ import { signOutAction } from "@/app/(auth)/signin/actions";
 import { profileService } from "@/server/services/profile-service";
 import { LearnerShell } from "@/components/shell/LearnerShell";
 import { LEARNER_NAV } from "@/components/shell/learner-nav";
-import { LearnerAccountSlot } from "@/components/shell/LearnerAccountSlot";
+import { LearnerAccountSlot, PhoneMenuSignOut } from "@/components/shell/LearnerAccountSlot";
 
 /**
  * The checkout route-group layout — mirrors `src/app/account/layout.tsx`'s
@@ -49,7 +49,7 @@ export default async function CheckoutLayout({
   const rightSlot = <LearnerAccountSlot display={display} signOut={signOutAction} />;
 
   return (
-    <LearnerShell nav={LEARNER_NAV} homeHref="/dashboard" rightSlot={rightSlot}>
+    <LearnerShell nav={LEARNER_NAV} homeHref="/dashboard" rightSlot={rightSlot} mobileMenuExtra={<PhoneMenuSignOut signOut={signOutAction} />}>
       {children}
     </LearnerShell>
   );

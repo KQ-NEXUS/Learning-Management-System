@@ -358,7 +358,7 @@ export function ArrangeBoard({
           type="button"
           onClick={() => onSave()}
           disabled={!dirty || saving}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save order"}
         </button>
@@ -372,7 +372,7 @@ export function ArrangeBoard({
 
       {withdrawn.length > 0 && (
         <details className="rounded-xl border border-border bg-surface-2 px-4 py-2 shadow-xs">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <summary className="cursor-pointer text-[15px] font-bold text-ink">
             Withdrawn ({withdrawn.length})
           </summary>
           <ul className="mt-2 flex flex-col gap-1">
@@ -383,7 +383,7 @@ export function ArrangeBoard({
               >
                 <span className="flex-1 truncate">{entry.label}</span>
                 {entry.kind && (
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span className="text-[15px] font-bold text-ink">
                     {entry.kind}
                   </span>
                 )}

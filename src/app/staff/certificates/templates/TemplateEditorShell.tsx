@@ -105,7 +105,7 @@ const PALETTE: { kind: "text" | "image" | "border"; label: string; icon: ReactNo
 
 const PANEL = "flex flex-col gap-3 bg-surface py-1";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50";
 
 export function TemplateEditorShell({
   initial,
@@ -210,7 +210,7 @@ export function TemplateEditorShell({
               key={entry.kind}
               type="button"
               onClick={() => addElement(entry.kind)}
-              className="flex items-center gap-2 rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              className="flex items-center gap-2 inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               {entry.icon}
               {entry.label}
@@ -301,7 +301,7 @@ export function TemplateEditorShell({
                   setPendingHref("/staff/certificates/templates");
                 }
               }}
-              className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               {readOnly ? "Back to templates" : "Cancel"}
             </Link>
@@ -320,7 +320,7 @@ export function TemplateEditorShell({
         <div className="flex flex-wrap items-end gap-4">
           {readOnly ? (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</span>
+              <span className="text-[15px] font-bold text-ink">Name</span>
               <span className="text-sm text-foreground">{name}</span>
             </div>
           ) : (
@@ -340,7 +340,7 @@ export function TemplateEditorShell({
 
           {readOnly ? (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="text-[15px] font-bold text-ink">
                 Page size
               </span>
               <span className="text-sm text-foreground">{pageSize === "A4" ? "A4" : "Letter"}</span>
@@ -367,7 +367,7 @@ export function TemplateEditorShell({
 
           {readOnly ? (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="text-[15px] font-bold text-ink">
                 Orientation
               </span>
               <span className="text-sm text-foreground capitalize">{orientation}</span>

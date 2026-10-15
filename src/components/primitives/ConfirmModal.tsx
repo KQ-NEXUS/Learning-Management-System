@@ -143,20 +143,20 @@ function ConfirmDialog({
       : "bg-accent text-accent-contrast hover:opacity-90";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-6 shadow-card"
+        className="flex w-full max-w-md flex-col gap-4 rounded-[18px] bg-paper p-7 shadow-card"
       >
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-[13px] font-bold text-ink-soft">
             {eyebrow}
           </span>
-          <h2 id={titleId} className="text-base font-semibold tracking-tight text-foreground">
+          <h2 id={titleId} className="ietc-display text-[26px] leading-[1.02]">
             {title}
           </h2>
           <div className="text-sm text-muted-foreground">{description}</div>
@@ -171,7 +171,7 @@ function ConfirmDialog({
               role="alert"
               className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2"
             >
-              <p className="text-xs font-semibold uppercase tracking-wide text-danger">
+              <p className="text-[15px] font-bold text-danger">
                 Action not applied
               </p>
               <p className="mt-1 text-sm text-danger">{error}</p>
@@ -182,7 +182,7 @@ function ConfirmDialog({
           <div className="flex flex-col gap-1">
             <label
               htmlFor={reasonId}
-              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              className="text-[15px] font-bold text-ink"
             >
               {reasonLabel}
               <span className="ml-1 font-normal text-muted-foreground" aria-hidden>
@@ -199,7 +199,7 @@ function ConfirmDialog({
               aria-describedby={counterId}
               onChange={(e) => setReason(e.target.value)}
               onBlur={() => setTouched(true)}
-              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground aria-[invalid=true]:border-danger disabled:bg-surface-2"
+              className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink aria-[invalid=true]:border-danger disabled:bg-surface-2"
             />
             <p
               id={counterId}
@@ -222,7 +222,7 @@ function ConfirmDialog({
             aria-disabled={!canConfirm}
             aria-describedby={blockedByLicence ? restrictedReasonId : undefined}
             onClick={() => canConfirm && onConfirm(reason.trim())}
-            className={`rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${confirmClasses}`}
+            className={`inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold disabled:cursor-not-allowed disabled:opacity-55 ${confirmClasses}`}
           >
             {pending ? "Working…" : confirmLabel}
           </button>
@@ -230,7 +230,7 @@ function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>

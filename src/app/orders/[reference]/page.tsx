@@ -113,7 +113,7 @@ export default async function OrderReceiptPage({
     <form action={signOutAction}>
       <button
         type="submit"
-        className="rounded-md px-2 py-2 text-sm font-medium text-sidebar-soft hover:text-white"
+        className="min-h-10 font-semibold text-ink hover:underline hover:underline-offset-4"
       >
         Sign out
       </button>
@@ -203,7 +203,7 @@ export default async function OrderReceiptPage({
 
         <Link
           href="/dashboard"
-          className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+          className="w-fit inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
         >
           Go to your dashboard
         </Link>

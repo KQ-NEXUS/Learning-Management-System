@@ -207,7 +207,7 @@ export function CourseForm(
                 maxLength={4000}
                 value={outcomes}
                 onChange={(event) => setOutcomes(event.target.value)}
-                className="min-h-[92px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
+                className="min-h-[92px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
               />
             )}
           </FormField>
@@ -239,7 +239,7 @@ export function CourseForm(
                 maxLength={4000}
                 value={prerequisites}
                 onChange={(event) => setPrerequisites(event.target.value)}
-                className="min-h-[76px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
+                className="min-h-[76px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
               />
             )}
           </FormField>

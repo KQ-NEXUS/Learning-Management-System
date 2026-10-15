@@ -1,10 +1,9 @@
-import Link from "next/link";
-import { CheckoutNotice } from "@/app/(public)/CheckoutNotice";
 import { ArrowRight } from "lucide-react";
+import { CheckoutNotice } from "@/app/(public)/CheckoutNotice";
 import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
-import { DELIVERY_MODE_LABEL, formatPrice } from "@/app/(public)/CohortCards";
-import { LagosTime } from "@/components/time/LagosTime";
-import { listPublicCourses, type PublicCohort } from "@/server/services/public-catalogue-service";
+import { CourseCard } from "@/components/site/CourseCard";
+import { BRAND, COMPANY_CERTIFICATION } from "@/lib/brand";
+import { listPublicCourses } from "@/server/services/public-catalogue-service";
 
 // Rendered per request, never prerendered. 04-15's `<planner_decisions>`
 // sanctioned this fallback: `next build` inside the Docker builder has no
@@ -17,14 +16,11 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Courses" };
 
-/** The soonest cohort's headline price: Naira when offered, else dollars. */
-function headlinePrice(cohort: PublicCohort | null): string | null {
-  if (!cohort) return null;
-  if (cohort.priceNgnMinor !== null) return formatPrice(cohort.priceNgnMinor, "NGN");
-  if (cohort.priceUsdMinor !== null) return formatPrice(cohort.priceUsdMinor, "USD");
-  return null;
-}
-
+/**
+ * `/courses` in the IETC look (design/mockups/public-courses.html): every listed course as a
+ * card, the ones with a dated class first, then IETC's company certification, which is not
+ * a class. The mockup's three category groups wait on a course category field.
+ */
 export default async function PublicCoursesPage({
   searchParams,
 }: {
@@ -32,77 +28,76 @@ export default async function PublicCoursesPage({
 }) {
   const courses = await listPublicCourses();
   const { notice } = await searchParams;
+  // Dated courses first, soonest first; undated ones keep the catalogue's title order.
+  const ordered = [...courses].sort((a, b) => {
+    if (a.nextCohort && b.nextCohort) return a.nextCohort.startsAt.getTime() - b.nextCohort.startsAt.getTime();
+    return (a.nextCohort ? 0 : 1) - (b.nextCohort ? 0 : 1);
+  });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       <LearnerPageHeader
-        size="hero"
         title="Courses"
-        subtitle={
-          <>
-            Professional training an employer can verify.{" "}
-            <Link href="/verify-certificate" className="font-semibold text-white underline underline-offset-4">
-              Verify a certificate
-            </Link>
-          </>
-        }
+        subtitle="Professional training you can enrol on, and certification for your organisation."
       />
       <CheckoutNotice notice={notice} />
-      {courses.length === 0 ? (
-        <p className="border-t border-foreground py-12 text-sm text-muted-foreground">
-          No courses are listed right now.
-        </p>
-      ) : (
-        <ul className="border-t border-foreground">
-          {courses.map((course) => {
-            const price = headlinePrice(course.nextCohort);
-            const format = [
-              course.durationHours != null ? `${course.durationHours} hours` : null,
-              course.nextCohort ? (DELIVERY_MODE_LABEL[course.nextCohort.deliveryMode] ?? null) : null,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return (
-              <li key={course.slug} className="border-b border-border">
-                <Link
-                  href={`/courses/${course.slug}`}
-                  className="grid gap-3 py-8 text-foreground hover:bg-surface-2/60 md:grid-cols-[minmax(0,1fr)_200px_140px_auto] md:items-center md:gap-8"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[24px] leading-[1.2] font-semibold tracking-[-0.025em] break-words">
-                      {course.title}
-                    </div>
-                    {course.summary && (
-                      <p className="mt-2 max-w-[560px] text-muted-foreground">{course.summary}</p>
-                    )}
-                  </div>
-                  <div>
-                    {format && <div className="text-[13px] text-muted-foreground">{format}</div>}
-                    <div className={`mt-1 font-semibold ${course.nextCohort ? "" : "text-muted-foreground"}`}>
-                      {course.nextCohort
-                        ? course.nextCohort.hasStarted
-                          ? "Enrolling now"
-                          : <>
-                            Next start <LagosTime value={course.nextCohort.startsAt} variant="date" />
-                          </>
-                        : "No dates scheduled"}
-                    </div>
-                  </div>
-                  <div className="font-mono text-[16px] font-medium tabular-nums md:text-right">
-                    {price ?? (
-                      <span className="font-sans text-[13px] font-normal text-muted-foreground">Price shown with dates</span>
-                    )}
-                  </div>
-                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-accent">
-                    View course
-                    <ArrowRight aria-hidden className="size-5" />
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <section aria-labelledby="course-list" className="mt-6">
+        <div className="flex items-baseline justify-between gap-4 border-b-2 border-ink pb-3">
+          <h2 id="course-list" className="ietc-display text-[25px] leading-none md:text-[28px]">
+            Courses you can enrol on
+          </h2>
+          <span className="font-semibold text-ink-soft">
+            {courses.length} {courses.length === 1 ? "course" : "courses"}
+          </span>
+        </div>
+        {ordered.length === 0 ? (
+          <div className="py-8">
+            <p className="ietc-display text-[25px] leading-none">No courses are listed right now.</p>
+            <p className="mt-2 text-ink-soft">New classes are added through the year. Please check back soon.</p>
+          </div>
+        ) : (
+          <div className="mt-[22px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
+            {ordered.map((course) => (
+              <CourseCard key={course.slug} course={course} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="company"
+        className="-mx-5 mt-12 -mb-[72px] bg-ink px-5 py-10 text-white md:-mx-14 md:mt-[72px] md:px-14 md:py-14"
+      >
+        <div className="grid gap-7 md:grid-cols-[1fr_440px] md:gap-16">
+          <div>
+            <span className="ietc-display inline-block rounded-md bg-orange px-2.5 py-1 text-[14px] tracking-[0.03em] text-ink uppercase">
+              {COMPANY_CERTIFICATION.label}
+            </span>
+            <h2 id="company" className="ietc-display mt-3.5 text-[clamp(34px,3.6vw,52px)]">
+              {COMPANY_CERTIFICATION.title}
+            </h2>
+            <p className="mt-3.5 max-w-[58ch] text-[17px] text-on-ink-soft md:text-[18.5px]">{COMPANY_CERTIFICATION.body}</p>
+          </div>
+          <div>
+            <p className="text-on-ink-soft">{COMPANY_CERTIFICATION.detail}</p>
+            <ul className="mt-3.5 flex flex-wrap gap-2">
+              {COMPANY_CERTIFICATION.standards.map((standard) => (
+                <li key={standard} className="ietc-display rounded-md px-2.5 py-[5px] text-[15px] shadow-[inset_0_0_0_1px_var(--ietc-chip-on-ink)]">
+                  {standard}
+                </li>
+              ))}
+            </ul>
+            {/* The address stays visible as text: a mailto: link is a convenience that may do nothing. */}
+            <a
+              href={`mailto:${BRAND.contact.email}`}
+              className="mt-[22px] inline-flex min-h-12 items-center gap-2.5 rounded-[10px] bg-orange px-[22px] text-[15.5px] font-bold text-ink hover:brightness-95"
+            >
+              {COMPANY_CERTIFICATION.cta} <ArrowRight aria-hidden className="size-[19px]" strokeWidth={2.3} />
+            </a>
+            <p className="mt-2 text-sm text-on-ink-soft">{BRAND.contact.email}</p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

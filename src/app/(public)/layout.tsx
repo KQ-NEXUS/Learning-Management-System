@@ -1,67 +1,30 @@
-import Link from "next/link";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { landingPathFor } from "@/server/auth/landing";
-import { LearnerShell, type LearnerNavItem } from "@/components/shell/LearnerShell";
+import { SiteHeader } from "@/components/site/SiteHeader";
+import { SiteFooter } from "@/components/site/SiteFooter";
+import { MAIN_CONTENT_ID, SkipLink } from "@/components/shell/SkipLink";
 
 /**
- * The public catalogue shell (plan 04-15; rebuilt on the shared learner shell
- * per D-23, UI-SPEC 7.3). Deliberately guard-free — no redirect anywhere in this
- * file — the catalogue must stay reachable without a session. It does look up the
- * actor, but only to choose the right-hand buttons: a visitor sees Sign in and
- * Register; someone already signed in sees a single link to their own home instead
- * of being offered to sign in again.
+ * The public catalogue shell in the IETC look: the white site header, the page, and the
+ * black site footer (design/mockups/public-courses.html). Deliberately guard-free — no
+ * redirect anywhere in this file — the catalogue must stay reachable without a session. It
+ * does look up the actor, but only to choose the header's right side: a visitor sees Sign in
+ * and Register; someone already signed in sees one link to their own home instead.
  */
-
-const NAV: LearnerNavItem[] = [
-  { label: "Courses", href: "/courses" },
-  { label: "Programmes", href: "/programmes" },
-  { label: "Verify a certificate", href: "/verify-certificate" },
-];
-
-const GHOST =
-  "inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover";
-const MENU_LINK = "flex min-h-11 items-center rounded-md px-2 text-sm";
-const PRIMARY =
-  "inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
-
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
   const actor = await getCurrentActor();
-
-  const rightSlot = actor ? (
-    <Link href={landingPathFor(actor)} className={PRIMARY}>
-      {actor.isStaff ? "Open workspace" : "My dashboard"}
-    </Link>
-  ) : (
-    // Below `sm` the two buttons would collide with the brand, so they move into the menu.
-    <div className="flex items-center gap-3 max-sm:hidden">
-      <Link href="/signin" className={GHOST}>
-        Sign in
-      </Link>
-      <Link href="/register" className={PRIMARY}>
-        Register
-      </Link>
-    </div>
-  );
-
-  const mobileMenuExtra = actor ? null : (
-    <>
-      <Link href="/signin" className={`${MENU_LINK} font-medium text-sidebar-fg`}>
-        Sign in
-      </Link>
-      <Link href="/register" className={`${MENU_LINK} font-semibold text-white`}>
-        Create an account
-      </Link>
-    </>
-  );
+  const account = actor
+    ? { href: landingPathFor(actor), label: actor.isStaff ? "Open workspace" : "My dashboard" }
+    : null;
 
   return (
-    <LearnerShell
-      nav={NAV}
-      rightSlot={rightSlot}
-      mobileMenuExtra={mobileMenuExtra}
-      homeHref={actor ? landingPathFor(actor) : "/courses"}
-    >
-      {children}
-    </LearnerShell>
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-ground">
+      <SkipLink />
+      <SiteHeader account={account} />
+      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="w-full flex-1 px-5 pb-[72px] focus:outline-none md:px-14">
+        {children}
+      </main>
+      <SiteFooter />
+    </div>
   );
 }

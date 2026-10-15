@@ -56,8 +56,8 @@ export default async function SupportIndexPage({
           We couldn’t load your tickets. Try again.
         </p>
       ) : total === 0 ? (
-        <div className="flex flex-col items-start gap-3 border-t border-foreground py-8">
-          <h2 className="text-base font-semibold text-foreground">No support tickets yet</h2>
+        <div className="flex flex-col items-start gap-3 border-t-2 border-ink py-8">
+          <h2 className="ietc-display text-[28px] leading-none">No support tickets yet</h2>
           <p className="max-w-[60ch] text-sm text-muted-foreground">
             If you need help with your account, payment, course, assessment, certificate, or a technical
             problem, create a ticket.
@@ -68,12 +68,12 @@ export default async function SupportIndexPage({
         </div>
       ) : (
         <>
-          <ul className="flex flex-col divide-y divide-border border-y border-border">
+          <ul className="flex max-w-[1000px] flex-col divide-y divide-rule border-t-2 border-b border-t-ink border-b-rule">
             {visible.map((ticket) => (
               <li key={ticket.id} className="flex flex-col gap-2 py-4 sm:grid sm:grid-cols-[1fr_auto] sm:items-center sm:gap-4">
                 <div className="flex min-w-0 flex-col gap-1">
-                  <h2 className="line-clamp-2 text-base font-semibold break-words text-foreground">{ticket.subject}</h2>
-                  <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <h2 className="ietc-display line-clamp-2 text-[25px] leading-[1.02] break-words">{ticket.subject}</h2>
+                  <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[14.5px] text-ink-soft">
                     <span className="font-mono break-all">{ticket.reference}</span>
                     <span>{ticketCategoryLabel(ticket.category)}</span>
                     <span>

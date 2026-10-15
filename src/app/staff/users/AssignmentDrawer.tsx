@@ -170,7 +170,7 @@ function DrawerPanel({
   const fieldError = (name: string) => state.errors.some(error => error.name === name) ? { "aria-invalid": true as const, "aria-describedby": `${titleId}-${name}-error` } : {};
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-foreground/40" onClick={event => { if (event.target === event.currentTarget && !pending) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-ink/45" onClick={event => { if (event.target === event.currentTarget && !pending) onClose(); }}>
       <div
         ref={panelRef}
         role="dialog"

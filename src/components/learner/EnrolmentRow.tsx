@@ -22,7 +22,7 @@ export function EnrolmentRow({
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <div className="flex items-center justify-between gap-6 border-b border-border py-5">
+    <div className="flex items-center justify-between gap-6 border-b border-rule py-4">
       <div className="min-w-0 grow">
         <div className="text-base font-semibold text-foreground">{card.cohortTitle}</div>
         {total > 0 && (
@@ -33,7 +33,7 @@ export function EnrolmentRow({
               aria-valuenow={pct}
               aria-valuemin={0}
               aria-valuemax={100}
-              className="h-1 grow overflow-hidden rounded-full bg-accent-wash"
+              className="h-2.5 grow overflow-hidden rounded-full bg-rule"
             >
               <div className="h-full rounded-full bg-progress-fill" style={{ width: `${pct}%` }} />
             </div>
@@ -50,7 +50,7 @@ export function EnrolmentRow({
           {completed && <span className="text-sm text-muted-foreground">Completed</span>}
           <Link
             href={`/learn/${card.enrolmentId}`}
-            className="inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-[18px] text-sm font-semibold text-foreground hover:bg-surface-2"
+            className="inline-flex min-h-10 items-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
           >
             Open
           </Link>

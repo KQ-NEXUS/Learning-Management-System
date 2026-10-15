@@ -96,7 +96,7 @@ const columns: Column<CohortRow>[] = [
     header: "Seats",
     render: (c) => (
       <span className="flex items-center gap-3">
-        <span aria-hidden className="h-1 w-20 overflow-hidden rounded-full bg-accent-wash">
+        <span aria-hidden className="h-2 w-20 overflow-hidden rounded-full bg-rule">
           <span
             className="block h-full rounded-full bg-progress-fill"
             style={{ width: `${Math.min(100, Math.round((c.seatsTaken / Math.max(c.capacity, 1)) * 100))}%` }}

@@ -49,7 +49,7 @@ export default async function ResultsPage({
       />
 
       {results.length === 0 ? (
-        <div className="flex flex-col gap-2 border-t border-foreground py-8">
+        <div className="flex flex-col gap-2 border-t-2 border-ink py-8">
           <p className="text-[16px] font-semibold text-foreground">No results yet</p>
           <p className="text-sm text-muted-foreground">
             Complete a quiz or submit an assignment to see your results here.

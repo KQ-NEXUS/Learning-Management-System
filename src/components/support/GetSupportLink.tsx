@@ -25,7 +25,7 @@ export function GetSupportLink({
   return (
     <Link
       href={`/support/new?${query.toString()}`}
-      className={className ?? "text-sm font-semibold text-accent hover:underline"}
+      className={className ?? "font-bold underline underline-offset-4 hover:text-orange-text"}
     >
       {label}
     </Link>

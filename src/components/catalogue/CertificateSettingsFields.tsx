@@ -127,7 +127,7 @@ export function CertificateSettingsFields({
             {...field}
             disabled={!certificateEnabled}
             defaultValue={templateId}
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground disabled:bg-surface-2 disabled:text-muted-foreground aria-[invalid=true]:border-danger"
+            className="h-[38px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink disabled:bg-surface-2 disabled:text-muted-foreground aria-[invalid=true]:border-danger"
           >
             <option value="">Use the default template</option>
             {archivedTemplate && (

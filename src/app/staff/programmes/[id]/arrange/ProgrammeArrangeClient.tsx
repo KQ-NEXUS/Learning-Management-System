@@ -216,14 +216,14 @@ export function ProgrammeArrangeClient({
         </>
       )}
 
-      <section className="flex flex-col gap-2 border-t border-foreground pt-5">
+      <section className="flex flex-col gap-2 border-t-2 border-ink pt-5">
         <h2 className="text-base font-semibold tracking-tight">Add a course</h2>
         <input
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search courses by title or slug"
-          className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+          className="h-[38px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
         />
         {candidates.length === 0 ? (
           <p className="text-sm text-muted-foreground">

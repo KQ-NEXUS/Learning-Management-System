@@ -40,7 +40,7 @@ export default async function ProgrammeArrangePage({
           actions={
             <GuardedLink
               href={`/staff/programmes/${id}`}
-              className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               Back to programme
             </GuardedLink>

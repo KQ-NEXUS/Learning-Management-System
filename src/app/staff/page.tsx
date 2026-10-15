@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Award, CreditCard, ListChecks, Users, Plus, ArrowRight, type LucideIcon } from "lucide-react";
+import { Award, CreditCard, ListChecks, Users, Plus, type LucideIcon } from "lucide-react";
 import { can } from "@/server/permissions";
 import {
   loadStaffOverview,
@@ -39,17 +39,20 @@ function ageLabel(days: number): string {
   return days === 1 ? "1 day" : `${days} days`;
 }
 
-function Figure({ label, value, caption, first }: { label: string; value: string; caption: string; first?: boolean }) {
+/** One headline figure in the white strip (design/mockups/staff-overview.html `.figs`). */
+function Figure({ label, value, caption, index }: { label: string; value: string; caption: string; index: number }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${first ? "" : "lg:border-l lg:border-sidebar-line lg:pl-6"}`}>
-      <span className="text-sm text-sidebar-soft">{label}</span>
-      <span className="font-mono text-[36px] leading-[1.15] font-medium tracking-[-0.03em] text-white tabular-nums">{value}</span>
-      <span className="text-sm text-sidebar-soft">{caption}</span>
+    <div
+      className={`flex min-w-0 flex-col px-5 py-5 md:px-8 md:py-[26px] ${index % 2 === 1 ? "border-l border-rule" : ""} ${index > 1 ? "border-t border-rule lg:border-t-0" : ""} ${index > 0 ? "lg:border-l lg:border-rule" : "lg:pl-14"}`}
+    >
+      <span className="font-bold">{label}</span>
+      <span className="ietc-display mt-2 mb-1.5 text-[48px] leading-none tabular-nums lg:text-[76px]">{value}</span>
+      <span className="text-[14.5px] text-ink-soft">{caption}</span>
     </div>
   );
 }
 
-function FiguresBand({ figures }: { figures: StaffOverview["figures"] }) {
+function FiguresStrip({ figures }: { figures: StaffOverview["figures"] }) {
   const cells: { label: string; value: string; caption: string }[] = [];
   if (figures.learnersInDelivery) {
     const f = figures.learnersInDelivery;
@@ -87,21 +90,23 @@ function FiguresBand({ figures }: { figures: StaffOverview["figures"] }) {
   }
   if (cells.length === 0) return null;
   return (
-    <div
-      className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
-      style={{ ["--cols" as string]: cells.length }}
-    >
-      {cells.map((c, i) => (
-        <Figure key={c.label} {...c} first={i === 0} />
-      ))}
-    </div>
+    <section aria-label="This month" className="-mx-5 mt-12 bg-paper md:-mx-14 md:mt-[52px]">
+      <div
+        className="grid grid-cols-2 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
+        style={{ ["--cols" as string]: cells.length }}
+      >
+        {cells.map((c, i) => (
+          <Figure key={c.label} {...c} index={i} />
+        ))}
+      </div>
+    </section>
   );
 }
 
 function SectionHead({ id, title, right }: { id: string; title: string; right?: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 pb-4">
-      <h2 id={id} className="flex items-center gap-3 text-[20px] font-semibold tracking-[-0.015em] text-foreground">
+    <div className="flex items-baseline justify-between gap-4 border-b-2 border-ink pb-3">
+      <h2 id={id} className="ietc-display text-[25px] leading-none md:text-[28px]">
         {title}
       </h2>
       {right}
@@ -113,37 +118,41 @@ function NeedsAttention({ items }: { items: OverviewQueueItem[] }) {
   const overdue = items.filter((i) => i.overdue).length;
   return (
     <section aria-labelledby="needs-attention">
-      <div className="flex items-baseline justify-between gap-4 pb-4">
-        <h2 id="needs-attention" className="flex items-center gap-3 text-[20px] font-semibold tracking-[-0.015em] text-foreground">
-          Needs attention
-          {overdue > 0 && <span aria-hidden className="alert-dot" />}
+      <div className="border-b-2 border-ink pb-3">
+        <h2 id="needs-attention" className="ietc-display text-[clamp(30px,3.4vw,46px)] leading-[0.95]">
+          {items.length === 0 ? (
+            "Needs attention"
+          ) : (
+            <>
+              {items.length} {items.length === 1 ? "thing needs" : "things need"} attention
+              {overdue > 0 && <span className="text-danger">, {overdue} overdue</span>}
+            </>
+          )}
         </h2>
-        <span className="text-sm">
-          {overdue > 0 && <span className="font-semibold text-danger">{overdue} overdue · </span>}
-          <span className="text-muted-foreground">{items.length} open</span>
-        </span>
       </div>
       {items.length === 0 ? (
-        <p className="border-t border-foreground py-8 text-base text-muted-foreground">Nothing is waiting on you right now.</p>
+        <p className="py-6 text-ink-soft">Nothing is waiting on you right now.</p>
       ) : (
-        <ul className={`border-t-2 ${overdue > 0 ? "border-danger" : "border-foreground"}`}>
+        <ul>
           {items.map((item) => {
             const Icon = QUEUE_ICON[item.kind];
             return (
               <li
                 key={item.key}
-                className={`-mx-3 grid grid-cols-[28px_minmax(0,1fr)_72px_84px] items-center gap-4 border-b border-border px-3 py-4 ${item.overdue ? "bg-danger-surface" : ""}`}
+                className={`grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-4 py-4 sm:grid-cols-[24px_minmax(0,1fr)_76px_auto] ${
+                  item.overdue ? "-mx-3.5 mt-1.5 rounded-[10px] bg-danger-surface px-3.5" : "border-b border-rule"
+                }`}
               >
-                <Icon aria-hidden className="size-5 text-muted-foreground" />
+                <Icon aria-hidden className={`size-5 ${item.overdue ? "text-danger" : "text-ink-soft"}`} />
                 <div className="min-w-0">
-                  <p className="text-base font-semibold text-foreground">{item.title}</p>
-                  <p className="truncate text-sm text-muted-foreground">{item.detail}</p>
+                  <p className="text-[17px] font-bold">{item.title}</p>
+                  <p className="truncate text-[14.5px] text-ink-soft">{item.detail}</p>
                 </div>
-                <span className={`text-right font-mono text-[13px] ${item.overdue ? "font-medium text-danger" : "text-muted-foreground"}`}>
+                <span className={`text-right text-[14.5px] font-semibold max-sm:hidden ${item.overdue ? "text-danger" : "text-ink-soft"}`}>
                   {ageLabel(item.ageDays)}
                 </span>
-                <Link href={item.href} className="inline-flex items-center justify-end gap-1.5 text-sm font-semibold text-accent hover:underline">
-                  Review <ArrowRight aria-hidden className="size-3.5" />
+                <Link href={item.href} className="font-bold underline underline-offset-4 hover:text-orange-text">
+                  Review
                 </Link>
               </li>
             );
@@ -168,8 +177,8 @@ function EnrolmentTrend({ weekly }: { weekly: NonNullable<StaffOverview["weekly"
   const total = weekly.reduce((n, w) => n + w.count, 0);
   return (
     <section aria-labelledby="enrolment-trend">
-      <SectionHead id="enrolment-trend" title="Enrolments per week" right={<span className="text-sm text-muted-foreground">Last 12 weeks</span>} />
-      <div className="border-t border-foreground pt-5">
+      <SectionHead id="enrolment-trend" title="Enrolments per week" right={<span className="text-[14.5px] text-ink-soft">Last 12 weeks</span>} />
+      <div className="pt-[18px]">
         <svg
           viewBox={`0 0 ${W} 214`}
           role="img"
@@ -178,17 +187,17 @@ function EnrolmentTrend({ weekly }: { weekly: NonNullable<StaffOverview["weekly"
         >
           {[0, max / 2, max].map((v) => (
             <g key={v}>
-              <line x1={X0} x2={W} y1={y(v)} y2={y(v)} className="stroke-border" strokeWidth="1" />
-              <text x="0" y={y(v) + 4} className="fill-muted-foreground font-mono text-[12px]">
+              <line x1={X0} x2={W} y1={y(v)} y2={y(v)} className="stroke-rule" strokeWidth="1" />
+              <text x="0" y={y(v) + 4} className="fill-ink-soft text-[12px]">
                 {Math.round(v)}
               </text>
             </g>
           ))}
-          <polygon points={`${X0},176 ${pts} ${x(weekly.length - 1).toFixed(1)},176`} className="fill-accent-wash" />
-          <polyline points={pts} fill="none" className="stroke-accent" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-          <circle cx={x(weekly.length - 1)} cy={y(last.count)} r="6" className="fill-accent stroke-surface" strokeWidth="3" />
+          <polygon points={`${X0},176 ${pts} ${x(weekly.length - 1).toFixed(1)},176`} className="fill-peach" />
+          <polyline points={pts} fill="none" className="stroke-ink" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          <circle cx={x(weekly.length - 1)} cy={y(last.count)} r="6" className="fill-orange stroke-paper" strokeWidth="3" />
           {[0, 5, 11].map((i) => (
-            <text key={i} x={i === 11 ? x(i) + 6 : x(i)} y="204" textAnchor={i === 11 ? "end" : "middle"} className="fill-muted-foreground font-mono text-[12px]">
+            <text key={i} x={x(i)} y="204" textAnchor={i === 0 ? "start" : i === 11 ? "end" : "middle"} className="fill-ink-soft text-[12px]">
               {label(weekly[i].weekStart)}
             </text>
           ))}
@@ -213,29 +222,31 @@ function NextSessions({ sessions }: { sessions: OverviewSession[] }) {
   }
   return (
     <section aria-labelledby="next-sessions">
-      <SectionHead id="next-sessions" title="Next sessions" right={<span className="text-sm text-muted-foreground">This week</span>} />
-      <div className="border-t border-foreground">
-        {sessions.length === 0 ? (
-          <p className="py-6 text-base text-muted-foreground">No sessions in the next seven days.</p>
-        ) : (
-          [...byDay.entries()].map(([day, rows]) => (
-            <div key={day}>
-              <p className="pt-5 pb-1 text-sm font-semibold text-foreground">{day}</p>
-              {rows.map((s) => (
-                <Link key={s.id} href={`/staff/cohorts/${s.cohortId}/sessions/${s.id}/attendance`} className="grid grid-cols-[56px_minmax(0,1fr)] gap-3 py-2 hover:bg-surface-2">
-                  <span className="pt-0.5 font-mono text-[13px] font-medium text-accent">{timeOf(s.startsAt, s.timezone)}</span>
-                  <span>
-                    <span className="block text-base font-semibold text-foreground">{s.title}</span>
-                    <span className="block text-sm text-muted-foreground">
-                      <span className="font-mono text-[13px]">{s.cohortCode}</span> · {s.location ?? (s.virtual ? "Virtual" : "Location to be confirmed")}
-                    </span>
+      <SectionHead id="next-sessions" title="Next sessions" right={<span className="text-[14.5px] text-ink-soft">This week</span>} />
+      {sessions.length === 0 ? (
+        <p className="py-6 text-ink-soft">No sessions in the next seven days.</p>
+      ) : (
+        [...byDay.entries()].map(([day, rows]) => (
+          <div key={day}>
+            <p className="pt-3.5 pb-1 text-sm font-bold text-ink-soft">{day}</p>
+            {rows.map((s) => (
+              <Link
+                key={s.id}
+                href={`/staff/cohorts/${s.cohortId}/sessions/${s.id}/attendance`}
+                className="group grid grid-cols-[76px_minmax(0,1fr)] gap-3 border-b border-rule py-3"
+              >
+                <span className="ietc-display text-[26px] leading-[1.1]">{timeOf(s.startsAt, s.timezone)}</span>
+                <span>
+                  <b className="block font-bold group-hover:underline group-hover:underline-offset-4">{s.title}</b>
+                  <span className="block text-sm text-ink-soft">
+                    {s.cohortCode} · {s.location ?? (s.virtual ? "Virtual" : "Location to be confirmed")}
                   </span>
-                </Link>
-              ))}
-            </div>
-          ))
-        )}
-      </div>
+                </span>
+              </Link>
+            ))}
+          </div>
+        ))
+      )}
     </section>
   );
 }
@@ -243,70 +254,74 @@ function NextSessions({ sessions }: { sessions: OverviewSession[] }) {
 function Filling({ cohorts }: { cohorts: NonNullable<StaffOverview["filling"]> }) {
   return (
     <section aria-labelledby="filling-up">
-      <SectionHead id="filling-up" title="Filling up" right={<span className="text-sm text-muted-foreground">Seats taken</span>} />
-      <div className="border-t border-foreground">
-        {cohorts.length === 0 ? (
-          <p className="py-6 text-base text-muted-foreground">No cohorts are open for registration.</p>
-        ) : (
-          cohorts.map((c) => (
-            <Link key={c.cohortId} href={`/staff/cohorts/${c.cohortId}`} className="block border-b border-border py-4 hover:bg-surface-2">
-              <span className="flex items-baseline justify-between gap-3">
-                <span className="text-base font-semibold text-foreground">{c.title}</span>
-                <span className="font-mono text-[13px] whitespace-nowrap text-foreground">
-                  {c.taken} of {c.capacity}
-                </span>
+      <SectionHead id="filling-up" title="Filling up" right={<span className="text-[14.5px] text-ink-soft">Seats taken</span>} />
+      {cohorts.length === 0 ? (
+        <p className="py-6 text-ink-soft">No cohorts are open for registration.</p>
+      ) : (
+        cohorts.map((c) => (
+          <Link key={c.cohortId} href={`/staff/cohorts/${c.cohortId}`} className="group block border-b border-rule py-4">
+            <span className="flex items-baseline justify-between gap-3">
+              <b className="font-bold group-hover:underline group-hover:underline-offset-4">{c.title}</b>
+              <span className="ietc-display text-[22px] whitespace-nowrap">
+                {c.taken} of {c.capacity}
               </span>
-              <span className="mt-0.5 mb-2 block text-sm text-muted-foreground">
-                <span className="font-mono text-[13px]">{c.code}</span> · starts {new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: c.timezone }).format(c.startsAt)}
-              </span>
-              <span className="block h-1 rounded-sm bg-accent-wash">
-                <span className="block h-full rounded-sm bg-accent" style={{ width: `${Math.min(100, Math.round((c.taken / c.capacity) * 100))}%` }} />
-              </span>
-            </Link>
-          ))
-        )}
-      </div>
+            </span>
+            <span className="mt-0.5 mb-2.5 block text-sm text-ink-soft">
+              {c.code} · starts {new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: c.timezone }).format(c.startsAt)}
+            </span>
+            <span className="block h-2.5 overflow-hidden rounded-full bg-rule">
+              <span className="block h-full rounded-full bg-ink" style={{ width: `${Math.min(100, Math.round((c.taken / c.capacity) * 100))}%` }} />
+            </span>
+          </Link>
+        ))
+      )}
     </section>
   );
 }
 
 export default async function StaffOverviewPage() {
   const [overview, canCreateCohort] = await Promise.all([loadStaffOverview(), can("cohorts.manage", {})]);
+  const nothingVisible = !overview.queue && !overview.weekly && !overview.nextSessions && !overview.filling;
 
   return (
     <div data-primary-content className="flex flex-col">
       <PageHeader
         title="Overview"
         subtitle={dateFormat.format(overview.now)}
-        band={<FiguresBand figures={overview.figures} />}
         actions={
           canCreateCohort ? (
             <Link
               href="/staff/cohorts/new"
-              className="inline-flex min-h-11 items-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              className="inline-flex min-h-12 items-center gap-2.5 rounded-[10px] bg-ink px-[22px] text-[15.5px] font-bold text-white hover:bg-ink-hover"
             >
-              <Plus aria-hidden className="size-4" />
+              <Plus aria-hidden className="size-[19px]" strokeWidth={2.3} />
               New cohort
             </Link>
           ) : undefined
         }
       />
 
-      <div className="mt-4 grid gap-12 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="flex flex-col gap-14">
-          {overview.queue && <NeedsAttention items={overview.queue} />}
-          {overview.weekly && <EnrolmentTrend weekly={overview.weekly} />}
-          {!overview.queue && !overview.weekly && (
-            <p className="border-t border-foreground py-8 text-base text-muted-foreground">
-              Your role does not include the views this page summarises. Use the menu to open the sections you can access.
-            </p>
-          )}
-        </div>
-        <div className="flex flex-col gap-14 xl:border-l xl:border-border xl:pl-10">
+      {nothingVisible && (
+        <p className="border-t-2 border-ink py-8 text-ink-soft">
+          Your role does not include the views this page summarises. Use the menu to open the sections you can access.
+        </p>
+      )}
+
+      {(overview.queue || overview.nextSessions) && (
+        <div className="grid items-start gap-11 pt-2 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-16">
+          {overview.queue ? <NeedsAttention items={overview.queue} /> : <div />}
           {overview.nextSessions && <NextSessions sessions={overview.nextSessions} />}
+        </div>
+      )}
+
+      <FiguresStrip figures={overview.figures} />
+
+      {(overview.weekly || overview.filling) && (
+        <div className="grid items-start gap-11 pt-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-16">
+          {overview.weekly ? <EnrolmentTrend weekly={overview.weekly} /> : <div />}
           {overview.filling && <Filling cohorts={overview.filling} />}
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -30,11 +30,11 @@ import { FormField, TextInput } from "@/components/primitives/ResourceForm";
  */
 
 const BTN_PRIMARY =
-  "h-12 shrink-0 rounded-md bg-accent px-6 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-[52px] shrink-0 rounded-[10px] bg-ink px-[22px] text-[15.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-55";
 
-export function VerifyReferenceForm() {
+export function VerifyReferenceForm({ initialValue = "" }: { initialValue?: string }) {
   const router = useRouter();
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialValue);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,17 +47,17 @@ export function VerifyReferenceForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-[760px] items-end gap-3 pb-10">
-      <div className="min-w-0 grow">
+    <form onSubmit={handleSubmit} className="mt-7 grid w-full max-w-[640px] items-end gap-2.5 sm:grid-cols-[1fr_auto]">
+      <div className="min-w-0">
         <FormField name="verificationRef" label="Verification reference" required>
           {(fieldProps) => (
             <TextInput
               {...fieldProps}
-              mono
               required
               value={value}
               onChange={(event) => setValue(event.target.value)}
               placeholder="CERT-…"
+              className="font-bold tracking-[0.04em]"
             />
           )}
         </FormField>

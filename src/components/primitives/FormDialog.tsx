@@ -93,7 +93,7 @@ function Dialog({ title, pending = false, onClose, children }: FormDialogProps) 
     // `items-start` with `my-auto` on the panel: centred when it fits, and scrollable from its
     // very top when it does not. Centring with `items-center` would cut the top off a tall form.
     <div
-      className="fixed inset-0 flex items-start justify-center overflow-y-auto bg-foreground/40 p-4"
+      className="fixed inset-0 flex items-start justify-center overflow-y-auto bg-ink/45 p-4"
       // A dialog opened from another sits above it.
       style={{ zIndex: 50 + depth }}
     >
@@ -104,10 +104,10 @@ function Dialog({ title, pending = false, onClose, children }: FormDialogProps) 
         aria-labelledby={titleId}
         tabIndex={-1}
         data-dialog-depth={depth}
-        className="my-auto flex w-full max-w-xl flex-col gap-4 rounded-xl bg-surface p-6 shadow-card"
+        className="my-auto flex w-full max-w-xl flex-col gap-4 rounded-[18px] bg-paper p-7 shadow-card"
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 id={titleId} className="text-base font-semibold tracking-tight text-foreground">
+          <h2 id={titleId} className="ietc-display text-[26px] leading-[1.02]">
             {title}
           </h2>
           <button

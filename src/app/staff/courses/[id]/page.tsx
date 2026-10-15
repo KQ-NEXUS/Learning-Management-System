@@ -150,7 +150,7 @@ export default async function CourseDetailPage({
           {canEditCourse && (
             <Link
               href={`/staff/courses/${id}/edit`}
-              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               Edit course
             </Link>
@@ -158,14 +158,14 @@ export default async function CourseDetailPage({
           {/* D-13 preview surfaces (plan 04-14) — staff-gated, no shareable link. */}
           <Link
             href={`/staff/courses/${id}/preview`}
-            className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+            className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
           >
             Preview public page
           </Link>
           {firstLessonId && (
             <Link
               href={`/staff/courses/${id}/preview/lessons/${firstLessonId}`}
-              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               Preview learner view
             </Link>

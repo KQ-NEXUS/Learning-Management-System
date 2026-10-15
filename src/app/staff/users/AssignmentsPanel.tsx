@@ -100,7 +100,7 @@ export function AssignmentsPanel({
       )}
 
       {active.length === 0 ? (
-        <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
+        <div className="flex flex-col items-start gap-2 border-t-2 border-ink py-12">
           <p className="text-sm font-semibold text-foreground">No active role assignments</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             {canManage
@@ -145,7 +145,7 @@ export function AssignmentsPanel({
 
       {revoked.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-[15px] font-bold text-ink">
             Revoked
           </span>
           <ul className="flex flex-col gap-1">

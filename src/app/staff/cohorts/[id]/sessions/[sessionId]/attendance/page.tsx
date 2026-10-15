@@ -29,7 +29,7 @@ export default async function AttendanceMarkPage({
     if (error instanceof AuthorizationError) {
       // Identical copy regardless of whether the session exists (RBAC-06).
       return (
-        <div className="flex flex-col items-start gap-2 border-t border-foreground py-12">
+        <div className="flex flex-col items-start gap-2 border-t-2 border-ink py-12">
           <span className="font-mono text-xs tracking-wide text-muted-foreground">403</span>
           <p className="text-sm font-semibold text-foreground">
             You do not have access to this session&apos;s attendance
@@ -76,7 +76,7 @@ export default async function AttendanceMarkPage({
           actions={
             <GuardedLink
               href={`/staff/cohorts/${cohortId}`}
-              className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               Back to cohort
             </GuardedLink>

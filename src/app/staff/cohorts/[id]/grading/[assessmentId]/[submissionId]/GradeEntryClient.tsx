@@ -55,9 +55,9 @@ export type GradeEntryClientProps = {
 };
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Blank/non-integer/out-of-range all resolve to `null` — never silently
  * coerced to 0 (`Number("")` is `0` in JS, a real footgun for a blank
@@ -222,7 +222,7 @@ export function GradeEntryClient({
                 value={feedbackInput}
                 disabled={pending}
                 onChange={(e) => setFeedbackInput(e.target.value)}
-                className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground disabled:bg-surface-2"
+                className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink disabled:bg-surface-2"
               />
             )}
           </FormField>

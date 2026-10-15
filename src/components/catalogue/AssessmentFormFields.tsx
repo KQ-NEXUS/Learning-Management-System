@@ -105,7 +105,7 @@ const FEEDBACK_LABELS: Record<string, string> = {
 };
 
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_DANGER =
   "rounded-md border border-danger/40 bg-surface px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -225,7 +225,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
         <div className="flex flex-col gap-1">
           <label
             htmlFor="assessment-type"
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            className="text-[15px] font-bold text-ink"
           >
             Type
           </label>
@@ -234,7 +234,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
               id="assessment-type"
               value={type}
               onChange={(event) => setType(event.target.value as "QUIZ" | "ASSIGNMENT")}
-              className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+              className="h-[38px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
             >
               <option value="QUIZ">Quiz</option>
               <option value="ASSIGNMENT">Assignment</option>
@@ -263,7 +263,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
               rows={4}
               maxLength={10_000}
               defaultValue={initial.instructions ?? ""}
-              className="min-h-[92px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
+              className="min-h-[92px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
             />
           )}
         </FormField>
@@ -301,7 +301,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
       {mode === "edit" && <ReadinessPanel items={props.readinessItems} />}
 
       {mode === "edit" && (
-        <div className="flex flex-col items-start gap-2 border-t border-foreground pt-5">
+        <div className="flex flex-col items-start gap-2 border-t-2 border-ink pt-5">
           <p className="text-sm font-semibold">Publish</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             {published
@@ -320,7 +320,7 @@ export function AssessmentFormFields(props: AssessmentFormFieldsProps) {
       )}
 
       {mode === "edit" && !archived && (
-        <div className="flex flex-col items-start gap-2 border-t border-foreground pt-5">
+        <div className="flex flex-col items-start gap-2 border-t-2 border-ink pt-5">
           <p className="text-sm font-semibold">Archive this assessment</p>
           <p className="max-w-prose text-sm text-muted-foreground">
             It leaves every staff authoring list. It cannot be deleted — archiving is the only
@@ -404,7 +404,7 @@ function QuizFields({
           <select
             {...field}
             defaultValue={initial.feedbackBehaviour}
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+            className="h-[38px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
           >
             {FEEDBACK_BEHAVIOURS.map((value) => (
               <option key={value} value={value}>
@@ -541,7 +541,7 @@ function AssignmentFields({
           <select
             {...field}
             defaultValue={initial.feedbackBehaviour}
-            className="h-[38px] rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+            className="h-[38px] min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
           >
             {FEEDBACK_BEHAVIOURS.map((value) => (
               <option key={value} value={value}>

@@ -71,7 +71,7 @@ export function PolicyConsentForm({
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="orderId" value={orderId} />
 
-      <div className="flex flex-col gap-3 border-t border-foreground pt-5">
+      <div className="flex flex-col gap-3 border-t-2 border-ink pt-5">
         <label className="flex items-start gap-2 text-sm text-foreground">
           <input
             name="acceptedTerms"

@@ -27,9 +27,9 @@ export type InstructorsPanelProps = {
 };
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
-  "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50";
 
 export function InstructorsPanel({ cohortId, instructors, canManage }: InstructorsPanelProps) {
   const router = useRouter();
@@ -85,15 +85,15 @@ export function InstructorsPanel({ cohortId, instructors, canManage }: Instructo
 
   return (
     <section aria-label="Instructors" className="flex flex-col">
-      <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+      <h2 className="pb-4 ietc-display text-[25px] leading-none md:text-[28px]">
         Instructors
       </h2>
       {instructors.length === 0 ? (
-        <p className="border-t border-foreground pt-4 text-sm text-muted-foreground">
+        <p className="border-t-2 border-ink pt-4 text-sm text-muted-foreground">
           No instructor assigned to this cohort.
         </p>
       ) : (
-        <ul className="border-t border-foreground">
+        <ul className="border-t-2 border-ink">
           {instructors.map((row) => (
             <li key={row.id} className="flex items-center justify-between gap-4 border-b border-border py-4 text-sm">
               <span className="flex min-w-0 items-center gap-4">

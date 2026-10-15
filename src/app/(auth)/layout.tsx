@@ -1,60 +1,39 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BrandMark } from "@/components/shell/BrandMark";
+import { SiteBrand } from "@/components/site/SiteHeader";
+import { BRAND } from "@/lib/brand";
 
 /**
- * The split-panel auth shell shared by all six `(auth)` routes (D-21, D-22).
+ * The sign-in area shell shared by all six `(auth)` routes (IETC redesign,
+ * design/mockups/auth-signin.html): a black IETC panel that says who IETC is, and the form
+ * beside it. On a phone the panel shortens to the brand, the headline and the verify link.
  *
- * Deliberately guard-free: every screen this wraps exists to be reached by
- * someone who is not signed in (sign-in, register, password recovery, email
- * verification), so — unlike `staff/layout.tsx` and `account/layout.tsx` —
- * this file must perform no actor lookup and no redirect. That asymmetry
- * mirrors `(public)/layout.tsx`'s guard-free shape and is load-bearing: a
- * guard here would lock a locked-out user out of the recovery flow
- * (RESEARCH.md Pitfall 5).
- *
- * All six page files used to repeat the same duplicated centred-column
- * wrapper class string verbatim; that wrapper is retired entirely in favour
- * of the split panel below, whose `<main>` landmark now owns the right
- * column's centred content in every one of the six routes.
+ * Deliberately guard-free: every screen this wraps exists to be reached by someone who is
+ * not signed in (sign-in, register, password recovery, email verification), so this file
+ * performs no actor lookup and no redirect. A guard here would lock a locked-out user out
+ * of the recovery flow (RESEARCH.md Pitfall 5).
  */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-sidebar-bg md:flex-row">
-      <header className="flex w-full shrink-0 flex-col justify-between gap-3 bg-sidebar-bg p-5 md:w-[44%] md:gap-8 md:p-12">
-        <div className="flex items-center gap-2">
-          <BrandMark className="size-7" />
-          <span className="text-base font-semibold tracking-[-0.01em] text-white">
-            KQ Nexus
-          </span>
-        </div>
-
-        <p className="text-sm text-sidebar-muted md:hidden">
-          Professional training that an employer can verify.
-        </p>
-
-        <div className="hidden flex-col gap-4 md:flex">
-          <p className="max-w-[18ch] text-[36px] leading-[1.15] font-bold tracking-[-0.04em] text-white">
-            Professional training that an employer can verify.
+    <div className="grid min-h-screen bg-ground md:grid-cols-[44%_1fr]">
+      <header className="flex flex-col justify-between gap-[22px] bg-ink px-5 pt-[22px] pb-[26px] text-white md:gap-10 md:px-14 md:py-11">
+        <SiteBrand tone="white" />
+        <div>
+          <p className="ietc-display max-w-none text-[32px] md:max-w-[12ch] md:text-[clamp(38px,4.4vw,64px)]">
+            Professional training that an employer can <span className="text-orange">verify.</span>
           </p>
-          <p className="max-w-[38ch] text-sm leading-relaxed text-sidebar-muted">
-            Every certificate carries a public verification link. No phone call, no letterhead.
+          <p className="mt-4 hidden max-w-[40ch] text-on-ink-soft md:block">
+            Every {BRAND.shortName} certificate carries a public verification reference. No phone call, no letterhead.
           </p>
-          <Link
-            href="/verify-certificate"
-            className="w-fit text-sm font-semibold text-white underline underline-offset-4 hover:text-sidebar-fg"
-          >
-            Verify a certificate →
+          <Link href="/verify-certificate" className="mt-3 inline-block font-bold underline underline-offset-4 hover:text-orange md:mt-[18px]">
+            Verify a certificate
           </Link>
         </div>
-
-        <span className="hidden font-mono text-xs tracking-wide text-sidebar-muted md:inline">
-          AFRICA/LAGOS
-        </span>
+        <span className="hidden text-sm font-semibold text-on-ink-soft md:inline">Lekki, Lagos · {BRAND.accreditation.title}, New Jersey, USA</span>
       </header>
 
-      <main className="flex flex-1 items-center justify-center rounded-t-[28px] bg-surface p-5 md:p-8 md:rounded-l-[28px] md:rounded-tr-none">
-        <div className="flex w-full max-w-[378px] flex-col gap-5">{children}</div>
+      <main className="flex items-start justify-center px-5 pt-8 pb-12 md:items-center md:px-8 md:py-12">
+        <div className="flex w-full max-w-[400px] flex-col gap-5">{children}</div>
       </main>
     </div>
   );

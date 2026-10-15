@@ -375,7 +375,30 @@ export type LearnerDashboardProgress = {
   requiredLessonsTotal: number;
   attendance: AttendanceComponent;
   structure: "structure" | "unpinned";
+  /** Every module in course order, for the dashboard's module strip. Absent when unpinned. */
+  modules?: DashboardModule[];
 };
+
+/**
+ * One module on the dashboard strip: `done` once every required, not-withdrawn lesson in it
+ * is complete; `current` for the module holding the next required lesson; otherwise `todo`.
+ */
+export type DashboardModule = { title: string; state: "done" | "current" | "todo" };
+
+/** The module strip, read from the same decorated path (and the same D-17 exclusion) as the counts. */
+export function summariseModules(path: LearnerPath): DashboardModule[] {
+  const next = findNextIncompleteRequiredLesson(path);
+  const modules: DashboardModule[] = [];
+  for (const course of path.courses) {
+    for (const mod of course.modules) {
+      const required = mod.lessons.filter((lesson) => lesson.required && lesson.withdrawnAt == null);
+      const holdsNext = next !== null && mod.lessons.some((lesson) => lesson.id === next.lessonId);
+      const done = !holdsNext && required.length > 0 && required.every((lesson) => lesson.completed);
+      modules.push({ title: mod.title, state: holdsNext ? "current" : done ? "done" : "todo" });
+    }
+  }
+  return modules;
+}
 
 export type UpcomingSessionCard = {
   id: string;
@@ -879,6 +902,7 @@ export function createEnrolmentDashboardService(deps: EnrolmentDashboardDeps) {
       requiredLessonsTotal: requiredLessonIds.length,
       attendance,
       structure: "structure",
+      modules: summariseModules(path),
     };
 
     // A COMPLETED card has no assessment obligations left (that read is

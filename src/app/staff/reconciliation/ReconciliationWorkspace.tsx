@@ -130,7 +130,7 @@ export function ReconciliationWorkspace({
     return (
       <div className="flex min-w-0 flex-col gap-8">
         <PageHeader breadcrumbs={breadcrumbs} title="Reconciliation" />
-        <section className="border-t border-foreground pt-5">
+        <section className="border-t-2 border-ink pt-5">
           <p className="text-sm text-muted-foreground">You do not have access to perform this action.</p>
         </section>
       </div>
@@ -149,7 +149,7 @@ export function ReconciliationWorkspace({
             {canExportRefunds && !loading && !error && <button type="button" onClick={() => { setRefundExportQueued(false); setRefundExportOpen(true); }} className={BTN_PRIMARY_ON_NAVY}>Export refunds CSV</button>}
           </>
         }
-        band={<p className="mt-4 font-mono text-[13px] text-sidebar-soft">Data as of <time dateTime={asOf.toISOString()}>{asOf.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></p>}
+        band={<p className="mt-4 font-mono text-[13px] text-ink-soft">Data as of <time dateTime={asOf.toISOString()}>{asOf.toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></p>}
       />
 
       {refundExportQueued && <p role="status" className={NOTE_SUCCESS}>Export queued. You can leave this page and follow its progress in Export History. <Link href="/staff/reports/exports" className="font-semibold text-accent hover:underline">View export history</Link></p>}
@@ -186,7 +186,7 @@ export function ReconciliationWorkspace({
 
       <section aria-labelledby="queue-title" aria-busy={loading || isNavigating} className="min-w-0">
         <h2 id="queue-title" className={`${SECTION_TITLE} pb-4`}>Unresolved exceptions</h2>
-        <div className="border-t border-foreground">
+        <div className="border-t-2 border-ink">
           {loading ? (
             <p role="status" className="py-6 text-sm text-muted-foreground">Loading reconciliation exceptions…</p>
           ) : error ? (
@@ -231,7 +231,7 @@ export function ReconciliationWorkspace({
         <h2 id="summary-title" className={SECTION_TITLE}>Scoped totals</h2>
         <p className="mt-2 text-sm text-muted-foreground">Totals use the same provider, currency, subject, date, status, and permission scope as the rows above.</p>
         {summary.length > 0 && (
-          <div className="mt-4 grid gap-x-10 border-t border-foreground md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-4 grid gap-x-10 border-t-2 border-ink md:grid-cols-2 xl:grid-cols-3">
             {summary.map((item) => (
               <article key={`${item.currency}-${item.provider}-${item.subject}`} className="border-b border-border py-5">
                 <p className="text-sm text-muted-foreground">{item.currency} · {PROVIDER_LABEL[item.provider]} · {item.subject === "PAYMENT" ? "Payments" : "Refunds"}</p>

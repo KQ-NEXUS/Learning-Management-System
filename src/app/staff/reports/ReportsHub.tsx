@@ -47,12 +47,12 @@ function MetricLink({ href, name, label, value, size, first }: { href: string; n
       href={href}
       aria-label={name}
       className={`group flex min-w-0 flex-col gap-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white ${
-        first ? "" : "lg:border-l lg:border-sidebar-line lg:pl-6"
+        first ? "" : "lg:border-l lg:border-rule lg:pl-7"
       }`}
     >
-      <span className="text-sm text-sidebar-soft">{label}</span>
-      <span className={`font-mono ${size} leading-[1.15] font-medium tracking-[-0.03em] break-words text-white tabular-nums`}>{value}</span>
-      <span className="text-sm text-sidebar-soft group-hover:text-white group-hover:underline">View matching records</span>
+      <span className="text-sm text-ink-soft">{label}</span>
+      <span className={`ietc-display ${size} leading-none break-words tabular-nums`}>{value}</span>
+      <span className="text-sm font-bold text-ink underline underline-offset-4 group-hover:text-orange-text">View matching records</span>
     </Link>
   );
 }
@@ -66,7 +66,7 @@ function ReportGroups({ filters = {} }: { filters?: ReportFilters }) {
           <h2 id={`report-group-${group.id}`} className={`${SECTION_TITLE} pb-4`}>
             {group.label}
           </h2>
-          <ul className="grid grid-cols-1 gap-x-10 border-t border-foreground md:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-x-10 border-t-2 border-ink md:grid-cols-2 xl:grid-cols-3">
             {REPORT_REGISTRY.filter((definition) => definition.group === group.id).map((definition) => (
               <li
                 key={definition.id}
@@ -180,7 +180,7 @@ export function ReportsHub(props: ReportsHubProps) {
       />
 
       {props.state === "loading" && (
-        <div role="status" aria-busy="true" className="border-t border-foreground pt-5">
+        <div role="status" aria-busy="true" className="border-t-2 border-ink pt-5">
           <p className="text-sm font-semibold text-foreground">Loading report overview</p>
           <div aria-hidden className="mt-4 grid grid-cols-2 gap-6 lg:grid-cols-5">
             {Array.from({ length: 5 }, (_, index) => (
@@ -191,14 +191,14 @@ export function ReportsHub(props: ReportsHubProps) {
       )}
 
       {props.state === "error" && (
-        <div role="alert" className="border-l-2 border-danger py-1 pl-4 text-sm text-danger">
+        <div role="alert" className="rounded-xl bg-danger-surface px-4 py-3.5 text-[15px] text-pill-red-ink">
           <p className="font-semibold">Could not load this report. No value has been replaced with zero.</p>
           <p className="mt-1">Retry the report or return later. No collection names, counts, or identifiers are shown.</p>
         </div>
       )}
 
       {ready && (
-        <section aria-label="Report context" className="grid grid-cols-1 gap-x-10 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-2 xl:grid-cols-4">
+        <section aria-label="Report context" className="grid grid-cols-1 gap-x-10 gap-y-5 border-t-2 border-ink pt-5 sm:grid-cols-2 xl:grid-cols-4">
           <ContextItem label="Date range">
             <p className="break-words">{filters.from ?? "All dates"} to {filters.to ?? "Data as of"}</p>
           </ContextItem>

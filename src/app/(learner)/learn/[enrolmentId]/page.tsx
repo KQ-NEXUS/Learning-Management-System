@@ -9,7 +9,6 @@ import {
   type LearnerPath,
 } from "@/server/services/learner-access";
 import { collectRequiredLessonEvidence } from "@/server/services/enrolment-dashboard-service";
-import { ProgressMeter } from "@/components/learner/ProgressMeter";
 import { GetSupportLink } from "@/components/support/GetSupportLink";
 import { LessonRow } from "@/components/learner/LessonRow";
 import { AccessDeniedPanel } from "@/components/learner/AccessDeniedPanel";
@@ -75,9 +74,9 @@ export default async function LessonListPage({
   if (path.courses.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <LearnerPageHeader size="hero" title={path.enrolment.cohort.title} />
-        <div className="border-t border-foreground py-6 text-sm text-muted-foreground">
-          This course&apos;s content is not yet available
+        <LearnerPageHeader tint="bg-peach" title={path.enrolment.cohort.title} back={{ label: "My learning", href: "/learn" }} />
+        <div className="mt-8 rounded-[18px] bg-paper p-6">
+          <p className="ietc-display text-[25px] leading-none">This course&apos;s content is not yet available</p>
         </div>
       </div>
     );
@@ -105,44 +104,51 @@ export default async function LessonListPage({
   const resumeLabel = completedCount > 0 ? "Resume lesson" : "Start lesson";
 
   return (
-    <div data-primary-content className="flex flex-col gap-6">
-      <LearnerPageHeader size="hero" title={heading} />
-
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-        <div className="min-w-0 lg:pr-14">
-          <div className="pb-12">
-            <ProgressMeter
-              label="Required lessons complete"
-              valuePct={completionPct}
-              captionText={`${completedCount} of ${totalRequired} required lessons complete`}
-            />
+    <div data-primary-content className="flex flex-col">
+      <LearnerPageHeader
+        tint="bg-peach"
+        title={heading}
+        back={{ label: "My learning", href: "/learn" }}
+        band={
+          <div className="flex flex-wrap items-center gap-x-[18px] gap-y-2">
+            <div
+              role="progressbar"
+              aria-label="Required lessons complete"
+              aria-valuenow={completionPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="h-2.5 w-full max-w-[300px] overflow-hidden rounded-full bg-ink/15"
+            >
+              <div className="h-full rounded-full bg-ink" style={{ width: `${completionPct}%` }} />
+            </div>
+            <p className="text-[14.5px] font-semibold text-peach-text">
+              {completedCount} of {totalRequired} required lessons complete
+            </p>
           </div>
+        }
+      />
 
-          <h2 className="pb-5 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
-            Course content
-          </h2>
+      <div className="grid items-start gap-9 pt-7 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-16 lg:pt-11">
+        <div className="min-w-0">
+          <h2 className="ietc-display pb-4 text-[25px] leading-none md:text-[28px]">Course content</h2>
 
           {path.courses.map((course) => (
             <div key={course.courseId} className="flex flex-col">
-              {path.courses.length > 1 && (
-                <h3 className="pb-3 text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">
-                  {course.courseTitle}
-                </h3>
-              )}
+              {path.courses.length > 1 && <h3 className="ietc-display pb-3 text-[22px] leading-none">{course.courseTitle}</h3>}
 
               {course.modules.map((mod, mi) => {
                 const doneInModule = mod.lessons.filter((l) => l.completed).length;
                 return (
-                  <section key={mod.id} className="pb-8">
-                    <div className="flex items-baseline justify-between gap-4 pb-3">
-                      <h3 className="text-[20px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+                  <section key={mod.id} className="pb-9">
+                    <div className="flex items-baseline justify-between gap-4 border-b-2 border-ink pb-2.5">
+                      <h3 className="ietc-display text-[22px] leading-[1.05]">
                         {mi + 1}. {mod.title}
                       </h3>
-                      <span className="text-[13px] whitespace-nowrap text-muted-foreground tabular-nums">
+                      <span className="text-[14px] whitespace-nowrap text-ink-soft tabular-nums">
                         {doneInModule} of {mod.lessons.length} lessons
                       </span>
                     </div>
-                    <div className="border-t border-foreground">
+                    <div>
                       {mod.lessons.map((lesson, li) => (
                         <LessonRow
                           key={lesson.id}
@@ -161,69 +167,67 @@ export default async function LessonListPage({
           ))}
         </div>
 
-        <aside className="flex flex-col gap-10 lg:border-l lg:border-border lg:pl-10">
+        <aside className="flex flex-col gap-5 rounded-[18px] bg-paper p-6 shadow-card max-lg:-order-1 lg:sticky lg:top-5">
           {courseCompleted && (
             <section aria-label="Course completed">
-              <p className="text-[18px] font-semibold tracking-[-0.01em] text-foreground">
-                You&apos;ve completed this course
-              </p>
-              <p className="mt-1 mb-4 text-sm text-muted-foreground">
-                Lessons are closed now that the course is complete. Your progress, results and certificate stay on
-                record.
+              <p className="ietc-display text-[25px] leading-none">You&apos;ve completed this course</p>
+              <p className="mt-2 mb-4 text-[14.5px] text-ink-soft">
+                Lessons are closed now that the course is complete. Your progress, results and certificate stay on record.
               </p>
               <Link
                 href="/dashboard"
-                className="inline-flex min-h-[46px] items-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-[10px] bg-ink px-[22px] text-[15.5px] font-bold text-white hover:bg-ink-hover"
               >
                 View your certificate
-                <ArrowRight aria-hidden className="size-4" />
+                <ArrowRight aria-hidden className="size-[19px]" strokeWidth={2.3} />
               </Link>
             </section>
           )}
 
           {current && (
-            <section>
-              <p className="text-sm text-muted-foreground">Next up</p>
-              <p className="mt-1 mb-4 text-[18px] font-semibold tracking-[-0.01em] text-foreground">
+            <section aria-label="Next up">
+              <p className="text-[14.5px] font-bold">Next up</p>
+              <p className="ietc-display mt-1.5 mb-4 text-[25px] leading-[1.02]">
                 <span className="sr-only">Lesson </span>
                 {(current as { number: string; title: string }).number} {(current as { title: string }).title}
               </p>
               <Link
                 href={`/learn/${enrolmentId}/lessons/${(current as { id: string }).id}`}
-                className="inline-flex min-h-[46px] items-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-[10px] bg-ink px-[22px] text-[15.5px] font-bold text-white hover:bg-ink-hover"
               >
                 {resumeLabel}
-                <ArrowRight aria-hidden className="size-4" />
+                <ArrowRight aria-hidden className="size-[19px]" strokeWidth={2.3} />
               </Link>
             </section>
           )}
 
-          {/* The sessions page serves ACTIVE enrolments only (G-01), so a completed course offers no link to it. */}
-          {!courseCompleted && (
-            <section aria-label="Sessions">
-              <div className="pb-4">
-                <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">Sessions</h2>
+          <dl className="border-t border-rule">
+            {/* The sessions page serves ACTIVE enrolments only (G-01), so a completed course offers no link to it. */}
+            {!courseCompleted && (
+              <div className="flex items-baseline justify-between gap-4 border-b border-rule py-3.5">
+                <dt className="font-bold">Sessions</dt>
+                <dd>
+                  <Link href={`/learn/${enrolmentId}/sessions`} className="font-bold underline underline-offset-4 hover:text-orange-text">
+                    View all sessions
+                  </Link>
+                </dd>
               </div>
-              <div className="border-t border-foreground pt-4">
-                <Link href={`/learn/${enrolmentId}/sessions`} className="font-semibold text-accent hover:underline">
-                  View all sessions
+            )}
+            <div className="flex items-baseline justify-between gap-4 border-b border-rule py-3.5">
+              <dt className="font-bold">Results</dt>
+              <dd>
+                <Link href={`/learn/${enrolmentId}/results`} className="font-bold underline underline-offset-4 hover:text-orange-text">
+                  View results
                 </Link>
-              </div>
-            </section>
-          )}
-
-          <section aria-label="Results">
-            <div className="pb-4">
-              <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">Results</h2>
+              </dd>
             </div>
-            <div className="border-t border-foreground pt-4">
-              <Link href={`/learn/${enrolmentId}/results`} className="font-semibold text-accent hover:underline">
-                View results
-              </Link>
-            </div>
-          </section>
+          </dl>
 
-          <GetSupportLink kind="COHORT" id={path.enrolment.cohort.id} />
+          <GetSupportLink
+            kind="COHORT"
+            id={path.enrolment.cohort.id}
+            className="w-fit font-bold underline underline-offset-4 hover:text-orange-text"
+          />
         </aside>
       </div>
     </div>

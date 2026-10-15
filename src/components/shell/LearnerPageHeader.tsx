@@ -3,16 +3,13 @@ import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
- * LearnerPageHeader — the page title, drawn in the navy band of the learner shell.
+ * LearnerPageHeader — a learner or public page's head in the IETC look: an optional back
+ * link, the condensed display title and a lede, the page's actions, and an optional band
+ * underneath (e.g. the course facts strip).
  *
- * The learner shell is a navy top bar over a white, rounded-top sheet whose content is
- * centred in a 1120px column. This header pulls itself up out of that column (negative top
- * margin cancels the column's top padding), spans the full viewport width in navy, keeps its
- * text aligned to the same 1120px column, and finishes with a white cap that overlaps the
- * band's bottom edge so the sheet's rounded corners land below the title.
- *
- * Hook-free, so it renders on the server and the h1 is in the initial HTML. It must be the
- * first rendered element inside the shell's <main>.
+ * It sits on the page ground at the top of the shell's <main>. `tint` paints the head in a
+ * class colour and pulls it out to the full width (a course's own page). Hook-free, so it
+ * renders on the server and the h1 is in the initial HTML.
  */
 export type LearnerPageHeaderProps = {
   title: string;
@@ -20,49 +17,37 @@ export type LearnerPageHeaderProps = {
   /** A single "go back" link shown above the title. */
   back?: { label: string; href: string };
   actions?: ReactNode;
-  /** Catalogue pages draw a bigger headline than the working pages ("hero": 56px, "display": 66px). */
+  /** Catalogue pages draw a bigger headline than the working pages. */
   size?: "default" | "hero" | "display";
-  /** Extra content under the title, still on the navy band (e.g. the course facts strip). */
+  /** Extra content under the title (e.g. the course facts strip). */
   band?: ReactNode;
+  /** A class tint utility such as `bg-tint-1` or `bg-peach`; the head then spans the full width. */
+  tint?: string;
 };
 
 const H1_SIZE = {
-  default: "text-[36px] md:text-[48px]",
-  hero: "text-[40px] md:text-[56px]",
-  display: "text-[44px] md:text-[66px]",
+  default: "text-[clamp(38px,4.4vw,64px)]",
+  hero: "text-[clamp(42px,5.2vw,74px)]",
+  display: "text-[clamp(42px,5.2vw,74px)]",
 } as const;
 
-export function LearnerPageHeader({ title, subtitle, back, actions, size = "default", band }: LearnerPageHeaderProps) {
+export function LearnerPageHeader({ title, subtitle, back, actions, size = "default", band, tint }: LearnerPageHeaderProps) {
   return (
-    <div className="relative left-1/2 -mt-[41px] w-screen -translate-x-1/2">
-      <div className="on-navy bg-sidebar-bg text-white">
-        <div className="mx-auto flex max-w-[1168px] flex-col gap-3 px-6 pt-4 pb-[56px]">
-          {back && (
-            <Link
-              href={back.href}
-              className="inline-flex min-h-8 w-fit items-center gap-2 text-sm text-sidebar-soft hover:text-white"
-            >
-              <ArrowLeft aria-hidden className="size-4" />
-              {back.label}
-            </Link>
-          )}
-          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-            <div className="flex min-w-0 flex-col gap-2">
-              <h1 className={`${H1_SIZE[size]} leading-[1.04] font-bold tracking-[-0.04em] break-words text-white`}>
-                {title}
-              </h1>
-              {subtitle && (
-                <p className={`max-w-[60ch] text-sidebar-fg ${size === "default" ? "text-base" : "text-[16px] md:text-[20px] md:leading-[1.6]"}`}>
-                  {subtitle}
-                </p>
-              )}
-            </div>
-            {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-          </div>
-          {band && <div className="mt-6">{band}</div>}
+    <header className={`flex flex-col gap-3 pt-7 pb-[30px] md:pt-10 ${tint ? `${tint} -mx-5 px-5 md:-mx-14 md:px-14` : ""}`}>
+      {back && (
+        <Link href={back.href} className="inline-flex min-h-8 w-fit items-center gap-2 text-[15px] font-bold text-ink hover:underline hover:underline-offset-4">
+          <ArrowLeft aria-hidden className="size-[19px]" strokeWidth={2.3} />
+          {back.label}
+        </Link>
+      )}
+      <div className="flex flex-wrap items-end justify-between gap-x-7 gap-y-[18px]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <h1 className={`ietc-display ${H1_SIZE[size]} break-words`}>{title}</h1>
+          {subtitle && <p className={`max-w-[58ch] text-[17px] md:text-[18.5px] ${tint ? "text-tint-text" : "text-ink-soft"}`}>{subtitle}</p>}
         </div>
+        {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
       </div>
-      <div aria-hidden className="-mt-7 -mb-1 h-8 rounded-t-[28px] bg-surface" />
-    </div>
+      {band && <div className="mt-5">{band}</div>}
+    </header>
   );
 }

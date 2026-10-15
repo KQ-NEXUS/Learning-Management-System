@@ -2,27 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import {
-  ChevronDown,
-  Award,
-  BookOpen,
-  ChevronRight,
-  CreditCard,
-  Hash,
-  KeyRound,
-  Layers,
-  LayoutGrid,
-  ListChecks,
-  Menu,
-  ShieldCheck,
-  User,
-  UserPlus,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
-import { BrandMark } from "@/components/shell/BrandMark";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, Menu, X } from "lucide-react";
+import { SiteBrand } from "@/components/site/SiteHeader";
 import { MAIN_CONTENT_ID, SkipLink } from "@/components/shell/SkipLink";
+import { BRAND } from "@/lib/brand";
 import {
   LicenceRestrictionProvider,
   UNRESTRICTED_LICENCE_RESTRICTION,
@@ -30,101 +14,20 @@ import {
 } from "@/components/licence/LicenceRestrictionProvider";
 
 /**
- * StaffShell — the client half of the staff workspace shell (D-19, D-20).
+ * StaffShell — the client half of the staff workspace shell (IETC redesign,
+ * design/mockups/staff-overview.html).
  *
- * `staff/layout.tsx` stays an async Server Component so the actor lookup and
- * its two redirects run before any of this ever mounts (RBAC-06 rendering
- * guard). This component owns only chrome: a 248px navy rail with grouped nav, a
- * navy header band with a section-level locator trail, and the white content
- * sheet whose rounded top corners reveal the navy frame behind them.
+ * `staff/layout.tsx` stays an async Server Component so the actor lookup and its two
+ * redirects run before any of this mounts (RBAC-06 rendering guard). This component owns
+ * only chrome: a white top bar with Overview and one menu per nav group, the bell, who is
+ * signed in and Sign out; the licence banner; the content area; a quiet footer.
  *
- * Chrome persistence (UI-SPEC 8.17): the sidebar, header bar and identity
- * chip are rendered here, outside `children`. A loading or erroring child
- * route only ever swaps the content pane — there is no branch anywhere in
- * this file that replaces the sidebar or header bar.
+ * On a phone (below lg) the groups fold into one Menu panel listing every link under its
+ * group. Chrome persistence: header, banner and footer render outside `children`, so a
+ * loading or erroring child route only ever swaps the content area.
  */
 
 export type StaffNavItem = { label: string; href: string; group?: string };
-
-const NAV_ICONS: Record<string, LucideIcon> = {
-  "/staff": LayoutGrid,
-  "/staff/cohorts": Users,
-  "/staff/enrolments": UserPlus,
-  "/staff/payments": CreditCard,
-  "/staff/courses": BookOpen,
-  "/staff/programmes": Layers,
-  "/staff/certificates": Award,
-  "/staff/users": User,
-  "/staff/roles": ShieldCheck,
-  "/staff/audit": ListChecks,
-  "/staff/licence": KeyRound,
-  "/staff/learner-numbers": Hash,
-};
-
-// ---------------------------------------------------------------------------
-// Collapsible nav groups (owner request, 2026-10-04)
-// ---------------------------------------------------------------------------
-//
-// Each labelled group (Delivery, Finance, Catalogue...) can be folded to its
-// heading. Which groups are folded is a per-browser preference kept in
-// localStorage, read through `useSyncExternalStore` so the server render and
-// the first client render agree (everything open) and the stored choice is
-// applied right after, without a set-state-in-effect.
-
-const COLLAPSED_GROUPS_KEY = "kq.staffNav.collapsedGroups";
-const COLLAPSED_GROUPS_EVENT = "kq:staff-nav-groups";
-
-/** Stands for "the user has never chosen". Not a valid group label, so it cannot clash with a stored value. */
-const UNSET = "*";
-
-/** The stored value ("" when the user opened everything), `UNSET` when nothing was ever stored, or `null` when storage cannot be read at all. */
-function readCollapsedGroups(): string | null {
-  try {
-    return window.localStorage.getItem(COLLAPSED_GROUPS_KEY) ?? UNSET;
-  } catch {
-    return null;
-  }
-}
-
-function writeCollapsedGroups(labels: string[]): void {
-  try {
-    window.localStorage.setItem(COLLAPSED_GROUPS_KEY, labels.join("|"));
-  } catch {
-    // Not remembered; still applied for this page view through the event below.
-  }
-  window.dispatchEvent(new CustomEvent(COLLAPSED_GROUPS_EVENT, { detail: labels.join("|") }));
-}
-
-let collapsedGroupsFallback: string | null = null;
-
-function subscribeCollapsedGroups(onChange: () => void): () => void {
-  const onCustom = (event: Event) => {
-    collapsedGroupsFallback = (event as CustomEvent<string>).detail;
-    onChange();
-  };
-  window.addEventListener("storage", onChange);
-  window.addEventListener(COLLAPSED_GROUPS_EVENT, onCustom);
-  return () => {
-    window.removeEventListener("storage", onChange);
-    window.removeEventListener(COLLAPSED_GROUPS_EVENT, onCustom);
-  };
-}
-
-/**
- * The folded groups. Before the user has ever folded or opened a group, every group
- * is folded except the one holding the current page (`unset`), so the whole menu fits
- * on a laptop screen. The server and first client render agree on "everything open".
- * Falls back to the last value set in this page when storage is blocked.
- */
-function useCollapsedGroups(): { labels: Set<string>; unset: boolean } {
-  const raw = useSyncExternalStore(
-    subscribeCollapsedGroups,
-    // Storage is the truth when it can be read; the in-page value only stands in when it cannot.
-    () => readCollapsedGroups() ?? collapsedGroupsFallback ?? UNSET,
-    () => "",
-  );
-  return { labels: new Set(raw && raw !== UNSET ? raw.split("|") : []), unset: raw === UNSET };
-}
 
 /** Groups consecutive items that share a group label, preserving nav order. */
 function groupNav(nav: StaffNavItem[]): { label: string | null; items: StaffNavItem[] }[] {
@@ -138,7 +41,7 @@ function groupNav(nav: StaffNavItem[]): { label: string | null; items: StaffNavI
   return groups;
 }
 
-/** Only what the footer chip needs — never the full profile snapshot. */
+/** Only what the header needs — never the full profile snapshot. */
 export type StaffIdentity = { name: string; email: string } | null;
 
 type StaffShellProps = {
@@ -158,26 +61,15 @@ type StaffShellProps = {
 };
 
 /**
- * Derives the chip's initials + display label.
- *
- * When a display name exists it wins outright. When it does not, initials
- * come from the email local-part (first char, uppercased, plus the first
- * char of a second `.`/`_`/`-`-delimited segment if one exists) and the
- * email itself fills the name slot — there is no role label available from
- * `Actor` or the profile snapshot, so that line is omitted entirely rather
- * than reserving its height (UI-SPEC 8.17 empty).
+ * The initials and full label for the signed-in chip. A display name wins; without one,
+ * initials come from the email's local part and the email itself is the label.
  */
-function deriveIdentityDisplay(
-  identity: StaffIdentity,
-): { initials: string; label: string } | null {
+function deriveIdentityDisplay(identity: StaffIdentity): { initials: string; label: string } | null {
   if (!identity) return null;
   const trimmedName = identity.name?.trim();
   if (trimmedName) {
     const words = trimmedName.split(/\s+/).filter(Boolean);
-    const initials =
-      words.length > 1
-        ? `${words[0][0]}${words[1][0]}`.toUpperCase()
-        : words[0].slice(0, 2).toUpperCase();
+    const initials = words.length > 1 ? `${words[0][0]}${words[1][0]}`.toUpperCase() : words[0].slice(0, 2).toUpperCase();
     return { initials, label: trimmedName };
   }
   const local = identity.email.split("@")[0] ?? "";
@@ -193,274 +85,188 @@ function isActiveNavItem(pathname: string | null, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-const DESKTOP_QUERY = "(min-width: 1024px)";
-function subscribeToViewport(onChange: () => void) {
-  const media = window.matchMedia(DESKTOP_QUERY);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-}
-const getDesktopSnapshot = () => window.matchMedia(DESKTOP_QUERY).matches;
-const getServerDesktopSnapshot = () => false;
+const TOP_LINK =
+  "inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 font-semibold text-ink-soft hover:bg-ground hover:text-ink aria-[current]:bg-ink aria-[current]:text-white";
+const MENU_LINK = "block rounded-lg px-3 py-2.5 font-semibold text-ink hover:bg-ground aria-[current=page]:bg-peach";
 
 export function StaffShell({ nav, identity, signOut, bell, banner, licenceRestriction, children }: StaffShellProps) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const desktop = useSyncExternalStore(subscribeToViewport, getDesktopSnapshot, getServerDesktopSnapshot);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const sidebarRef = useRef<HTMLElement>(null);
-  const backgroundRef = useRef<HTMLDivElement>(null);
-  const sidebarId = useId();
-  const mobileOpen = open && !desktop;
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const phoneButtonRef = useRef<HTMLButtonElement>(null);
+  const groupButtons = useRef(new Map<string, HTMLButtonElement>());
+  const phonePanelId = useId();
+  const menuIdBase = useId();
 
-  const [previousDesktop, setPreviousDesktop] = useState(desktop);
-  if (previousDesktop !== desktop) {
-    setPreviousDesktop(desktop);
-    if (open) setOpen(false);
-  }
-
-  // Isolate only the content sibling, retaining its previous inert state.
-  // Desktop transitions must never return focus to the CSS-hidden trigger.
-  useEffect(() => {
-    if (!mobileOpen) return;
-    const sidebar = sidebarRef.current!;
-    const background = backgroundRef.current!;
-    const menuButton = menuButtonRef.current;
-    const previousInert = background.getAttribute("inert");
-    background.setAttribute("inert", "");
-    const focusable = () => Array.from(sidebar.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ));
-    (focusable()[0] ?? sidebar).focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setOpen(false);
-      } else if (event.key === "Tab") {
-        const items = focusable();
-        const first = items[0] ?? sidebar;
-        const last = items.at(-1) ?? sidebar;
-        if (!sidebar.contains(document.activeElement) ||
-          (event.shiftKey && document.activeElement === first) ||
-          (!event.shiftKey && document.activeElement === last)) {
-          event.preventDefault();
-          (event.shiftKey ? last : first).focus();
-        }
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (previousInert === null) background.removeAttribute("inert");
-      else background.setAttribute("inert", previousInert);
-      if (!window.matchMedia(DESKTOP_QUERY).matches) menuButton?.focus();
-    };
-  }, [mobileOpen]);
-
-  useEffect(() => {
-    if (!desktop && !mobileOpen && sidebarRef.current?.contains(document.activeElement)) {
-      menuButtonRef.current?.focus();
-    }
-  }, [desktop, mobileOpen]);
-
-  // A stale open drawer surviving a navigation would strand it over the new
-  // screen, so every route change closes it. Adjusted during render (React's
-  // documented pattern for resetting state on a prop change, using state
-  // rather than a ref since refs may not be read during render) instead of
-  // an effect, which would cascade an extra render after the browser paints.
+  // Every navigation closes whatever menu is open. Adjusted during render (React's
+  // documented pattern for resetting state on a prop change) rather than in an effect.
   const [previousPathname, setPreviousPathname] = useState(pathname);
   if (previousPathname !== pathname) {
     setPreviousPathname(pathname);
-    if (open) setOpen(false);
+    if (openGroup !== null) setOpenGroup(null);
+    if (phoneOpen) setPhoneOpen(false);
   }
 
-  const currentNavItem = nav.find((item) => isActiveNavItem(pathname, item.href));
-  const trailLabel = currentNavItem?.label ?? "Workspace";
-  const display = deriveIdentityDisplay(identity);
+  // A group menu closes on Escape (focus back to its button) or a press outside the nav.
+  useEffect(() => {
+    if (openGroup === null) return;
+    const group = openGroup;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpenGroup(null);
+      groupButtons.current.get(group)?.focus();
+    }
+    function onPointerDown(event: PointerEvent) {
+      if (!navRef.current?.contains(event.target as Node)) setOpenGroup(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [openGroup]);
+
+  // The phone panel closes on Escape and returns focus to the Menu button.
+  useEffect(() => {
+    if (!phoneOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setPhoneOpen(false);
+      phoneButtonRef.current?.focus();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [phoneOpen]);
 
   const groups = groupNav(nav);
-  const { labels: collapsedGroups, unset: groupsUnset } = useCollapsedGroups();
-  const navGroupId = useId();
-
-  function toggleGroup(label: string) {
-    // The default is "all folded", so the first choice starts from that.
-    const next = new Set(
-      groupsUnset ? groups.flatMap((group) => (group.label ? [group.label] : [])) : collapsedGroups,
-    );
-    if (next.has(label)) next.delete(label);
-    else next.add(label);
-    writeCollapsedGroups([...next]);
-  }
+  const display = deriveIdentityDisplay(identity);
 
   return (
     // The provider (D-09) wraps the whole shell so the page content can read the licence restriction.
-    // No `overflow-x` clip on the row wrapper below: `overflow-x: hidden` forces
-    // `overflow-y` to compute to `auto`, turning it into a scroll container, and
-    // the sidebar's `lg:sticky` would then anchor to this non-scrolling box
-    // instead of the viewport — so it scrolled away with the page on tall
-    // routes. Horizontal bleed is clipped on the content column instead.
     <LicenceRestrictionProvider value={licenceRestriction ?? UNRESTRICTED_LICENCE_RESTRICTION}>
-    <div className="flex min-h-screen bg-sidebar-bg">
-      <SkipLink />
-      {mobileOpen && (
-        <div
-          aria-hidden
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-foreground/50 lg:hidden"
-        />
-      )}
+      <div className="flex min-h-screen flex-col bg-ground">
+        <SkipLink />
+        <header className="relative z-30 flex items-center gap-3 border-b border-rule bg-paper px-5 py-3 sm:gap-6 md:px-14 lg:gap-10 lg:py-4">
+          <SiteBrand href="/staff" />
 
-      <aside
-        ref={sidebarRef}
-        id={sidebarId}
-        tabIndex={-1}
-        inert={!desktop && !mobileOpen}
-        aria-hidden={!desktop && !mobileOpen ? true : undefined}
-        aria-label="Workspace navigation"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col overflow-y-auto bg-sidebar-bg px-4 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:[scrollbar-width:thin] lg:[&::-webkit-scrollbar]:block lg:[&::-webkit-scrollbar]:w-1.5 [@media(max-height:691px)]:pb-2 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        {/* Brand block */}
-        <div className="flex items-center gap-3 px-3 pt-6 pb-7 [@media(min-height:780px)_and_(max-height:899px)]:pt-4 [@media(min-height:780px)_and_(max-height:899px)]:pb-4 [@media(min-height:692px)_and_(max-height:779px)]:pt-3 [@media(min-height:692px)_and_(max-height:779px)]:pb-3 [@media(max-height:691px)]:pt-2 [@media(max-height:691px)]:pb-2">
-          <BrandMark />
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-base leading-tight font-semibold text-white">
-              KQ Nexus
-            </span>
-            <span className="truncate text-[12px] text-sidebar-soft">
-              Admin workspace
-            </span>
-          </div>
-        </div>
-
-        <nav aria-label="Workspace" className="flex flex-1 flex-col gap-6 [@media(min-height:780px)_and_(max-height:899px)]:gap-4 [@media(min-height:692px)_and_(max-height:779px)]:gap-3 [@media(max-height:691px)]:gap-2">
-          {groups.map((group, groupIndex) => {
-            // The group holding the current page is always open, so you never lose your place.
-            const holdsCurrentPage = group.items.some((item) => isActiveNavItem(pathname, item.href));
-            const collapsed =
-              group.label !== null && (groupsUnset || collapsedGroups.has(group.label)) && !holdsCurrentPage;
-            const itemsId = `${navGroupId}-group-${groupIndex}`;
-            return (
-            <div key={group.label ?? "top"} className="flex flex-col gap-1">
-              {group.label && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!holdsCurrentPage) toggleGroup(group.label as string);
-                  }}
-                  aria-expanded={!collapsed}
-                  aria-controls={itemsId}
-                  // Folding the group you are in would hide the page you are on, so it stays open.
-                  aria-disabled={holdsCurrentPage || undefined}
-                  title={holdsCurrentPage ? undefined : collapsed ? `Show ${group.label}` : `Hide ${group.label}`}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-3 pb-2 text-left text-[12px] font-semibold tracking-[0.06em] text-sidebar-muted uppercase [@media(max-height:779px)]:pb-1 [@media(max-height:691px)]:pb-0 ${
-                    holdsCurrentPage ? "cursor-default" : "hover:text-white"
-                  }`}
-                >
-                  <span>{group.label}</span>
-                  {!holdsCurrentPage && (
-                    <ChevronDown
-                      aria-hidden
-                      className={`size-4 shrink-0 transition-transform duration-150 ${collapsed ? "-rotate-90" : ""}`}
-                    />
-                  )}
-                </button>
-              )}
-              <div id={itemsId} hidden={collapsed} className="flex flex-col gap-1">
-              {group.items.map((item) => {
-                const active = isActiveNavItem(pathname, item.href);
-                const Icon = NAV_ICONS[item.href];
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    aria-current={active ? "page" : undefined}
-                    title={item.label}
-                    className={`flex min-h-10 min-w-0 items-center gap-3 rounded-md px-3 text-sm font-medium [@media(min-height:780px)_and_(max-height:899px)]:min-h-9 [@media(min-height:692px)_and_(max-height:779px)]:min-h-8 [@media(max-height:691px)]:min-h-7 ${
-                      active
-                        ? "bg-sidebar-accent text-white"
-                        : "text-sidebar-fg hover:bg-sidebar-hover hover:text-white"
-                    }`}
-                  >
-                    {Icon && <Icon aria-hidden className="size-[18px] shrink-0" />}
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <nav ref={navRef} aria-label="Workspace" className="hidden items-center gap-1.5 lg:flex">
+            {groups.map((group) => {
+              if (group.label === null) {
+                return group.items.map((item) => (
+                  <Link key={item.href} href={item.href} aria-current={isActiveNavItem(pathname, item.href) ? "page" : undefined} className={TOP_LINK}>
+                    {item.label}
                   </Link>
-                );
-              })}
-              </div>
-            </div>
-            );
-          })}
-        </nav>
+                ));
+              }
+              const label = group.label;
+              const holdsCurrent = group.items.some((item) => isActiveNavItem(pathname, item.href));
+              const open = openGroup === label;
+              const menuId = `${menuIdBase}-${label}`;
+              return (
+                <div key={label} className="relative">
+                  <button
+                    type="button"
+                    ref={(node) => {
+                      if (node) groupButtons.current.set(label, node);
+                      else groupButtons.current.delete(label);
+                    }}
+                    aria-expanded={open}
+                    aria-controls={menuId}
+                    aria-current={holdsCurrent ? "true" : undefined}
+                    onClick={() => setOpenGroup(open ? null : label)}
+                    className={`${TOP_LINK} ${open && !holdsCurrent ? "bg-ground text-ink" : ""}`}
+                  >
+                    {label}
+                    <ChevronDown aria-hidden className={`size-[15px] transition-transform ${open ? "rotate-180" : ""}`} strokeWidth={2.3} />
+                  </button>
+                  {open && (
+                    <div
+                      id={menuId}
+                      className="absolute top-[calc(100%+8px)] left-0 z-40 min-w-[220px] rounded-xl bg-paper p-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_16px_30px_-18px_rgba(0,0,0,0.3),0_0_0_1px_var(--ietc-rule)]"
+                    >
+                      {group.items.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setOpenGroup(null)}
+                          aria-current={isActiveNavItem(pathname, item.href) ? "page" : undefined}
+                          className={MENU_LINK}
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
 
-        {/* Footer identity chip. */}
-        <div className="mt-auto pt-4 [@media(max-height:899px)]:pt-2 [@media(max-height:599px)]:hidden">
-          <div
-            className="flex items-center gap-3 px-3"
-            aria-label={display ? undefined : "Signed in"}
-          >
-            <span
-              aria-hidden
-              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-line text-[13px] font-semibold text-white"
-            >
-              {display?.initials ?? ""}
-            </span>
-            <span
-              className="min-w-0 flex-1 truncate text-sm font-semibold text-white"
-              title={display?.label ?? "Signed in"}
-            >
-              {display?.label ?? "Signed in"}
-            </span>
-          </div>
-        </div>
-      </aside>
-
-      <div ref={backgroundRef} className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
-        <header className="flex h-[68px] shrink-0 items-center justify-between gap-4 px-6 text-sidebar-fg lg:px-8">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              ref={menuButtonRef}
-              aria-expanded={mobileOpen}
-              aria-controls={sidebarId}
-              onClick={() => setOpen((v) => !v)}
-              className="-ml-2 flex size-11 shrink-0 items-center justify-center rounded-md text-white hover:bg-sidebar-hover lg:hidden"
-            >
-              <Menu aria-hidden className="size-5" />
-              <span className="sr-only">
-                {open ? "Close navigation" : "Open navigation"}
-              </span>
-            </button>
-
-            <div className="flex min-w-0 items-center gap-2 text-sm">
-              <span className="hidden shrink-0 text-sidebar-soft sm:inline">Admin workspace</span>
-              <ChevronRight aria-hidden className="hidden size-3.5 shrink-0 text-sidebar-muted sm:block" />
-              <span
-                className="min-w-0 truncate font-semibold text-white"
-                title={trailLabel}
-              >
-                {trailLabel}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-5">
+          <div className="ml-auto flex items-center gap-3 lg:gap-[18px]">
             {bell}
-            <span className="hidden font-mono text-[12px] text-sidebar-soft sm:inline">
-              Africa/Lagos
+            <span
+              title={display ? `Signed in as ${display.label}` : "Signed in"}
+              className="hidden size-[38px] shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-extrabold tracking-[0.02em] text-white sm:flex"
+            >
+              <span aria-hidden>{display?.initials ?? ""}</span>
+              <span className="sr-only">Signed in as {display?.label ?? "a staff member"}</span>
             </span>
-            {signOut}
+            <div className="hidden lg:block">{signOut}</div>
+            <button
+              ref={phoneButtonRef}
+              type="button"
+              aria-expanded={phoneOpen}
+              aria-controls={phonePanelId}
+              onClick={() => setPhoneOpen((v) => !v)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[15px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] lg:hidden"
+            >
+              {phoneOpen ? <X aria-hidden className="size-[19px]" strokeWidth={2.3} /> : <Menu aria-hidden className="size-[19px]" strokeWidth={2.3} />}
+              {phoneOpen ? "Close" : "Menu"}
+            </button>
           </div>
+
+          {phoneOpen && (
+            <nav
+              id={phonePanelId}
+              aria-label="Workspace"
+              className="absolute inset-x-0 top-full max-h-[calc(100vh-72px)] overflow-y-auto border-b border-rule bg-paper px-5 pt-2 pb-5 shadow-[0_16px_30px_-18px_rgba(0,0,0,0.3)] md:px-14 lg:hidden"
+            >
+              {groups.map((group) => (
+                <div key={group.label ?? "top"} className="py-1">
+                  {group.label && <p className="px-3 pt-3 pb-1 text-sm font-bold text-ink-soft">{group.label}</p>}
+                  {group.items.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setPhoneOpen(false)}
+                      aria-current={isActiveNavItem(pathname, item.href) ? "page" : undefined}
+                      className={MENU_LINK}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              ))}
+              <div className="mt-2 border-t border-rule px-3 pt-3">{signOut}</div>
+            </nav>
+          )}
         </header>
 
         {banner}
 
-        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 rounded-t-[28px] bg-surface px-6 pt-9 pb-14 focus:outline-none lg:px-10">
+        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 px-5 pb-16 focus:outline-none md:px-14">
           {children}
         </main>
+
+        <footer className="mt-10 flex flex-col justify-between gap-4 border-t border-rule px-5 py-[22px] text-sm text-ink-soft md:flex-row md:px-14">
+          <span>© {new Date().getFullYear()} {BRAND.name} · Admin workspace</span>
+          <span>{BRAND.poweredBy}</span>
+        </footer>
       </div>
-    </div>
     </LicenceRestrictionProvider>
   );
 }

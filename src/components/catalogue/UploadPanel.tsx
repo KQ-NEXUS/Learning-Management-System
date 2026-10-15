@@ -254,7 +254,7 @@ export function UploadPanel({
   return (
     <fieldset
       aria-label={`${noun} resources`}
-      className="flex flex-col gap-4 border-t border-foreground pt-5"
+      className="flex flex-col gap-4 border-t-2 border-ink pt-5"
     >
       <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-foreground">
         Resources

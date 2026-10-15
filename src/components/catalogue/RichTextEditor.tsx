@@ -204,20 +204,20 @@ export function RichTextEditor({
               aria-invalid={linkError ? true : undefined}
               aria-describedby={linkError ? "lesson-link-error" : undefined}
               onChange={(event) => setLinkUrl(event.target.value)}
-              className="min-w-64 flex-1 rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
+              className="min-w-64 flex-1 min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink placeholder:text-muted-foreground aria-[invalid=true]:border-danger"
               placeholder="https://example.com"
             />
             <button
               type="button"
               onClick={applyLink}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
             >
               Apply link
             </button>
             <button
               type="button"
               onClick={() => setLinkOpen(false)}
-              className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5"
             >
               Cancel link
             </button>

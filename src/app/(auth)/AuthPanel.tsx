@@ -46,8 +46,8 @@ export function AuthTitle({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <h1 className="text-[36px] leading-[1.1] font-bold tracking-[-0.035em] text-foreground">{title}</h1>
-      {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      <h1 className="ietc-display text-[40px] md:text-[48px]">{title}</h1>
+      {subtitle && <p className="mt-1 text-ink-soft">{subtitle}</p>}
     </div>
   );
 }
@@ -62,9 +62,9 @@ export function AuthFooterLine({
   linkLabel: string;
 }) {
   return (
-    <p className="text-center text-sm text-muted-foreground">
+    <p className="text-center text-[15px] text-ink-soft">
       {text}{" "}
-      <Link href={href} className="font-semibold text-accent underline underline-offset-2">
+      <Link href={href} className="font-bold text-ink underline underline-offset-4">
         {linkLabel}
       </Link>
     </p>

@@ -143,7 +143,7 @@ export function RowActionMenu({ label, items, showWordOnPhone = true }: RowActio
         aria-label={label}
         onClick={() => (open ? close(false) : openMenu("first"))}
         onKeyDown={onButtonKeyDown}
-        className="inline-flex min-h-11 min-w-11 w-fit items-center justify-center gap-2 rounded-md border border-input-border bg-surface px-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+        className="inline-flex min-h-[38px] min-w-[38px] w-fit items-center justify-center gap-2 rounded-[9px] px-1.5 text-sm font-bold text-ink hover:bg-surface-2"
       >
         <EllipsisVertical aria-hidden className="size-5" />
         {showWordOnPhone && (
@@ -162,7 +162,7 @@ export function RowActionMenu({ label, items, showWordOnPhone = true }: RowActio
             aria-label={label}
             onKeyDown={onMenuKeyDown}
             style={{ position: "fixed", top: placement.top, bottom: placement.bottom, left: placement.left, width: MENU_WIDTH }}
-            className="z-[70] flex flex-col rounded-md border border-border bg-surface p-1 shadow-lg"
+            className="z-[70] flex min-w-[220px] flex-col rounded-xl bg-paper p-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_16px_30px_-18px_rgba(0,0,0,0.3),0_0_0_1px_var(--ietc-rule)]"
           >
             {ordered.map((item, index) => (
               <div key={item.key} role="none">
@@ -174,7 +174,7 @@ export function RowActionMenu({ label, items, showWordOnPhone = true }: RowActio
                   role="menuitem"
                   tabIndex={-1}
                   onClick={() => choose(item)}
-                  className={`flex min-h-11 w-full items-center rounded-md px-3 text-left text-sm font-medium hover:bg-surface-2 focus-visible:bg-surface-2 ${
+                  className={`flex min-h-11 w-full items-center rounded-lg px-3 text-left font-semibold hover:bg-ground focus-visible:bg-ground ${
                     item.destructive ? "text-danger" : "text-foreground"
                   }`}
                 >

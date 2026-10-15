@@ -56,7 +56,7 @@ export function SupportWorkspace({ view, assignees = [], denied = false, error =
     return (
       <div className="flex min-w-0 flex-col gap-8">
         <PageHeader breadcrumbs={BREADCRUMBS} title="Support" />
-        <section className="border-t border-foreground pt-5">
+        <section className="border-t-2 border-ink pt-5">
           <h2 className={SECTION_TITLE}>You do not have access to Support</h2>
           <p className="mt-2 text-sm text-muted-foreground">Your role does not include the tickets.view permission.</p>
         </section>
@@ -109,7 +109,7 @@ export function SupportWorkspace({ view, assignees = [], denied = false, error =
         title="Support"
         subtitle="Triage, assign, and resolve learner requests."
         band={
-          <p className="mt-4 font-mono text-[13px] text-sidebar-soft">
+          <p className="mt-4 font-mono text-[13px] text-ink-soft">
             Data as of <LagosTime value={view.asOf} />
           </p>
         }
@@ -176,7 +176,7 @@ export function SupportWorkspace({ view, assignees = [], denied = false, error =
         className="min-w-0"
       >
         <h2 className={`${SECTION_TITLE} pb-4`}>{QUEUE_TAB_LABEL[params.tab]}</h2>
-        <div className="border-t border-foreground">
+        <div className="border-t-2 border-ink">
           {view.rows.length === 0 ? (
             <div className="py-6">
               {filtersActive ? (

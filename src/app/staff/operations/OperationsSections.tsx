@@ -67,18 +67,21 @@ function Figure({
   first?: boolean;
 }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${first ? "" : "lg:border-l lg:border-sidebar-line lg:pl-6"}`}>
-      <span className="text-sm text-sidebar-soft">{label}</span>
-      <span className="font-mono text-[36px] leading-[1.15] font-medium tracking-[-0.03em] text-white tabular-nums">
+    <div className={`flex min-w-0 flex-col px-5 py-5 md:px-7 md:py-[22px] ${first ? "lg:pl-14" : "border-t border-rule lg:border-t-0 lg:border-l"}`}>
+      <span className="font-bold">{label}</span>
+      <span className={`ietc-display mt-1 text-[44px] leading-none tabular-nums md:text-[52px] ${value ? "text-orange-text" : ""}`}>
         <span aria-hidden>{value === null ? "—" : value}</span>
         <span className="sr-only">{value === null ? `${label}: unavailable` : spoken}</span>
       </span>
-      <span className="text-sm text-sidebar-soft">{caption}</span>
+      <span className="text-sm text-ink-soft">{caption}</span>
     </div>
   );
 }
 
-/** The three band figures and the "Checked" line, drawn on the navy header band. */
+/**
+ * The plain-language headline and the three figures (design/mockups/staff-operations.html):
+ * one sentence first, then the figures in a white strip under the page head.
+ */
 export function OperationsBand({
   summary,
   checkedAt,
@@ -89,8 +92,8 @@ export function OperationsBand({
   maxSendAttempts: number;
 }) {
   return (
-    <div className="mt-6 flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-8 lg:grid-cols-3">
+    <div className="-mx-5 flex flex-col md:-mx-14">
+      <div className="grid bg-paper lg:grid-cols-3">
         <Figure
           first
           label="Failed jobs"
@@ -111,7 +114,7 @@ export function OperationsBand({
           caption={`Not delivered after ${maxSendAttempts} attempts`}
         />
       </div>
-      <p className="text-sm text-sidebar-soft">
+      <p className="px-5 pt-3 text-sm text-ink-soft md:px-14">
         Checked <LagosTime value={checkedAt} />
       </p>
     </div>
@@ -154,7 +157,7 @@ function SectionFrame({
         </h2>
         {count && <span className="text-sm text-muted-foreground">{count}</span>}
       </div>
-      <div className={hasFailure ? "border-t-2 border-danger" : "border-t border-foreground"}>{children}</div>
+      <div className={hasFailure ? "border-t-2 border-danger" : "border-t-2 border-ink"}>{children}</div>
     </section>
   );
 }

@@ -57,10 +57,10 @@ export default async function CertificatesPage() {
         title="Certificates"
         actions={
           <>
-            <Link href="/staff/certificates/issued" className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover">
+            <Link href="/staff/certificates/issued" className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5">
               All certificates
             </Link>
-            <Link href="/staff/certificates/templates" className="inline-flex min-h-10 items-center rounded-md border border-sidebar-line px-4 text-sm font-semibold text-white hover:bg-sidebar-hover">
+            <Link href="/staff/certificates/templates" className="inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5">
               Certificate templates
             </Link>
           </>

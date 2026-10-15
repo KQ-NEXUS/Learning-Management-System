@@ -17,7 +17,7 @@ type Props = {
   readinessInput?: Partial<Omit<AssessmentReadinessInput, "questions">>;
   onSubmit(input: { assessmentId: string; questions: QuestionDraft[] }): Promise<QuestionSaveResult>;
 };
-const INPUT = "w-full rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground";
+const INPUT = "w-full min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink";
 const BTN = "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
 
 function keyed(question: QuestionDraft, key: string): Draft {

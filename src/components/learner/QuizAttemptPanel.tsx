@@ -87,7 +87,7 @@ export function QuizAttemptPanel(props: Props) {
   return <section className="flex flex-col gap-6" aria-label="Quiz">
     <h2 className="sr-only"><ListChecks aria-hidden size={20} />{props.title}</h2>
     {props.instructions && <p className="whitespace-pre-wrap text-sm">{props.instructions}</p>}
-    <dl className="grid grid-cols-2 border-y-0 border-t border-foreground text-[13px] text-muted-foreground sm:grid-cols-[repeat(auto-fit,minmax(140px,1fr))] [&>div]:border-b [&>div]:border-border [&>div]:py-4 [&>div:not(:first-child)]:sm:border-l [&>div:not(:first-child)]:sm:pl-6 [&_dd]:text-base [&_dd]:font-semibold [&_dd]:text-foreground">
+    <dl className="grid grid-cols-2 border-y-0 border-t-2 border-ink text-[13px] text-muted-foreground sm:grid-cols-[repeat(auto-fit,minmax(140px,1fr))] [&>div]:border-b [&>div]:border-border [&>div]:py-4 [&>div:not(:first-child)]:sm:border-l [&>div:not(:first-child)]:sm:pl-6 [&_dd]:text-base [&_dd]:font-semibold [&_dd]:text-foreground">
       <div><dt>Attempts</dt><dd>{props.maxAttempts ?? "Unlimited"}</dd></div>
       <div><dt>Remaining</dt><dd>{remaining ?? "Unlimited"}</dd></div>
       <div><dt>Pass mark</dt><dd>{props.passMark ?? "No threshold"}</dd></div>
@@ -99,7 +99,7 @@ export function QuizAttemptPanel(props: Props) {
       {/* Not a live region: it would announce on every answer. */}
       <div className="sticky top-0 z-10 bg-surface py-3 font-semibold">
         <span className="text-accent">{answered} of {active.questions.length} answered</span>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-accent-wash"><div className="h-full rounded-full bg-progress-fill" style={{ width: `${Math.round((answered / Math.max(1, active.questions.length)) * 100)}%` }} /></div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-rule"><div className="h-full rounded-full bg-progress-fill" style={{ width: `${Math.round((answered / Math.max(1, active.questions.length)) * 100)}%` }} /></div>
       </div>
       <fieldset disabled={pending} className="flex flex-col gap-6">
         {active.questions.map((q, index) => <fieldset key={q.id} className="flex flex-col gap-2">
@@ -113,7 +113,7 @@ export function QuizAttemptPanel(props: Props) {
                 ? e.target.checked ? [...(old[q.id] ?? []), o.id] : (old[q.id] ?? []).filter(id => id !== o.id) : [o.id] })); }} />{o.label}
           </label>)}
         </fieldset>)}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-foreground pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-ink pt-6">
           <span className="text-sm text-muted-foreground">Answers are kept only when you save or submit. Select Save answers before leaving this page.</span>
           <div className="flex gap-3">
             <button type="button" onClick={save} className="inline-flex min-h-[46px] items-center rounded-md border border-input-border bg-surface px-5 text-sm font-semibold text-foreground hover:bg-surface-2">Save answers</button>

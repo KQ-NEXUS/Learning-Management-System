@@ -31,7 +31,7 @@ export function ProgressMeter({ label, valuePct, captionText }: ProgressMeterPro
         aria-valuenow={clamped}
         aria-valuemin={0}
         aria-valuemax={100}
-        className="h-1.5 w-full overflow-hidden rounded-full bg-accent-wash"
+        className="h-2.5 w-full overflow-hidden rounded-full bg-rule"
       >
         <div
           className="h-full rounded-full bg-progress-fill"

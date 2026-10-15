@@ -23,7 +23,7 @@ export function LicenceRefusalNote({ message = LICENCE_REFUSAL_MESSAGE }: { mess
   return (
     <p
       role="status"
-      className="flex items-start gap-2 border-l-2 border-warning bg-warning-surface px-4 py-2 text-sm text-foreground"
+      className="flex items-start gap-2 rounded-xl bg-warning-surface px-4 py-3.5 text-[15px] text-pill-amber-ink"
     >
       <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
       <span className="min-w-0">{message}</span>

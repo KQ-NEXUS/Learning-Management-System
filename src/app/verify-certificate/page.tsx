@@ -1,5 +1,4 @@
-import { VerifyReferenceForm } from "../verify/VerifyReferenceForm";
-import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
+import { VerifyTop } from "../verify/VerifyTop";
 
 /**
  * Public certificate reference-entry page (CRD-04, UAT test 13).
@@ -16,14 +15,5 @@ import { LearnerPageHeader } from "@/components/shell/LearnerPageHeader";
 export const metadata = { title: "Verify a certificate" };
 
 export default function VerifyCertificateEntryPage() {
-  return (
-    <div className="flex flex-col gap-6">
-      <LearnerPageHeader
-        size="hero"
-        title="Verify a certificate"
-        subtitle="Enter the verification reference from a certificate to check whether it's valid."
-      />
-      <VerifyReferenceForm />
-    </div>
-  );
+  return <VerifyTop />;
 }

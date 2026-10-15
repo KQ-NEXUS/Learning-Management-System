@@ -64,18 +64,18 @@ export function TemporaryPasswordNotice() {
   return (
     <div
       role="status"
-      className="on-navy flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 border-b border-sidebar-line bg-sidebar-hover px-6 py-2 lg:px-8"
+      className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 bg-peach px-5 py-2.5 text-peach-text md:px-14"
     >
-      <span className="flex shrink-0 items-center gap-2 text-sm font-semibold text-white">
+      <span className="flex shrink-0 items-center gap-2 font-bold">
         <KeyRound aria-hidden className="size-5 shrink-0" />
         Temporary password
       </span>
-      <p className="min-w-0 flex-1 basis-64 text-sm text-white">
+      <p className="min-w-0 flex-1 basis-64 text-[15px]">
         You&apos;re still using the password you were given. We recommend choosing your own.
       </p>
       <Link
         href="/forgot-password"
-        className="inline-flex min-h-11 items-center text-sm font-semibold text-white underline underline-offset-2"
+        className="inline-flex min-h-11 items-center font-bold underline underline-offset-4"
       >
         Change password
       </Link>
@@ -85,7 +85,7 @@ export function TemporaryPasswordNotice() {
           rememberDismissal(Date.now());
           setVisible(false);
         }}
-        className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-medium text-sidebar-soft hover:text-white"
+        className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 font-semibold hover:bg-ink/5"
       >
         <X aria-hidden className="size-4" />
         Dismiss

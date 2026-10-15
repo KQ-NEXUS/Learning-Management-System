@@ -133,7 +133,7 @@ export type SessionFormFieldsProps = {
 /** A field label with the cohort's IANA zone appended in mono (D-23). */
 function ZonedLabel({ label, timezone }: { label: string; timezone: string }) {
   return (
-    <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <span className="flex items-center gap-2 text-[15px] font-bold text-ink">
       {label}
       <span className="font-mono text-xs font-normal normal-case tracking-normal text-muted-foreground">
         {timezone}
@@ -242,7 +242,7 @@ export function SessionFormFields({
                 {...field}
                 value={value.courseId}
                 onChange={(e) => set("courseId", e.target.value)}
-                className="rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground"
+                className="min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink"
               >
                 <option value="">No course tag</option>
                 {courseOptions.map((c) => (

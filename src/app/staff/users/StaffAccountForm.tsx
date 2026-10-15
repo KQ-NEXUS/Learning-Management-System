@@ -66,7 +66,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
 
   if (state.created) {
     return (
-      <div className="flex flex-col gap-4 border-t border-foreground pt-5">
+      <div className="flex flex-col gap-4 border-t-2 border-ink pt-5">
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-semibold tracking-tight">Staff account created</h2>
           <p className="text-sm text-muted-foreground">
@@ -75,7 +75,7 @@ export function StaffAccountForm({ roles }: { roles: RoleOption[] }) {
         </div>
 
         <div className="flex flex-col gap-1 rounded-md border border-border bg-surface-2 px-4 py-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-[15px] font-bold text-ink">
             Temporary password
           </span>
           <div className="flex items-center gap-2">

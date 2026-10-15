@@ -338,10 +338,10 @@ export default async function CohortDetailPage({
             content: (
               <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_380px]">
                 <section aria-label="Cohort details" className="min-w-0 lg:pr-14">
-                  <h2 className="pb-4 text-[22px] leading-[1.2] font-semibold tracking-[-0.015em] text-foreground">
+                  <h2 className="pb-4 ietc-display text-[25px] leading-none md:text-[28px]">
                     Cohort details
                   </h2>
-                  <div className="border-t border-foreground">
+                  <div className="border-t-2 border-ink">
                     <DetailFacts
                       facts={[
                         // A viewer without access to the offer's own list sees the kind only, not a dash.
@@ -371,7 +371,7 @@ export default async function CohortDetailPage({
                               </span>
                               <span
                                 aria-hidden
-                                className="h-1 w-36 overflow-hidden rounded-full bg-accent-wash"
+                                className="h-2 w-36 overflow-hidden rounded-full bg-rule"
                               >
                                 <span
                                   className="block h-full rounded-full bg-progress-fill"

@@ -35,12 +35,12 @@ function toManualCurrency(value: string): ManualCurrency {
 }
 
 const BTN =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-[10px] px-4 text-[14.5px] font-bold text-ink shadow-[inset_0_0_0_2px_var(--ietc-ink)] hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_PRIMARY =
   "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 const FIELD_LABEL = "text-xs font-semibold uppercase tracking-wide text-foreground";
 const FIELD_INPUT =
-  "rounded-md border border-input-border bg-surface px-4 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:bg-surface-2";
+  "min-h-11 rounded-[10px] border-[1.5px] border-field bg-paper px-4 py-2 text-base text-ink disabled:cursor-not-allowed disabled:bg-surface-2";
 
 export type ManualPaymentDialogProps = {
   orderId: string;
@@ -219,7 +219,7 @@ function ManualPaymentDialogBody({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4">
       <div
         ref={dialogRef}
         role="dialog"
@@ -239,7 +239,7 @@ function ManualPaymentDialogBody({
 
         {error && (
           <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-danger">Action not applied</p>
+            <p className="text-[15px] font-bold text-danger">Action not applied</p>
             <p className="mt-1 text-sm text-danger">{error}</p>
           </div>
         )}

@@ -57,7 +57,7 @@ const TYPE_LABEL: Record<string, string> = {
   ASSIGNMENT: "Assignment",
 };
 
-const ROW_BASE = "flex items-center gap-4 border-b border-border py-3";
+const ROW_BASE = "flex items-center gap-4 border-b border-rule py-3";
 const ICON = "size-[19px] shrink-0";
 
 function Meta({ number }: { number?: string }) {
@@ -107,7 +107,7 @@ export function LessonRow({ lesson, href, isCurrent, number, readOnly = false }:
 
   if (lesson.completed) {
     return (
-      <Link href={href} className={`${ROW_BASE} hover:bg-surface-2/60`}>
+      <Link href={href} className={`${ROW_BASE} hover:bg-paper`}>
         <CheckCircle2 aria-hidden className={`${ICON} text-accent`} />
         <Meta number={number} />
         <span className="min-w-0 grow font-medium text-foreground">{lesson.title}</span>
@@ -136,8 +136,8 @@ export function LessonRow({ lesson, href, isCurrent, number, readOnly = false }:
 
   if (isCurrent) {
     return (
-      <Link href={href} className={`${ROW_BASE} hover:bg-surface-2/60`}>
-        <Play aria-hidden fill="currentColor" className={`${ICON} text-accent`} />
+      <Link href={href} aria-current="step" className={`${ROW_BASE} -mx-3.5 rounded-[10px] border-transparent bg-peach px-3.5`}>
+        <Play aria-hidden fill="currentColor" className={`${ICON} text-orange-text`} />
         <Meta number={number} />
         <span className="min-w-0 grow font-bold text-foreground">{lesson.title}</span>
         <Tail lesson={lesson} />
@@ -146,7 +146,7 @@ export function LessonRow({ lesson, href, isCurrent, number, readOnly = false }:
   }
 
   return (
-    <Link href={href} className={`${ROW_BASE} hover:bg-surface-2/60`}>
+    <Link href={href} className={`${ROW_BASE} hover:bg-paper`}>
       <Circle aria-hidden className={`${ICON} text-muted-foreground opacity-60`} />
       <Meta number={number} />
       <span className="min-w-0 grow font-medium text-foreground">{lesson.title}</span>

@@ -159,7 +159,7 @@ function PublishDialogBody({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4">
       <div
         ref={dialogRef}
         role="dialog"
@@ -187,7 +187,7 @@ function PublishDialogBody({
 
         {error && (
           <div role="alert" className="rounded-md border border-danger/30 bg-danger-surface px-4 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-danger">
+            <p className="text-[15px] font-bold text-danger">
               Not published
             </p>
             <p className="mt-1 text-sm text-danger">{error}</p>

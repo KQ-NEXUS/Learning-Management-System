@@ -153,7 +153,7 @@ export function TemplatesTable({
               </Link>
               <Link
                 href="/staff/certificates/templates/new"
-                className="inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep"
+                className="inline-flex min-h-10 items-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover"
               >
                 New template
               </Link>

@@ -19,7 +19,7 @@ function filterParams(params: Record<string, string | string[] | undefined>) {
 }
 
 const PRIMARY =
-  "inline-flex min-h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-contrast hover:bg-accent-deep";
+  "inline-flex min-h-10 items-center rounded-[10px] bg-ink px-4 text-[14.5px] font-bold text-white hover:bg-ink-hover";
 const SECONDARY = "text-sm font-semibold text-accent underline underline-offset-2";
 
 /**
@@ -42,7 +42,7 @@ function ReportProblem({
         title={title}
         breadcrumbs={[{ label: "Reports", href: "/staff/reports" }, { label: title }]}
       />
-      <div role="alert" className="flex flex-col items-start gap-4 border-l-2 border-danger bg-danger-surface px-5 py-4">
+      <div role="alert" className="flex flex-col items-start gap-4 rounded-xl bg-danger-surface px-5 py-4 text-pill-red-ink">
         <p className="text-sm text-foreground">{message}</p>
         <div className="flex flex-wrap items-center gap-4">
           <Link href={primary.href} className={PRIMARY}>
