@@ -3,14 +3,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Mechanical WCAG 2.2 AA contrast gate for NFR-09.
+ * Mechanical WCAG 2.2 AA contrast gate for NFR-09, for the IETC tokens.
  *
- * This test does NOT hard-code any hex value. It reads `src/app/globals.css` at test time,
- * parses the `--primitive-*` and `--pill-*` declarations into a name -> hex map, and drives
- * every assertion from that map — so a token edit in globals.css fails this test rather than
- * drifting silently out of sync with the design contract in
- * `.planning/phases/04.1-design-system-rollout-modern-ui-across-every-existing-surfac/04.1-UI-SPEC.md`
- * section 5.4.
+ * No hex value is hard-coded here. The test reads `src/app/globals.css`, parses every custom
+ * property in its `:root` block, resolves `var(--x)` chains down to a hex value, and drives
+ * every assertion from that map — so a token edit that breaks a pair fails here instead of
+ * drifting out of AA unnoticed.
  */
 
 const GLOBALS_CSS_PATH = path.resolve(import.meta.dirname, "../../src/app/globals.css");
@@ -28,165 +26,92 @@ function contrastRatio(hexA: string, hexB: string): number {
   return (l1 + 0.05) / (l2 + 0.05);
 }
 
-/** Parses every `--primitive-*` / `--pill-*` hex declaration out of globals.css's `:root` block. */
-function parseTokens(css: string): Map<string, string> {
+/** Every `--name: value;` in the first `:root { … }` block. */
+function parseRoot(css: string): Map<string, string> {
+  const root = css.slice(css.indexOf(":root {"), css.indexOf("\n}\n", css.indexOf(":root {")));
   const map = new Map<string, string>();
-  const pattern = /--((?:primitive|pill|sidebar|on-navy)-[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;/g;
-  for (const match of css.matchAll(pattern)) {
-    map.set(match[1], match[2]);
-  }
+  for (const match of root.matchAll(/--([\w-]+):\s*([^;]+);/g)) map.set(match[1], match[2].trim());
   return map;
 }
 
 const css = readFileSync(GLOBALS_CSS_PATH, "utf-8");
-const tokens = parseTokens(css);
+const tokens = parseRoot(css);
 
-/** Test 4: the parser must find every primitive/pill token it needs — a missing or renamed
- * declaration fails loudly here rather than silently skipping the pair that depends on it. */
-const REQUIRED_TOKENS = [
-  "primitive-white",
-  "primitive-ink",
-  "primitive-muted",
-  "primitive-line",
-  "primitive-paper",
-  "primitive-brand",
-  "primitive-field",
-  "primitive-navy",
-  "primitive-brand-light",
-  "sidebar-fg",
-  "sidebar-muted",
-  "sidebar-soft",
-  "on-navy-green",
-  "on-navy-amber",
-  "on-navy-red",
-  "on-navy-blue",
-  "on-navy-grey",
-  "primitive-amber-700",
-  "primitive-amber-500",
-  "primitive-red-700",
-  "primitive-red-50",
-  "primitive-green-700",
-  "pill-green-bg",
-  "pill-green-ink",
-  "pill-blue-bg",
-  "pill-blue-ink",
-  "pill-amber-bg",
-  "pill-amber-ink",
-  "pill-grey-bg",
-  "pill-grey-ink",
-  "pill-red-bg",
-  "pill-red-ink",
-] as const;
-
-describe("contrast token parser", () => {
-  it.each(REQUIRED_TOKENS)("finds --%s in globals.css", (name) => {
-    expect(tokens.get(name), `Missing or renamed token --${name} in globals.css`).toBeDefined();
-  });
-});
-
-/** Small typed helper so a missing token throws immediately, naming the token, instead of
- * silently comparing against `undefined`. */
-function hex(name: (typeof REQUIRED_TOKENS)[number]): string {
+/** A token's hex value, following var() references; fails loudly when a token is missing. */
+function hex(name: string, seen: string[] = []): string {
   const value = tokens.get(name);
-  if (!value) {
-    throw new Error(`Token --${name} not found in globals.css — cannot run contrast assertion`);
-  }
-  return value;
+  if (value === undefined) throw new Error(`--${name} is not declared in globals.css :root`);
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) return value.toLowerCase();
+  const ref = value.match(/^var\(--([\w-]+)\)$/);
+  if (ref && !seen.includes(ref[1])) return hex(ref[1], [...seen, name]);
+  throw new Error(`--${name} is not a plain hex or var() chain: ${value}`);
 }
 
-describe("body text contrast — UI-SPEC 5.4 PASS rows, >= 4.5:1", () => {
-  const white = () => hex("primitive-white");
-  const paper = () => hex("primitive-paper");
+function expectRatio(fg: string, bg: string, min: number) {
+  const ratio = contrastRatio(hex(fg), hex(bg));
+  expect(ratio, `--${fg} on --${bg} is ${ratio.toFixed(2)}:1, needs ${min}:1`).toBeGreaterThanOrEqual(min);
+}
 
-  const textPairs: [string, () => string, () => string][] = [
-    ["ink on white", () => hex("primitive-ink"), white],
-    ["ink on paper", () => hex("primitive-ink"), paper],
-    ["muted-foreground on white", () => hex("primitive-muted"), white],
-    ["muted-foreground on paper", () => hex("primitive-muted"), paper],
-    ["accent (brand) on white", () => hex("primitive-brand"), white],
-    ["accent-contrast (white) on accent", white, () => hex("primitive-brand")],
-    ["status green ink on white", () => hex("pill-green-ink"), white],
-    ["status blue ink on white", () => hex("pill-blue-ink"), white],
-    ["status amber ink on white", () => hex("pill-amber-ink"), white],
-    ["status grey ink on white", () => hex("pill-grey-ink"), white],
-    ["status red ink on white", () => hex("pill-red-ink"), white],
-    ["warning (text-safe amber) on white", () => hex("primitive-amber-700"), white],
-    ["success (green) on white", () => hex("primitive-green-700"), white],
-    ["danger on white", () => hex("primitive-red-700"), white],
-    ["danger on danger-surface", () => hex("primitive-red-700"), () => hex("primitive-red-50")],
-  ];
+describe("contrast token parser", () => {
+  it.each(["ietc-ink", "ietc-paper", "ietc-ground", "ietc-orange", "ietc-orange-text", "pill-green-ink", "sidebar-fg", "danger"])(
+    "resolves --%s to a hex value",
+    (name) => {
+      expect(hex(name)).toMatch(/^#[0-9a-f]{6}$/);
+    },
+  );
+});
 
-  it.each(textPairs)("%s meets 4.5:1", (_label, fg, bg) => {
-    const ratio = contrastRatio(fg(), bg());
-    expect(ratio).toBeGreaterThanOrEqual(4.5);
+describe("body text, >= 4.5:1", () => {
+  it.each([
+    ["ietc-ink", "ietc-paper"],
+    ["ietc-ink", "ietc-ground"],
+    ["ietc-ink-soft", "ietc-paper"],
+    ["ietc-ink-soft", "ietc-ground"],
+    ["ietc-orange-text", "ietc-paper"],
+    ["ietc-orange-text", "ietc-ground"],
+    ["ietc-placeholder", "ietc-paper"],
+    ["ietc-peach-text", "ietc-peach"],
+    ["accent-contrast", "accent"],
+    ["warning", "ietc-paper"],
+    ["success", "ietc-paper"],
+    ["danger", "ietc-paper"],
+    ["danger", "danger-surface"],
+    ["pill-amber-ink", "warning-surface"],
+  ])("--%s on --%s", (fg, bg) => expectRatio(fg, bg, 4.5));
+});
+
+describe("text on the black frame, >= 4.5:1", () => {
+  it.each(["ietc-paper", "sidebar-fg", "sidebar-muted", "sidebar-soft", "ietc-on-ink-soft", "ietc-orange", "on-navy-blue"])(
+    "--%s on --ietc-ink",
+    (fg) => expectRatio(fg, "ietc-ink", 4.5),
+  );
+});
+
+describe("class tints carry dark text, >= 4.5:1", () => {
+  const tints = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `ietc-tint-${n}`);
+  it.each(tints)("--ietc-ink on --%s", (tint) => expectRatio("ietc-ink", tint, 4.5));
+  it.each(tints)("--ietc-tint-text on --%s", (tint) => expectRatio("ietc-tint-text", tint, 4.5));
+  it("ink on the solid orange of the current module", () => expectRatio("ietc-ink", "ietc-orange", 4.5));
+});
+
+describe("StatusPill tone ink-on-tint, >= 4.5:1", () => {
+  it.each(["green", "blue", "amber", "grey", "red"])("%s tone", (tone) => expectRatio(`pill-${tone}-ink`, `pill-${tone}-bg`, 4.5));
+});
+
+describe("UI edges and the focus ring, >= 3:1 (WCAG 1.4.11)", () => {
+  it.each(["ietc-paper", "ietc-ground"])("input-border (field) on --%s", (bg) => expectRatio("ietc-field", bg, 3));
+  it.each(["ietc-paper", "ietc-ground", "ietc-peach", "ietc-ink"])("the orange-text focus ring on --%s", (bg) =>
+    expectRatio("ietc-orange-text", bg, 3),
+  );
+
+  it("draws focus with the text-safe orange, not the bright one", () => {
+    expect(css).toMatch(/:focus-visible\s*\{\s*outline:\s*3px solid var\(--ietc-orange-text\)/);
   });
 });
 
-describe("navy frame text contrast — rail, header band and auth panel, >= 4.5:1", () => {
-  const navy = () => hex("primitive-navy");
-  const pairs: [string, () => string][] = [
-    ["white on navy", () => hex("primitive-white")],
-    ["sidebar-fg on navy", () => hex("sidebar-fg")],
-    ["sidebar-muted on navy", () => hex("sidebar-muted")],
-    ["sidebar-soft on navy", () => hex("sidebar-soft")],
-    ["on-navy green status on navy", () => hex("on-navy-green")],
-    ["on-navy amber status on navy", () => hex("on-navy-amber")],
-    ["on-navy red status on navy", () => hex("on-navy-red")],
-    ["on-navy blue status on navy", () => hex("on-navy-blue")],
-    ["on-navy grey status on navy", () => hex("on-navy-grey")],
-  ];
-  it.each(pairs)("%s meets 4.5:1", (_label, fg) => {
-    expect(contrastRatio(fg(), navy())).toBeGreaterThanOrEqual(4.5);
-  });
-
-  // The active-nav underline on navy is a non-text indicator: 3:1 (WCAG 1.4.11).
-  it("accent-light (active nav underline) on navy meets 3:1", () => {
-    expect(contrastRatio(hex("primitive-brand-light"), navy())).toBeGreaterThanOrEqual(3);
-  });
-  // The primary button is the brand blue sitting on navy in the header band: 3:1 for the edge.
-  it("brand blue button on navy meets 3:1", () => {
-    expect(contrastRatio(hex("primitive-brand"), navy())).toBeGreaterThanOrEqual(3);
-  });
-});
-
-describe("UI edge contrast — input-border (field), >= 3:1 against white and parsed paper", () => {
-  const uiEdgePairs: [string, () => string, () => string][] = [
-    ["input-border (field) on white", () => hex("primitive-field"), () => hex("primitive-white")],
-    ["input-border (field) on paper", () => hex("primitive-field"), () => hex("primitive-paper")],
-  ];
-
-  it.each(uiEdgePairs)("%s meets 3:1", (_label, fg, bg) => {
-    const ratio = contrastRatio(fg(), bg());
-    expect(ratio).toBeGreaterThanOrEqual(3);
-  });
-});
-
-describe("StatusPill tone ink-on-tint — UI-SPEC 5.6, >= 4.5:1", () => {
-  const pillPairs: [string, () => string, () => string][] = [
-    ["green tone", () => hex("pill-green-ink"), () => hex("pill-green-bg")],
-    ["blue tone", () => hex("pill-blue-ink"), () => hex("pill-blue-bg")],
-    ["amber tone", () => hex("pill-amber-ink"), () => hex("pill-amber-bg")],
-    ["grey tone", () => hex("pill-grey-ink"), () => hex("pill-grey-bg")],
-    ["red tone", () => hex("pill-red-ink"), () => hex("pill-red-bg")],
-  ];
-
-  it.each(pillPairs)("%s ink-on-tint meets 4.5:1", (_label, fg, bg) => {
-    const ratio = contrastRatio(fg(), bg());
-    expect(ratio).toBeGreaterThanOrEqual(4.5);
-  });
-});
-
-describe("deliberately sub-threshold values — pinned by exact hex, not asserted as passing", () => {
-  // WCAG 1.4.11 (D-15): --primitive-line is a decorative/structural border, exempt because
-  // these elements are identified by content/layout, not solely their edge.
-  it("--primitive-line stays #e3e7f1", () => {
-    expect(hex("primitive-line")).toBe("#e3e7f1");
-  });
-
-  // WCAG 1.4.11 (D-12/D-15 mitigation, UI-SPEC 5.5): --primitive-amber-500 is the fill token,
-  // never used as freestanding text or an unlabelled swatch — its standalone sub-3:1 ratio is
-  // an accepted, documented exemption, not a bug to "fix" by picking a darker amber.
-  it("--primitive-amber-500 stays #f79009", () => {
-    expect(hex("primitive-amber-500")).toBe("#f79009");
+describe("the bright orange stays off light backgrounds", () => {
+  it("is below 3:1 on paper and ground, which is why text on them uses --ietc-orange-text", () => {
+    expect(contrastRatio(hex("ietc-orange"), hex("ietc-paper"))).toBeLessThan(3);
+    expect(contrastRatio(hex("ietc-orange"), hex("ietc-ground"))).toBeLessThan(3);
   });
 });

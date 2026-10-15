@@ -9,7 +9,7 @@ describe("auth layout landmarks", () => {
     render(<AuthLayout><p>Sign in form</p></AuthLayout>);
 
     const banner = screen.getByRole("banner");
-    expect(banner.textContent).toContain("KQ Nexus");
+    expect(banner.textContent).toContain("International Energy");
     expect(screen.getByRole("main").textContent).toContain("Sign in form");
     expect(banner.contains(screen.getByRole("main"))).toBe(false);
   });

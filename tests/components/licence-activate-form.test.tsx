@@ -261,7 +261,7 @@ describe("checking", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe(message);
     expect(alert.textContent).toContain("Nothing was changed.");
-    expect(alert.className).toMatch(/border-danger/);
+    expect(alert.className).toMatch(/bg-danger-surface/);
     expect(pasteBox().value).toBe(RAW);
     expect(checkButton().disabled).toBe(false);
     expect(document.activeElement).toBe(alert);
@@ -281,7 +281,7 @@ describe("checking", () => {
     const note = await screen.findByText(rejectionSentence("ALREADY_ACTIVE"));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(note.getAttribute("role")).toBe("status");
-    expect(note.className).toMatch(/border-foreground/);
+    expect(note.className).toMatch(/bg-ground/);
     expect(note.className).not.toMatch(/danger/);
   });
 
@@ -422,7 +422,7 @@ describe("confirming", () => {
 
     const note = await screen.findByRole("status");
     expect(note.textContent).toBe(message);
-    expect(note.className).toMatch(/border-success/);
+    expect(note.className).toMatch(/bg-pill-green-bg/);
     expect(document.activeElement).toBe(note);
     expect(screen.queryByRole("dialog")).toBeNull();
 

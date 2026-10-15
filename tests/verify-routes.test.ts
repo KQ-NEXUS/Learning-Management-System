@@ -98,8 +98,8 @@ describe("/verify/[verificationRef] — D-11 certificate-check limit", () => {
     // The Clock icon is decorative.
     const icon = html.match(/<svg[^>]*lucide-clock[^>]*>/)?.[0] ?? "";
     expect(icon).toContain('aria-hidden="true"');
-    expect(icon).toContain("size-8");
-    expect(icon).toContain("text-muted-foreground");
+    expect(icon).toContain("size-11");
+    expect(icon).toContain("text-ink-soft");
     expect(m.verifyCertificateByRef).not.toHaveBeenCalled();
 
     expect(m.auditCreate).toHaveBeenCalledTimes(1);

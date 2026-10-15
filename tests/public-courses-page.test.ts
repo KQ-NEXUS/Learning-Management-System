@@ -36,26 +36,29 @@ const course = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => mocks.listPublicCourses.mockReset());
 
 describe("/courses", () => {
-  it("states the value line and links to certificate verification", async () => {
+  it("closes the list with IETC's company certification, which is not a class", async () => {
     mocks.listPublicCourses.mockResolvedValue([course()]);
     const html = await renderPage();
 
-    expect(html).toContain("Professional training an employer can verify.");
-    expect(html).toMatch(/<a href="\/verify-certificate"[^>]*>Verify a certificate<\/a>/);
+    expect(html).toContain("IETC Company Certification");
+    expect(html).toContain("This is not a class.");
   });
 
-  it("shows a View course label on every row, not only an arrow", async () => {
+  it("makes every course a card linking to its own page, with the course count", async () => {
     mocks.listPublicCourses.mockResolvedValue([course(), course({ slug: "fire", title: "Fire Safety" })]);
     const html = await renderPage();
 
-    expect(html.match(/View course/g)).toHaveLength(2);
+    expect(html).toContain('href="/courses/safety"');
+    expect(html).toContain('href="/courses/fire"');
+    expect(html).toContain("2 courses");
   });
 
-  it("explains a missing price instead of showing a lone dash", async () => {
+  it("explains a missing price in words instead of showing a lone dash", async () => {
     mocks.listPublicCourses.mockResolvedValue([course()]);
     const html = await renderPage();
 
-    expect(html).toContain("Price shown with dates");
+    expect(html).toContain("Price to be announced");
+    expect(html).toContain("No dates yet");
     expect(html).not.toContain(">—<");
   });
 
@@ -65,7 +68,7 @@ describe("/courses", () => {
         nextCohort: {
           startsAt: new Date("2026-11-30T00:00:00Z"),
           hasStarted: false,
-          deliveryMode: "in-person",
+          deliveryMode: "INSTRUCTOR_LED",
           priceNgnMinor: 45_000_000,
           priceUsdMinor: null,
         },
@@ -73,7 +76,7 @@ describe("/courses", () => {
     ]);
     const html = await renderPage();
 
-    expect(html).not.toContain("Price shown with dates");
+    expect(html).not.toContain("Price to be announced");
     expect(html).toContain("450,000");
   });
 });

@@ -150,7 +150,7 @@ describe("CohortCards", () => {
       expect((usdForm.querySelector('input[name="currency"]') as HTMLInputElement).value).toBe("USD");
     });
 
-    it("sits both CTAs side by side at >=640px and stacks them full width below, via the same responsive container class", () => {
+    it("stacks both CTAs full width, the second as an outline so one choice leads", () => {
       render(
         <CohortCards
           cohorts={[cohort({ id: "c1", priceNgnMinor: 45_000_000, priceUsdMinor: 50_000 })]}
@@ -159,7 +159,10 @@ describe("CohortCards", () => {
       const ngnButton = screen.getByRole("button", { name: "Pay in NGN with Paystack" });
       const ctaContainer = ngnButton.closest("form")!.parentElement as HTMLElement;
       expect(ctaContainer.className).toContain("flex-col");
-      expect(ctaContainer.className).toContain("sm:flex-row");
+      expect(ctaContainer.className).not.toContain("sm:flex-row");
+      const usdButton = screen.getByRole("button", { name: "Pay in USD with Stripe" });
+      expect(ngnButton.className).toContain("bg-ink");
+      expect(usdButton.className).toContain("shadow-[inset_0_0_0_2px");
     });
 
     it("renders a single USD CTA in the previous single-CTA position when only the USD rail is priced — no empty second slot", () => {

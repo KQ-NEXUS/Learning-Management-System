@@ -214,7 +214,7 @@ describe("LicenceRefusalNote and RestrictedControlReason (14-19)", () => {
     const { container } = render(<LicenceRefusalNote />);
     expect(screen.getByRole("status").textContent).toBe(LICENCE_REFUSAL_MESSAGE);
     expect(container.innerHTML).not.toContain("danger");
-    expect(container.innerHTML).toContain("border-warning");
+    expect(container.innerHTML).toContain("text-pill-amber-ink");
     expect(container.innerHTML).toContain("bg-warning-surface");
   });
 

@@ -38,8 +38,8 @@ describe("CheckoutNotice — Phase 14 unavailable notice (OQ8, A12)", () => {
     const el = screen.getByRole("status");
     expect(el.tagName).toBe("P");
     expect(el.textContent).toBe(SENTENCE);
-    expect(el.className).toContain("border-l-2");
-    expect(el.className).toContain("border-warning");
+    expect(el.className).toContain("rounded-xl");
+    expect(el.className).toContain("text-pill-amber-ink");
     expect(el.className).toContain("bg-warning-surface");
   });
 

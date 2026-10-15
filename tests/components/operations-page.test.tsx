@@ -367,9 +367,9 @@ describe("Operations status: responsive rows and long labels", () => {
     expect(table.className).toContain("w-full");
     expect(table.className).toContain("hidden");
     expect(table.className).toContain("md:table");
-    expect(table.querySelector("th")?.className).toContain("text-muted-foreground");
+    expect(table.querySelector("th")?.className).toContain("text-ink-soft");
     const cell = table.querySelector("td") as HTMLElement;
-    expect(cell.className).toContain("px-3 py-4");
+    expect(cell.className).toContain("py-3.5 pr-4");
     // Long labels wrap inside the cell instead of widening the table.
     expect(cell.className).toContain("break-words");
     expect(cell.textContent).toContain("A very long dataset label");

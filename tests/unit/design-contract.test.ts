@@ -42,13 +42,16 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 // ---------------------------------------------------------------------------
 
 /**
- * Primitive / app-UI scale (redesign): 48 and 36 are the page title (PageHeader), 20 a section
- * heading, 16 emphasis, 14 body and table text, 13 captions and column labels, 12 mono times and
- * eyebrow labels. The old 25px and 11px sizes are retired.
+ * Primitive / app-UI scale (IETC redesign, design/mockups/system.css): 64/52/48/44/40 page and
+ * figure titles (condensed), 32/30/28/26/25/24/22/20 section and card headings, 19/18.5/18/17
+ * ledes and emphasis, 16 body, 15.5/15/14.5/14 buttons, labels, notes and secondary text,
+ * 13.5/13/12.5/12 column heads, chips and small print.
  */
-const PRIMITIVE_FONT_PX = new Set([48, 36, 22, 20, 16, 14, 13, 12]);
-/** Marketing / display scale — front-of-house headlines. 48 and 36 join the original four. */
-const DISPLAY_FONT_PX = new Set([66, 56, 48, 42, 36, 34, 33, 28, 24, 22, 18]);
+const PRIMITIVE_FONT_PX = new Set([
+  64, 52, 48, 44, 40, 32, 30, 28, 26, 25, 24, 22, 21, 20, 19, 18.5, 18, 17, 16, 15.5, 15, 14.5, 14, 13.5, 13, 12.5, 12, 11,
+]);
+/** Marketing / display scale — the landing hero, the dashboard record strip and the module ruler. */
+const DISPLAY_FONT_PX = new Set([76, 74, 66, 56, 46, 42, 36, 34, 33]);
 
 /** Named Tailwind font-size utilities -> px (default theme). */
 const FONT_SIZE_KEYWORDS: Record<string, number> = {
@@ -78,15 +81,17 @@ const FONT_WEIGHTS: Record<string, number> = {
   "font-black": 900,
 };
 
-/** Redesign weights: 400 body, 500 nav and table labels, 600 headings and buttons, 700 page titles. */
-const ACTIVE_WEIGHTS = new Set([400, 500, 600, 700]);
+/** IETC weights: 400/500 body, 600 nav and labels, 700 buttons and emphasis, 800 the condensed display cut. */
+const ACTIVE_WEIGHTS = new Set([400, 500, 600, 700, 800]);
 
 // ---------------------------------------------------------------------------
-// Spacing grid — redesign: every multiple of 4px up to 64px (plus 0). The old grid skipped
-// 12, 20, 28, 40 and 56, which the new shells and page bands rely on.
+// Spacing grid — IETC redesign: the mockups' own steps (design/mockups/system.css), which
+// add the 2/3/5/6/7/10/14/18/22/26/30 half-steps and the 72px section gap to the 4px grid.
 // ---------------------------------------------------------------------------
 
-const ALLOWED_SPACING_PX = new Set([0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]);
+const ALLOWED_SPACING_PX = new Set([
+  0, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 44, 48, 52, 56, 60, 64, 72,
+]);
 
 const SPACING_PREFIXES = [
   "space-x",
@@ -579,7 +584,7 @@ function checkClassString(classStr: string, relPath: string, violations: Violati
           file: relPath,
           token: raw,
           kind: "font-weight",
-          detail: `weight ${weight} — only 400 / 600 are active this phase (UI-SPEC §4.3)`,
+          detail: `weight ${weight} — not an IETC weight (400–800)`,
         });
       }
       continue;
@@ -596,7 +601,7 @@ function checkClassString(classStr: string, relPath: string, violations: Violati
         file: relPath,
         token: raw,
         kind: "spacing",
-        detail: `${px}px is off the 4 / 8 / 16 / 24 / 32 / 48 / 64 grid (UI-SPEC §3.1)`,
+        detail: `${px}px is off the IETC spacing steps (design/mockups/system.css)`,
       });
     }
   }
@@ -657,13 +662,13 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
 
   it("flags a font-size outside the primitive scale", () => {
     const v: Violation[] = [];
-    checkClassString("text-[17px]", PRIMITIVE, v);
+    checkClassString("text-[23px]", PRIMITIVE, v);
     expect(v.map((x) => x.kind)).toEqual(["font-size"]);
   });
 
-  it("flags text-lg (18px) in a primitive — a named size off the scale", () => {
+  it("flags text-7xl (72px) in a primitive — a named size off the scale", () => {
     const v: Violation[] = [];
-    checkClassString("text-lg", PRIMITIVE, v);
+    checkClassString("text-7xl", PRIMITIVE, v);
     expect(v).toHaveLength(1);
     expect(v[0].kind).toBe("font-size");
   });
@@ -677,14 +682,8 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
 
   it("flags off-grid spacing utilities", () => {
     const v: Violation[] = [];
-    checkClassString("px-2.5 gap-1.5 py-3.5 p-4.5 gap-0.5", "src/components/primitives/ConfirmModal.tsx", v);
-    expect(v.filter((x) => x.kind === "spacing").map((x) => x.token).sort()).toEqual([
-      "gap-0.5",
-      "gap-1.5",
-      "p-4.5",
-      "px-2.5",
-      "py-3.5",
-    ]);
+    checkClassString("px-2.5 gap-[9px] py-3.5 p-[11px] gap-[13px]", "src/components/primitives/ConfirmModal.tsx", v);
+    expect(v.filter((x) => x.kind === "spacing").map((x) => x.token).sort()).toEqual(["gap-[13px]", "gap-[9px]", "p-[11px]"]);
   });
 
   it("passes the D-21 locked exception at its exact file + token", () => {
@@ -705,10 +704,10 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
     expect(v).toEqual([]);
   });
 
-  it("does not global-allow py-3.5 elsewhere (px-7 is 28px and on the redesign grid)", () => {
+  it("accepts the IETC half-steps (py-3.5 is 14px, px-7 is 28px) and still rejects an off-step value", () => {
     const v: Violation[] = [];
-    checkClassString("px-7 py-3.5", PRIMITIVE, v);
-    expect(v.map((x) => x.token).sort()).toEqual(["py-3.5"]);
+    checkClassString("px-7 py-3.5 py-[9px]", PRIMITIVE, v);
+    expect(v.map((x) => x.token).sort()).toEqual(["py-[9px]"]);
   });
 
   it("ignores negative nudges, auto, sizing, positioning and sr-only", () => {
@@ -736,7 +735,7 @@ describe("contract checker fixtures — enforcement is non-vacuous", () => {
   it("accepts the permitted primitive sizes, weights and grid steps", () => {
     const v: Violation[] = [];
     checkClassString(
-      "text-[36px] text-base text-sm text-xs font-normal font-semibold gap-1 gap-2 gap-4 gap-6 p-8 p-12",
+      "text-[64px] text-[14.5px] text-base text-sm text-xs font-normal font-semibold font-extrabold gap-1 gap-2.5 gap-[18px] gap-6 p-8 p-12",
       PRIMITIVE,
       v,
     );

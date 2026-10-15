@@ -305,8 +305,8 @@ describe("/dashboard", () => {
     });
     const endingHtml = await renderPage();
     expect(endingHtml).toContain('Your access ends <time dateTime="2026-10-01T00:00:00.000Z">1 Oct 2026</time>');
-    expect(endingHtml).toContain("border-warning");
-    expect(endingHtml).not.toContain("border-danger");
+    expect(endingHtml).toContain("bg-warning-surface");
+    expect(endingHtml).not.toContain("bg-danger-surface");
 
     mocks.loadLearnerDashboard.mockResolvedValue({
       cards: [card({ enrolmentId: "e-ended", accessNotice: { kind: "ended" } })],
@@ -391,7 +391,7 @@ describe("/dashboard", () => {
 
     expect(html).not.toContain("certificates ship");
     expect(html).not.toContain("once certificates");
-    expect(html).toContain("Certificate section below");
+    expect(html).toContain("Certificates section below");
   });
 
   it("guard: an ACTIVE card still renders Assessments, Results and Upcoming sessions", async () => {

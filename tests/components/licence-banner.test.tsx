@@ -32,16 +32,16 @@ describe("LicenceBanner (14-19 Task 1, D-15)", () => {
     expect(tone.getAttribute("data-tone")).toBe("danger");
     expect(tone.textContent).toContain("Restricted continuity mode");
     expect(tone.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
-    expect(tone.className).toContain("border-l-4");
-    expect(tone.className).toContain("border-current");
+    expect(tone.className).toContain("font-bold");
+    expect(strip.className).toContain("bg-danger-surface");
+    expect(strip.className).toContain("text-pill-red-ink");
 
     const message = screen.getByText(RESTRICTED_MESSAGE);
-    expect(message.className).toContain("text-white");
+    expect(message.tagName).toBe("P");
 
     const link = screen.getByRole("link", { name: "Activate a licence" });
     expect(link.getAttribute("href")).toBe("/staff/licence");
     expect(link.className).toContain("underline");
-    expect(link.className).toContain("text-white");
     expect(link.className).toContain("min-h-11");
   });
 

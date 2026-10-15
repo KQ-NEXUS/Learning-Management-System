@@ -101,7 +101,7 @@ describe("DiagnosticDownloadButton", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe(DIAGNOSTIC_ERROR_MESSAGE);
     expect(alert.textContent).toBe("Diagnostic report not downloaded. Try again.");
-    expect(alert.className).toMatch(/border-danger/);
+    expect(alert.className).toMatch(/bg-danger-surface/);
     expect(click).not.toHaveBeenCalled();
     expect(createObjectURL).not.toHaveBeenCalled();
     await waitFor(() => expect(button().disabled).toBe(false));
